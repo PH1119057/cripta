@@ -1204,6 +1204,60 @@ def strategy_paper_state() -> dict[str, object]:
 def _live_trading_state(*, include_history: bool) -> dict[str, object]:
     tickers = live_tickers()
     liquidity_risks = execution_liquidity_risks()
+    source_head = ""
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(APP_ROOT / "source_checkout"),
+                "rev-parse",
+                "HEAD",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        source_head = result.stdout.strip().lower()
+    except (OSError, subprocess.SubprocessError):
+        source_head = ""
+
+    observer_current: dict[str, object] = {}
+    try:
+        if UNIVERSAL_ENTRY_OBSERVER_STATE.exists():
+            observer_current = json.loads(
+                UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8")
+            )
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        observer_current = {}
+
+    p90_arm_blockers: list[str] = []
+    if (
+        not LOADED_RELEASE_COMMIT
+        or not source_head
+        or source_head != LOADED_RELEASE_COMMIT
+    ):
+        p90_arm_blockers.append("REMOTE_SOURCE_INSTALLED_IDENTITY_DRIFT")
+    if (
+        str(observer_current.get("state") or "") != "RUNNING"
+        or not bool(observer_current.get("observer_ready"))
+    ):
+        p90_arm_blockers.append("P90_REAL_OBSERVER_NOT_READY")
+    p90_arm_status = {
+        "state": "BLOCKED" if p90_arm_blockers else "FRESH_CHECK_REQUIRED",
+        "blockers": p90_arm_blockers,
+        "loaded_commit": LOADED_RELEASE_COMMIT,
+        "source_head": source_head,
+        "observer_state": observer_current.get("state"),
+        "observer_ready": bool(observer_current.get("observer_ready")),
+        "observer_updated_at": observer_current.get("updated_at"),
+        "note": (
+            "Final OWNER ARM always performs fresh remote/source/installed "
+            "identity and evidence checks server-side."
+        ),
+    }
+
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
         # Read-only P90 operator projection. Geometry is not recomputed here:
         # the Dashboard renders the exact active native causal checkpoint.
@@ -2159,6 +2213,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         },
         "positions": positions,
         "p90_rail": p90_rail,
+        "p90_arm_status": p90_arm_status,
         "pending_entry_orders": pending_orders,
         "settings": {
             "stake_usdt": settings[0],
@@ -3171,13 +3226,54 @@ def observer_runtime_fault_state() -> dict[str, object]:
             "state": "unavailable",
             "count": 0,
             "items": [],
+            "historical_open_count": 0,
+            "superseded_count": 0,
             "error": f"{type(exc).__name__}: {exc}",
         }
+
+    historical_open_count = len(items)
+    superseded_count = 0
+    try:
+        observer = (
+            json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
+            if UNIVERSAL_ENTRY_OBSERVER_STATE.exists()
+            else {}
+        )
+        observer_healthy = (
+            str(observer.get("state") or "") == "RUNNING"
+            and bool(observer.get("observer_ready"))
+        )
+        observer_updated_raw = str(observer.get("updated_at") or "")
+        observer_updated = (
+            datetime.fromisoformat(observer_updated_raw.replace("Z", "+00:00"))
+            if observer_updated_raw
+            else None
+        )
+        if observer_healthy and observer_updated is not None:
+            active_items: list[dict[str, object]] = []
+            for item in items:
+                last_seen_raw = str(item.get("last_seen_at") or "")
+                try:
+                    last_seen = datetime.fromisoformat(
+                        last_seen_raw.replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    active_items.append(item)
+                    continue
+                if last_seen < observer_updated:
+                    superseded_count += 1
+                else:
+                    active_items.append(item)
+            items = active_items
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        pass
 
     return {
         "state": "red" if items else "clear",
         "count": len(items),
         "items": items,
+        "historical_open_count": historical_open_count,
+        "superseded_count": superseded_count,
         "error": None,
     }
 
