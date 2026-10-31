@@ -553,6 +553,21 @@ runuser -u cripta -- env \
   PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
   "$runtime_release/.venv/bin/python" \
   "$runtime_release/operations/connectivity/runtime_schema.py" validate
+
+# Register the owner-approved diagnostic Strategy pair only while the exact
+# production baseline is fully DISARMED.  The installer creates immutable
+# Strategy/plan/binding rows only; ExecutionPermission remains OFF and no
+# LIVE-arm session or Exchange mutation is created.
+runuser -u cripta -- env \
+  PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
+  "$runtime_release/.venv/bin/python" \
+  "$runtime_release/operations/implementation/install_owner_full_contour_diagnostic.py" install
+db_mutation_steps=$((db_mutation_steps + 1))
+runuser -u cripta -- env \
+  PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
+  "$runtime_release/.venv/bin/python" \
+  "$runtime_release/operations/implementation/install_owner_full_contour_diagnostic.py" check
+
 # Installer does not close LIVE-arm sessions or change execution permissions.
 # Post-restart Exchange reconciliation is performed by the private runtime.
 
