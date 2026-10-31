@@ -910,6 +910,23 @@ positionIdx = 0
 Это не считается вечным account state. Перед real arm и далее по freshness
 contract требуется новое подтверждённое `position_mode_state`.
 
+OWNER DECISION 2026-11-01: утверждены два разных owner diagnostic capability.
+Existing execution smoke остаётся downstream transport-проверкой без Strategy
+lineage. Новый `Owner-controlled full-contour REAL diagnostic` должен иметь
+отдельную diagnostic Strategy identity и по explicit authenticated owner trigger
+проходить обычный Universal Entry -> real admission -> EntryExecutionRequest ->
+Execution -> StrategyPosition -> Universal Exit lifecycle. Exact risk v1:
+10 USDT, 1x, MARKET, SL -0.5%, TP +0.5% от actual fill; P90 statistics/research
+его исключают. Canon owner: TRADING_CONTOUR §4.8.2 / ARCH §7.1.
+
+На момент этой documentation revision:
+```text
+FULL_CONTOUR_DIAGNOSTIC_CANON       = YES
+FULL_CONTOUR_DIAGNOSTIC_IMPLEMENTED = NO
+FULL_CONTOUR_DIAGNOSTIC_DEPLOYED    = NO
+```
+Эти статусы нельзя повышать до implementation/test/release/runtime evidence.
+
 IMPLEMENTED / DEPLOYED 2026-09-21:
 - durable `runtime.position_mode_states`;
 - exclusive `runtime.exchange_position_slot_claims`;
