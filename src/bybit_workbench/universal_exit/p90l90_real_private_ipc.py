@@ -34,6 +34,7 @@ _NONCE = re.compile(r"[a-f0-9]{32}\Z")
 _MAX_BYTES = 32_768
 _VERSION = 1
 _AF_UNIX = getattr(socket, "AF_UNIX", -1)
+P90_ACCOUNT_PROOF_TIMEOUT_SECONDS = 15.0
 
 
 class P90PrivateIpcUnverified(RuntimeError):
@@ -379,7 +380,7 @@ class P90PrivateProofClient:
         self, *, account: str, connector: str, timeout_seconds: float = 10.0,
     ) -> None:
         self._address = private_ipc_address(account)
-        if not connector or not 0 < timeout_seconds <= 10:
+        if not connector or not 0 < timeout_seconds <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS:
             raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_CLIENT_INVALID")
         self._account = account
         self._connector = connector
