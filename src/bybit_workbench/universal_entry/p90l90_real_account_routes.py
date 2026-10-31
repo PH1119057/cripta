@@ -211,6 +211,7 @@ def read_p90_real_signed_flat_accounts(
         P90RealSignedFlatAccount,
     )
     from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+        P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
         P90PrivateProofClient,
     )
 
@@ -230,7 +231,7 @@ def read_p90_real_signed_flat_accounts(
             proof = P90PrivateProofClient(
                 account=route.trading_account_id,
                 connector=route.account_connector_id,
-                timeout_seconds=3.0,
+                timeout_seconds=P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
             ).read_flat_account()
         except Exception:
             raise P90RealAccountRoutesUnverified(

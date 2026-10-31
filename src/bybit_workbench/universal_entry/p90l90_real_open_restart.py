@@ -279,7 +279,7 @@ def prove_p90_real_open_restart_inventory(
             proof = P90PrivateProofClient(
                 account=route.trading_account_id,
                 connector=route.account_connector_id,
-                timeout_seconds=3.0,
+                timeout_seconds=15.0,
             ).read_recovery_account()
         except Exception:
             raise P90RealOpenRestartUnverified(

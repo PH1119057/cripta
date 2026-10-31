@@ -948,7 +948,7 @@ async function changeP90RealV3Arm(enabled){
   const finish=beginTimedStatus(status,enabled?'Проверяю P90 REAL v3 перед открытием mainnet gate':'Отключаю P90 REAL v3');
   gateChanging=true;tradeGateButton.disabled=true;if(button)button.disabled=true;
   try{
-    await livePostTimed('/api/p90l90/real-v3/arm',{enabled,confirmed:enabled,request_id:requestId},90000);
+    await livePostTimed('/api/p90l90/real-v3/arm',{enabled,confirmed:enabled,request_id:requestId},180000);
     await loadStrategies(true);
     await confirmGateState(enabled);
     finish('success',enabled?'ГОТОВО · P90 REAL v3 MICRO_LIVE ARMED':'ГОТОВО · P90 REAL v3 DISARMED');

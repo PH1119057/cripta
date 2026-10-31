@@ -224,7 +224,7 @@ def test_flat_roster_requests_two_credential_local_proofs(monkeypatch) -> None:
     main, sub = read_p90_real_signed_flat_accounts(routes)
     assert (main.trading_account_id, sub.trading_account_id) == (MAIN, SUB)
     assert calls == [
-        (MAIN, "connector-main", 3.0), (SUB, "connector-sub", 3.0),
+        (MAIN, "connector-main", 15.0), (SUB, "connector-sub", 15.0),
     ]
     monkeypatch.setattr(
         FakeClient, "read_flat_account",
