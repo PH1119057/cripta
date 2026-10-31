@@ -27,10 +27,10 @@ from bybit_workbench.lifecycle_supervisor import (
     LifecycleSupervisorPolicy,
 )
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
+from bybit_workbench.stale_arm_retirement import retire_stale_release_arms
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     OWNER_ARM_STAGE_RELOAD_REASON,
 )
-from bybit_workbench.stale_arm_retirement import retire_stale_release_arms
 
 DB_DSN = os.environ.get(
     "CRIPTA_DATABASE_DSN",
