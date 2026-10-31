@@ -66,7 +66,7 @@ BEGIN
 END
 $role$;
 
-GRANT USAGE ON SCHEMA strategy_entry,identity,control
+GRANT USAGE ON SCHEMA strategy_entry,identity,control,runtime
   TO cripta_owner_full_contour_binding;
 GRANT SELECT ON
   strategy_entry.strategy_cards,
@@ -79,7 +79,8 @@ GRANT SELECT ON
   identity.account_connectors,
   control.execution_gates,
   control.live_arm_sessions,
-  control.account_live_arm_sessions
+  control.account_live_arm_sessions,
+  runtime.trade_commands
   TO cripta_owner_full_contour_binding;
 GRANT INSERT ON strategy_entry.strategy_execution_bindings
   TO cripta_owner_full_contour_binding;
@@ -330,6 +331,18 @@ BEGIN
 
   -- The diagnostic is subordinate to the already explicit P90 owner arm for
   -- the selected symbol/account/release. It can never broaden owner scope.
+  IF EXISTS (
+      SELECT 1
+        FROM runtime.trade_commands c
+       WHERE c.trading_account_id=p_account_id
+         AND c.symbol=p_symbol
+         AND c.command_type='entry'
+         AND c.state IN ('queued','running')
+         AND c.identity_status='PROVEN'
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_SYMBOL_ENTRY_MUTATION_PENDING';
+  END IF;
+
   IF NOT EXISTS (
       SELECT 1
         FROM control.account_live_arm_sessions s
