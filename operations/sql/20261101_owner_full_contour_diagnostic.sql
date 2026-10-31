@@ -312,6 +312,22 @@ BEGIN
     RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_BINDING_NOT_READY';
   END IF;
 
+  IF NOT EXISTS (
+      SELECT 1
+        FROM control.live_arm_sessions s
+       WHERE s.live_arm_session_id=p_live_session_id
+         AND s.strategy_id=p_strategy_id
+         AND s.strategy_version='1.0-owner-full-contour-20261101'
+         AND s.strategy_config_fingerprint=p_strategy_fingerprint
+         AND s.strategy_activation_id=p_activation_id
+         AND s.symbol=p_symbol
+         AND s.release_commit=p_release_commit
+         AND s.state='ACTIVE'
+         AND s.deactivated_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_GENERIC_ARM_NOT_ACTIVE';
+  END IF;
+
   -- The diagnostic is subordinate to the already explicit P90 owner arm for
   -- the selected symbol/account/release. It can never broaden owner scope.
   IF NOT EXISTS (
@@ -330,14 +346,14 @@ BEGIN
   END IF;
 
   INSERT INTO control.account_live_arm_sessions(
-    account_live_arm_session_id,live_arm_session_id,
+    account_live_arm_session_id,
     strategy_activation_id,strategy_execution_binding_id,
     trading_account_id,account_connector_id,
     strategy_id,strategy_version,strategy_config_fingerprint,
     symbol,release_commit,state,owner_approved_at,activated_at,
     deactivated_at,owner_approval_source
   ) VALUES(
-    p_session_id,p_live_session_id,
+    p_session_id,
     p_activation_id,p_binding_id,p_account_id,p_connector_id,
     p_strategy_id,'1.0-owner-full-contour-20261101',
     p_strategy_fingerprint,p_symbol,p_release_commit,'ACTIVE',
