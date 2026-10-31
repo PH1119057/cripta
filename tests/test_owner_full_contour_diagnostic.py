@@ -244,6 +244,83 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
     account_insert = account_insert[:account_insert.index("RETURN p_session_id")]
     assert "\n    live_arm_session_id," not in account_insert
     assert "OWNER_FULL_CONTOUR_SYMBOL_ENTRY_MUTATION_PENDING" in MIGRATION
+    assert "p_release_commit !~ '^[0-9a-f]{40}
+
+def test_verified_release_registers_and_readbacks_diagnostic_capability() -> None:
+    migration = "operations/sql/20261101_owner_full_contour_diagnostic.sql"
+    installer = (
+        "operations/implementation/install_owner_full_contour_diagnostic.py"
+    )
+    assert migration in RELEASE_INSTALLER
+    migration_pos = RELEASE_INSTALLER.index(migration)
+    install_call = RELEASE_INSTALLER.index(
+        f"$runtime_release/{installer}\" install"
+    )
+    check_call = RELEASE_INSTALLER.index(
+        f"$runtime_release/{installer}\" check"
+    )
+    assert migration_pos < install_call < check_call
+    assert "runuser -u cripta" in RELEASE_INSTALLER[
+        RELEASE_INSTALLER.rfind("runuser -u cripta", 0, install_call):install_call
+    ]
+    assert "db_mutation_steps=$((db_mutation_steps + 1))" in RELEASE_INSTALLER[
+        install_call:check_call
+    ]
+
+
+def test_prestart_recovery_never_replays_stale_execution_smoke_entry() -> None:
+    block = PRIVATE[
+        PRIVATE.index("def resolve_prestart_entry_commands"):
+        PRIVATE.index("def resolve_prestart_non_entry_running_commands")
+    ]
+    assert "api_post(" not in block
+    assert "RESTART_NO_EXACT_EXCHANGE_OUTCOME" in block
+    assert "SET state='failed'" in block
+
+
+class _Cursor:
+    def __init__(self, row):
+        self._row = row
+
+    def fetchone(self):
+        return self._row
+
+
+class _RetireDictRowConnection:
+    def __init__(self):
+        self.calls: list[tuple[str, tuple[object, ...]]] = []
+
+    def execute(self, statement, parameters=()):
+        self.calls.append((statement, tuple(parameters)))
+        if "SELECT strategy_id,strategy_version,strategy_config_fingerprint" in statement:
+            return _Cursor(
+                {
+                    "strategy_id": diagnostic.MAIN_ID,
+                    "strategy_version": diagnostic.VERSION,
+                    "strategy_config_fingerprint": "f" * 64,
+                }
+            )
+        if "SELECT count(*) AS active_count" in statement:
+            return _Cursor({"active_count": 1})
+        if "SELECT control.disarm_owner_full_contour_account_scope" in statement:
+            return _Cursor((control.account_session_id("owner-fc-test"),))
+        return _Cursor(None)
+
+
+def test_retire_entry_rights_handles_dict_row_and_disarms_account_scope() -> None:
+    connection = _RetireDictRowConnection()
+    control.retire_entry_rights(
+        connection,
+        run_id="owner-fc-test",
+        at=datetime(2026, 11, 1, tzinfo=UTC),
+        reason="test dispatch",
+    )
+    sql = "\n".join(statement for statement, _params in connection.calls)
+    assert "UPDATE strategy_entry.execution_permissions" in sql
+    assert "UPDATE control.live_arm_sessions" in sql
+    assert "SELECT control.disarm_owner_full_contour_account_scope" in sql
+" in MIGRATION
+    assert "p_release_commit !~ '^[0-9a-f]{40}     OR" not in MIGRATION
 
 
 def test_verified_release_registers_and_readbacks_diagnostic_capability() -> None:
