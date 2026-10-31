@@ -263,7 +263,352 @@ DECLARE
 BEGIN
   IF session_user <> 'cripta'
      OR p_source NOT LIKE 'dashboard:owner-full-contour-diagnostic:%'
-     OR p_release_commit !~ '^[0-9a-f]{40}     OR p_symbol NOT IN ('LTCUSDT','INJUSDT','APTUSDT','ARBUSDT','DOTUSDT')
+     OR p_release_commit !~ '^[0-9a-f]{40}
+  THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_SCOPE_INVALID';
+  END IF;
+
+  IF p_symbol IN ('LTCUSDT','INJUSDT') THEN
+    v_expected_strategy:='owner_full_contour_diag_main';
+    v_expected_account:='ta-2122c81ecff14f3b85b102db605212f7';
+    v_expected_connector:='ac-ed73de20410548d6841aeafa5f196f70';
+    v_expected_activation:='activation-owner-full-contour-main-20261101';
+    v_expected_binding:='binding-owner-full-contour-main-20261101';
+    v_parent_strategy:='p90l90_legacy_main_ltc_inj';
+  ELSE
+    v_expected_strategy:='owner_full_contour_diag_sub';
+    v_expected_account:='ta-853ac5fcd58185697396d33cd57459fa';
+    v_expected_connector:='ac-ec57819f875f1bfd929a382d6dc8a125';
+    v_expected_activation:='activation-owner-full-contour-sub-20261101';
+    v_expected_binding:='binding-owner-full-contour-sub-20261101';
+    v_parent_strategy:='p90l90_legacy_sub_dot_arb_apt';
+  END IF;
+
+  IF (p_strategy_id,p_account_id,p_connector_id,p_activation_id,p_binding_id)
+       IS DISTINCT FROM
+     (v_expected_strategy,v_expected_account,v_expected_connector,
+      v_expected_activation,v_expected_binding)
+  THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_IDENTITY_DRIFT';
+  END IF;
+
+  IF NOT EXISTS (
+      SELECT 1
+        FROM strategy_entry.strategy_activations a
+        JOIN strategy_entry.strategy_execution_bindings b
+          ON b.strategy_activation_id=a.activation_id
+       WHERE a.activation_id=p_activation_id
+         AND a.strategy_id=p_strategy_id
+         AND a.strategy_version='1.0-owner-full-contour-20261101'
+         AND a.strategy_config_fingerprint=p_strategy_fingerprint
+         AND a.enabled=true
+         AND b.strategy_execution_binding_id=p_binding_id
+         AND b.trading_account_id=p_account_id
+         AND b.binding_state='ACTIVE'
+         AND b.execution_leg='PRIMARY'
+         AND b.execution_role='PRIMARY'
+         AND b.allocation_mode='DEDICATED_STRATEGY'
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_BINDING_NOT_READY';
+  END IF;
+
+  IF NOT EXISTS (
+      SELECT 1
+        FROM control.live_arm_sessions s
+       WHERE s.live_arm_session_id=p_live_session_id
+         AND s.strategy_id=p_strategy_id
+         AND s.strategy_version='1.0-owner-full-contour-20261101'
+         AND s.strategy_config_fingerprint=p_strategy_fingerprint
+         AND s.strategy_activation_id=p_activation_id
+         AND s.symbol=p_symbol
+         AND s.release_commit=p_release_commit
+         AND s.state='ACTIVE'
+         AND s.deactivated_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_GENERIC_ARM_NOT_ACTIVE';
+  END IF;
+
+  -- The diagnostic is subordinate to the already explicit P90 owner arm for
+  -- the selected symbol/account/release. It can never broaden owner scope.
+  IF EXISTS (
+      SELECT 1
+        FROM runtime.trade_commands c
+       WHERE c.trading_account_id=p_account_id
+         AND c.symbol=p_symbol
+         AND c.command_type='entry'
+         AND c.state IN ('queued','running')
+         AND c.identity_status='PROVEN'
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_SYMBOL_ENTRY_MUTATION_PENDING';
+  END IF;
+
+  IF NOT EXISTS (
+      SELECT 1
+        FROM control.account_live_arm_sessions s
+       WHERE s.trading_account_id=p_account_id
+         AND s.account_connector_id=p_connector_id
+         AND s.strategy_id=v_parent_strategy
+         AND s.strategy_version='2.0-p90l90-real-main-sub-20261028'
+         AND s.symbol=p_symbol
+         AND s.release_commit=p_release_commit
+         AND s.state='ACTIVE'
+         AND s.deactivated_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_NOT_ACTIVE';
+  END IF;
+
+  INSERT INTO control.account_live_arm_sessions(
+    account_live_arm_session_id,
+    strategy_activation_id,strategy_execution_binding_id,
+    trading_account_id,account_connector_id,
+    strategy_id,strategy_version,strategy_config_fingerprint,
+    symbol,release_commit,state,owner_approved_at,activated_at,
+    deactivated_at,owner_approval_source
+  ) VALUES(
+    p_session_id,
+    p_activation_id,p_binding_id,p_account_id,p_connector_id,
+    p_strategy_id,'1.0-owner-full-contour-20261101',
+    p_strategy_fingerprint,p_symbol,p_release_commit,'ACTIVE',
+    p_approved_at,p_approved_at,NULL,p_source
+  );
+  RETURN p_session_id;
+END;
+$account_arm$;
+
+ALTER FUNCTION control.arm_owner_full_contour_account_scope(
+  text,text,text,text,text,text,text,text,text,text,timestamptz,text
+) OWNER TO cripta_owner_full_contour_binding;
+
+CREATE OR REPLACE FUNCTION control.disarm_owner_full_contour_account_scope(
+    p_session_id text,
+    p_deactivated_at timestamptz,
+    p_source text
+)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $account_disarm$
+BEGIN
+  IF session_user <> 'cripta'
+     OR p_source NOT LIKE 'owner_full_contour_real_diagnostic:%'
+  THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_DISARM_SCOPE_INVALID';
+  END IF;
+  UPDATE control.account_live_arm_sessions
+     SET state='DISARMED',deactivated_at=p_deactivated_at,
+         updated_at=clock_timestamp()
+   WHERE account_live_arm_session_id=p_session_id
+     AND strategy_version='1.0-owner-full-contour-20261101'
+     AND state='ACTIVE';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_SESSION_NOT_ACTIVE';
+  END IF;
+  RETURN p_session_id;
+END;
+$account_disarm$;
+
+ALTER FUNCTION control.disarm_owner_full_contour_account_scope(
+  text,timestamptz,text
+) OWNER TO cripta_owner_full_contour_binding;
+
+REVOKE CREATE ON SCHEMA strategy_entry,control FROM cripta_owner_full_contour_binding;
+REVOKE ALL ON FUNCTION
+  strategy_entry.register_owner_full_contour_binding(text,text,text)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION
+  control.arm_owner_full_contour_account_scope(
+    text,text,text,text,text,text,text,text,text,text,timestamptz,text
+  ) FROM PUBLIC;
+REVOKE ALL ON FUNCTION
+  control.disarm_owner_full_contour_account_scope(text,timestamptz,text)
+  FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION
+  strategy_entry.register_owner_full_contour_binding(text,text,text)
+  TO cripta;
+GRANT EXECUTE ON FUNCTION
+  control.arm_owner_full_contour_account_scope(
+    text,text,text,text,text,text,text,text,text,text,timestamptz,text
+  ) TO cripta;
+GRANT EXECUTE ON FUNCTION
+  control.disarm_owner_full_contour_account_scope(text,timestamptz,text)
+  TO cripta;
+
+COMMIT;
+
+     OR p_symbol NOT IN ('LTCUSDT','INJUSDT','APTUSDT','ARBUSDT','DOTUSDT')
+  THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_SCOPE_INVALID';
+  END IF;
+
+  IF p_symbol IN ('LTCUSDT','INJUSDT') THEN
+    v_expected_strategy:='owner_full_contour_diag_main';
+    v_expected_account:='ta-2122c81ecff14f3b85b102db605212f7';
+    v_expected_connector:='ac-ed73de20410548d6841aeafa5f196f70';
+    v_expected_activation:='activation-owner-full-contour-main-20261101';
+    v_expected_binding:='binding-owner-full-contour-main-20261101';
+    v_parent_strategy:='p90l90_legacy_main_ltc_inj';
+  ELSE
+    v_expected_strategy:='owner_full_contour_diag_sub';
+    v_expected_account:='ta-853ac5fcd58185697396d33cd57459fa';
+    v_expected_connector:='ac-ec57819f875f1bfd929a382d6dc8a125';
+    v_expected_activation:='activation-owner-full-contour-sub-20261101';
+    v_expected_binding:='binding-owner-full-contour-sub-20261101';
+    v_parent_strategy:='p90l90_legacy_sub_dot_arb_apt';
+  END IF;
+
+  IF (p_strategy_id,p_account_id,p_connector_id,p_activation_id,p_binding_id)
+       IS DISTINCT FROM
+     (v_expected_strategy,v_expected_account,v_expected_connector,
+      v_expected_activation,v_expected_binding)
+  THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_IDENTITY_DRIFT';
+  END IF;
+
+  IF NOT EXISTS (
+      SELECT 1
+        FROM strategy_entry.strategy_activations a
+        JOIN strategy_entry.strategy_execution_bindings b
+          ON b.strategy_activation_id=a.activation_id
+       WHERE a.activation_id=p_activation_id
+         AND a.strategy_id=p_strategy_id
+         AND a.strategy_version='1.0-owner-full-contour-20261101'
+         AND a.strategy_config_fingerprint=p_strategy_fingerprint
+         AND a.enabled=true
+         AND b.strategy_execution_binding_id=p_binding_id
+         AND b.trading_account_id=p_account_id
+         AND b.binding_state='ACTIVE'
+         AND b.execution_leg='PRIMARY'
+         AND b.execution_role='PRIMARY'
+         AND b.allocation_mode='DEDICATED_STRATEGY'
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_BINDING_NOT_READY';
+  END IF;
+
+  IF NOT EXISTS (
+      SELECT 1
+        FROM control.live_arm_sessions s
+       WHERE s.live_arm_session_id=p_live_session_id
+         AND s.strategy_id=p_strategy_id
+         AND s.strategy_version='1.0-owner-full-contour-20261101'
+         AND s.strategy_config_fingerprint=p_strategy_fingerprint
+         AND s.strategy_activation_id=p_activation_id
+         AND s.symbol=p_symbol
+         AND s.release_commit=p_release_commit
+         AND s.state='ACTIVE'
+         AND s.deactivated_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_GENERIC_ARM_NOT_ACTIVE';
+  END IF;
+
+  -- The diagnostic is subordinate to the already explicit P90 owner arm for
+  -- the selected symbol/account/release. It can never broaden owner scope.
+  IF EXISTS (
+      SELECT 1
+        FROM runtime.trade_commands c
+       WHERE c.trading_account_id=p_account_id
+         AND c.symbol=p_symbol
+         AND c.command_type='entry'
+         AND c.state IN ('queued','running')
+         AND c.identity_status='PROVEN'
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_SYMBOL_ENTRY_MUTATION_PENDING';
+  END IF;
+
+  IF NOT EXISTS (
+      SELECT 1
+        FROM control.account_live_arm_sessions s
+       WHERE s.trading_account_id=p_account_id
+         AND s.account_connector_id=p_connector_id
+         AND s.strategy_id=v_parent_strategy
+         AND s.strategy_version='2.0-p90l90-real-main-sub-20261028'
+         AND s.symbol=p_symbol
+         AND s.release_commit=p_release_commit
+         AND s.state='ACTIVE'
+         AND s.deactivated_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_NOT_ACTIVE';
+  END IF;
+
+  INSERT INTO control.account_live_arm_sessions(
+    account_live_arm_session_id,
+    strategy_activation_id,strategy_execution_binding_id,
+    trading_account_id,account_connector_id,
+    strategy_id,strategy_version,strategy_config_fingerprint,
+    symbol,release_commit,state,owner_approved_at,activated_at,
+    deactivated_at,owner_approval_source
+  ) VALUES(
+    p_session_id,
+    p_activation_id,p_binding_id,p_account_id,p_connector_id,
+    p_strategy_id,'1.0-owner-full-contour-20261101',
+    p_strategy_fingerprint,p_symbol,p_release_commit,'ACTIVE',
+    p_approved_at,p_approved_at,NULL,p_source
+  );
+  RETURN p_session_id;
+END;
+$account_arm$;
+
+ALTER FUNCTION control.arm_owner_full_contour_account_scope(
+  text,text,text,text,text,text,text,text,text,text,timestamptz,text
+) OWNER TO cripta_owner_full_contour_binding;
+
+CREATE OR REPLACE FUNCTION control.disarm_owner_full_contour_account_scope(
+    p_session_id text,
+    p_deactivated_at timestamptz,
+    p_source text
+)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $account_disarm$
+BEGIN
+  IF session_user <> 'cripta'
+     OR p_source NOT LIKE 'owner_full_contour_real_diagnostic:%'
+  THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_DISARM_SCOPE_INVALID';
+  END IF;
+  UPDATE control.account_live_arm_sessions
+     SET state='DISARMED',deactivated_at=p_deactivated_at,
+         updated_at=clock_timestamp()
+   WHERE account_live_arm_session_id=p_session_id
+     AND strategy_version='1.0-owner-full-contour-20261101'
+     AND state='ACTIVE';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_SESSION_NOT_ACTIVE';
+  END IF;
+  RETURN p_session_id;
+END;
+$account_disarm$;
+
+ALTER FUNCTION control.disarm_owner_full_contour_account_scope(
+  text,timestamptz,text
+) OWNER TO cripta_owner_full_contour_binding;
+
+REVOKE CREATE ON SCHEMA strategy_entry,control FROM cripta_owner_full_contour_binding;
+REVOKE ALL ON FUNCTION
+  strategy_entry.register_owner_full_contour_binding(text,text,text)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION
+  control.arm_owner_full_contour_account_scope(
+    text,text,text,text,text,text,text,text,text,text,timestamptz,text
+  ) FROM PUBLIC;
+REVOKE ALL ON FUNCTION
+  control.disarm_owner_full_contour_account_scope(text,timestamptz,text)
+  FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION
+  strategy_entry.register_owner_full_contour_binding(text,text,text)
+  TO cripta;
+GRANT EXECUTE ON FUNCTION
+  control.arm_owner_full_contour_account_scope(
+    text,text,text,text,text,text,text,text,text,text,timestamptz,text
+  ) TO cripta;
+GRANT EXECUTE ON FUNCTION
+  control.disarm_owner_full_contour_account_scope(text,timestamptz,text)
+  TO cripta;
+
+COMMIT;
+\n     OR p_symbol NOT IN ('LTCUSDT','INJUSDT','APTUSDT','ARBUSDT','DOTUSDT')
   THEN
     RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_SCOPE_INVALID';
   END IF;
