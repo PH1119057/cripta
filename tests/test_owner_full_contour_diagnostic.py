@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import bybit_workbench.universal_entry.owner_full_contour_diagnostic as diagnostic
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import (
     FrozenPolicy,
@@ -13,7 +14,6 @@ from bybit_workbench.universal_entry.contracts import (
     TradeDirection,
 )
 from bybit_workbench.universal_entry.materializer import materialize_plans
-import bybit_workbench.universal_entry.owner_full_contour_diagnostic as diagnostic
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 from bybit_workbench.universal_exit.contracts import (
     ExitActionKind,
@@ -35,8 +35,13 @@ MIGRATION = (
 
 
 def _main_bundle():
-    card = next(card for card in diagnostic.cards(approved_at=datetime(2026, 11, 1, tzinfo=UTC))
-                if card.strategy_id == diagnostic.MAIN_ID)
+    card = next(
+        card
+        for card in diagnostic.cards(
+            approved_at=datetime(2026, 11, 1, tzinfo=UTC)
+        )
+        if card.strategy_id == diagnostic.MAIN_ID
+    )
     activation = StrategyActivation(
         activation_id=diagnostic.MAIN_ACTIVATION_ID,
         strategy_id=card.strategy_id,
