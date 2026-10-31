@@ -56,6 +56,11 @@ from bybit_workbench.p90l90_real_prearm_evidence import (
 )
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID as P90_MAIN_ID
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID as P90_SUB_ID
+from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
+    MAIN_ID as OWNER_FULL_CONTOUR_MAIN_ID,
+    SUB_ID as OWNER_FULL_CONTOUR_SUB_ID,
+    VERSION as OWNER_FULL_CONTOUR_VERSION,
+)
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     OWNER_ARM_STAGE_GATE_REASON as P90_OWNER_ARM_STAGE_GATE_REASON,
     VERSION as P90_REAL_V3_VERSION,
@@ -4465,6 +4470,14 @@ def _u6_set_activation(handler: object, request: dict[str, object]) -> None:
         and strategy_id in {P90_MAIN_ID, P90_SUB_ID}
     ):
         raise ValueError("P90_REAL_V3_USE_DEDICATED_PREARM_CONTROL")
+    if (
+        strategy_version == OWNER_FULL_CONTOUR_VERSION
+        and strategy_id in {
+            OWNER_FULL_CONTOUR_MAIN_ID,
+            OWNER_FULL_CONTOUR_SUB_ID,
+        }
+    ):
+        raise ValueError("OWNER_FULL_CONTOUR_USE_DEDICATED_CONTROL")
     enabled = request.get("enabled")
     if not isinstance(enabled, bool):
         raise ValueError("enabled must be boolean")
@@ -4540,6 +4553,14 @@ def _u6_set_execution_permission(handler: object, request: dict[str, object]) ->
         and strategy_id in {P90_MAIN_ID, P90_SUB_ID}
     ):
         raise ValueError("P90_REAL_V3_USE_DEDICATED_OWNER_ARM_CONTROL")
+    if (
+        strategy_version == OWNER_FULL_CONTOUR_VERSION
+        and strategy_id in {
+            OWNER_FULL_CONTOUR_MAIN_ID,
+            OWNER_FULL_CONTOUR_SUB_ID,
+        }
+    ):
+        raise ValueError("OWNER_FULL_CONTOUR_USE_DEDICATED_CONTROL")
     operator = handler.session_user() or "UNKNOWN"
     with psycopg.connect(
         "dbname=cripta user=cripta host=/var/run/postgresql"
