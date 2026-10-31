@@ -922,9 +922,13 @@ Execution -> StrategyPosition -> Universal Exit lifecycle. Exact risk v1:
 На момент этой documentation revision:
 ```text
 FULL_CONTOUR_DIAGNOSTIC_CANON       = YES
-FULL_CONTOUR_DIAGNOSTIC_IMPLEMENTED = NO
+FULL_CONTOUR_DIAGNOSTIC_IMPLEMENTED = YES
 FULL_CONTOUR_DIAGNOSTIC_DEPLOYED    = NO
 ```
+Implementation evidence: PR #325, squash commit `6948ab3b6b81fe48ebabe79bb54188333b1639db`;
+all current PR checks PASS. Production release/runtime evidence отсутствует,
+поэтому `DEPLOYED=NO` и runtime verification не заявляется.
+
 Эти статусы нельзя повышать до implementation/test/release/runtime evidence.
 
 IMPLEMENTED / DEPLOYED 2026-09-21:
