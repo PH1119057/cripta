@@ -184,12 +184,25 @@ def check_release_arm_invariant(
             )
         return False
 
-    # A clean, matching, authorized state is independent recovery evidence.
-    # A deliberately disarmed state with no ACTIVE session is also safe.
+    # Resolve only incidents this invocation is competent to prove recovered.
+    # The lightweight Entry-consumer guard does not inspect observer/source
+    # health and therefore must never clear REAL_ENTRY_RUNTIME_NOT_READY.
+    # Resolution is also scoped to the exact loaded release; one healthy
+    # release cannot erase a durable incident belonging to another release.
+    recoverable_reasons = ["RELEASE_BOUND_LIVE_ARM_NOT_READY"]
+    if require_entry_runtime_health:
+        recoverable_reasons.append("REAL_ENTRY_RUNTIME_NOT_READY")
     connection.execute(
         """UPDATE control.release_arm_incidents
               SET state='RESOLVED',resolved_at=%s,last_checked_at=%s
-            WHERE state='OPEN'""",
-        (instant, instant),
+            WHERE state='OPEN'
+              AND release_commit=%s
+              AND reason = ANY(%s)""",
+        (
+            instant,
+            instant,
+            loaded_commit or "UNKNOWN",
+            recoverable_reasons,
+        ),
     )
     return gate_open
