@@ -76,9 +76,11 @@ _REQUIRED_DB_PRIVILEGES = (
     ("strategy_entry.strategy_attempts", "SELECT"),
     ("strategy_entry.strategy_activations", "SELECT"),
     ("strategy_entry.execution_permissions", "SELECT"),
+    ("strategy_entry.execution_permissions", "UPDATE"),
     ("strategy_entry.entry_decisions", "SELECT"),
     ("strategy_entry.execution_dispatches", "SELECT"),
     ("strategy_entry.execution_dispatches", "INSERT"),
+    ("strategy_entry.execution_request_state_events", "SELECT"),
     ("strategy_entry.execution_request_state_events", "INSERT"),
     ("strategy_entry.strategy_cards", "SELECT"),
     ("strategy_entry.entry_plans", "SELECT"),
@@ -89,6 +91,10 @@ _REQUIRED_DB_PRIVILEGES = (
     ("runtime.exchange_position_slot_claims", "UPDATE"),
     ("runtime.trade_commands", "SELECT"),
     ("runtime.trade_commands", "INSERT"),
+    ("control.owner_full_contour_diagnostic_runs", "SELECT"),
+    ("control.owner_full_contour_diagnostic_runs", "UPDATE"),
+    ("control.live_arm_sessions", "SELECT"),
+    ("control.live_arm_sessions", "UPDATE"),
 )
 
 
