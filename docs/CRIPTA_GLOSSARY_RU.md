@@ -691,7 +691,19 @@ EntryDecision, EntryExecutionRequest or StrategyPosition evidence and is not
 counted as Strategy performance.
 
 **owner_controlled_live_test** — exact runtime source marker for the current
-implementation of that diagnostic command.
+implementation of the execution-only diagnostic command.
+
+**Owner-controlled full-contour REAL diagnostic** — explicit authenticated
+owner-triggered diagnostic run with a dedicated diagnostic Strategy identity.
+Only the initial fact `OWNER_FULL_CONTOUR_TRIGGER` is operator-originated;
+StrategySignal, strategy_attempt, EntryDecision, EntryExecutionRequest,
+StrategyPosition and Exit decisions are created by their ordinary production
+owners. The run uses fixed bounded diagnostic risk, is excluded from P90
+performance/research semantics and never impersonates a P90 Strategy signal.
+
+**OWNER_FULL_CONTOUR_TRIGGER** — exact control fact consumed only by the
+dedicated full-contour diagnostic EntryPlan. It is not a P90 market fact,
+not a P90 Entry condition and cannot be created autonomously.
 
 # 16. Запрещённые/исторические обозначения
 
