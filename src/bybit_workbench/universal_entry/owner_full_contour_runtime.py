@@ -40,7 +40,6 @@ from .owner_full_contour_control import (
 from .owner_full_contour_diagnostic import (
     RUNTIME_SOURCE,
     TRIGGER_EVENT_KIND,
-    VERSION,
     is_diagnostic_strategy,
 )
 from .registry import ActivePlanRegistry
