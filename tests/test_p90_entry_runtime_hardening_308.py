@@ -10,6 +10,7 @@ DASH_APP = (ROOT / "operations/dashboard/app.py").read_text()
 SUB_UNIT = (ROOT / "operations/systemd/cripta-universal-entry-consumer@.service").read_text()
 INSTALLER = (ROOT / "operations/infrastructure/install_verified_release.sh").read_text()
 HEALTH_SQL = (ROOT / "operations/sql/20261031_entry_consumer_health.sql").read_text()
+OBSERVER = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text()
 
 
 def test_consumer_health_schema_is_durable_and_least_privilege() -> None:
@@ -66,3 +67,15 @@ def test_consumer_health_does_not_grant_request_update_privilege() -> None:
     assert '("strategy_entry.execution_requests", "UPDATE")' not in CONSUMER
     assert "FOR UPDATE OF r SKIP LOCKED" not in CONSUMER
     assert "FOR UPDATE OF c SKIP LOCKED" in CONSUMER
+
+
+def test_observer_latest_coin_context_lookup_is_index_bounded() -> None:
+    start = OBSERVER.index("def _observer_objective_inputs(")
+    end = OBSERVER.index("\ndef _maybe_record_reverse_transition(", start)
+    body = OBSERVER[start:end]
+    assert "CROSS JOIN LATERAL" in body
+    assert "FROM unnest(%s::text[]) AS instrument(linear_instrument_id)" in body
+    assert "linear_instrument_id=instrument.linear_instrument_id" in body
+    assert "ORDER BY observed_at DESC" in body
+    assert "LIMIT 1" in body
+    assert "SELECT DISTINCT ON (linear_instrument_id)" not in body
