@@ -232,18 +232,16 @@ def materialize_requested_run(
         raise RuntimeError("OWNER_FULL_CONTOUR_RUN_ROW_MAPPING_REQUIRED")
     run_id = str(run["run_id"])
     try:
-        if connection.execute(
+        gate = connection.execute(
             "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
-        ).fetchone() != {"enabled": True}:
-            # dict_row equality is exact; fall back below for sequence drivers.
-            gate = connection.execute(
-                "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
-            ).fetchone()
-            if gate is None or not bool(_v(gate, "enabled", 0)):
-                return _fail(
-                    connection, run_id=run_id, now=current,
-                    reason="OWNER_FULL_CONTOUR_GATE_NOT_OPEN",
-                )
+        ).fetchone()
+        if gate is None or not bool(_v(gate, "enabled", 0)):
+            return _fail(
+                connection,
+                run_id=run_id,
+                now=current,
+                reason="OWNER_FULL_CONTOUR_GATE_NOT_OPEN",
+            )
 
         bundle: Any = _load_bundle(connection, run)
         symbol = str(run["symbol"])
