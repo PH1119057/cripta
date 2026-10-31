@@ -461,11 +461,12 @@ def prepare_p90l90_real_v3_prearm_evidence(
         _require(health is not None, strategy_id + " Entry consumer health missing")
         health_connector, health_release, health_state, health_detail, health_at = health
         health_observed = _aware(health_at, strategy_id + " Entry consumer health")
+        health_checked_at = datetime.now(UTC)
         _require(
             str(health_connector) == str(connector_id)
             and str(health_release) == release_commit
             and str(health_state) == "READY"
-            and 0 <= (current - health_observed).total_seconds() <= 8,
+            and 0 <= (health_checked_at - health_observed).total_seconds() <= 8,
             strategy_id + " Entry consumer not READY/fresh",
         )
         consumer_health[strategy_id] = {
