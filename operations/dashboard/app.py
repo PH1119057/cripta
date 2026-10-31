@@ -44,16 +44,22 @@ from bybit_workbench.r1_unified_arm_control import (
     disarm_unified_r1,
 )
 from bybit_workbench.p90l90_real_arm_control import (
-    arm_p90l90_real_v3,
     disarm_p90l90_real_v3,
     prearm_p90l90_real_v3,
+)
+from bybit_workbench.p90l90_real_staged_arm import (
+    finalize_p90l90_real_v3,
+    stage_p90l90_real_v3,
 )
 from bybit_workbench.p90l90_real_prearm_evidence import (
     prepare_p90l90_real_v3_prearm_evidence,
 )
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID as P90_MAIN_ID
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID as P90_SUB_ID
-from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_V3_VERSION
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+    OWNER_ARM_STAGE_GATE_REASON as P90_OWNER_ARM_STAGE_GATE_REASON,
+    VERSION as P90_REAL_V3_VERSION,
+)
 from bybit_workbench.r1_micro_live_control import (
     arm as arm_r1_micro_live,
     disarm as disarm_r1_micro_live,
@@ -1271,6 +1277,8 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                      WHERE state='ACTIVE' AND strategy_version=%s
                        AND strategy_id IN (%s,%s)),
                    (SELECT enabled FROM control.execution_gates
+                     WHERE mode='mainnet'),
+                   (SELECT reason FROM control.execution_gates
                      WHERE mode='mainnet')""",
             (
                 P90_REAL_V3_VERSION, P90_MAIN_ID, P90_SUB_ID,
@@ -1284,6 +1292,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "live_arm_sessions": int(p90_arm_facts[1]),
                 "account_live_arm_sessions": int(p90_arm_facts[2]),
                 "gate_enabled": bool(p90_arm_facts[3]),
+                "gate_reason": str(p90_arm_facts[4] or ""),
             })
         # Read-only P90 operator projection. Geometry is not recomputed here:
         # the Dashboard renders the exact active native causal checkpoint.
@@ -4116,6 +4125,131 @@ def _u6_multi_strategy_observer_ready() -> bool:
         and payload.get("state") in {"IDLE", "WARMUP", "RUNNING", "RELOADING"}
     )
 
+def _u6_p90_real_v3_stage_ready() -> tuple[bool, str]:
+    """Exact gate-closed staged readiness used immediately before gate OPEN."""
+    try:
+        payload = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
+        updated = datetime.fromisoformat(str(payload.get("updated_at") or ""))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return False, "OBSERVER_STATUS_UNREADABLE:" + type(exc).__name__
+    if updated.tzinfo is None or updated.utcoffset() is None:
+        return False, "OBSERVER_TIMESTAMP_INVALID"
+    now = datetime.now(UTC)
+    age = (now - updated.astimezone(UTC)).total_seconds()
+    if not (
+        0 <= age <= 10
+        and payload.get("runtime_mode") == "MULTI_STRATEGY_OBSERVER"
+        and payload.get("state") == "RUNNING"
+        and payload.get("observer_ready") is True
+        and payload.get("source_commit") == LOADED_RELEASE_COMMIT
+        and payload.get("p90_owner_arm_stage") == "READY"
+    ):
+        return False, (
+            "OBSERVER_STAGE_NOT_READY:"
+            + str(payload.get("state") or "UNKNOWN")
+            + ":" + str(payload.get("p90_owner_arm_stage") or "NONE")
+        )
+
+    fresh_after = now - timedelta(seconds=8)
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        connection.execute("BEGIN READ ONLY")
+        gate = connection.execute(
+            "SELECT enabled,reason FROM control.execution_gates "
+            "WHERE mode='mainnet'"
+        ).fetchone()
+        if gate != (False, P90_OWNER_ARM_STAGE_GATE_REASON):
+            return False, "P90_REAL_OWNER_ARM_STAGE_GATE_DRIFT"
+
+        permissions = connection.execute(
+            """SELECT strategy_id,strategy_version
+                 FROM strategy_entry.execution_permissions
+                WHERE enabled=true ORDER BY strategy_id"""
+        ).fetchall()
+        if {
+            (str(row[0]), str(row[1])) for row in permissions
+        } != {
+            (P90_MAIN_ID, P90_REAL_V3_VERSION),
+            (P90_SUB_ID, P90_REAL_V3_VERSION),
+        }:
+            return False, "P90_REAL_OWNER_ARM_STAGE_PERMISSION_DRIFT"
+
+        if connection.execute(
+            """SELECT count(*) FROM control.live_arm_sessions
+                WHERE state='ACTIVE' AND release_commit=%s
+                  AND strategy_version=%s
+                  AND strategy_id IN (%s,%s)""",
+            (
+                LOADED_RELEASE_COMMIT,
+                P90_REAL_V3_VERSION,
+                P90_MAIN_ID,
+                P90_SUB_ID,
+            ),
+        ).fetchone() != (5,):
+            return False, "P90_REAL_OWNER_ARM_STAGE_SESSION_DRIFT"
+
+        if connection.execute(
+            """SELECT count(*) FROM control.account_live_arm_sessions
+                WHERE state='ACTIVE' AND release_commit=%s
+                  AND strategy_version=%s
+                  AND strategy_id IN (%s,%s)""",
+            (
+                LOADED_RELEASE_COMMIT,
+                P90_REAL_V3_VERSION,
+                P90_MAIN_ID,
+                P90_SUB_ID,
+            ),
+        ).fetchone() != (5,):
+            return False, "P90_REAL_OWNER_ARM_STAGE_ACCOUNT_SESSION_DRIFT"
+
+        health = connection.execute(
+            """SELECT trading_account_id,release_commit,state,observed_at
+                 FROM runtime.entry_consumer_health
+                ORDER BY trading_account_id"""
+        ).fetchall()
+        expected_accounts = {
+            "ta-2122c81ecff14f3b85b102db605212f7",
+            "ta-853ac5fcd58185697396d33cd57459fa",
+        }
+        current_accounts = {
+            str(row[0])
+            for row in health
+            if (
+                str(row[1]) == LOADED_RELEASE_COMMIT
+                and str(row[2]) == "READY"
+                and isinstance(row[3], datetime)
+                and row[3].tzinfo is not None
+                and row[3].astimezone(UTC) >= fresh_after
+            )
+        }
+        if current_accounts != expected_accounts:
+            return False, "P90_REAL_ENTRY_CONSUMERS_NOT_READY"
+
+        if connection.execute(
+            """SELECT count(*) FROM control.release_arm_incidents
+                WHERE release_commit=%s AND state='OPEN'""",
+            (LOADED_RELEASE_COMMIT,),
+        ).fetchone() != (0,):
+            return False, "P90_REAL_OPEN_RUNTIME_INCIDENT"
+
+    return True, "READY"
+
+
+def _u6_wait_p90_real_v3_stage_ready(
+    *, timeout_seconds: float = 60.0,
+) -> tuple[bool, str]:
+    deadline = time.monotonic() + timeout_seconds
+    last_detail = "P90_REAL_OWNER_ARM_STAGE_NOT_STARTED"
+    while time.monotonic() < deadline:
+        ready, detail = _u6_p90_real_v3_stage_ready()
+        if ready:
+            return True, detail
+        last_detail = detail
+        time.sleep(0.25)
+    return False, last_detail
+
+
 U6_STRATEGY_GET_PATH = "/api/strategies"
 U6_STRATEGY_CREATE_PATH = "/api/strategies/create"
 U6_STRATEGY_VERSION_PATH = "/api/strategies/version"
@@ -5018,11 +5152,25 @@ def _u6_p90_real_v3_arm(
                 release_commit=LOADED_RELEASE_COMMIT,
                 now=datetime.now(UTC),
             )
-    with psycopg.connect(
-        "dbname=cripta user=cripta host=/var/run/postgresql"
-    ) as connection:
-        if enabled:
-            result = arm_p90l90_real_v3(
+    if not enabled:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            result = disarm_p90l90_real_v3(
+                connection,
+                now=datetime.now(UTC),
+                operator=operator,
+                request_id=request_id,
+            )
+        _u6_json(handler, 200, result)
+        return
+
+    staged = False
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            stage_p90l90_real_v3(
                 connection,
                 release_commit=LOADED_RELEASE_COMMIT,
                 now=datetime.now(UTC),
@@ -5031,13 +5179,56 @@ def _u6_p90_real_v3_arm(
                 confirmed=True,
                 observer_ready=_u6_multi_strategy_observer_ready(),
             )
-        else:
-            result = disarm_p90l90_real_v3(
+        staged = True
+
+        stage_ready, stage_detail = _u6_wait_p90_real_v3_stage_ready(
+            timeout_seconds=60.0
+        )
+        if not stage_ready:
+            raise ValueError(
+                "P90_REAL_OWNER_ARM_STAGE_TIMEOUT:" + stage_detail
+            )
+
+        # Read the exact stage status again immediately before the final
+        # transaction. The gate is still CLOSED at this point.
+        final_stage_ready, final_stage_detail = _u6_p90_real_v3_stage_ready()
+        if not final_stage_ready:
+            raise ValueError(
+                "P90_REAL_OWNER_ARM_STAGE_FINAL_CHECK_FAILED:"
+                + final_stage_detail
+            )
+
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            result = finalize_p90l90_real_v3(
                 connection,
+                release_commit=LOADED_RELEASE_COMMIT,
                 now=datetime.now(UTC),
                 operator=operator,
                 request_id=request_id,
+                observer_stage_ready=True,
             )
+        staged = False
+    except Exception:
+        if staged:
+            try:
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as cleanup_connection:
+                    disarm_p90l90_real_v3(
+                        cleanup_connection,
+                        now=datetime.now(UTC),
+                        operator=operator,
+                        request_id=request_id,
+                    )
+            except Exception as cleanup_exc:
+                raise RuntimeError(
+                    "P90_REAL_OWNER_ARM_STAGE_CLEANUP_FAILED:"
+                    + type(cleanup_exc).__name__
+                ) from cleanup_exc
+        raise
+
     _u6_json(handler, 200, result)
 
 
