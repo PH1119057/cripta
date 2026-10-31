@@ -127,6 +127,16 @@ if [[ ! -d "$tooling_release" ]]; then
   as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service     | runuser -u cripta -- tar -xf - -C "$tooling_release"
 fi
 
+# Fail closed before service/DB mutation if the runtime release retention root
+# contains any unexpected direct child or if current does not resolve to the
+# exact expected baseline. The helper is taken from the exact candidate release.
+runuser -u root -- /usr/bin/python3 \
+  "$runtime_release/operations/infrastructure/runtime_release_retention.py" \
+  --root "$RUNTIME_ROOT/releases" \
+  --current-link "$RUNTIME_ROOT/current" \
+  validate \
+  --expected-sha "$EXPECTED_BASELINE"
+
 # Prepare the separately identified Dashboard bundle from the same approved
 # Git release. Its active symlink switches only during the coordinated cutover.
 ui_release="$DASHBOARD_UI_ROOT/releases/$RELEASE_COMMIT"
@@ -665,6 +675,18 @@ if [[ "$STAGED_OFFLINE" == "1" ]]; then
 else
   prune_release_backups
 fi
+
+# Owner decision 2026-10-31: immutable runtime artifacts retain only the exact
+# current release plus the exact immediate previous deployed baseline. This
+# runs after cutover, managed-service liveness checks, reconciliation handling
+# and INSTALLED_COMMIT persistence. It never touches other artifact/data roots.
+runuser -u root -- /usr/bin/python3 \
+  "$runtime_release/operations/infrastructure/runtime_release_retention.py" \
+  --root "$RUNTIME_ROOT/releases" \
+  --current-link "$RUNTIME_ROOT/current" \
+  prune \
+  --current-sha "$RELEASE_COMMIT" \
+  --previous-sha "$EXPECTED_BASELINE"
 
 deploy_succeeded=1
 cleanup_controller_stage
