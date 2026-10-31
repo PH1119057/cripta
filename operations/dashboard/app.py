@@ -70,6 +70,9 @@ from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActi
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.r1_strategy import build_r1_cards
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
+from bybit_workbench.universal_entry.owner_full_contour_control import (
+    request_run as request_owner_full_contour_run,
+)
 from bybit_workbench.universal_entry.dashboard_control import (
     StaleActivationState,
     StrategyDashboardStore,
@@ -1700,16 +1703,26 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             "SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet'"
         ).fetchone()
         rearm = live_rearm_readiness(connection)
+        command_accounts = p90_accounts or [TRADING_ACCOUNT_ID]
         commands = connection.execute(
             """SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error
                  FROM runtime.trade_commands
-                WHERE (
-                     (trading_account_id=%s AND identity_status='PROVEN')
-                )
+                WHERE trading_account_id=ANY(%s)
+                  AND identity_status='PROVEN'
                 ORDER BY requested_at_epoch_ms DESC
                 LIMIT 20""",
-            (TRADING_ACCOUNT_ID,),
+            (command_accounts,),
         ).fetchall()
+        owner_full_contour_row = connection.execute(
+            """SELECT run_id,requested_at,requested_by,symbol,direction,
+                      strategy_id,trading_account_id,state,signal_id,
+                      strategy_attempt_id,entry_decision_id,
+                      entry_execution_request_id,entry_command_id,
+                      strategy_position_id,error,completed_at,updated_at
+                 FROM control.owner_full_contour_diagnostic_runs
+                ORDER BY requested_at DESC,run_id DESC
+                LIMIT 1"""
+        ).fetchone()
         # Read-only fail-closed projection of durable gate/session state.
         release_arm_rows = connection.execute(
             """SELECT strategy_id, symbol, release_commit
@@ -1813,12 +1826,11 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                   )
             ) x ON true
             WHERE c.command_type='entry'
-              AND (
-                   (c.trading_account_id=%s AND c.identity_status='PROVEN')
-              )
+              AND c.trading_account_id=ANY(%s)
+              AND c.identity_status='PROVEN'
             ORDER BY c.requested_at_epoch_ms DESC
             LIMIT 100""",
-            (TRADING_ACCOUNT_ID,),
+            (command_accounts,),
         ).fetchall()
         supervisor_rows = []
         if connection.execute("SELECT to_regclass('supervisor.snapshots')").fetchone()[0]:
@@ -2350,6 +2362,53 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             }
             for r in commands
         ],
+        "owner_full_contour_diagnostic": (
+            None
+            if owner_full_contour_row is None
+            else {
+                "run_id": str(owner_full_contour_row[0]),
+                "requested_at": owner_full_contour_row[1].isoformat(),
+                "requested_by": str(owner_full_contour_row[2]),
+                "symbol": str(owner_full_contour_row[3]),
+                "direction": str(owner_full_contour_row[4]),
+                "strategy_id": str(owner_full_contour_row[5]),
+                "trading_account_id": str(owner_full_contour_row[6]),
+                "state": str(owner_full_contour_row[7]),
+                "signal_id": (
+                    None if owner_full_contour_row[8] is None
+                    else str(owner_full_contour_row[8])
+                ),
+                "strategy_attempt_id": (
+                    None if owner_full_contour_row[9] is None
+                    else str(owner_full_contour_row[9])
+                ),
+                "entry_decision_id": (
+                    None if owner_full_contour_row[10] is None
+                    else str(owner_full_contour_row[10])
+                ),
+                "entry_execution_request_id": (
+                    None if owner_full_contour_row[11] is None
+                    else str(owner_full_contour_row[11])
+                ),
+                "entry_command_id": (
+                    None if owner_full_contour_row[12] is None
+                    else str(owner_full_contour_row[12])
+                ),
+                "strategy_position_id": (
+                    None if owner_full_contour_row[13] is None
+                    else str(owner_full_contour_row[13])
+                ),
+                "error": (
+                    None if owner_full_contour_row[14] is None
+                    else str(owner_full_contour_row[14])
+                ),
+                "completed_at": (
+                    None if owner_full_contour_row[15] is None
+                    else owner_full_contour_row[15].isoformat()
+                ),
+                "updated_at": owner_full_contour_row[16].isoformat(),
+            }
+        ),
         "release_arm_incidents": [
             {
                 "incident_id": r[0],
