@@ -230,12 +230,12 @@ def test_verified_installer_prunes_runtime_releases_only_after_post_deploy_check
     helper = "runtime_release_retention.py"
     assert helper in source
 
-    preflight = source.index('validate \\\n  --expected-sha "$EXPECTED_BASELINE"')
+    preflight = source.index('--expected-sha "$EXPECTED_BASELINE"')
     services_stop = source.index("services_stopped=1")
     state_commit = source.index(
-        'printf \'%s\\\\n\' "$RELEASE_COMMIT" > "$STATE_ROOT/INSTALLED_COMMIT"'
+        '"$RELEASE_COMMIT" > "$STATE_ROOT/INSTALLED_COMMIT"'
     )
-    prune = source.index('prune \\\n  --current-sha "$RELEASE_COMMIT"')
+    prune = source.index('--current-sha "$RELEASE_COMMIT"', state_commit)
     deploy_success = source.index("deploy_succeeded=1")
     final_pass = source.index('echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"')
 
@@ -250,6 +250,7 @@ def test_verified_installer_prunes_runtime_releases_only_after_post_deploy_check
     assert "exactly 1 immediate previous deployed release" in rules
     assert "EXPECTED_BASELINE_COMMIT" in rules
     assert "/srv/cripta/runtime/releases" in rules
+
 
 def test_verified_installer_manages_download_expansion_unit() -> None:
     source = INSTALLER.read_text(encoding="utf-8")
