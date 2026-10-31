@@ -23,6 +23,8 @@ from bybit_workbench.live_arm_readiness import (
     scope_for_check,
 )
 from bybit_workbench.strategy_position_binding import exchange_position_key
+from bybit_workbench.universal_entry.contracts import TradeDirection
+from bybit_workbench.universal_entry.execution_bridge import PreparedRuntimeEntryCommand
 from operations.connectivity.universal_entry_consumer import run_once
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -1033,3 +1035,107 @@ def test_two_account_ack_partial_cancel_and_restart_preserves_independent_ledger
                 WHERE trading_account_id=%s AND symbol='LINKUSDT'""",
             (sub["trading_account_id"],),
         ).fetchone()[0] == 1
+
+
+def test_synthetic_accepted_request_dispatches_to_trade_command_without_exchange(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fast E2E of the exact pre-Exchange path that failed in production."""
+    assert DSN is not None
+    prefix = "synthetic-dispatch-" + uuid4().hex[:10]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(
+            connection,
+            prefix,
+            symbol="LTCUSDT",
+            reservation_state="RESERVED",
+            expires_at=NOW + timedelta(seconds=30),
+            permission=True,
+        )
+        _gate(connection, True)
+        connection.commit()
+
+        prepared = PreparedRuntimeEntryCommand(
+            command_id=ids["command_id"],
+            execution_request_id=ids["execution_request_id"],
+            strategy_attempt_id=f"{prefix}-attempt",
+            entry_decision_id=f"{prefix}-decision",
+            signal_id=f"{prefix}-signal",
+            strategy_id=ids["strategy_id"],
+            strategy_version=ids["strategy_version"],
+            strategy_config_fingerprint=ids["strategy_config_fingerprint"],
+            entry_plan_fingerprint=f"{prefix}-entry-fp",
+            exit_plan_fingerprint=f"{prefix}-exit-fp",
+            capital_reservation_id=ids["reservation_id"],
+            exchange_position_slot_claim_id=ids["slot_claim_id"],
+            position_mode_state_ref=ids["position_mode_state_ref"],
+            strategy_activation_id=ids["strategy_activation_id"],
+            strategy_execution_binding_id=ids["binding_id"],
+            execution_leg="PRIMARY",
+            trading_account_id=ids["trading_account_id"],
+            symbol=ids["symbol"],
+            direction=TradeDirection.LONG,
+            requested_at=NOW,
+            payload={
+                "source": "synthetic-disposable-e2e",
+                "trading_account_id": ids["trading_account_id"],
+            },
+        )
+        monkeypatch.setattr(
+            entry_consumer,
+            "_admission_pre_dispatch_status",
+            lambda *_args, **_kwargs: ("READY", ""),
+        )
+        monkeypatch.setattr(
+            entry_consumer,
+            "_critical_lifecycle_fault_code",
+            lambda *_args, **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            entry_consumer,
+            "_live_arm_ready",
+            lambda *_args, **_kwargs: (True, ()),
+        )
+        monkeypatch.setattr(entry_consumer, "_policy_bundle", lambda *_args: object())
+        monkeypatch.setattr(
+            entry_consumer,
+            "prepare_runtime_entry_command",
+            lambda *_args, **_kwargs: prepared,
+        )
+
+        result = _run_once_for_fixture_account(
+            connection,
+            ids["trading_account_id"],
+        )
+        assert result == f"DISPATCHED:{ids['command_id']}"
+        dispatch = connection.execute(
+            """SELECT state,command_id
+                 FROM strategy_entry.execution_dispatches
+                WHERE execution_request_id=%s""",
+            (ids["execution_request_id"],),
+        ).fetchone()
+        assert dispatch == {
+            "state": "DISPATCHED",
+            "command_id": ids["command_id"],
+        }
+        command = connection.execute(
+            """SELECT state,command_type,trading_account_id
+                 FROM runtime.trade_commands
+                WHERE command_id=%s""",
+            (ids["command_id"],),
+        ).fetchone()
+        assert command == {
+            "state": "queued",
+            "command_type": "entry",
+            "trading_account_id": ids["trading_account_id"],
+        }
+        reservation = connection.execute(
+            """SELECT state,state_reason
+                 FROM runtime.capital_reservations
+                WHERE reservation_id=%s""",
+            (ids["reservation_id"],),
+        ).fetchone()
+        assert reservation == {
+            "state": "DISPATCHED",
+            "state_reason": "DISPATCHED_TO_EXECUTION",
+        }
