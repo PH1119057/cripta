@@ -221,7 +221,8 @@ def test_real_consumer_commits_every_entry_iteration(monkeypatch) -> None:
     fake_connection = OfflineConnection()
     outcomes = iter(("DISPATCHED:entry-a", "BLOCKED:MODE", "NO_REQUEST"))
 
-    def fake_run_once(_connection):
+    def fake_run_once(_connection, *, now=None):
+        del now
         result = next(outcomes)
         events.append(result)
         if result == "NO_REQUEST":
