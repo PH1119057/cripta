@@ -78,6 +78,7 @@ def test_sub_entry_service_is_explicitly_enableable_without_private_credential(
     unit = ENTRY.read_text(encoding="utf-8")
     assert "[Install]\nWantedBy=multi-user.target" in unit
     assert "Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=ENABLED" in unit
+    assert "Environment=CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND=SUB" in unit
     assert "universal_entry_consumer.py --sub-account=%i" in unit
     assert "EnvironmentFile=/etc/cripta/private-runtime-%i.env" in unit
     assert "BindsTo=cripta-private-runtime@%i.service" in unit
