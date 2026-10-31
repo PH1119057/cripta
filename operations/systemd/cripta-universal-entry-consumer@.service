@@ -17,7 +17,7 @@ Group=cripta
 WorkingDirectory=/srv/cripta/runtime/current
 Environment=PYTHONUNBUFFERED=1
 Environment=CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY
-Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED
+Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=ENABLED
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
 EnvironmentFile=/etc/cripta/release.env
 EnvironmentFile=/etc/cripta/private-runtime-%i.env
