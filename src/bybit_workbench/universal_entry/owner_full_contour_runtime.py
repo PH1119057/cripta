@@ -525,20 +525,4 @@ def refresh_run_lifecycle(
                 )
                 return "OWNER_DIAGNOSTIC_CLOSED:" + position_id
 
-    command_id = _v(row, "entry_command_id", 2)
-    if command_id:
-        command = connection.execute(
-            """SELECT state,error FROM runtime.trade_commands
-                WHERE command_id=%s AND trading_account_id=%s""",
-            (str(command_id), trading_account_id),
-        ).fetchone()
-        if command is not None and str(_v(command, "state", 0)) == "failed":
-            set_run_state(
-                connection,
-                run_id=run_id,
-                state="FAILED",
-                now=now,
-                error=str(_v(command, "error", 1) or "ENTRY_COMMAND_FAILED"),
-            )
-            return "OWNER_DIAGNOSTIC_FAILED:ENTRY_COMMAND"
     return None
