@@ -56,6 +56,11 @@ from bybit_workbench.p90l90_real_prearm_evidence import (
 )
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID as P90_MAIN_ID
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID as P90_SUB_ID
+from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
+    MAIN_ID as OWNER_FULL_CONTOUR_MAIN_ID,
+    SUB_ID as OWNER_FULL_CONTOUR_SUB_ID,
+    VERSION as OWNER_FULL_CONTOUR_VERSION,
+)
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     OWNER_ARM_STAGE_GATE_REASON as P90_OWNER_ARM_STAGE_GATE_REASON,
     VERSION as P90_REAL_V3_VERSION,
@@ -70,6 +75,9 @@ from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActi
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.r1_strategy import build_r1_cards
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
+from bybit_workbench.universal_entry.owner_full_contour_control import (
+    request_run as request_owner_full_contour_run,
+)
 from bybit_workbench.universal_entry.dashboard_control import (
     StaleActivationState,
     StrategyDashboardStore,
@@ -1700,16 +1708,26 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             "SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet'"
         ).fetchone()
         rearm = live_rearm_readiness(connection)
+        command_accounts = p90_accounts or [TRADING_ACCOUNT_ID]
         commands = connection.execute(
             """SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error
                  FROM runtime.trade_commands
-                WHERE (
-                     (trading_account_id=%s AND identity_status='PROVEN')
-                )
+                WHERE trading_account_id=ANY(%s)
+                  AND identity_status='PROVEN'
                 ORDER BY requested_at_epoch_ms DESC
                 LIMIT 20""",
-            (TRADING_ACCOUNT_ID,),
+            (command_accounts,),
         ).fetchall()
+        owner_full_contour_row = connection.execute(
+            """SELECT run_id,requested_at,requested_by,symbol,direction,
+                      strategy_id,trading_account_id,state,signal_id,
+                      strategy_attempt_id,entry_decision_id,
+                      entry_execution_request_id,entry_command_id,
+                      strategy_position_id,error,completed_at,updated_at
+                 FROM control.owner_full_contour_diagnostic_runs
+                ORDER BY requested_at DESC,run_id DESC
+                LIMIT 1"""
+        ).fetchone()
         # Read-only fail-closed projection of durable gate/session state.
         release_arm_rows = connection.execute(
             """SELECT strategy_id, symbol, release_commit
@@ -1813,12 +1831,11 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                   )
             ) x ON true
             WHERE c.command_type='entry'
-              AND (
-                   (c.trading_account_id=%s AND c.identity_status='PROVEN')
-              )
+              AND c.trading_account_id=ANY(%s)
+              AND c.identity_status='PROVEN'
             ORDER BY c.requested_at_epoch_ms DESC
             LIMIT 100""",
-            (TRADING_ACCOUNT_ID,),
+            (command_accounts,),
         ).fetchall()
         supervisor_rows = []
         if connection.execute("SELECT to_regclass('supervisor.snapshots')").fetchone()[0]:
@@ -2350,6 +2367,53 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             }
             for r in commands
         ],
+        "owner_full_contour_diagnostic": (
+            None
+            if owner_full_contour_row is None
+            else {
+                "run_id": str(owner_full_contour_row[0]),
+                "requested_at": owner_full_contour_row[1].isoformat(),
+                "requested_by": str(owner_full_contour_row[2]),
+                "symbol": str(owner_full_contour_row[3]),
+                "direction": str(owner_full_contour_row[4]),
+                "strategy_id": str(owner_full_contour_row[5]),
+                "trading_account_id": str(owner_full_contour_row[6]),
+                "state": str(owner_full_contour_row[7]),
+                "signal_id": (
+                    None if owner_full_contour_row[8] is None
+                    else str(owner_full_contour_row[8])
+                ),
+                "strategy_attempt_id": (
+                    None if owner_full_contour_row[9] is None
+                    else str(owner_full_contour_row[9])
+                ),
+                "entry_decision_id": (
+                    None if owner_full_contour_row[10] is None
+                    else str(owner_full_contour_row[10])
+                ),
+                "entry_execution_request_id": (
+                    None if owner_full_contour_row[11] is None
+                    else str(owner_full_contour_row[11])
+                ),
+                "entry_command_id": (
+                    None if owner_full_contour_row[12] is None
+                    else str(owner_full_contour_row[12])
+                ),
+                "strategy_position_id": (
+                    None if owner_full_contour_row[13] is None
+                    else str(owner_full_contour_row[13])
+                ),
+                "error": (
+                    None if owner_full_contour_row[14] is None
+                    else str(owner_full_contour_row[14])
+                ),
+                "completed_at": (
+                    None if owner_full_contour_row[15] is None
+                    else owner_full_contour_row[15].isoformat()
+                ),
+                "updated_at": owner_full_contour_row[16].isoformat(),
+            }
+        ),
         "release_arm_incidents": [
             {
                 "incident_id": r[0],
@@ -4406,6 +4470,14 @@ def _u6_set_activation(handler: object, request: dict[str, object]) -> None:
         and strategy_id in {P90_MAIN_ID, P90_SUB_ID}
     ):
         raise ValueError("P90_REAL_V3_USE_DEDICATED_PREARM_CONTROL")
+    if (
+        strategy_version == OWNER_FULL_CONTOUR_VERSION
+        and strategy_id in {
+            OWNER_FULL_CONTOUR_MAIN_ID,
+            OWNER_FULL_CONTOUR_SUB_ID,
+        }
+    ):
+        raise ValueError("OWNER_FULL_CONTOUR_USE_DEDICATED_CONTROL")
     enabled = request.get("enabled")
     if not isinstance(enabled, bool):
         raise ValueError("enabled must be boolean")
@@ -4481,6 +4553,14 @@ def _u6_set_execution_permission(handler: object, request: dict[str, object]) ->
         and strategy_id in {P90_MAIN_ID, P90_SUB_ID}
     ):
         raise ValueError("P90_REAL_V3_USE_DEDICATED_OWNER_ARM_CONTROL")
+    if (
+        strategy_version == OWNER_FULL_CONTOUR_VERSION
+        and strategy_id in {
+            OWNER_FULL_CONTOUR_MAIN_ID,
+            OWNER_FULL_CONTOUR_SUB_ID,
+        }
+    ):
+        raise ValueError("OWNER_FULL_CONTOUR_USE_DEDICATED_CONTROL")
     operator = handler.session_user() or "UNKNOWN"
     with psycopg.connect(
         "dbname=cripta user=cripta host=/var/run/postgresql"
@@ -5857,6 +5937,73 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     "application/json; charset=utf-8",
                 )
             return
+        if path == "/api/owner-full-contour-diagnostic":
+            try:
+                if not _u6_financial_account_same_origin(self):
+                    self.send_body(
+                        403,
+                        json.dumps(
+                            {"error": "OWNER_FULL_CONTOUR_ORIGIN_UNVERIFIED"}
+                        ).encode(),
+                        "application/json; charset=utf-8",
+                    )
+                    return
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    raise ValueError("OWNER_FULL_CONTOUR_REQUEST_SIZE_INVALID")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise ValueError("OWNER_FULL_CONTOUR_REQUEST_INVALID")
+                if request.get("confirmed") is not True:
+                    raise ValueError("OWNER_FULL_CONTOUR_OWNER_CONFIRMATION_REQUIRED")
+                request_id = str(request.get("request_id") or "").strip()
+                symbol = str(request.get("symbol") or "").strip().upper()
+                direction = str(request.get("direction") or "").strip().upper()
+                operator = self.session_user()
+                if (
+                    not operator
+                    or not request_id
+                    or len(request_id) > 128
+                    or any(
+                        ch not in (
+                            "abcdefghijklmnopqrstuvwxyz"
+                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "0123456789_-"
+                        )
+                        for ch in request_id
+                    )
+                ):
+                    raise ValueError("OWNER_FULL_CONTOUR_REQUEST_ID_INVALID")
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                    result = request_owner_full_contour_run(
+                        connection,
+                        request_id=request_id,
+                        symbol=symbol,
+                        direction=direction,
+                        operator=operator,
+                        release_commit=LOADED_RELEASE_COMMIT,
+                        now=datetime.now(UTC),
+                    )
+                    connection.commit()
+                _cache = None
+                self.send_body(
+                    202,
+                    json.dumps(
+                        {"status": "REQUESTED", **result},
+                        ensure_ascii=False,
+                    ).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            return
         if path in {"/api/live/settings", "/api/live/command", "/api/live/gate"}:
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -6145,26 +6292,57 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             ).fetchone()
                             if not gate or not bool(gate[0]):
                                 raise ValueError("mainnet gate закрыт")
-                            active_arm = connection.execute(
-                                """SELECT 1 FROM control.live_arm_sessions arm
-                                   JOIN strategy_entry.strategy_activations act
-                                     ON act.activation_id=arm.strategy_activation_id
-                                    AND act.strategy_id=arm.strategy_id
-                                    AND act.strategy_version=arm.strategy_version
-                                    AND act.strategy_config_fingerprint=arm.strategy_config_fingerprint
-                                   JOIN strategy_entry.execution_permissions perm
-                                     ON perm.strategy_id=arm.strategy_id
-                                    AND perm.strategy_version=arm.strategy_version
-                                    AND perm.strategy_config_fingerprint=arm.strategy_config_fingerprint
-                                   WHERE arm.state='ACTIVE' AND arm.symbol=%s
-                                     AND act.enabled=true AND perm.enabled=true
-                                   LIMIT 1""",
-                                (symbol,),
-                            ).fetchone()
-                            if active_arm is None:
+                            active_arm_rows = connection.execute(
+                                """SELECT arm.trading_account_id,arm.account_connector_id
+                                     FROM control.account_live_arm_sessions arm
+                                     JOIN strategy_entry.strategy_activations act
+                                       ON act.activation_id=arm.strategy_activation_id
+                                      AND act.strategy_id=arm.strategy_id
+                                      AND act.strategy_version=arm.strategy_version
+                                      AND act.strategy_config_fingerprint=
+                                          arm.strategy_config_fingerprint
+                                     JOIN strategy_entry.execution_permissions perm
+                                       ON perm.strategy_id=arm.strategy_id
+                                      AND perm.strategy_version=arm.strategy_version
+                                      AND perm.strategy_config_fingerprint=
+                                          arm.strategy_config_fingerprint
+                                    WHERE arm.state='ACTIVE'
+                                      AND arm.deactivated_at IS NULL
+                                      AND arm.symbol=%s
+                                      AND arm.release_commit=%s
+                                      AND arm.strategy_version=%s
+                                      AND arm.strategy_id IN (%s,%s)
+                                      AND act.enabled=true AND perm.enabled=true
+                                      AND EXISTS (
+                                          SELECT 1
+                                            FROM control.live_arm_sessions generic_arm
+                                           WHERE generic_arm.state='ACTIVE'
+                                             AND generic_arm.strategy_id=arm.strategy_id
+                                             AND generic_arm.strategy_version=arm.strategy_version
+                                             AND generic_arm.strategy_config_fingerprint=
+                                                 arm.strategy_config_fingerprint
+                                             AND generic_arm.strategy_activation_id=
+                                                 arm.strategy_activation_id
+                                             AND generic_arm.symbol=arm.symbol
+                                             AND generic_arm.release_commit=arm.release_commit
+                                      )
+                                    ORDER BY arm.trading_account_id,arm.account_connector_id""",
+                                (
+                                    symbol,
+                                    LOADED_RELEASE_COMMIT,
+                                    P90_REAL_V3_VERSION,
+                                    P90_MAIN_ID,
+                                    P90_SUB_ID,
+                                ),
+                            ).fetchall()
+                            if len(active_arm_rows) != 1:
                                 raise ValueError(
-                                    "контрольный вход разрешён только для монеты текущего active MICRO_LIVE cohort"
+                                    "контрольный вход разрешён только для монеты "
+                                    "current active MICRO_LIVE cohort с exact "
+                                    "P90 account scope"
                                 )
+                            test_account_id = str(active_arm_rows[0][0])
+                            test_connector_id = str(active_arm_rows[0][1])
                             occupied = connection.execute(
                                 """SELECT
                                     EXISTS(
@@ -6194,11 +6372,11 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                     )""",
                                 (
                                     symbol,
-                                    TRADING_ACCOUNT_ID,
+                                    test_account_id,
                                     symbol,
-                                    TRADING_ACCOUNT_ID,
+                                    test_account_id,
                                     symbol,
-                                    TRADING_ACCOUNT_ID,
+                                    test_account_id,
                                 ),
                             ).fetchone()
                             if occupied and bool(occupied[0]):
@@ -6210,6 +6388,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             command_type = "entry"
                             command_payload = {
                                 "source": "owner_controlled_live_test",
+                                "account_connector_id": test_connector_id,
                                 "stake_usdt": "10",
                                 "leverage": 1,
                                 "side": "Buy" if direction == "LONG" else "Sell",
@@ -6251,7 +6430,11 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                 symbol,
                                 json.dumps(command_payload),
                                 int(time.time() * 1000),
-                                TRADING_ACCOUNT_ID,
+                                (
+                                    test_account_id
+                                    if kind == "owner_test_entry"
+                                    else TRADING_ACCOUNT_ID
+                                ),
                             ),
                         )
                     connection.commit()

@@ -785,7 +785,8 @@ function renderOpenRailPositions(positions){
         '</div></div></div>';
   }).join(''):'<div class="rail-placeholder">Открытых позиций на Bybit нет.</div>';
 }
-function renderP90RailPositions(items,positions){
+function diagnosticStateRu(state){return ({REQUESTED:'запрос принят',MATERIALIZED:'Entry сформирован',DISPATCHED:'отправлено в Execution',POSITION_OPEN:'позиция открыта',CLOSED:'сквозной тест завершён',FAILED:'ошибка',RECONCILIATION_REQUIRED:'нужна сверка'})[String(state||'')]||String(state||'—')}
+function renderP90RailPositions(items,positions,diagnostic=window.ownerFullContourDiagnosticLatest||null){
   const rail=document.getElementById('openRailPositions'),count=document.getElementById('openRailCount');
   if(!rail||!count)return;
   const rows=Array.isArray(items)?items:[];
@@ -815,6 +816,15 @@ function renderP90RailPositions(items,positions){
       const geometryText=nearest
         ?'Entry '+entry+' · сейчас '+current
         :'текущая H9/PREV7D geometry не даёт LONG/SHORT Entry edge';
+      const diag=diagnostic&&String(diagnostic.symbol||'')===String(item.symbol||'')?diagnostic:null;
+      const diagLine=diag
+        ?'<div class="rail-position-meta">Сквозной REAL‑тест: <b>'+safe(diagnosticStateRu(diag.state))+'</b>'+(diag.error?' · '+safe(diag.error):'')+'</div>'
+        :'';
+      const diagControls=
+        '<div class="rail-position-controls" style="margin-top:7px">'+
+          '<button class="action" type="button" onclick="ownerFullContourDiagnostic(\''+symbol+'\',\'LONG\')">Сквозной LONG</button>'+
+          '<button class="action" type="button" onclick="ownerFullContourDiagnostic(\''+symbol+'\',\'SHORT\')">Сквозной SHORT</button>'+
+        '</div>';
       return '<div class="rail-open-position '+stateClass+'">'+
         '<div class="rail-position-summary">'+
           '<span><span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state '+tone+'">'+stateText+'</small></span>'+
@@ -822,6 +832,7 @@ function renderP90RailPositions(items,positions){
         '</div>'+
         '<div class="rail-position-meta">'+safe(geometryText)+'</div>'+
         '<div class="rail-position-meta">geometry '+safe(item.geometry?.effective_at||'—')+'</div>'+
+        diagLine+diagControls+
       '</div>';
     }
     const p=item.position||{},isLong=p.side==='Buy',direction=isLong?'LONG':'SHORT';
@@ -850,6 +861,9 @@ function renderP90RailPositions(items,positions){
         '<span class="rail-position-pnl '+pnlClass+'">'+pnlText+'<br><small class="rail-position-meta">после комиссий</small></span>'+
         '<span aria-hidden="true">'+(expanded?'▾':'▸')+'</span></button>'+
       '<div class="rail-position-meta">Вход '+price(p.entry_price)+' · Сейчас '+price(p.executable_close_price||p.mark_price)+' · qty '+(Number.isFinite(qty)?qty.toFixed(4):'—')+'</div>'+
+      (diagnostic&&String(diagnostic.symbol||'')===String(item.symbol||'')
+        ?'<div class="rail-position-meta">Сквозной REAL‑тест: <b>'+safe(diagnosticStateRu(diagnostic.state))+'</b>'+(diagnostic.error?' · '+safe(diagnostic.error):'')+'</div>'
+        :'')+
       '<div class="rail-position-more" id="rail-open-'+symbol+'" '+(expanded?'':'hidden')+'>'+
         '<div class="rail-position-facts"><span>Сторона: <b>'+direction+'</b></span><span>PnL: <b class="'+pnlClass+'">'+pnlText+'</b></span>'+
           '<span>Аккаунт: '+safe(item.trading_account_id||'—')+'</span><span>'+basis+'</span></div>'+
@@ -875,14 +889,17 @@ function renderGateReasons(lt){const reasons=lt.rearm?.reasons||[];if(liveGateOp
 function updateOperatorConnection(){const now=Date.now(),apiAge=lastLiveSuccessAt?Math.max(0,Math.round((now-lastLiveSuccessAt)/1000)):null,walletAge=lastWalletRefreshMs?Math.max(0,Math.round((now-lastWalletRefreshMs)/1000)):null;let cls='operator-link-bad',text='ПОРТАЛ НЕДОСТУПЕН',detail='нет ответа портала live-state более 60 сек.';if(apiAge!==null&&apiAge<=60){if(walletAge!==null&&walletAge<=30){cls='operator-link-ok';text='ONLINE';detail=`сервер ${apiAge} сек. · account ${walletAge} сек.`}else{cls='operator-link-warn';text='ДАННЫЕ АККАУНТА УСТАРЕЛИ';detail=`сервер ${apiAge} сек. · account ${walletAge==null?'нет':walletAge+' сек.'}`}}operatorConnection.className=`value ${cls}`;operatorConnection.textContent=text;liveFreshness.textContent=detail}
 setInterval(updateOperatorConnection,1000);
 async function confirmGateState(expected){const deadline=Date.now()+20000;let lastError=null;while(Date.now()<deadline){try{const lt=await readLiveStateOnce();if(Boolean(lt.gate?.enabled)===expected)return lt}catch(e){lastError=e}await new Promise(resolve=>setTimeout(resolve,500))}throw lastError||new Error(`Сервер не подтвердил состояние шлюза за 20 секунд: ${expected?'ОТКРЫТ':'ЗАКРЫТ'}`)}
-function exactR1MicroLiveCohort(){const expected=new Set(['r1_aptusdt','r1_injusdt','r1_dotusdt','r1_ltcusdt','r1_arbusdt']),active=(u6StrategyCatalog||[]).filter(item=>(item.activations||[]).some(a=>a.enabled));return active.length===5&&active.every(item=>expected.has(String(item.strategy_id||''))&&String(item.strategy_version||'')==='1.1-micro-live')}
-function exactUnifiedR1MicroLiveCohort(){const active=(u6StrategyCatalog||[]).filter(item=>(item.activations||[]).some(a=>a.enabled));return active.length===1&&String(active[0].strategy_id||'')==='r1_five_symbols'&&String(active[0].strategy_version||'')==='1.0-five-symbols-20261021'}
+function exactR1MicroLiveCohort(){const expected=new Set(['r1_aptusdt','r1_injusdt','r1_dotusdt','r1_ltcusdt','r1_arbusdt']),active=(u6StrategyCatalog||[]).filter(item=>expected.has(String(item.strategy_id||''))&&String(item.strategy_version||'')==='1.1-micro-live'&&(item.activations||[]).some(a=>a.enabled));return active.length===5}
+function exactUnifiedR1MicroLiveCohort(){const active=(u6StrategyCatalog||[]).filter(item=>String(item.strategy_id||'')==='r1_five_symbols'&&String(item.strategy_version||'')==='1.0-five-symbols-20261021'&&(item.activations||[]).some(a=>a.enabled));return active.length===1}
 function exactP90RealV3Cohort(){
   const expected={
     p90l90_legacy_main_ltc_inj:new Set(['LTCUSDT','INJUSDT']),
     p90l90_legacy_sub_dot_arb_apt:new Set(['DOTUSDT','ARBUSDT','APTUSDT'])
   },version='2.0-p90l90-real-main-sub-20261028',
-  active=(u6StrategyCatalog||[]).filter(item=>(item.activations||[]).some(a=>a.enabled));
+  active=(u6StrategyCatalog||[]).filter(item=>
+    Object.prototype.hasOwnProperty.call(expected,String(item.strategy_id||''))&&
+    (item.activations||[]).some(a=>a.enabled)
+  );
   if(active.length!==2)return false;
   return active.every(item=>{
     const want=expected[String(item.strategy_id||'')];
@@ -983,10 +1000,42 @@ document.getElementById('p90RealV3ArmButton')?.addEventListener('click',async()=
 });
 async function fetchLiveStateData(){if(liveStateInFlight)return liveStateInFlight;const view=activePanelName()==='liveDesk'?activeTradePage():'open',path=`/api/live/state?view=${encodeURIComponent(view)}`;liveStateInFlight=(async()=>{const r=await fetchWithTimeout(path,{cache:'no-store'},8000);if(!r.ok)throw new Error(`live-state HTTP ${r.status}`);const out=await r.json();lastLiveSuccessAt=Date.now();return out})();try{return await liveStateInFlight}finally{liveStateInFlight=null}}
 async function readLiveStateOnce(){const d=await fetchLiveStateData();renderLiveState(d);return d.live_trading||{}}
-async function waitForTradeCommand(commandId){for(let attempt=0;attempt<30;attempt++){await new Promise(resolve=>setTimeout(resolve,500));const d=await fetchLiveStateData(),command=(d.live_trading?.commands||[]).find(x=>x.command_id===commandId);if(command?.state==='completed')return command;if(command?.state==='failed')throw new Error(command.error||'Bybit отклонил команду')}throw new Error('Нет подтверждения Bybit за 15 секунд. Проверьте строку сделки и журнал команд.')}
+async function waitForTradeCommand(commandId){for(let attempt=0;attempt<120;attempt++){await new Promise(resolve=>setTimeout(resolve,500));const d=await fetchLiveStateData(),command=(d.live_trading?.commands||[]).find(x=>x.command_id===commandId);if(command?.state==='completed')return command;if(command?.state==='failed')throw new Error(command.error||'Bybit отклонил команду')}throw new Error('Нет terminal подтверждения Bybit за 60 секунд. Команда не считается успешной; проверьте её состояние и журнал.')}
 async function tradeCommand(type,symbol){if(!confirm(`Отправить реальную команду для ${symbol}?`))return;try{const accepted=await livePost('/api/live/command',{type,symbol});tradeCommandStatus.textContent=`${symbol}: команда отправлена, ожидается подтверждение Bybit`;await waitForTradeCommand(accepted.command_id);tradeCommandStatus.textContent=`${symbol}: команда выполнена и подтверждена Bybit`;alert('Команда выполнена и подтверждена Bybit.')}catch(e){tradeCommandStatus.textContent=`${symbol}: команда не выполнена · ${e.message}`;alert(e.message)}}
 async function ownerTestEntry(){const symbol=ownerTestSymbol.value,direction=ownerTestDirection.value;if(!confirm(`РЕАЛЬНАЯ КОНТРОЛЬНАЯ СДЕЛКА\n\n${symbol} · ${direction}\n10 USDT · 1x\nSL −0,5% · TP +0,5%\n\nОткрыть на Bybit через production private runtime?`))return;ownerTestEntryButton.disabled=true;const finish=beginTimedStatus(ownerTestEntryStatus,`Отправляю ${symbol} ${direction} на Bybit`);try{const accepted=await livePostTimed('/api/live/command',{type:'owner_test_entry',symbol,direction,stake_usdt:10,leverage:1,stop_loss_pct:0.5,take_profit_pct:0.5,confirmed:true},12000);finish('busy',`${symbol}: команда принята · жду fill и защиту Bybit`);const command=await waitForTradeCommand(accepted.command_id);finish('success',`${symbol}: ОТКРЫТО И ПОДТВЕРЖДЕНО BYBIT · ${command.command_id}`);await readLiveStateOnce();alert(`${symbol}: контрольная реальная сделка открыта и подтверждена Bybit.`)}catch(e){finish('error',`${symbol}: НЕ ОТКРЫТО · ${e.message}`);alert(e.message)}finally{ownerTestEntryButton.disabled=false}}
 ownerTestEntryButton.addEventListener('click',ownerTestEntry);
+async function ownerFullContourDiagnostic(symbol,direction){
+  const requestId=`owner-fc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  if(!confirm(`СКВОЗНОЙ REAL‑ТЕСТ\n\n${symbol} · ${direction}\n10 USDT · 1x · MARKET\nHard-stop −0,5% · Exit +0,5%\n\nЭто реальная диагностическая сделка. Будут проверены обычные Strategy → Entry → admission → Execution → Bybit → StrategyPosition → Universal Exit. В P90‑статистику тест не входит. Продолжить?`))return;
+  tradeCommandStatus.textContent=`${symbol}: создаю owner trigger сквозного REAL‑теста`;
+  try{
+    const accepted=await livePostTimed('/api/owner-full-contour-diagnostic',{symbol,direction,confirmed:true,request_id:requestId},12000);
+    tradeCommandStatus.textContent=`${symbol}: сквозной тест принят · жду обычный Entry/Execution lifecycle`;
+    for(let attempt=0;attempt<120;attempt++){
+      await new Promise(resolve=>setTimeout(resolve,1000));
+      const d=await fetchLiveStateData(),run=d.live_trading?.owner_full_contour_diagnostic;
+      if(!run||run.run_id!==accepted.run_id)continue;
+      renderLiveState(d);
+      if(run.state==='FAILED'||run.state==='RECONCILIATION_REQUIRED')throw new Error(run.error||diagnosticStateRu(run.state));
+      if(run.state==='POSITION_OPEN'){
+        tradeCommandStatus.textContent=`${symbol}: сквозной Entry подтверждён · позиция открыта, Universal Exit сопровождает ±0,5%`;
+        alert(`${symbol}: сквозной REAL‑тест дошёл до реальной StrategyPosition. Exit +0,5% / hard-stop −0,5% теперь сопровождается production-контуром.`);
+        return;
+      }
+      if(run.state==='CLOSED'){
+        tradeCommandStatus.textContent=`${symbol}: сквозной REAL‑тест полностью завершён`;
+        alert(`${symbol}: сквозной REAL‑тест прошёл полный Entry → Execution → Position → Exit lifecycle.`);
+        return;
+      }
+    }
+    const d=await fetchLiveStateData(),run=d.live_trading?.owner_full_contour_diagnostic;
+    renderLiveState(d);
+    tradeCommandStatus.textContent=`${symbol}: тест продолжается · ${diagnosticStateRu(run?.state)}. Это не считается ошибкой или успехом до terminal evidence.`;
+  }catch(e){
+    tradeCommandStatus.textContent=`${symbol}: сквозной REAL‑тест не подтверждён · ${e.message}`;
+    alert(e.message);
+  }
+}
 function rememberTrailing(symbol,value){trailingChoices.set(symbol,Number(value))}
 function trailingOptions(symbol){const chosen=trailingChoices.get(symbol)??0.3;return [0.1,0.2,0.3,0.5,1].map(x=>`<option value="${x}" ${x===chosen?'selected':''}>${x.toFixed(2).replace('.',',')}%</option>`).join('')}
 async function setTrailing(symbol,enabled){const distance=trailingChoices.get(symbol)??0.3,row=window.currentPositions?.find(x=>x.symbol===symbol),entry=Number(row?.entry_price||0),mark=Number(row?.mark_price||0),move=entry>0&&mark>0?(row.side==='Buy'?1:-1)*(mark/entry-1)*100:0;if(enabled&&move<=0){alert(`Плавающий стоп не включён: сделка ${symbol} сейчас не находится в плюсе.`);return}const action=enabled?'ВКЛЮЧИТЬ':'ВЫКЛЮЧИТЬ';if(!confirm(`${action} плавающий стоп ${distance.toFixed(2)}% для ${symbol}? Команда немедленно изменит условия реальной сделки.`))return;try{const accepted=await livePost('/api/live/command',{type:'trailing_stop',symbol,enabled,distance_pct:distance});tradeCommandStatus.textContent=`${symbol}: команда отправлена, ожидается подтверждение Bybit`;await waitForTradeCommand(accepted.command_id);tradeCommandStatus.textContent=`${symbol}: плавающий стоп подтверждён Bybit`;alert('Изменение плавающего стопа выполнено и подтверждено Bybit.')}catch(e){tradeCommandStatus.textContent=`${symbol}: плавающий стоп не изменён · ${e.message}`;alert(e.message)}}
@@ -1230,7 +1279,7 @@ function renderLiveState(d){
   tradeEquity.textContent=wallet?num(wallet.total_equity):'нет данных';tradeAvailable.textContent=wallet?num(wallet.available_balance):'нет данных';livePositions.textContent=positions.length;const positionReserve=wallet?Number(wallet.reserved_for_positions||0):0,orderReserve=wallet?Number(wallet.reserved_for_orders||0):0,inUse=positionReserve+orderReserve;tradeInUse.textContent=wallet?`${inUse.toFixed(2)} USDT`:'нет данных';tradeInUseDetail.textContent=wallet?`позиции ${positionReserve.toFixed(2)} + заявки ${orderReserve.toFixed(2)} USDT`:'нет account snapshot';tradeBalanceDetail.textContent=wallet?`баланс без текущего результата: ${Number(wallet.wallet_balance||0).toFixed(2)} USDT`:'account snapshot отсутствует';updateOperatorConnection();
   const positionKeys=new Set(positions.map(p=>p.symbol+':'+p.side)),savedPositionKeys=localStorage.getItem('cripta-open-position-keys');if(lastOpenPositions===null&&savedPositionKeys){try{lastOpenPositions=new Set(JSON.parse(savedPositionKeys))}catch(_e){lastOpenPositions=null}}if(lastOpenPositions!==null){for(const key of positionKeys)if(!lastOpenPositions.has(key))entrySound()}lastOpenPositions=positionKeys;localStorage.setItem('cripta-open-position-keys',JSON.stringify([...positionKeys]));
   renderOpenRailPositions(positions);
-  renderP90RailPositions(lt.p90_rail?.items||[],positions);
+  window.ownerFullContourDiagnosticLatest=lt.owner_full_contour_diagnostic||null;renderP90RailPositions(lt.p90_rail?.items||[],positions);
   if(activeTradePage()==='open')positionRows.innerHTML=positions.length?positions.map(p=>{const entry=Number(p.entry_price),mark=Number(p.mark_price),size=Number(p.size),leverage=Number(p.leverage||1),direction=p.side==='Buy'?1:-1,supervisorState=({WARMUP:'прогрев',HEALTHY:'нормально',WARNING:'предупреждение',RECOVERY:'восстановление',PROVEN:'движение подтверждено',RUNNER:'сильное движение',BROKEN:'идея сломана',BLOCKED:'данных недостаточно',ERROR:'ошибка'})[p.supervisor?.state]||p.supervisor?.state||'—',move=entry>0&&mark>0?direction*(mark/entry-1)*100:null,stop=Number(p.stop_loss||0),stopMove=entry>0&&stop>0?direction*(stop/entry-1)*100:null,trail=Number(p.trailing_stop||0),trailPct=mark>0&&trail>0?trail/mark*100:null,trailTrigger=Number(p.trailing_trigger_price||0),trailTriggerMove=entry>0&&trailTrigger>0?direction*(trailTrigger/entry-1)*100:null,notional=entry*size,bybitMargin=Number(p.bybit_position_im||0),actualMargin=bybitMargin>0?bybitMargin:leverage>0?notional/leverage:null,pnl=p.net_pnl_to_close==null?null:Number(p.net_pnl_to_close),marginReturn=actualMargin>0&&pnl!=null?pnl/actualMargin*100:null,age=Math.max(0,Math.round((Date.now()-Number(p.refreshed_at_epoch_ms||0))/1000));return `<tr><td><a href="https://www.bybit.kz/trade/usdt/${p.symbol}" target="_blank" rel="noopener"><b>${p.symbol}</b></a><br><small class="muted">данные ${age} сек. назад</small></td><td>${p.strategy_name?`<span class="strategy-name-chip">${safe(p.strategy_name)}</span><br><small class="muted">${safe(p.strategy_version||'')}</small>`:p.strategy_id?`<small>${safe(p.strategy_id)} · ${safe(p.strategy_version)}</small>`:'<span class="muted">не привязана</span>'}</td><td><span class="pill">${safe(supervisorState)}</span></td><td>${p.side==='Buy'?'покупка':'продажа'}</td><td>${p.size}<br><small class="muted">объём ${notional.toFixed(2)} USDT<br>маржа ≈ ${actualMargin==null?'—':actualMargin.toFixed(2)} USDT</small></td><td>${entry.toFixed(4)}</td><td>${p.break_even_price?Number(p.break_even_price).toFixed(4):'—'}</td><td>${mark?mark.toFixed(4):'—'}</td><td>${stop?stop.toFixed(4):'не установлен'}${stopMove==null?'':`<br><b class="${stopMove>=0?'ok':'warn'}">${stopMove>=0?'+':''}${stopMove.toFixed(3)}% от входа</b>`}${trailPct==null?'':`<br><span class="ok">отступ плавающего стопа: ${trailPct.toFixed(3)}%</span>`}${trailTrigger>0?`<br><b class="ok">плавающий стоп сейчас: ${trailTrigger.toFixed(4)} (${trailTriggerMove==null?'—':(trailTriggerMove>=0?'+':' ')+trailTriggerMove.toFixed(3)+'% от входа'})</b><br><small class="muted">подтверждено Bybit</small>`:trail>0?`<br><span class="warn">цена плавающего стопа ещё не получена</span>`:''}</td><td><b class="${pnl==null?'muted':pnl>0?'ok':pnl<0?'loss':''}">${pnl==null?'—':(pnl>0?'+':'')+pnl.toFixed(4)+' USDT'}</b><br><small class="muted">после комиссий · закрытие тейкером (оценка)${marginReturn==null?'':' · '+(marginReturn>0?'+':'')+marginReturn.toFixed(2)+'% маржи'}</small></td><td><button class="action" onclick="tradeCommand('break_even','${p.symbol}')">Безубыток</button> <button class="action" onclick="tradeCommand('current_stop','${p.symbol}')">Стоп −0,20%</button><br><select id="trail-${p.symbol}" title="Отступ плавающего стопа" onchange="rememberTrailing('${p.symbol}',this.value)">${trailingOptions(p.symbol)}</select> <button class="action" onclick="setTrailing('${p.symbol}',${trail<=0})">${trail>0?'Выключить плавающий стоп':'Включить плавающий стоп'}</button> <button class="action danger" onclick="tradeCommand('close','${p.symbol}')">Закрыть</button></td></tr>`}).join(''):'<tr><td colspan="12" class="muted">Открытых позиций на Bybit нет.</td></tr>';
   const reasonText={StopLoss:'стоп',TakeProfit:'цель',TrailingStop:'плавающий стоп',UNKNOWN:'закрыто вручную'};const closed=lt.recent_closed||[],closedKeys=new Set(closed.map(x=>String(x.cycle_key||((x.exec_ids||[]).join(":"))||x.symbol+":"+x.closed_at_epoch_ms)));
   const soundSeenStorageKey='cripta-seen-closed-cycles-v1',storedCycleKeys=localStorage.getItem(soundSeenStorageKey);

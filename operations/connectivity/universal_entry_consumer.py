@@ -35,6 +35,13 @@ from bybit_workbench.universal_entry.execution_bridge import (
     prepare_runtime_entry_command,
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
+from bybit_workbench.universal_entry.owner_full_contour_control import (
+    set_run_state as set_owner_diagnostic_run_state,
+)
+from bybit_workbench.universal_entry.owner_full_contour_runtime import (
+    materialize_requested_run,
+    refresh_run_lifecycle,
+)
 
 CURRENT_ACCOUNT_REF = "BYBIT:UNIFIED"
 CURRENT_POSITION_IDX = 0
@@ -72,9 +79,11 @@ _REQUIRED_DB_PRIVILEGES = (
     ("strategy_entry.strategy_attempts", "SELECT"),
     ("strategy_entry.strategy_activations", "SELECT"),
     ("strategy_entry.execution_permissions", "SELECT"),
+    ("strategy_entry.execution_permissions", "UPDATE"),
     ("strategy_entry.entry_decisions", "SELECT"),
     ("strategy_entry.execution_dispatches", "SELECT"),
     ("strategy_entry.execution_dispatches", "INSERT"),
+    ("strategy_entry.execution_request_state_events", "SELECT"),
     ("strategy_entry.execution_request_state_events", "INSERT"),
     ("strategy_entry.strategy_cards", "SELECT"),
     ("strategy_entry.entry_plans", "SELECT"),
@@ -85,6 +94,10 @@ _REQUIRED_DB_PRIVILEGES = (
     ("runtime.exchange_position_slot_claims", "UPDATE"),
     ("runtime.trade_commands", "SELECT"),
     ("runtime.trade_commands", "INSERT"),
+    ("control.owner_full_contour_diagnostic_runs", "SELECT"),
+    ("control.owner_full_contour_diagnostic_runs", "UPDATE"),
+    ("control.live_arm_sessions", "SELECT"),
+    ("control.live_arm_sessions", "UPDATE"),
 )
 
 
@@ -1045,9 +1058,116 @@ def _live_arm_ready(
     return True, ()
 
 
+def _refresh_owner_diagnostic_terminal_exit(
+    connection: psycopg.Connection[Any], *, now: datetime,
+) -> str | None:
+    row = connection.execute(
+        """SELECT run_id,strategy_position_id,entry_execution_request_id
+             FROM control.owner_full_contour_diagnostic_runs
+            WHERE trading_account_id=%s
+              AND state IN ('DISPATCHED','POSITION_OPEN')
+              AND entry_execution_request_id IS NOT NULL
+            ORDER BY requested_at DESC LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
+    ).fetchone()
+    if row is None:
+        return None
+    position = connection.execute(
+        """SELECT position_id,state FROM runtime.position_ownership
+            WHERE entry_execution_request_id=%s
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
+            ORDER BY created_at DESC LIMIT 1""",
+        (str(row["entry_execution_request_id"]), TRADING_ACCOUNT_ID),
+    ).fetchone()
+    if position is None or str(position["state"]) != "CLOSED":
+        return None
+    position_id = str(position["position_id"])
+    universal_exit = connection.execute(
+        """SELECT d.exit_decision_id,r.execution_request_id,
+                  x.command_id,c.state
+             FROM strategy_exit.exit_decisions d
+             JOIN strategy_exit.execution_requests r
+               ON r.exit_decision_id=d.exit_decision_id
+             JOIN strategy_exit.execution_dispatches x
+               ON x.execution_request_id=r.execution_request_id
+              AND x.state='DISPATCHED'
+             JOIN runtime.trade_commands c
+               ON c.command_id=x.command_id
+              AND c.command_type='strategy_exit'
+              AND c.trading_account_id=%s
+              AND c.identity_status='PROVEN'
+            WHERE d.strategy_position_id=%s
+              AND d.action_kind='CLOSE'
+              AND c.state='completed'
+              AND c.payload_json::jsonb->>'source'='universal_exit'
+            ORDER BY d.decided_at DESC,x.created_at DESC
+            LIMIT 1""",
+        (TRADING_ACCOUNT_ID, position_id),
+    ).fetchone()
+    if universal_exit is None:
+        set_owner_diagnostic_run_state(
+            connection,
+            run_id=str(row["run_id"]),
+            state="FAILED",
+            now=now,
+            lineage={"strategy_position_id": position_id},
+            error=(
+                "POSITION_CLOSED_WITHOUT_COMPLETED_UNIVERSAL_EXIT:"
+                "exchange protection or another close path ended the "
+                "position before full-contour Exit proof"
+            ),
+        )
+        return (
+            "OWNER_DIAGNOSTIC_FAILED:"
+            "POSITION_CLOSED_WITHOUT_COMPLETED_UNIVERSAL_EXIT"
+        )
+    set_owner_diagnostic_run_state(
+        connection,
+        run_id=str(row["run_id"]),
+        state="CLOSED",
+        now=now,
+        lineage={"strategy_position_id": position_id},
+    )
+    return "OWNER_DIAGNOSTIC_CLOSED:" + position_id
+
+
+def _refresh_owner_diagnostic_command_failure(
+    connection: psycopg.Connection[Any], *, now: datetime,
+) -> str | None:
+    row = connection.execute(
+        """SELECT run_id,entry_command_id
+             FROM control.owner_full_contour_diagnostic_runs
+            WHERE trading_account_id=%s
+              AND state IN ('DISPATCHED','POSITION_OPEN')
+              AND entry_command_id IS NOT NULL
+            ORDER BY requested_at DESC LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
+    ).fetchone()
+    if row is None:
+        return None
+    command = connection.execute(
+        """SELECT state,error FROM runtime.trade_commands
+            WHERE command_id=%s AND trading_account_id=%s
+              AND identity_status='PROVEN'""",
+        (str(row["entry_command_id"]), TRADING_ACCOUNT_ID),
+    ).fetchone()
+    if command is None or str(command["state"]) != "failed":
+        return None
+    set_owner_diagnostic_run_state(
+        connection,
+        run_id=str(row["run_id"]),
+        state="FAILED",
+        now=now,
+        error=str(command["error"] or "ENTRY_COMMAND_FAILED"),
+    )
+    return "OWNER_DIAGNOSTIC_FAILED:ENTRY_COMMAND"
+
+
 def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None) -> str:
     current = (now or datetime.now(UTC)).astimezone(UTC)
     _release_expired_reserved_requests(connection, now=current)
+
     if not _execution_gate_enabled(connection):
         return "EXECUTION_GATE_DISARMED"
     # Registry routing is only a prerequisite. Per-request binding/connector,
@@ -1069,7 +1189,42 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         return "ACCOUNT_ENTRY_SAFETY_NOT_READY:" + ",".join(safety_reasons)
     row = _next_request(connection, route=route)
     if row is None:
-        return "NO_REQUEST"
+        # Ordinary production requests retain priority. Only after the exact
+        # process/account route and account safety checks passed, and no normal
+        # Entry request is pending, may this consumer inspect an owner
+        # diagnostic trigger.
+        refresh_run_lifecycle(
+            connection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            now=current,
+        )
+        terminal_result = _refresh_owner_diagnostic_terminal_exit(
+            connection,
+            now=current,
+        )
+        if terminal_result:
+            return terminal_result
+        command_result = _refresh_owner_diagnostic_command_failure(
+            connection,
+            now=current,
+        )
+        if command_result:
+            return command_result
+        diagnostic_result = materialize_requested_run(
+            connection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            account_connector_id=ACCOUNT_CONNECTOR_ID,
+            release_commit=LOADED_RELEASE_COMMIT,
+            now=current,
+        )
+        if diagnostic_result and diagnostic_result.startswith(
+            "OWNER_DIAGNOSTIC_FAILED:"
+        ):
+            return diagnostic_result
+        if diagnostic_result:
+            row = _next_request(connection, route=route)
+        if row is None:
+            return diagnostic_result or "NO_REQUEST"
     request = _request_from_row(row)
     reservation_state = row.get("capital_reservation_state")
     if (

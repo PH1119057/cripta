@@ -273,6 +273,72 @@ def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
     )
 
 
+def _owner_full_contour_diagnostic_policy(card: StrategyCard) -> bool:
+    """Exact owner-triggered diagnostic policy; never a market-observer Strategy."""
+    if card.strategy_version != "1.0-owner-full-contour-20261101":
+        return False
+    scopes = {
+        "owner_full_contour_diag_main": ("INJUSDT", "LTCUSDT"),
+        "owner_full_contour_diag_sub": ("APTUSDT", "ARBUSDT", "DOTUSDT"),
+    }
+    expected = scopes.get(card.strategy_id)
+    if expected is None or card.symbols != expected:
+        return False
+    entry = card.entry_policy.to_dict()
+    predicate = _mapping(entry.get("predicate"))
+    params = _mapping(predicate.get("params"))
+    execution = _mapping(entry.get("execution_policy"))
+    capital = card.capital_policy.to_dict()
+    initial = _mapping(card.protection_policy.to_dict().get("initial_protection"))
+    exit_policy = card.exit_policy.to_dict()
+    rules = exit_policy.get("rules")
+    lifecycle = card.lifecycle_policy.to_dict()
+    emergency = _mapping(lifecycle.get("emergency_policy"))
+    return (
+        {side.value for side in card.direction_policy} == {"LONG", "SHORT"}
+        and _mapping(entry.get("watch_policy")).get("enabled") is False
+        and predicate.get("op") == "COMPARE"
+        and params == {
+            "path": "event_kind",
+            "comparator": "EQ",
+            "value": "OWNER_FULL_CONTOUR_TRIGGER",
+        }
+        and execution == {
+            "order_type": "MARKET",
+            "reference_value_path": "fact.price",
+            "max_request_age_seconds": 15,
+        }
+        and capital.get("require_capacity") is True
+        and capital.get("capacity_max_age_seconds") == 15
+        and capital.get("capacity_min_quality") == "HIGH"
+        and capital.get("amount_currency") == "USDT"
+        and capital.get("requested_amount") == "10"
+        and capital.get("leverage") == 1
+        and capital.get("margin_mode") == "ISOLATED"
+        and capital.get("max_simultaneous_committed_usdt") == "10"
+        and capital.get("max_open_positions_per_symbol") == 1
+        and initial.get("stop_loss_enabled") is True
+        and initial.get("stop_loss_pct") == "0.5"
+        and initial.get("exchange_resident_required") is True
+        and initial.get("take_profit_enabled") is False
+        and initial.get("trigger_by") == "LastPrice"
+        and initial.get("tpsl_mode") == "Full"
+        and isinstance(rules, list)
+        and {str(item.get("rule_id") or "") for item in rules if isinstance(item, Mapping)}
+            == {"OWNER_DIAGNOSTIC_TP_0_5", "OWNER_DIAGNOSTIC_SL_0_5"}
+        and _mapping(exit_policy.get("execution_policy"))
+            == {"max_request_age_seconds": 10}
+        and lifecycle.get("position_mode") == "ONE_WAY"
+        and lifecycle.get("max_open_positions_per_symbol") == 1
+        and emergency == {
+            "enabled": True,
+            "terminal_loss_containment": "INITIAL_PROTECTION",
+            "initial_stop_loss_pct": "0.5",
+            "operator_kill": "MAINNET_GATE_OFF",
+        }
+    )
+
+
 def assess_strategy_runtime_readiness(
     card: StrategyCard,
     *,
@@ -293,7 +359,8 @@ def assess_strategy_runtime_readiness(
 
     entry = card.entry_policy.to_dict()
     watch = _mapping(entry.get("watch_policy"))
-    if not bool(watch.get("enabled", False)):
+    owner_diagnostic = _owner_full_contour_diagnostic_policy(card)
+    if not bool(watch.get("enabled", False)) and not owner_diagnostic:
         policy_reasons.append(
             RuntimeReadinessReason(
                 "ENTRY_WATCH_DISABLED",

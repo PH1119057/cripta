@@ -23,6 +23,9 @@ from bybit_workbench.lifecycle_ack import (
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, TradeDirection
 from bybit_workbench.universal_entry.fingerprint import fingerprint
 from bybit_workbench.universal_entry.market_watch import compute_l53_zone
+from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
+    is_diagnostic_strategy,
+)
 from bybit_workbench.universal_exit.contracts import ExitObservation
 from bybit_workbench.universal_exit.engine import UniversalExitEngine
 from bybit_workbench.universal_exit.loader import load_exit_binding
@@ -207,6 +210,66 @@ def _fetch_l53_observation(position: object, plan: object, *, now: datetime) -> 
     )
 
 
+def _fetch_owner_diagnostic_observation(
+    position: object,
+    *,
+    now: datetime,
+) -> ExitObservation:
+    if not PUBLIC_REST:
+        raise RuntimeError("CRIPTA_U5_PUBLIC_REST is required for diagnostic Exit")
+    symbol = str(position.symbol)
+    entry = Decimal(str(position.actual_avg_fill))
+    if entry <= 0:
+        raise RuntimeError("owner diagnostic actual fill is invalid")
+    query = urllib.parse.urlencode({"category": "linear", "symbol": symbol})
+    with urllib.request.urlopen(
+        f"{PUBLIC_REST}/v5/market/tickers?{query}", timeout=5
+    ) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if str(payload.get("retCode")) != "0":
+        raise RuntimeError(f"Bybit ticker failed: {payload.get('retMsg')}")
+    result = payload.get("result")
+    rows = result.get("list") if isinstance(result, dict) else None
+    if not isinstance(rows, list) or len(rows) != 1:
+        raise RuntimeError("Bybit ticker result.list invalid")
+    try:
+        mark = Decimal(str(rows[0].get("lastPrice")))
+    except Exception as exc:
+        raise RuntimeError("Bybit diagnostic LastPrice invalid") from exc
+    if not mark.is_finite() or mark <= 0:
+        raise RuntimeError("Bybit diagnostic LastPrice invalid")
+    directional = (
+        ((mark - entry) / entry) * Decimal("100")
+        if position.direction is TradeDirection.LONG
+        else ((entry - mark) / entry) * Decimal("100")
+    )
+    observation_id = "exit-observation-" + fingerprint(
+        {
+            "strategy_position_id": position.strategy_position_id,
+            "event_kind": "OWNER_FULL_CONTOUR_MARK",
+            "last_price": str(mark),
+            "observed_at": now,
+        }
+    )[:32]
+    return ExitObservation(
+        observation_id=observation_id,
+        strategy_position_id=position.strategy_position_id,
+        symbol=symbol,
+        event_at=now,
+        observed_at=now,
+        received_at=now,
+        event_kind="OWNER_FULL_CONTOUR_MARK",
+        attributes=FrozenPolicy.from_mapping(
+            {
+                "directional_pnl_pct": str(directional),
+                "last_price": str(mark),
+                "actual_avg_fill": str(entry),
+            }
+        ),
+        source_refs=(f"bybit:ticker:{symbol}:{now.isoformat()}",),
+    )
+
+
 def _evaluate_claimed_positions(
     connection: psycopg.Connection[Any],
     engine: UniversalExitEngine,
@@ -220,29 +283,37 @@ def _evaluate_claimed_positions(
     for position_id in position_ids:
         try:
             position, plan = load_exit_binding(connection, strategy_position_id=position_id)
-            observation = _fetch_l53_observation(position, plan, now=now)
-            # Existing ATR200 still determines the INNER target at a structural
-            # change, but its movement alone cannot emit another SET_TP.
-            # Compare only the relevant opposite working-range extremum.
-            geometry = observation.attributes.to_dict()["geometry"]["l5_3"]
-            structural_field = (
-                "range_high" if position.direction is TradeDirection.LONG
-                else "range_low"
+            diagnostic = is_diagnostic_strategy(
+                position.strategy_id, position.strategy_version
             )
-            previous = connection.execute(
-                """SELECT attributes->'geometry'->'l5_3'->>%s AS boundary
-                     FROM strategy_exit.exit_observations
-                    WHERE strategy_position_id=%s
-                      AND event_kind='GEOMETRY_L5_3'
-                    ORDER BY observed_at DESC, observation_id DESC LIMIT 1""",
-                (structural_field, position_id),
-            ).fetchone()
-            if previous is not None:
-                if previous["boundary"] is None:
-                    raise RuntimeError("previous L5-3 structural boundary missing")
-                if Decimal(str(previous["boundary"])) == Decimal(str(geometry[structural_field])):
-                    # No new geometry event needed: current range is unchanged.
-                    continue
+            observation = (
+                _fetch_owner_diagnostic_observation(position, now=now)
+                if diagnostic
+                else _fetch_l53_observation(position, plan, now=now)
+            )
+            if not diagnostic:
+                # Existing ATR200 still determines the INNER target at a structural
+                # change, but its movement alone cannot emit another SET_TP.
+                # Compare only the relevant opposite working-range extremum.
+                geometry = observation.attributes.to_dict()["geometry"]["l5_3"]
+                structural_field = (
+                    "range_high" if position.direction is TradeDirection.LONG
+                    else "range_low"
+                )
+                previous = connection.execute(
+                    """SELECT attributes->'geometry'->'l5_3'->>%s AS boundary
+                         FROM strategy_exit.exit_observations
+                        WHERE strategy_position_id=%s
+                          AND event_kind='GEOMETRY_L5_3'
+                        ORDER BY observed_at DESC, observation_id DESC LIMIT 1""",
+                    (structural_field, position_id),
+                ).fetchone()
+                if previous is not None:
+                    if previous["boundary"] is None:
+                        raise RuntimeError("previous L5-3 structural boundary missing")
+                    if Decimal(str(previous["boundary"])) == Decimal(str(geometry[structural_field])):  # noqa: E501
+                        # No new geometry event needed: current range is unchanged.
+                        continue
             prior_rows = connection.execute(
                 """SELECT rule_id FROM strategy_exit.exit_decisions
                      WHERE strategy_position_id=%s AND repeat_policy='ONCE_PER_POSITION'""",

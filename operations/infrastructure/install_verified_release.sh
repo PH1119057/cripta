@@ -86,11 +86,12 @@ if [[ -n "$EXPECTED_TREE" && "$tree" != "$EXPECTED_TREE" ]]; then die "release t
 pre_gate="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
 pre_permissions="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
 pre_sessions="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
-echo "TRADING_STATE_INFORMATIONAL=gate:$pre_gate permissions:$pre_permissions sessions:$pre_sessions"
+pre_account_sessions="$(sql_scalar "SELECT count(*) FROM control.account_live_arm_sessions WHERE state='ACTIVE'")"
+echo "TRADING_STATE_INFORMATIONAL=gate:$pre_gate permissions:$pre_permissions sessions:$pre_sessions account_sessions:$pre_account_sessions"
 if [[ "$STAGED_OFFLINE" == "1" ]]; then
   # Local facts are necessary, NOT sufficient: approved preflight must also
   # independently verify Exchange positions/orders and restore/rollback.
-  [[ "$pre_gate" == "0" && "$pre_permissions" == "0" && "$pre_sessions" == "0" ]] || die "STAGED_OFFLINE_TRADING_NOT_DISARMED"
+  [[ "$pre_gate" == "0" && "$pre_permissions" == "0" && "$pre_sessions" == "0" && "$pre_account_sessions" == "0" ]] || die "STAGED_OFFLINE_TRADING_NOT_DISARMED"
   pre_hot_positions="$(sql_scalar "SELECT count(*) FROM runtime.hot_positions")"
   pre_hot_orders="$(sql_scalar "SELECT count(*) FROM runtime.hot_orders")"
   [[ "$pre_hot_positions" == "0" && "$pre_hot_orders" == "0" ]] || die "STAGED_OFFLINE_LOCAL_HOT_INVENTORY_NOT_EMPTY"
@@ -489,6 +490,7 @@ migration_files=(
   operations/sql/20261004_r1_live_arm_waiver.sql
   operations/sql/20261030_p90_portal_micro_live_waiver.sql
   operations/sql/20261031_entry_consumer_health.sql
+  operations/sql/20261101_owner_full_contour_diagnostic.sql
   operations/sql/20261007_live_arm_parity_gate.sql
   operations/sql/20261008_r1_entry_cancel_intents.sql
   operations/sql/20261008_exchange_closed_entry_recovery.sql
@@ -552,6 +554,21 @@ runuser -u cripta -- env \
   PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
   "$runtime_release/.venv/bin/python" \
   "$runtime_release/operations/connectivity/runtime_schema.py" validate
+
+# Register the owner-approved diagnostic Strategy pair only while the exact
+# production baseline is fully DISARMED.  The installer creates immutable
+# Strategy/plan/binding rows only; ExecutionPermission remains OFF and no
+# LIVE-arm session or Exchange mutation is created.
+runuser -u cripta -- env \
+  PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
+  "$runtime_release/.venv/bin/python" \
+  "$runtime_release/operations/implementation/install_owner_full_contour_diagnostic.py" install
+db_mutation_steps=$((db_mutation_steps + 1))
+runuser -u cripta -- env \
+  PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
+  "$runtime_release/.venv/bin/python" \
+  "$runtime_release/operations/implementation/install_owner_full_contour_diagnostic.py" check
+
 # Installer does not close LIVE-arm sessions or change execution permissions.
 # Post-restart Exchange reconciliation is performed by the private runtime.
 
@@ -629,12 +646,13 @@ done
 gate_after="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
 permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
 sessions_after="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
+account_sessions_after="$(sql_scalar "SELECT count(*) FROM control.account_live_arm_sessions WHERE state='ACTIVE'")"
 # Trading controls are reported, never used as installer go/no-go decisions.
 # A supervisor/runtime may legitimately change trading state during deployment.
-if [[ "$gate_after" == "$pre_gate" && "$permissions_after" == "$pre_permissions" && "$sessions_after" == "$pre_sessions" ]]; then
+if [[ "$gate_after" == "$pre_gate" && "$permissions_after" == "$pre_permissions" && "$sessions_after" == "$pre_sessions" && "$account_sessions_after" == "$pre_account_sessions" ]]; then
   echo "TRADING_CONTROL_UNCHANGED=PASS"
 else
-  echo "TRADING_CONTROL_CHANGED_EXTERNALLY=WARNING before:$pre_gate/$pre_permissions/$pre_sessions after:$gate_after/$permissions_after/$sessions_after" >&2
+  echo "TRADING_CONTROL_CHANGED_EXTERNALLY=WARNING before:$pre_gate/$pre_permissions/$pre_sessions/$pre_account_sessions after:$gate_after/$permissions_after/$sessions_after/$account_sessions_after" >&2
 fi
 # Exchange -> DB synchronization belongs to private runtime reconciliation.
 # Never send Exchange mutations from the installer.
