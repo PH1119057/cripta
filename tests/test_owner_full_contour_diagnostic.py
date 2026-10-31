@@ -218,6 +218,19 @@ def test_execution_smoke_fix_routes_exact_account_and_waits_terminal() -> None:
     assert "60 секунд" in INDEX
 
 
+def test_terminal_success_requires_completed_universal_exit_lineage() -> None:
+    runtime = (
+        ROOT
+        / "src/bybit_workbench/universal_entry/owner_full_contour_runtime.py"
+    ).read_text(encoding="utf-8")
+    assert "strategy_exit.exit_decisions" in runtime
+    assert "strategy_exit.execution_requests" in runtime
+    assert "strategy_exit.execution_dispatches" in runtime
+    assert "c.command_type='strategy_exit'" in runtime
+    assert "c.state='completed'" in runtime
+    assert "POSITION_CLOSED_WITHOUT_COMPLETED_UNIVERSAL_EXIT" in runtime
+
+
 def test_diagnostic_ui_and_schema_are_bounded() -> None:
     assert "Сквозной LONG" in INDEX
     assert "Сквозной SHORT" in INDEX
