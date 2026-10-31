@@ -896,7 +896,10 @@ function exactP90RealV3Cohort(){
     p90l90_legacy_main_ltc_inj:new Set(['LTCUSDT','INJUSDT']),
     p90l90_legacy_sub_dot_arb_apt:new Set(['DOTUSDT','ARBUSDT','APTUSDT'])
   },version='2.0-p90l90-real-main-sub-20261028',
-  active=(u6StrategyCatalog||[]).filter(item=>(item.activations||[]).some(a=>a.enabled));
+  active=(u6StrategyCatalog||[]).filter(item=>
+    Object.prototype.hasOwnProperty.call(expected,String(item.strategy_id||''))&&
+    (item.activations||[]).some(a=>a.enabled)
+  );
   if(active.length!==2)return false;
   return active.every(item=>{
     const want=expected[String(item.strategy_id||'')];
