@@ -235,6 +235,7 @@ def cards(*, approved_at: datetime) -> tuple[StrategyCard, StrategyCard]:
             _policy(strategy_id),
             approved_at=at,
             approved_source=SOURCE,
+            validate_authoring=False,
         )
         for strategy_id in (MAIN_ID, SUB_ID)
     )  # type: ignore[return-value]
