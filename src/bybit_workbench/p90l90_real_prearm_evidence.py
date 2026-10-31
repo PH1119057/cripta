@@ -33,7 +33,10 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     VERSION,
 )
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
-from bybit_workbench.universal_exit.p90l90_real_private_ipc import P90PrivateProofClient
+from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+    P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
+    P90PrivateProofClient,
+)
 
 _P90_PARITY_MODULES = (
     "src/bybit_workbench/p90l90_real_v3_independent_parity.py",
@@ -543,7 +546,9 @@ def prepare_p90l90_real_v3_prearm_evidence(
     position_modes: dict[tuple[str, str], tuple[object, ...]] = {}
     for strategy_id, (_binding, account_id, connector_id) in routes.items():
         proof = P90PrivateProofClient(
-            account=account_id, connector=connector_id, timeout_seconds=3.0
+            account=account_id,
+            connector=connector_id,
+            timeout_seconds=P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
         ).read_flat_account()
         proof_checked_at = datetime.now(UTC)
         _require(
