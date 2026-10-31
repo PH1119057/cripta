@@ -263,7 +263,8 @@ DECLARE
 BEGIN
   IF session_user <> 'cripta'
      OR p_source NOT LIKE 'dashboard:owner-full-contour-diagnostic:%'
-     OR p_release_commit !~ '^[0-9a-f]{40}     OR p_symbol NOT IN ('LTCUSDT','INJUSDT','APTUSDT','ARBUSDT','DOTUSDT')
+     OR p_release_commit !~ '^[0-9a-f]{40}$'
+     OR p_symbol NOT IN ('LTCUSDT','INJUSDT','APTUSDT','ARBUSDT','DOTUSDT')
   THEN
     RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_SCOPE_INVALID';
   END IF;

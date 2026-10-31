@@ -244,6 +244,8 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
     account_insert = account_insert[:account_insert.index("RETURN p_session_id")]
     assert "\n    live_arm_session_id," not in account_insert
     assert "OWNER_FULL_CONTOUR_SYMBOL_ENTRY_MUTATION_PENDING" in MIGRATION
+    assert "p_release_commit !~ '^[0-9a-f]{40}$'" in MIGRATION
+    assert "p_release_commit !~ '^[0-9a-f]{40}     OR" not in MIGRATION
 
 
 def test_verified_release_registers_and_readbacks_diagnostic_capability() -> None:
