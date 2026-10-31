@@ -44,6 +44,7 @@ def test_runtime_guard_runs_without_signal_and_recovers_expired_admission() -> N
 
 def test_sub_consumer_can_be_explicitly_persistent_but_installer_does_not_auto_start() -> None:
     assert "[Install]\nWantedBy=multi-user.target" in SUB_UNIT
+    assert "Environment=CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND=SUB" in SUB_UNIT
     assert "cripta-universal-entry-consumer@.service" in INSTALLER
     managed = INSTALLER.split("managed_services=(", 1)[1].split("\n)", 1)[0]
     assert "cripta-universal-entry-consumer@.service" not in managed
