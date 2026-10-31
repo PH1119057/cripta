@@ -913,8 +913,9 @@ function refreshP90RealV3ArmControl(){
   button.classList.toggle('danger',!armed);
   button.disabled=gateChanging||(!armed&&(!cohort||inconsistent||knownBlocked));
   let state='warn',message='Локальные проверки PASS · OWNER ARM выполнит свежую full server evidence-проверку';
-  if(armed){state='success';message='P90 REAL v3 ARMED · новые Entry разрешены только exact MAIN/SUB scope'}
+  if(exactArmed){state='success';message='P90 REAL v3 ARMED · новые Entry разрешены только exact MAIN/SUB scope'}
   else if(inconsistent){state='error';message='Mainnet открыт вне exact P90 arm-state · требуется диагностика'}
+  else if(armed){state='warn';message='P90 owner-arm state DEGRADED · новые Entry запрещены · DISARM доступен'}
   else if(!cohort){state='error';message='P90 exact cohort не найден или не активен'}
   else if(blockers.includes('REMOTE_SOURCE_INSTALLED_IDENTITY_DRIFT')){state='error';message='OWNER ARM заблокирован · source/runtime release identity не совпадает'}
   else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='error';message='OWNER ARM заблокирован · Universal Entry observer сейчас не готов'}
