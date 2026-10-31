@@ -4,6 +4,8 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
 APP = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
 
+# The right rail is intentionally narrower than the generic completed-trade history.
+
 
 def test_right_trade_rail_is_visible_and_scoped_to_current_p90():
     assert 'id="closedWorkspaceRail"' in INDEX
