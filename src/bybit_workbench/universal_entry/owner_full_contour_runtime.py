@@ -517,8 +517,50 @@ def refresh_run_lifecycle(
                 )
                 return "OWNER_DIAGNOSTIC_RECONCILIATION_REQUIRED"
             if position_state == "CLOSED":
+                universal_exit = connection.execute(
+                    """SELECT d.exit_decision_id,r.execution_request_id,
+                              x.command_id,c.state
+                         FROM strategy_exit.exit_decisions d
+                         JOIN strategy_exit.execution_requests r
+                           ON r.exit_decision_id=d.exit_decision_id
+                         JOIN strategy_exit.execution_dispatches x
+                           ON x.execution_request_id=r.execution_request_id
+                          AND x.state='DISPATCHED'
+                         JOIN runtime.trade_commands c
+                           ON c.command_id=x.command_id
+                          AND c.command_type='strategy_exit'
+                          AND c.trading_account_id=%s
+                          AND c.identity_status='PROVEN'
+                        WHERE d.strategy_position_id=%s
+                          AND d.action_kind='CLOSE'
+                          AND c.state='completed'
+                          AND c.payload_json::jsonb->>'source'='universal_exit'
+                        ORDER BY d.decided_at DESC,x.created_at DESC
+                        LIMIT 1""",
+                    (trading_account_id, position_id),
+                ).fetchone()
+                if universal_exit is None:
+                    set_run_state(
+                        connection,
+                        run_id=run_id,
+                        state="FAILED",
+                        now=now,
+                        lineage={"strategy_position_id": position_id},
+                        error=(
+                            "POSITION_CLOSED_WITHOUT_COMPLETED_UNIVERSAL_EXIT:"
+                            "exchange protection or another close path ended the "
+                            "position before full-contour Exit proof"
+                        ),
+                    )
+                    return (
+                        "OWNER_DIAGNOSTIC_FAILED:"
+                        "POSITION_CLOSED_WITHOUT_COMPLETED_UNIVERSAL_EXIT"
+                    )
                 set_run_state(
-                    connection, run_id=run_id, state="CLOSED", now=now,
+                    connection,
+                    run_id=run_id,
+                    state="CLOSED",
+                    now=now,
                     lineage={"strategy_position_id": position_id},
                 )
                 return "OWNER_DIAGNOSTIC_CLOSED:" + position_id
