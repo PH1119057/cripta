@@ -18,7 +18,8 @@ ARCHIVE = (ROOT / "operations/dashboard/archive_v2.py").read_text(encoding="utf-
 def test_universal_entry_reads_only_exact_r7_market_identity() -> None:
     assert "BYBIT_PUBLIC_MARKET_SOURCE_ID" in OBSERVER
     assert "WHERE market_source_id=%s" in OBSERVER
-    assert "linear_instrument_id = ANY(%s)" in OBSERVER
+    assert "FROM unnest(%s::text[]) AS instrument(linear_instrument_id)" in OBSERVER
+    assert "linear_instrument_id=instrument.linear_instrument_id" in OBSERVER
     assert "DISPATCHER_COIN_MARKET_IDENTITY_MISMATCH" in OBSERVER
     assert 'bybit_instrument_id("spot", symbol)' in OBSERVER
     assert 'bybit_instrument_id("linear", symbol)' in OBSERVER
