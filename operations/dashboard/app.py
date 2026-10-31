@@ -6264,26 +6264,52 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             ).fetchone()
                             if not gate or not bool(gate[0]):
                                 raise ValueError("mainnet gate закрыт")
-                            active_arm = connection.execute(
-                                """SELECT 1 FROM control.live_arm_sessions arm
-                                   JOIN strategy_entry.strategy_activations act
-                                     ON act.activation_id=arm.strategy_activation_id
-                                    AND act.strategy_id=arm.strategy_id
-                                    AND act.strategy_version=arm.strategy_version
-                                    AND act.strategy_config_fingerprint=arm.strategy_config_fingerprint
-                                   JOIN strategy_entry.execution_permissions perm
-                                     ON perm.strategy_id=arm.strategy_id
-                                    AND perm.strategy_version=arm.strategy_version
-                                    AND perm.strategy_config_fingerprint=arm.strategy_config_fingerprint
-                                   WHERE arm.state='ACTIVE' AND arm.symbol=%s
-                                     AND act.enabled=true AND perm.enabled=true
-                                   LIMIT 1""",
-                                (symbol,),
-                            ).fetchone()
-                            if active_arm is None:
+                            active_arm_rows = connection.execute(
+                                """SELECT arm.trading_account_id,arm.account_connector_id
+                                     FROM control.account_live_arm_sessions arm
+                                     JOIN strategy_entry.strategy_activations act
+                                       ON act.activation_id=arm.strategy_activation_id
+                                      AND act.strategy_id=arm.strategy_id
+                                      AND act.strategy_version=arm.strategy_version
+                                      AND act.strategy_config_fingerprint=arm.strategy_config_fingerprint
+                                     JOIN strategy_entry.execution_permissions perm
+                                       ON perm.strategy_id=arm.strategy_id
+                                      AND perm.strategy_version=arm.strategy_version
+                                      AND perm.strategy_config_fingerprint=arm.strategy_config_fingerprint
+                                    WHERE arm.state='ACTIVE'
+                                      AND arm.deactivated_at IS NULL
+                                      AND arm.symbol=%s
+                                      AND arm.release_commit=%s
+                                      AND arm.strategy_version=%s
+                                      AND arm.strategy_id IN (%s,%s)
+                                      AND act.enabled=true
+                                      AND perm.enabled=true
+                                      AND EXISTS (
+                                          SELECT 1
+                                            FROM control.live_arm_sessions generic_arm
+                                           WHERE generic_arm.state='ACTIVE'
+                                             AND generic_arm.strategy_id=arm.strategy_id
+                                             AND generic_arm.strategy_version=arm.strategy_version
+                                             AND generic_arm.strategy_config_fingerprint=arm.strategy_config_fingerprint
+                                             AND generic_arm.strategy_activation_id=arm.strategy_activation_id
+                                             AND generic_arm.symbol=arm.symbol
+                                             AND generic_arm.release_commit=arm.release_commit
+                                      )
+                                    ORDER BY arm.trading_account_id,arm.account_connector_id""",
+                                (
+                                    symbol,
+                                    LOADED_RELEASE_COMMIT,
+                                    P90_REAL_V3_VERSION,
+                                    P90_MAIN_ID,
+                                    P90_SUB_ID,
+                                ),
+                            ).fetchall()
+                            if len(active_arm_rows) != 1:
                                 raise ValueError(
-                                    "контрольный вход разрешён только для монеты текущего active MICRO_LIVE cohort"
+                                    "контрольный вход требует exact active P90 account scope"
                                 )
+                            test_account_id = str(active_arm_rows[0][0])
+                            test_connector_id = str(active_arm_rows[0][1])
                             occupied = connection.execute(
                                 """SELECT
                                     EXISTS(
@@ -6313,11 +6339,11 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                     )""",
                                 (
                                     symbol,
-                                    TRADING_ACCOUNT_ID,
+                                    test_account_id,
                                     symbol,
-                                    TRADING_ACCOUNT_ID,
+                                    test_account_id,
                                     symbol,
-                                    TRADING_ACCOUNT_ID,
+                                    test_account_id,
                                 ),
                             ).fetchone()
                             if occupied and bool(occupied[0]):
@@ -6362,15 +6388,25 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         connection.execute(
                             """INSERT INTO runtime.trade_commands(
                                    command_id,command_type,symbol,payload_json,state,
-                                   requested_at_epoch_ms,trading_account_id,identity_status
-                               ) VALUES(%s,%s,%s,%s,'queued',%s,%s,'PROVEN')""",
+                                   requested_at_epoch_ms,trading_account_id,
+                                   account_connector_id,identity_status
+                               ) VALUES(%s,%s,%s,%s,'queued',%s,%s,%s,'PROVEN')""",
                             (
                                 command_id,
                                 command_type,
                                 symbol,
                                 json.dumps(command_payload),
                                 int(time.time() * 1000),
-                                TRADING_ACCOUNT_ID,
+                                (
+                                    test_account_id
+                                    if kind == "owner_test_entry"
+                                    else TRADING_ACCOUNT_ID
+                                ),
+                                (
+                                    test_connector_id
+                                    if kind == "owner_test_entry"
+                                    else None
+                                ),
                             ),
                         )
                     connection.commit()
