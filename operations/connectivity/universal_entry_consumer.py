@@ -1119,7 +1119,7 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         # process/account route and account safety checks passed, and no normal
         # Entry request is pending, may this consumer inspect an owner
         # diagnostic trigger.
-        lifecycle_result = refresh_run_lifecycle(
+        refresh_run_lifecycle(
             connection,
             trading_account_id=TRADING_ACCOUNT_ID,
             now=current,
