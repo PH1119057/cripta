@@ -155,4 +155,5 @@ def test_left_rail_frontend_uses_p90_projection_and_requested_colors():
     assert "p90-open" in index
     assert "p90-near" in index
     assert "p90-far" in index
-    assert "renderOpenRailPositions(lt.p90_rail?.items||[],positions)" in index
+    assert "renderOpenRailPositions(positions);" in index
+    assert "renderP90RailPositions(lt.p90_rail?.items||[],positions)" in index
