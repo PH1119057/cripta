@@ -1106,6 +1106,85 @@ break-even, not a worst-case profit guarantee.
 
 A resulting manual protection mutation is attributed as `OWNER_MODIFIED_STOP`.
 
+### 4.8.2 Owner-controlled full-contour REAL diagnostic — OWNER DECISION 2026-11-01
+
+Владелец утвердил второй, отдельный diagnostic capability для проверки **всего
+production Strategy -> Entry -> Execution -> Position -> Exit lifecycle** после
+того, как оператор вручную имитирует только самый первый причинный факт
+«Entry condition сработал».
+
+Этот capability **не заменяет** §4.8 execution smoke-test. Оба существуют
+одновременно и имеют разные цели:
+
+```text
+§4.8 execution smoke
+  owner click -> production private runtime -> Bybit
+  НЕ создаёт StrategySignal / EntryDecision / StrategyPosition
+
+§4.8.2 full-contour diagnostic
+  authenticated owner trigger
+  -> dedicated diagnostic Strategy fact
+  -> Universal Entry Engine
+  -> StrategySignal
+  -> strategy_attempt
+  -> ordinary real admission
+  -> EntryDecision
+  -> EntryExecutionRequest
+  -> Universal Entry consumer
+  -> production private runtime / Bybit
+  -> StrategyPosition
+  -> exact diagnostic ExitPlan
+  -> Universal Exit / Execution
+  -> terminal close / reconciliation
+```
+
+Разрешён **отдельный diagnostic Strategy identity/version**, а не P90 Strategy ID
+и не подделка P90 signal. Его единственная Entry predicate — exact explicit
+owner fact `OWNER_FULL_CONTOUR_TRIGGER`. Dashboard только создаёт authenticated
+control request; Dashboard не имеет права самостоятельно INSERT-ить
+`StrategySignal`, `EntryDecision`, `EntryExecutionRequest` или
+`StrategyPosition`. Эти entities создаются обычными Universal Entry/Execution
+owners.
+
+Exact v1 contract:
+
+```text
+trigger              = explicit authenticated owner click only
+source marker        = owner_full_contour_real_diagnostic
+scope                 = one symbol from current exact P90 REAL v3 five-symbol scope
+direction             = LONG or SHORT explicitly confirmed by owner
+stake                 = exactly 10 USDT
+leverage              = exactly 1x
+entry                 = MARKET
+position mode         = ONE_WAY / positionIdx=0
+initial stop          = -0.5% from actual executed average Entry
+take profit           = +0.5% from actual executed average Entry
+dynamic trailing/BE   = disabled
+geometry Exit         = disabled
+statistics            = excluded from P90 Strategy/research performance
+concurrency           = at most one active full-contour diagnostic run
+```
+
+Mandatory gates:
+- current global mainnet gate OPEN;
+- exact current release-bound P90 owner scope for the selected symbol is ACTIVE;
+- exact account route/binding, fresh `AccountStateGeneration`, position mode,
+  capital reservation, physical slot and consumer readiness all pass through
+  the ordinary REAL admission path;
+- selected symbol has no open position, active non-reduce-only order, pending
+  Entry mutation or unresolved diagnostic run;
+- diagnostic Strategy has its own exact StrategyCard / EntryPlan / ExitPlan /
+  activation / binding / permission / LIVE-arm lineage;
+- diagnostic permission/LIVE-arm is scoped only to the explicit run and is
+  retired after successful Entry dispatch or terminal failure so it cannot act
+  as a standing autonomous Strategy right;
+- any ambiguous Exchange mutation remains reconciliation-required and fail-closed.
+
+The run is diagnostic evidence, not P90 performance. P90 hard-stop counters,
+PnL/win-rate, research datasets, SECOND48 and Strategy-specific analytics MUST
+exclude this diagnostic identity. Exchange fees and actual fill/close evidence
+remain durable operational evidence.
+
 ## 4.9 PAPER / REAL execution mode — OWNER DECISION 2026-10-06
 
 Execution mode — это выбор среды исполнения одной активной Strategy, а не
