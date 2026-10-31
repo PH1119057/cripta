@@ -445,18 +445,40 @@ operational-safety workflow, но не выбирает emergency action сам�
 не означает автоматическое закрытие уже открытой позиции без отдельного
 разрешённого действия.
 
-## 7.1 Owner-controlled execution diagnostic
+## 7.1 Owner-controlled execution diagnostics
 
-A manually confirmed owner smoke-test is a separate control-plane mutation
-capability, not a Strategy execution decision.
+There are two separate owner-triggered diagnostic capabilities. Neither is a
+normal autonomous Strategy and neither may be counted as P90 performance.
 
-It may call the same production Execution/private-runtime adapter to prove
-Exchange order/fill/protection behavior, but it has no right to synthesize
-StrategySignal, EntryDecision or StrategyPosition evidence. It must carry an
-explicit diagnostic source marker, remain operator-triggered only and be
-excluded from Strategy performance semantics.
+**Execution transport smoke** uses the production Execution/private-runtime
+adapter directly to prove Exchange order/fill/protection behavior. It does not
+create StrategySignal, EntryDecision, EntryExecutionRequest or StrategyPosition
+evidence. Exact limits remain owned by TRADING_CONTOUR §4.8.
 
-Current exact limits are owned by TRADING_CONTOUR §4.8.
+**Full-contour REAL diagnostic** is different: it deliberately tests the
+ordinary production Strategy/Entry/Execution/Exit lifecycle. Its control-plane
+click may create only an authenticated diagnostic trigger. A dedicated
+diagnostic StrategyCard whose Entry predicate consumes that exact trigger is
+the only permitted source of the resulting StrategySignal. Universal Entry,
+real admission, Universal Entry consumer, Execution, StrategyPosition and
+Universal Exit remain their normal owners.
+
+The full-contour diagnostic MUST:
+- use a distinct diagnostic Strategy identity/version and explicit diagnostic
+  source marker;
+- use ordinary account-scoped binding, capital/slot admission, release-bound
+  LIVE-arm, EntryExecutionRequest and reconciliation contracts;
+- have owner-fixed bounded risk independent of the production Strategy amount;
+- exclude its identity from P90 performance/research semantics;
+- retire its temporary diagnostic execution permission/LIVE-arm after Entry
+  dispatch or terminal failure;
+- fail closed on occupied symbol, stale account truth, closed gate, wrong
+  release, missing owner trigger or ambiguous Exchange mutation.
+
+Dashboard is control UI only: it MUST NOT synthesize StrategySignal,
+EntryDecision, EntryExecutionRequest or StrategyPosition rows.
+
+Current exact limits and v1 risk parameters are owned by TRADING_CONTOUR §4.8.2.
 
 ## 7.2 PAPER / REAL execution-mode invariant — OWNER DECISION 2026-10-06
 
