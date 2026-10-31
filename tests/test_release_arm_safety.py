@@ -189,3 +189,34 @@ def test_observer_not_ready_closes_gate_even_with_fresh_consumers():
         entry_source_detail="OBSERVER_NOT_READY",
     ) is False
     assert "UPDATE control.execution_gates" in "\n".join(_writes(c))
+
+
+def test_runtime_health_incident_remains_blocked_after_gate_is_closed():
+    now = datetime(2026, 10, 31, 10, 0, tzinfo=UTC)
+    c = _Connection(
+        gate=False,
+        sessions=[("p90", "v2", "LTCUSDT", "a" * 40)],
+        permissions=[("p90", "v2")],
+        expected_accounts=["ta-main"],
+        consumer_health={
+            "ta-main": (
+                "ac-main",
+                "a" * 40,
+                "BLOCKED",
+                "ENTRY_REQUEST_SQL_PREFLIGHT_FAILED:42501",
+                now,
+            ),
+        },
+    )
+    assert check_release_arm_invariant(
+        c,
+        loaded_commit="a" * 40,
+        now=now,
+        require_entry_runtime_health=True,
+        entry_source_ready=False,
+        entry_source_detail="OBSERVER_NOT_READY",
+    ) is False
+    writes = "\n".join(_writes(c))
+    assert "INSERT INTO control.release_arm_incidents" in writes
+    assert "UPDATE control.execution_gates" not in writes
+    assert "SET state='RESOLVED'" not in writes
