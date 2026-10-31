@@ -4237,7 +4237,7 @@ def _u6_p90_real_v3_stage_ready() -> tuple[bool, str]:
 
 
 def _u6_wait_p90_real_v3_stage_ready(
-    *, timeout_seconds: float = 60.0,
+    *, timeout_seconds: float = 120.0,
 ) -> tuple[bool, str]:
     deadline = time.monotonic() + timeout_seconds
     last_detail = "P90_REAL_OWNER_ARM_STAGE_NOT_STARTED"
@@ -5182,7 +5182,7 @@ def _u6_p90_real_v3_arm(
         staged = True
 
         stage_ready, stage_detail = _u6_wait_p90_real_v3_stage_ready(
-            timeout_seconds=60.0
+            timeout_seconds=120.0
         )
         if not stage_ready:
             raise ValueError(
