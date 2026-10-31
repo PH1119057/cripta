@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, datetime
 from decimal import Decimal
-import inspect
 from pathlib import Path
 
 from operations.dashboard import app as dashboard
