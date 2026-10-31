@@ -52,6 +52,8 @@ _EVIDENCE_SOURCE = "p90l90-real-v3:technical-prearm-evidence"
 _SERVICE_UNITS = (
     "cripta-private-runtime.service",
     f"cripta-private-runtime@{_SUB_ACCOUNT}.service",
+    "cripta-universal-entry-consumer.service",
+    f"cripta-universal-entry-consumer@{_SUB_ACCOUNT}.service",
     "cripta-lifecycle-supervisor.service",
     f"cripta-lifecycle-account@{_SUB_ACCOUNT}.service",
     "cripta-position-supervisor.service",
@@ -444,11 +446,36 @@ def prepare_p90l90_real_v3_prearm_evidence(
         connection, release_commit=release_commit, now=current
     )
     _require(len(contexts) == 5 and len(routes) == 2, "exact five contexts/two routes missing")
-    for strategy_id, (_binding, account_id, _connector) in routes.items():
+    consumer_health: dict[str, dict[str, object]] = {}
+    for strategy_id, (_binding, account_id, connector_id) in routes.items():
         _require(
             account_id == _ACCOUNT_BY_STRATEGY[strategy_id],
             strategy_id + " dedicated account drift",
         )
+        health = connection.execute(
+            """SELECT account_connector_id,release_commit,state,detail,observed_at
+                 FROM runtime.entry_consumer_health
+                WHERE trading_account_id=%s""",
+            (account_id,),
+        ).fetchone()
+        _require(health is not None, strategy_id + " Entry consumer health missing")
+        health_connector, health_release, health_state, health_detail, health_at = health
+        health_observed = _aware(health_at, strategy_id + " Entry consumer health")
+        _require(
+            str(health_connector) == str(connector_id)
+            and str(health_release) == release_commit
+            and str(health_state) == "READY"
+            and 0 <= (current - health_observed).total_seconds() <= 8,
+            strategy_id + " Entry consumer not READY/fresh",
+        )
+        consumer_health[strategy_id] = {
+            "trading_account_id": str(account_id),
+            "account_connector_id": str(connector_id),
+            "release_commit": str(health_release),
+            "state": str(health_state),
+            "detail": str(health_detail),
+            "observed_at": health_observed.isoformat(),
+        }
 
     epoch = connection.execute(
         """SELECT epoch_id,source_commit,market_source_id,source_ws_ready_at,
@@ -711,6 +738,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 "symbols": sorted(expected_symbols),
                 "accounts": account_evidence,
                 "observer_trading_effect": observer.get("trading_effect"),
+                "entry_consumers": consumer_health,
                 "gate": 0,
                 "execution_permissions": 0,
                 "exchange_mutation": False,
@@ -741,6 +769,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 "main": main_lifecycle,
                 "sub": sub_lifecycle,
                 "sub_account_position": sub_position,
+                "entry_consumers": consumer_health,
                 "services": list(_SERVICE_UNITS),
             },
             True,

@@ -478,6 +478,7 @@ migration_files=(
   operations/sql/20261004_r1_reverse_transitions.sql
   operations/sql/20261004_r1_live_arm_waiver.sql
   operations/sql/20261030_p90_portal_micro_live_waiver.sql
+  operations/sql/20261031_entry_consumer_health.sql
   operations/sql/20261007_live_arm_parity_gate.sql
   operations/sql/20261008_r1_entry_cancel_intents.sql
   operations/sql/20261008_exchange_closed_entry_recovery.sql

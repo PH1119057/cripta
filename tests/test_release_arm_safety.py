@@ -15,10 +15,15 @@ class _Result:
 
 
 class _Connection:
-    def __init__(self, *, gate=True, sessions=(), permissions=()):
+    def __init__(
+        self, *, gate=True, sessions=(), permissions=(),
+        expected_accounts=(), consumer_health=None,
+    ):
         self.gate = gate
         self.sessions = sessions
         self.permissions = permissions
+        self.expected_accounts = expected_accounts
+        self.consumer_health = consumer_health or {}
         self.statements = []
 
     def execute(self, sql, params=None):
@@ -29,6 +34,12 @@ class _Connection:
             return _Result(self.sessions)
         if "FROM strategy_entry.execution_permissions" in sql:
             return _Result(self.permissions)
+        if "SELECT DISTINCT b.trading_account_id" in sql:
+            return _Result([(item,) for item in self.expected_accounts])
+        if "FROM runtime.entry_consumer_health" in sql:
+            account_id = params[0]
+            row = self.consumer_health.get(account_id)
+            return _Result([] if row is None else [row])
         return _Result([])
 
 
@@ -131,3 +142,81 @@ def test_real_consumer_psycopg_dict_row_detects_stale_session():
     c = DictConnection()
     assert check_release_arm_invariant(c, loaded_commit="b" * 40) is False
     assert "UPDATE control.execution_gates" in "\\n".join(_writes(c))
+
+
+def test_runtime_health_failure_closes_gate_without_waiting_for_signal():
+    now = datetime(2026, 10, 31, 10, 0, tzinfo=UTC)
+    c = _Connection(
+        gate=True,
+        sessions=[("p90", "v2", "LTCUSDT", "a" * 40)],
+        permissions=[("p90", "v2")],
+        expected_accounts=["ta-main", "ta-sub"],
+        consumer_health={
+            "ta-main": ("ac-main", "a" * 40, "READY", "READY", now),
+            "ta-sub": ("ac-sub", "a" * 40, "BLOCKED", "DB_PRIVILEGE", now),
+        },
+    )
+    assert check_release_arm_invariant(
+        c,
+        loaded_commit="a" * 40,
+        now=now,
+        require_entry_runtime_health=True,
+        entry_source_ready=True,
+        entry_source_detail="READY",
+    ) is False
+    writes = "\n".join(_writes(c))
+    assert "UPDATE control.execution_gates" in writes
+    assert "INSERT INTO control.release_arm_incidents" in writes
+
+
+def test_observer_not_ready_closes_gate_even_with_fresh_consumers():
+    now = datetime(2026, 10, 31, 10, 0, tzinfo=UTC)
+    c = _Connection(
+        gate=True,
+        sessions=[("p90", "v2", "LTCUSDT", "a" * 40)],
+        permissions=[("p90", "v2")],
+        expected_accounts=["ta-main"],
+        consumer_health={
+            "ta-main": ("ac-main", "a" * 40, "READY", "READY", now),
+        },
+    )
+    assert check_release_arm_invariant(
+        c,
+        loaded_commit="a" * 40,
+        now=now,
+        require_entry_runtime_health=True,
+        entry_source_ready=False,
+        entry_source_detail="OBSERVER_NOT_READY",
+    ) is False
+    assert "UPDATE control.execution_gates" in "\n".join(_writes(c))
+
+
+def test_runtime_health_incident_remains_blocked_after_gate_is_closed():
+    now = datetime(2026, 10, 31, 10, 0, tzinfo=UTC)
+    c = _Connection(
+        gate=False,
+        sessions=[("p90", "v2", "LTCUSDT", "a" * 40)],
+        permissions=[("p90", "v2")],
+        expected_accounts=["ta-main"],
+        consumer_health={
+            "ta-main": (
+                "ac-main",
+                "a" * 40,
+                "BLOCKED",
+                "ENTRY_REQUEST_SQL_PREFLIGHT_FAILED:42501",
+                now,
+            ),
+        },
+    )
+    assert check_release_arm_invariant(
+        c,
+        loaded_commit="a" * 40,
+        now=now,
+        require_entry_runtime_health=True,
+        entry_source_ready=False,
+        entry_source_detail="OBSERVER_NOT_READY",
+    ) is False
+    writes = "\n".join(_writes(c))
+    assert "INSERT INTO control.release_arm_incidents" in writes
+    assert "UPDATE control.execution_gates" not in writes
+    assert "SET state='RESOLVED'" not in writes

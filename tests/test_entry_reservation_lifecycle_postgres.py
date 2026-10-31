@@ -9,9 +9,11 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from psycopg import sql
 from psycopg.rows import dict_row
 
 import operations.connectivity.universal_entry_consumer as entry_consumer
+from bybit_workbench.entry_pre_dispatch_recovery import release_expired_pre_dispatch
 from bybit_workbench.entry_reservation_lifecycle import (
     finalize_failed_entry_command_reservation,
     mark_entry_order_acknowledged,
@@ -23,6 +25,8 @@ from bybit_workbench.live_arm_readiness import (
     scope_for_check,
 )
 from bybit_workbench.strategy_position_binding import exchange_position_key
+from bybit_workbench.universal_entry.contracts import TradeDirection
+from bybit_workbench.universal_entry.execution_bridge import PreparedRuntimeEntryCommand
 from operations.connectivity.universal_entry_consumer import run_once
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -1033,3 +1037,221 @@ def test_two_account_ack_partial_cancel_and_restart_preserves_independent_ledger
                 WHERE trading_account_id=%s AND symbol='LINKUSDT'""",
             (sub["trading_account_id"],),
         ).fetchone()[0] == 1
+
+
+def test_synthetic_accepted_request_dispatches_to_trade_command_without_exchange(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fast E2E of the exact pre-Exchange path that failed in production."""
+    assert DSN is not None
+    prefix = "synthetic-dispatch-" + uuid4().hex[:10]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(
+            connection,
+            prefix,
+            symbol="LTCUSDT",
+            reservation_state="RESERVED",
+            expires_at=NOW + timedelta(seconds=30),
+            permission=True,
+        )
+        _gate(connection, True)
+        connection.commit()
+
+        prepared = PreparedRuntimeEntryCommand(
+            command_id=ids["command_id"],
+            execution_request_id=ids["execution_request_id"],
+            strategy_attempt_id=f"{prefix}-attempt",
+            entry_decision_id=f"{prefix}-decision",
+            signal_id=f"{prefix}-signal",
+            strategy_id=ids["strategy_id"],
+            strategy_version=ids["strategy_version"],
+            strategy_config_fingerprint=ids["strategy_config_fingerprint"],
+            entry_plan_fingerprint=f"{prefix}-entry-fp",
+            exit_plan_fingerprint=f"{prefix}-exit-fp",
+            capital_reservation_id=ids["reservation_id"],
+            exchange_position_slot_claim_id=ids["slot_claim_id"],
+            position_mode_state_ref=ids["position_mode_state_ref"],
+            strategy_activation_id=ids["strategy_activation_id"],
+            strategy_execution_binding_id=ids["binding_id"],
+            execution_leg="PRIMARY",
+            trading_account_id=ids["trading_account_id"],
+            symbol=ids["symbol"],
+            direction=TradeDirection.LONG,
+            requested_at=NOW,
+            payload={
+                "source": "synthetic-disposable-e2e",
+                "trading_account_id": ids["trading_account_id"],
+            },
+        )
+        monkeypatch.setattr(
+            entry_consumer,
+            "_admission_pre_dispatch_status",
+            lambda *_args, **_kwargs: ("READY", ""),
+        )
+        monkeypatch.setattr(
+            entry_consumer,
+            "_critical_lifecycle_fault_code",
+            lambda *_args, **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            entry_consumer,
+            "_live_arm_ready",
+            lambda *_args, **_kwargs: (True, ()),
+        )
+        monkeypatch.setattr(entry_consumer, "_policy_bundle", lambda *_args: object())
+        monkeypatch.setattr(
+            entry_consumer,
+            "prepare_runtime_entry_command",
+            lambda *_args, **_kwargs: prepared,
+        )
+
+        result = _run_once_for_fixture_account(
+            connection,
+            ids["trading_account_id"],
+        )
+        assert result == f"DISPATCHED:{ids['command_id']}"
+        dispatch = connection.execute(
+            """SELECT state,command_id
+                 FROM strategy_entry.execution_dispatches
+                WHERE execution_request_id=%s""",
+            (ids["execution_request_id"],),
+        ).fetchone()
+        assert dispatch == {
+            "state": "DISPATCHED",
+            "command_id": ids["command_id"],
+        }
+        command = connection.execute(
+            """SELECT state,command_type,trading_account_id
+                 FROM runtime.trade_commands
+                WHERE command_id=%s""",
+            (ids["command_id"],),
+        ).fetchone()
+        assert command == {
+            "state": "queued",
+            "command_type": "entry",
+            "trading_account_id": ids["trading_account_id"],
+        }
+        reservation = connection.execute(
+            """SELECT state,state_reason
+                 FROM runtime.capital_reservations
+                WHERE reservation_id=%s""",
+            (ids["reservation_id"],),
+        ).fetchone()
+        assert reservation == {
+            "state": "DISPATCHED",
+            "state_reason": "DISPATCHED_TO_EXECUTION",
+        }
+
+
+def test_lifecycle_recovery_releases_expired_request_without_consumer() -> None:
+    assert DSN is not None
+    prefix = "independent-expiry-" + uuid4().hex[:10]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(
+            connection,
+            prefix,
+            symbol="ARBUSDT",
+            reservation_state="RESERVED",
+            expires_at=NOW - timedelta(seconds=1),
+        )
+        connection.commit()
+        with connection.transaction():
+            released = release_expired_pre_dispatch(connection, now=NOW)
+        assert released == 1
+        assert connection.execute(
+            "SELECT state FROM runtime.capital_reservations WHERE reservation_id=%s",
+            (ids["reservation_id"],),
+        ).fetchone() == {"state": "RELEASED"}
+        assert connection.execute(
+            """SELECT claim_state FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_slot_claim_id=%s""",
+            (ids["slot_claim_id"],),
+        ).fetchone() == {"claim_state": "RELEASED"}
+        assert connection.execute(
+            """SELECT state,reason FROM strategy_entry.execution_dispatches
+                WHERE execution_request_id=%s""",
+            (ids["execution_request_id"],),
+        ).fetchone() == {
+            "state": "BLOCKED",
+            "reason": "REQUEST_EXPIRED_PRE_DISPATCH",
+        }
+
+
+def test_request_claim_needs_no_update_on_immutable_execution_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disposable PG privilege regression for the production 2026-10-31 failure."""
+    assert DSN is not None
+    prefix = "request-lock-priv-" + uuid4().hex[:10]
+    role = "entry_consumer_test_" + uuid4().hex[:12]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(
+            connection,
+            prefix,
+            symbol="INJUSDT",
+            reservation_state="RESERVED",
+            expires_at=NOW + timedelta(seconds=30),
+            permission=True,
+        )
+        connection.commit()
+        role_id = sql.Identifier(role)
+        connection.execute(
+            sql.SQL("CREATE ROLE {} NOLOGIN").format(role_id)
+        )
+        connection.execute(
+            sql.SQL(
+                "GRANT USAGE ON SCHEMA strategy_entry,runtime TO {}"
+            ).format(role_id)
+        )
+        connection.execute(
+            sql.SQL(
+                """GRANT SELECT ON
+                       strategy_entry.execution_requests,
+                       strategy_entry.strategy_attempts,
+                       strategy_entry.strategy_activations,
+                       strategy_entry.execution_permissions,
+                       strategy_entry.entry_decisions,
+                       strategy_entry.execution_dispatches
+                   TO {}"""
+            ).format(role_id)
+        )
+        connection.execute(
+            sql.SQL(
+                "GRANT SELECT,UPDATE ON runtime.capital_reservations TO {}"
+            ).format(role_id)
+        )
+        connection.commit()
+        assert connection.execute(
+            "SELECT has_table_privilege(%s,%s,%s)",
+            (role, "strategy_entry.execution_requests", "UPDATE"),
+        ).fetchone() == {"has_table_privilege": False}
+
+        connection.execute(sql.SQL("SET ROLE {}").format(role_id))
+        try:
+            with (
+                monkeypatch.context() as scoped,
+            ):
+                scoped.setattr(
+                    entry_consumer,
+                    "TRADING_ACCOUNT_ID",
+                    ids["trading_account_id"],
+                )
+                scoped.setattr(
+                    entry_consumer,
+                    "ACCOUNT_CONNECTOR_ID",
+                    ids["trading_account_id"][:-3] + "-connector",
+                )
+                row = entry_consumer._next_request(connection)
+                assert row is not None
+                assert row["execution_request_id"] == ids["execution_request_id"]
+        finally:
+            connection.execute("RESET ROLE")
+            connection.rollback()
+
+        connection.execute(
+            sql.SQL("DROP OWNED BY {}").format(role_id)
+        )
+        connection.execute(
+            sql.SQL("DROP ROLE {}").format(role_id)
+        )
+        connection.commit()

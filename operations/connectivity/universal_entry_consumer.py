@@ -48,6 +48,7 @@ ENTRY_COMMAND_SOURCE = os.environ.get(
 ).strip().upper()
 CONSUMER_ARM = os.environ.get("CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER", "DISABLED").strip().upper()
 POLL_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_ENTRY_CONSUMER_POLL_SECONDS", "0.25"))
+HEALTH_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_ENTRY_HEALTH_SECONDS", "2.0"))
 LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
@@ -64,6 +65,156 @@ def _mapping(value: object, label: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise RuntimeError(f"{label} must be an object")
     return value
+
+
+_REQUIRED_DB_PRIVILEGES = (
+    ("strategy_entry.execution_requests", "SELECT"),
+    ("strategy_entry.strategy_attempts", "SELECT"),
+    ("strategy_entry.strategy_activations", "SELECT"),
+    ("strategy_entry.execution_permissions", "SELECT"),
+    ("strategy_entry.entry_decisions", "SELECT"),
+    ("strategy_entry.execution_dispatches", "SELECT"),
+    ("strategy_entry.execution_dispatches", "INSERT"),
+    ("strategy_entry.execution_request_state_events", "INSERT"),
+    ("strategy_entry.strategy_cards", "SELECT"),
+    ("strategy_entry.entry_plans", "SELECT"),
+    ("strategy_entry.exit_plans", "SELECT"),
+    ("runtime.capital_reservations", "SELECT"),
+    ("runtime.capital_reservations", "UPDATE"),
+    ("runtime.exchange_position_slot_claims", "SELECT"),
+    ("runtime.exchange_position_slot_claims", "UPDATE"),
+    ("runtime.trade_commands", "SELECT"),
+    ("runtime.trade_commands", "INSERT"),
+)
+
+
+_NEXT_REQUEST_SQL = """SELECT r.*,a.activation_id,a.enabled AS activation_enabled,
+          a.strategy_id AS activation_strategy_id,
+          a.strategy_version AS activation_strategy_version,
+          a.strategy_config_fingerprint AS activation_strategy_config_fingerprint,
+          p.execution_permission_id,p.enabled_at AS execution_enabled_at,
+          c.state AS capital_reservation_state,
+          c.account_ref AS capital_reservation_account_ref,
+          c.capacity_snapshot_id AS capital_capacity_snapshot_id,
+          c.strategy_execution_binding_id AS capital_binding_id,
+          c.execution_leg AS capital_execution_leg,
+          c.trading_account_id AS capital_trading_account_id,
+          c.identity_status AS capital_identity_status,
+          e.strategy_execution_binding_id AS decision_binding_id,
+          e.execution_leg AS decision_execution_leg,
+          e.trading_account_id AS decision_trading_account_id,
+          e.identity_status AS decision_identity_status
+     FROM strategy_entry.execution_requests r
+     JOIN strategy_entry.strategy_attempts t
+       ON t.strategy_attempt_id=r.strategy_attempt_id
+      AND t.signal_id=r.signal_id
+     JOIN strategy_entry.strategy_activations a
+       ON a.activation_id=t.strategy_activation_id
+      AND a.enabled=true
+     JOIN strategy_entry.execution_permissions p
+       ON p.strategy_id=r.strategy_id
+      AND p.strategy_version=r.strategy_version
+      AND p.strategy_config_fingerprint=r.strategy_config_fingerprint
+      AND p.enabled=true
+      AND p.enabled_at IS NOT NULL
+      AND r.requested_at >= p.enabled_at
+     JOIN runtime.capital_reservations c
+       ON c.reservation_id=r.capital_reservation_id
+      AND c.strategy_attempt_id=r.strategy_attempt_id
+      AND c.trading_account_id=r.trading_account_id
+      AND c.identity_status='PROVEN'
+     LEFT JOIN strategy_entry.entry_decisions e
+       ON e.entry_decision_id=r.entry_decision_id
+      AND e.strategy_attempt_id=r.strategy_attempt_id
+      AND e.signal_id=r.signal_id
+    WHERE r.trading_account_id=%s
+      AND r.identity_status='PROVEN'
+      AND NOT EXISTS (
+          SELECT 1 FROM strategy_entry.execution_dispatches d
+           WHERE d.execution_request_id=r.execution_request_id
+    )
+    ORDER BY r.requested_at,r.execution_request_id
+    LIMIT 1
+    FOR UPDATE OF c SKIP LOCKED"""
+
+
+def _consumer_runtime_readiness(
+    connection: psycopg.Connection[Any],
+) -> tuple[bool, tuple[str, ...]]:
+    reasons: list[str] = []
+    if len(LOADED_RELEASE_COMMIT) != 40:
+        reasons.append("LOADED_RELEASE_COMMIT_INVALID")
+    try:
+        route = ConsumerWorkerRoute(TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID)
+    except ValueError:
+        reasons.append("ACCOUNT_CONNECTOR_ROUTE_NOT_READY")
+    else:
+        route_check = check_consumer_worker_route(connection, route=route)
+        if not route_check.ready:
+            reasons.extend(route_check.reasons)
+        safety_ready, safety_reasons = account_entry_safety_ready(
+            connection,
+            trading_account_id=route.trading_account_id,
+            account_connector_id=route.account_connector_id,
+        )
+        if not safety_ready:
+            reasons.extend(safety_reasons)
+    for table, privilege in _REQUIRED_DB_PRIVILEGES:
+        row = connection.execute(
+            "SELECT has_table_privilege(current_user,%s,%s)",
+            (table, privilege),
+        ).fetchone()
+        allowed = bool(
+            row
+            and (
+                row[0]
+                if not isinstance(row, Mapping)
+                else next(iter(row.values()))
+            )
+        )
+        if not allowed:
+            reasons.append(f"DB_PRIVILEGE_MISSING:{table}:{privilege}")
+    try:
+        connection.execute(
+            "EXPLAIN (COSTS FALSE) " + _NEXT_REQUEST_SQL,
+            (TRADING_ACCOUNT_ID,),
+        ).fetchall()
+    except psycopg.Error as exc:
+        reasons.append(
+            "ENTRY_REQUEST_SQL_PREFLIGHT_FAILED:"
+            + str(exc.sqlstate or type(exc).__name__)
+        )
+    return not reasons, tuple(dict.fromkeys(reasons))
+
+
+def _write_consumer_health(
+    connection: psycopg.Connection[Any],
+    *,
+    ready: bool,
+    detail: str,
+    now: datetime,
+) -> None:
+    connection.execute(
+        """INSERT INTO runtime.entry_consumer_health(
+               trading_account_id,account_connector_id,release_commit,
+               state,detail,observed_at,updated_at
+           ) VALUES(%s,%s,%s,%s,%s,%s,clock_timestamp())
+           ON CONFLICT(trading_account_id) DO UPDATE
+             SET account_connector_id=excluded.account_connector_id,
+                 release_commit=excluded.release_commit,
+                 state=excluded.state,
+                 detail=excluded.detail,
+                 observed_at=excluded.observed_at,
+                 updated_at=clock_timestamp()""",
+        (
+            TRADING_ACCOUNT_ID,
+            ACCOUNT_CONNECTOR_ID,
+            LOADED_RELEASE_COMMIT,
+            "READY" if ready else "BLOCKED",
+            detail,
+            now.astimezone(UTC),
+        ),
+    )
 
 
 def _request_from_row(row: Mapping[str, object]) -> ExecutionRequest:
@@ -126,52 +277,7 @@ def _next_request(
     ):
         raise ValueError("CONSUMER_ROUTE_PROCESS_IDENTITY_MISMATCH")
     return connection.execute(
-        """SELECT r.*,a.activation_id,a.enabled AS activation_enabled,
-                  a.strategy_id AS activation_strategy_id,
-                  a.strategy_version AS activation_strategy_version,
-                  a.strategy_config_fingerprint AS activation_strategy_config_fingerprint,
-                  p.execution_permission_id,p.enabled_at AS execution_enabled_at,
-                  c.state AS capital_reservation_state,
-                  c.account_ref AS capital_reservation_account_ref,
-                  c.capacity_snapshot_id AS capital_capacity_snapshot_id,
-                  c.strategy_execution_binding_id AS capital_binding_id,
-                  c.execution_leg AS capital_execution_leg,
-                  c.trading_account_id AS capital_trading_account_id,
-                  c.identity_status AS capital_identity_status,
-                  e.strategy_execution_binding_id AS decision_binding_id,
-                  e.execution_leg AS decision_execution_leg,
-                  e.trading_account_id AS decision_trading_account_id,
-                  e.identity_status AS decision_identity_status
-             FROM strategy_entry.execution_requests r
-             JOIN strategy_entry.strategy_attempts t
-               ON t.strategy_attempt_id=r.strategy_attempt_id
-              AND t.signal_id=r.signal_id
-             JOIN strategy_entry.strategy_activations a
-               ON a.activation_id=t.strategy_activation_id
-              AND a.enabled=true
-             JOIN strategy_entry.execution_permissions p
-               ON p.strategy_id=r.strategy_id
-              AND p.strategy_version=r.strategy_version
-              AND p.strategy_config_fingerprint=r.strategy_config_fingerprint
-              AND p.enabled=true
-              AND p.enabled_at IS NOT NULL
-              AND r.requested_at >= p.enabled_at
-             LEFT JOIN runtime.capital_reservations c
-               ON c.reservation_id=r.capital_reservation_id
-              AND c.strategy_attempt_id=r.strategy_attempt_id
-             LEFT JOIN strategy_entry.entry_decisions e
-               ON e.entry_decision_id=r.entry_decision_id
-              AND e.strategy_attempt_id=r.strategy_attempt_id
-              AND e.signal_id=r.signal_id
-            WHERE r.trading_account_id=%s
-              AND r.identity_status='PROVEN'
-              AND NOT EXISTS (
-                  SELECT 1 FROM strategy_entry.execution_dispatches d
-                   WHERE d.execution_request_id=r.execution_request_id
-            )
-            ORDER BY r.requested_at,r.execution_request_id
-            LIMIT 1
-            FOR UPDATE OF r SKIP LOCKED""",
+        _NEXT_REQUEST_SQL,
         (TRADING_ACCOUNT_ID,),
     ).fetchone()
 
@@ -1237,18 +1343,40 @@ def main() -> int:
         raise SystemExit("CRIPTA_TRADING_ACCOUNT_ID is required for Universal Entry consumer")
     if not ACCOUNT_CONNECTOR_ID:
         raise SystemExit("CRIPTA_ACCOUNT_CONNECTOR_ID is required for Universal Entry consumer")
-    if POLL_SECONDS <= 0:
-        raise SystemExit("CRIPTA_UNIVERSAL_ENTRY_CONSUMER_POLL_SECONDS must be positive")
+    if POLL_SECONDS <= 0 or HEALTH_SECONDS <= 0:
+        raise SystemExit("Universal Entry consumer poll/health seconds must be positive")
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
+    last_health_at = 0.0
+    last_health_signature: tuple[bool, tuple[str, ...]] | None = None
     with psycopg.connect(DB_DSN, row_factory=dict_row) as connection:
         while running:
+            current = datetime.now(UTC)
+            ready, reasons = _consumer_runtime_readiness(connection)
+            monotonic_now = time.monotonic()
+            health_signature = (ready, reasons)
+            if (
+                monotonic_now - last_health_at >= HEALTH_SECONDS
+                or health_signature != last_health_signature
+            ):
+                _write_consumer_health(
+                    connection,
+                    ready=ready,
+                    detail="READY" if ready else ",".join(reasons),
+                    now=current,
+                )
+                connection.commit()
+                last_health_at = monotonic_now
+                last_health_signature = health_signature
+            if not ready:
+                time.sleep(POLL_SECONDS)
+                continue
             # Independent no-signal safety guard; never touches open positions/Exit.
             check_release_arm_invariant(
-                connection, loaded_commit=LOADED_RELEASE_COMMIT
+                connection, loaded_commit=LOADED_RELEASE_COMMIT, now=current
             )
             connection.commit()
-            result = run_once(connection)
+            result = run_once(connection, now=current)
             # Each request/dispatch/fail-closed outcome must become durable
             # before polling the next Entry. A continuous signal stream
             # must not hold slot/advisory locks or queued commands uncommitted.

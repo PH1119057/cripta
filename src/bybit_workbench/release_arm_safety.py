@@ -7,13 +7,21 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
 
-def check_release_arm_invariant(connection: Any, *, loaded_commit: str,
-                                now: datetime | None = None) -> bool:
+def check_release_arm_invariant(
+    connection: Any,
+    *,
+    loaded_commit: str,
+    now: datetime | None = None,
+    require_entry_runtime_health: bool = False,
+    entry_source_ready: bool | None = None,
+    entry_source_detail: str | None = None,
+    health_max_age_seconds: int = 8,
+) -> bool:
     """Return True when new Entry may proceed from a release-bound perspective.
 
     A mismatch closes only the global *new-Entry* gate and raises a durable
@@ -56,7 +64,81 @@ def check_release_arm_invariant(connection: Any, *, loaded_commit: str,
         if not loaded_commit or str(field(r, 3, "release_commit")) != loaded_commit
     ]
     missing_scopes = sorted(permitted_scopes - session_scopes)
-    invalid = bool(stale) or (
+    runtime_health: dict[str, object] = {
+        "required": require_entry_runtime_health,
+        "source_ready": entry_source_ready,
+        "source_detail": entry_source_detail,
+        "consumer_accounts": [],
+        "consumer_failures": [],
+    }
+    runtime_invalid = False
+    runtime_scope_present = bool(gate_open or sessions or permissions)
+    if require_entry_runtime_health and runtime_scope_present:
+        expected_accounts = connection.execute(
+            """SELECT DISTINCT b.trading_account_id
+                 FROM strategy_entry.execution_permissions p
+                 JOIN strategy_entry.strategy_activations a
+                   ON a.strategy_id=p.strategy_id
+                  AND a.strategy_version=p.strategy_version
+                  AND a.strategy_config_fingerprint=p.strategy_config_fingerprint
+                  AND a.enabled=true
+                 JOIN strategy_entry.strategy_execution_bindings b
+                   ON b.strategy_activation_id=a.activation_id
+                  AND b.binding_state='ACTIVE'
+                WHERE p.enabled=true
+                  AND b.trading_account_id IS NOT NULL
+                ORDER BY b.trading_account_id"""
+        ).fetchall()
+        account_ids = [
+            str(field(row, 0, "trading_account_id")) for row in expected_accounts
+        ]
+        runtime_health["consumer_accounts"] = account_ids
+        consumer_failures: list[dict[str, object]] = []
+        fresh_after = instant - timedelta(seconds=health_max_age_seconds)
+        for account_id in account_ids:
+            row = connection.execute(
+                """SELECT account_connector_id,release_commit,state,detail,observed_at
+                     FROM runtime.entry_consumer_health
+                    WHERE trading_account_id=%s""",
+                (account_id,),
+            ).fetchone()
+            if row is None:
+                consumer_failures.append({
+                    "trading_account_id": account_id,
+                    "reason": "MISSING",
+                })
+                continue
+            connector = str(field(row, 0, "account_connector_id"))
+            release = str(field(row, 1, "release_commit"))
+            state = str(field(row, 2, "state"))
+            detail = str(field(row, 3, "detail"))
+            observed = field(row, 4, "observed_at")
+            fresh = (
+                isinstance(observed, datetime)
+                and observed.tzinfo is not None
+                and observed.astimezone(UTC) >= fresh_after
+            )
+            if release != loaded_commit or state != "READY" or not fresh:
+                consumer_failures.append({
+                    "trading_account_id": account_id,
+                    "account_connector_id": connector,
+                    "release_commit": release,
+                    "state": state,
+                    "detail": detail,
+                    "observed_at": (
+                        observed.isoformat()
+                        if isinstance(observed, datetime) else str(observed)
+                    ),
+                    "fresh": fresh,
+                })
+        runtime_health["consumer_failures"] = consumer_failures
+        runtime_invalid = (
+            not account_ids
+            or bool(consumer_failures)
+            or entry_source_ready is not True
+        )
+
+    invalid = bool(stale) or runtime_invalid or (
         gate_open and (not loaded_commit or not sessions or bool(missing_scopes))
     )
     if invalid:
@@ -65,15 +147,20 @@ def check_release_arm_invariant(connection: Any, *, loaded_commit: str,
             "stale_sessions": stale,
             "missing_scopes": missing_scopes,
             "gate_was_open": gate_open,
+            "entry_runtime_health": runtime_health,
         }
-        reason = "RELEASE_BOUND_LIVE_ARM_NOT_READY"
+        reason = (
+            "REAL_ENTRY_RUNTIME_NOT_READY"
+            if runtime_invalid else "RELEASE_BOUND_LIVE_ARM_NOT_READY"
+        )
         connection.execute(
             """INSERT INTO control.release_arm_incidents(
                    incident_id,release_commit,reason,affected,state,
                    detected_at,last_checked_at)
                VALUES(%s,%s,%s,%s::jsonb,'OPEN',%s,%s)
                ON CONFLICT (release_commit) WHERE state='OPEN'
-               DO UPDATE SET affected=EXCLUDED.affected,
+               DO UPDATE SET reason=EXCLUDED.reason,
+                             affected=EXCLUDED.affected,
                              last_checked_at=EXCLUDED.last_checked_at""",
             ("release-arm-" + uuid4().hex, loaded_commit or "UNKNOWN",
              reason, json.dumps(affected), instant, instant),

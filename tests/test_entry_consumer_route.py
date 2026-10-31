@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -193,3 +194,17 @@ def test_account_latch_denies_new_request_before_any_queue_claim(
         result = consumer.run_once(db)
     assert result == "ACCOUNT_ENTRY_SAFETY_NOT_READY:" + reason
     assert not any("FROM strategy_entry.execution_requests" in x for x, _ in db.queries)
+
+
+def test_request_claim_locks_mutable_reservation_not_immutable_request() -> None:
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "operations/connectivity/universal_entry_consumer.py"
+    ).read_text(encoding="utf-8")
+    assert "_NEXT_REQUEST_SQL" in source
+    assert "JOIN runtime.capital_reservations c" in source
+    assert "FOR UPDATE OF c SKIP LOCKED" in source
+    assert "FOR UPDATE OF r SKIP LOCKED" not in source
+    assert '"EXPLAIN (COSTS FALSE) " + _NEXT_REQUEST_SQL' in source
+    assert '("strategy_entry.execution_requests", "UPDATE")' not in source
+    assert '("runtime.capital_reservations", "UPDATE")' in source

@@ -221,7 +221,8 @@ def test_real_consumer_commits_every_entry_iteration(monkeypatch) -> None:
     fake_connection = OfflineConnection()
     outcomes = iter(("DISPATCHED:entry-a", "BLOCKED:MODE", "NO_REQUEST"))
 
-    def fake_run_once(_connection):
+    def fake_run_once(_connection, *, now=None):
+        del now
         result = next(outcomes)
         events.append(result)
         if result == "NO_REQUEST":
@@ -234,8 +235,15 @@ def test_real_consumer_commits_every_entry_iteration(monkeypatch) -> None:
         patch.object(entry_consumer, "TRADING_ACCOUNT_ID", "test-main"),
         patch.object(entry_consumer, "ACCOUNT_CONNECTOR_ID", "test-connector"),
         patch.object(entry_consumer, "POLL_SECONDS", 0.01),
+        patch.object(entry_consumer, "HEALTH_SECONDS", 2.0),
         patch.object(entry_consumer, "running", True),
         patch.object(entry_consumer, "require_exact_sub_instance"),
+        patch.object(
+            entry_consumer,
+            "_consumer_runtime_readiness",
+            return_value=(True, ()),
+        ),
+        patch.object(entry_consumer, "_write_consumer_health"),
         patch.object(entry_consumer.signal, "signal"),
         patch.object(
             entry_consumer.psycopg, "connect", return_value=fake_connection
@@ -247,7 +255,7 @@ def test_real_consumer_commits_every_entry_iteration(monkeypatch) -> None:
         assert entry_consumer.main() == 0
 
     assert events == [
-        "COMMIT", "DISPATCHED:entry-a", "COMMIT",
+        "COMMIT", "COMMIT", "DISPATCHED:entry-a", "COMMIT",
         "COMMIT", "BLOCKED:MODE", "COMMIT",
         "COMMIT", "NO_REQUEST", "COMMIT",
     ]

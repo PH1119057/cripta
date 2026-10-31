@@ -121,8 +121,9 @@ def test_supervisor_calls_retirement_without_bybit_or_binding_arguments():
     assert "loaded_commit=loaded_commit" in call
     assert "account_snapshot=" not in call
     assert "trading_account_id=" not in call
-    assert "if retired_arms:" in src
+    assert "if retired_arms:" not in src
     assert "check_release_arm_invariant(" in src
+    assert "require_entry_runtime_health=True" in src
 
 
 def test_installer_does_not_touch_trading_control_or_exchange():
