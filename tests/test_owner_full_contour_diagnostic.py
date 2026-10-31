@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import bybit_workbench.universal_entry.owner_full_contour_diagnostic as diagnostic
+import bybit_workbench.universal_entry.owner_full_contour_control as control
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import (
     FrozenPolicy,
@@ -264,3 +265,46 @@ def test_prestart_recovery_never_replays_stale_execution_smoke_entry() -> None:
     assert "api_post(" not in block
     assert "RESTART_NO_EXACT_EXCHANGE_OUTCOME" in block
     assert "SET state='failed'" in block
+
+
+class _Cursor:
+    def __init__(self, row):
+        self._row = row
+
+    def fetchone(self):
+        return self._row
+
+
+class _RetireDictRowConnection:
+    def __init__(self):
+        self.calls: list[tuple[str, tuple[object, ...]]] = []
+
+    def execute(self, statement, parameters=()):
+        self.calls.append((statement, tuple(parameters)))
+        if "SELECT strategy_id,strategy_version,strategy_config_fingerprint" in statement:
+            return _Cursor(
+                {
+                    "strategy_id": diagnostic.MAIN_ID,
+                    "strategy_version": diagnostic.VERSION,
+                    "strategy_config_fingerprint": "f" * 64,
+                }
+            )
+        if "SELECT count(*) AS active_count" in statement:
+            return _Cursor({"active_count": 1})
+        if "SELECT control.disarm_owner_full_contour_account_scope" in statement:
+            return _Cursor((control.account_session_id("owner-fc-test"),))
+        return _Cursor(None)
+
+
+def test_retire_entry_rights_handles_dict_row_and_disarms_account_scope() -> None:
+    connection = _RetireDictRowConnection()
+    control.retire_entry_rights(
+        connection,
+        run_id="owner-fc-test",
+        at=datetime(2026, 11, 1, tzinfo=UTC),
+        reason="test dispatch",
+    )
+    sql = "\n".join(statement for statement, _params in connection.calls)
+    assert "UPDATE strategy_entry.execution_permissions" in sql
+    assert "UPDATE control.live_arm_sessions" in sql
+    assert "SELECT control.disarm_owner_full_contour_account_scope" in sql
