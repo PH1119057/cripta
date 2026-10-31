@@ -1259,6 +1259,32 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
     }
 
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+        p90_arm_facts = connection.execute(
+            """SELECT
+                   (SELECT count(*) FROM strategy_entry.execution_permissions
+                     WHERE enabled=true AND strategy_version=%s
+                       AND strategy_id IN (%s,%s)),
+                   (SELECT count(*) FROM control.live_arm_sessions
+                     WHERE state='ACTIVE' AND strategy_version=%s
+                       AND strategy_id IN (%s,%s)),
+                   (SELECT count(*) FROM control.account_live_arm_sessions
+                     WHERE state='ACTIVE' AND strategy_version=%s
+                       AND strategy_id IN (%s,%s)),
+                   (SELECT enabled FROM control.execution_gates
+                     WHERE mode='mainnet')""",
+            (
+                P90_REAL_V3_VERSION, P90_MAIN_ID, P90_SUB_ID,
+                P90_REAL_V3_VERSION, P90_MAIN_ID, P90_SUB_ID,
+                P90_REAL_V3_VERSION, P90_MAIN_ID, P90_SUB_ID,
+            ),
+        ).fetchone()
+        if p90_arm_facts is not None:
+            p90_arm_status.update({
+                "execution_permissions": int(p90_arm_facts[0]),
+                "live_arm_sessions": int(p90_arm_facts[1]),
+                "account_live_arm_sessions": int(p90_arm_facts[2]),
+                "gate_enabled": bool(p90_arm_facts[3]),
+            })
         # Read-only P90 operator projection. Geometry is not recomputed here:
         # the Dashboard renders the exact active native causal checkpoint.
         def p90_decimal(value: object) -> Decimal | None:
