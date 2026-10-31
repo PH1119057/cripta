@@ -6355,6 +6355,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             command_type = "entry"
                             command_payload = {
                                 "source": "owner_controlled_live_test",
+                                "account_connector_id": test_connector_id,
                                 "stake_usdt": "10",
                                 "leverage": 1,
                                 "side": "Buy" if direction == "LONG" else "Sell",
