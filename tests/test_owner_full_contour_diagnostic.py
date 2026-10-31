@@ -230,4 +230,5 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
         "INSERT INTO control.account_live_arm_sessions("
     ):]
     account_insert = account_insert[:account_insert.index("RETURN p_session_id")]
-    assert "live_arm_session_id," not in account_insert
+    assert "\n    live_arm_session_id," not in account_insert
+    assert "OWNER_FULL_CONTOUR_SYMBOL_ENTRY_MUTATION_PENDING" in MIGRATION
