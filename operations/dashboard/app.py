@@ -5916,6 +5916,66 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     "application/json; charset=utf-8",
                 )
             return
+        if path == "/api/owner-full-contour-diagnostic":
+            try:
+                if not _u6_financial_account_same_origin(self):
+                    self.send_body(
+                        403,
+                        json.dumps(
+                            {"error": "OWNER_FULL_CONTOUR_ORIGIN_UNVERIFIED"}
+                        ).encode(),
+                        "application/json; charset=utf-8",
+                    )
+                    return
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    raise ValueError("OWNER_FULL_CONTOUR_REQUEST_SIZE_INVALID")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise ValueError("OWNER_FULL_CONTOUR_REQUEST_INVALID")
+                if request.get("confirmed") is not True:
+                    raise ValueError("OWNER_FULL_CONTOUR_OWNER_CONFIRMATION_REQUIRED")
+                request_id = str(request.get("request_id") or "").strip()
+                symbol = str(request.get("symbol") or "").strip().upper()
+                direction = str(request.get("direction") or "").strip().upper()
+                operator = self.session_user()
+                if (
+                    not operator
+                    or not request_id
+                    or len(request_id) > 128
+                    or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for ch in request_id)
+                ):
+                    raise ValueError("OWNER_FULL_CONTOUR_REQUEST_ID_INVALID")
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                    result = request_owner_full_contour_run(
+                        connection,
+                        request_id=request_id,
+                        symbol=symbol,
+                        direction=direction,
+                        operator=operator,
+                        release_commit=LOADED_RELEASE_COMMIT,
+                        now=datetime.now(UTC),
+                    )
+                    connection.commit()
+                _cache = None
+                self.send_body(
+                    202,
+                    json.dumps(
+                        {"status": "REQUESTED", **result},
+                        ensure_ascii=False,
+                    ).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            return
         if path in {"/api/live/settings", "/api/live/command", "/api/live/gate"}:
             try:
                 length = int(self.headers.get("Content-Length", "0"))
