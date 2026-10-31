@@ -1756,16 +1756,23 @@ def _observer_objective_inputs(
             for symbol in symbols
         ]
         coin_rows = connection.execute(
-            """SELECT DISTINCT ON (linear_instrument_id)
-                      symbol,coin_context_id,observed_at,data_quality,payload,
-                      source_coin_context_id,market_source_id,spot_instrument_id,
-                      linear_instrument_id
-                 FROM dispatcher_v2.coin_market_contexts
-                WHERE market_source_id=%s
-                  AND linear_instrument_id = ANY(%s)
-                  AND observed_at <= %s
-                ORDER BY linear_instrument_id,observed_at DESC""",
-            (BYBIT_PUBLIC_MARKET_SOURCE_ID, expected_linear_ids, observed_at),
+            """SELECT c.symbol,c.coin_context_id,c.observed_at,c.data_quality,c.payload,
+                      c.source_coin_context_id,c.market_source_id,c.spot_instrument_id,
+                      c.linear_instrument_id
+                 FROM unnest(%s::text[]) AS instrument(linear_instrument_id)
+                 CROSS JOIN LATERAL (
+                       SELECT symbol,coin_context_id,observed_at,data_quality,payload,
+                              source_coin_context_id,market_source_id,spot_instrument_id,
+                              linear_instrument_id
+                         FROM dispatcher_v2.coin_market_contexts
+                        WHERE market_source_id=%s
+                          AND linear_instrument_id=instrument.linear_instrument_id
+                          AND observed_at <= %s
+                        ORDER BY observed_at DESC
+                        LIMIT 1
+                 ) AS c
+                ORDER BY c.linear_instrument_id""",
+            (expected_linear_ids, BYBIT_PUBLIC_MARKET_SOURCE_ID, observed_at),
         ).fetchall()
         for row in coin_rows:
             symbol = str(row[0])
