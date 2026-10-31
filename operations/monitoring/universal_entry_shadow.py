@@ -83,7 +83,12 @@ from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
     MAIN_ID as P90_MAIN_ID,
     SUB_ID as P90_SUB_ID,
 )
-from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_VERSION
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+    OWNER_ARM_OPEN_GATE_REASON,
+    OWNER_ARM_STAGE_GATE_REASON,
+    OWNER_ARM_STAGE_RELOAD_REASON,
+    VERSION as P90_REAL_VERSION,
+)
 from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
     P90L90ObserverPaperConsumer,
 )
@@ -1326,13 +1331,19 @@ def _require_p90_source_only_epoch_current(
         cast(Any, item).activation.activation_id for item in bundles
     )
     gate = connection.execute(
-        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        "SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet'"
     ).fetchone()
     gate_enabled = bool(gate and gate[0])
+    gate_reason = str(gate[1] or "") if gate else ""
     if not gate_enabled and not selected:
         return
-    if allow_live_transition and gate_enabled and selected == expected:
-        raise ObserverEpochReload("P90_REAL_OWNER_ARM_TO_LIVE_RELOAD")
+    if (
+        allow_live_transition
+        and not gate_enabled
+        and gate_reason == OWNER_ARM_STAGE_GATE_REASON
+        and selected == expected
+    ):
+        raise ObserverEpochReload(OWNER_ARM_STAGE_RELOAD_REASON)
     raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
 
 
@@ -2069,6 +2080,7 @@ def _observer_status(
     reason: str = "",
     sensor_status: Mapping[str, object] | None = None,
     strategy_monitors: tuple[Mapping[str, object], ...] = (),
+    p90_owner_arm_stage: str | None = None,
 ) -> None:
     _atomic_json(
         OBSERVER_STATUS_PATH,
@@ -2097,6 +2109,7 @@ def _observer_status(
             "warmup_until": None if warmup_until is None else warmup_until.isoformat(),
             "sensor_status": dict(sensor_status or {}),
             "strategy_monitors": [dict(item) for item in strategy_monitors],
+            "p90_owner_arm_stage": p90_owner_arm_stage,
         },
     )
 
@@ -2139,6 +2152,7 @@ def _run_observer_epoch(
     )
     p90_real_source_only = False
     p90_real_live = False
+    p90_real_staged = False
     if observer_split.p90_real:
         if len(observer_split.p90_real) != 2 or len(LOADED_COMMIT) != 40:
             raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
@@ -2150,24 +2164,35 @@ def _run_observer_epoch(
             for item in observer_split.p90_real
         )
         gate = connection.execute(
-            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+            "SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet'"
         ).fetchone()
         gate_enabled = bool(gate and gate[0])
+        gate_reason = str(gate[1] or "") if gate else ""
         if p90_real_force_source_only:
             if gate_enabled or selected:
                 raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
             p90_real_source_only = True
         elif not gate_enabled and not selected:
-            # Normal pre-arm state: build the exact REAL source/private
-            # topology with trading_effect=NONE. Owner arm later changes both
-            # permission rows + gate atomically; the light signature forces a
-            # new epoch which then selects the REAL execution branch.
+            # Normal pre-arm state: source/private topology only, no execution.
             p90_real_source_only = True
-        elif gate_enabled and selected == expected:
+        elif (
+            not gate_enabled
+            and gate_reason == OWNER_ARM_STAGE_GATE_REASON
+            and selected == expected
+        ):
+            # Exact owner-arm staging: assemble the complete native MAIN/SUB
+            # runtime while admission remains hard-disabled by the closed gate.
+            p90_real_live = True
+            p90_real_staged = True
+        elif (
+            gate_enabled
+            and gate_reason == OWNER_ARM_OPEN_GATE_REASON
+            and selected == expected
+        ):
             p90_real_live = True
         else:
-            # Partial permission, one-account selection or gate/permission
-            # disagreement is never interpreted as source-only or REAL.
+            # Partial permission, stale stage marker, one-account selection or
+            # gate/permission disagreement is never interpreted as REAL.
             raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
     # Executable release SHA and original market-data lineage are distinct.
     # Only an independently attested, immutable five-symbol source can be
@@ -3076,13 +3101,20 @@ def _run_observer_epoch(
                     selected = _real_execution_selected_activation_ids(
                         connection, observer_split.p90_real,
                     )
-                    if (
-                        activation is None
-                        or selected != expected_activation_ids
-                        or connection.execute(
-                            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
-                        ).fetchone() != (True,)
-                    ):
+                    gate_row = connection.execute(
+                        "SELECT enabled,reason FROM control.execution_gates "
+                        "WHERE mode='mainnet'"
+                    ).fetchone()
+                    if activation is None or selected != expected_activation_ids:
+                        raise RuntimeError(
+                            "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
+                        )
+                    if p90_real_staged:
+                        if gate_row != (False, OWNER_ARM_STAGE_GATE_REASON):
+                            raise RuntimeError(
+                                "P90_REAL_OWNER_ARM_STAGE_GATE_DRIFT"
+                            )
+                    elif gate_row != (True, OWNER_ARM_OPEN_GATE_REASON):
                         raise RuntimeError(
                             "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
                         )
@@ -3095,9 +3127,18 @@ def _run_observer_epoch(
                         real_selected_for=selected,
                     )
                     accounts = scoped.get(activation, ())
-                    return accounts, (
+                    account_ready = (
                         len(accounts) == 1 and activation in ready
                     )
+                    if p90_real_staged:
+                        if not account_ready:
+                            raise RuntimeError(
+                                "P90_REAL_OWNER_ARM_STAGE_ACCOUNT_NOT_READY"
+                            )
+                        # Full topology is proven, but the global gate is still
+                        # closed: never expose an executable admission context.
+                        return (), False
+                    return accounts, account_ready
 
                 runtime = assemble_p90_real_observer_runtime(
                     connection,
@@ -3223,7 +3264,11 @@ def _run_observer_epoch(
                         "source": (
                             "p90_real_native_source_only_NO_ORDERS"
                             if p90_real_source_only
-                            else "p90_real_live_original_native_main_sub"
+                            else (
+                                "p90_real_staged_gate_closed"
+                                if p90_real_staged
+                                else "p90_real_live_original_native_main_sub"
+                            )
                         ),
                         "source_commit": LOADED_COMMIT,
                         "source_epoch_id": source_epoch_id,
@@ -3243,21 +3288,64 @@ def _run_observer_epoch(
         )
         next_status = 0.0
         next_signature = 0.0
+        initial_running = sensor_ready(datetime.now(UTC))
         _observer_status(
-            state="WARMUP" if not sensor_ready(datetime.now(UTC)) else "RUNNING",
+            state="RUNNING" if initial_running else "WARMUP",
             epoch_id=epoch_id,
             active_bundles=bundles,
             symbols=symbols,
             warmup_until=warmup_until,
-            reason="causal seed complete",
+            reason=(
+                "P90_REAL_OWNER_ARM_STAGE_READY"
+                if p90_real_staged and initial_running
+                else "causal seed complete"
+            ),
             sensor_status=sensor_status(datetime.now(UTC)),
             strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+            p90_owner_arm_stage=(
+                "READY" if p90_real_staged and initial_running
+                else ("WARMUP" if p90_real_staged else None)
+            ),
         )
         while not stopping():
             now_mono = time.monotonic()
             if now_mono >= next_signature:
                 latest_signature = _observer_light_signature(connection)
                 if latest_signature != current_signature:
+                    if p90_real_staged:
+                        gate_row = connection.execute(
+                            "SELECT enabled,reason FROM control.execution_gates "
+                            "WHERE mode='mainnet'"
+                        ).fetchone()
+                        selected_now = _real_execution_selected_activation_ids(
+                            connection, observer_split.p90_real
+                        )
+                        if (
+                            gate_row == (True, OWNER_ARM_OPEN_GATE_REASON)
+                            and selected_now == expected
+                            and latest_signature[1:] == current_signature[1:]
+                        ):
+                            # Finalization changed only the global gate. Keep the
+                            # already-proven native runtime; admission becomes
+                            # executable dynamically without another epoch gap.
+                            p90_real_staged = False
+                            current_signature = latest_signature
+                            _observer_status(
+                                state="RUNNING",
+                                epoch_id=epoch_id,
+                                active_bundles=bundles,
+                                symbols=symbols,
+                                facts_received=facts_received,
+                                evaluations=evaluations_count,
+                                signals=signals_count,
+                                warmup_until=warmup_until,
+                                reason="P90_REAL_OWNER_ARM_GATE_OPEN",
+                                sensor_status=sensor_status(datetime.now(UTC)),
+                                strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+                                p90_owner_arm_stage=None,
+                            )
+                            next_signature = now_mono + 1.0
+                            continue
                     reload_reason = "StrategyActivation set changed"
                     if p90_real_source_only:
                         try:
@@ -3280,6 +3368,7 @@ def _run_observer_epoch(
                         reason=reload_reason,
                         sensor_status=sensor_status(datetime.now(UTC)),
                         strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+                        p90_owner_arm_stage=None,
                     )
                     return "RELOAD"
                 next_signature = now_mono + 1.0
@@ -3400,6 +3489,10 @@ def _run_observer_epoch(
                     ),
                     sensor_status=sensor_status(datetime.now(UTC)),
                     strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+                    p90_owner_arm_stage=(
+                        "READY" if p90_real_staged and running
+                        else ("WARMUP" if p90_real_staged else None)
+                    ),
                 )
                 next_status = now_mono + 2.0
         return "STOP"
