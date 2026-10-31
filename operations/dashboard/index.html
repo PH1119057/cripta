@@ -247,6 +247,12 @@
           <div id="tradeOperationStatus" class="operation-status" aria-live="polite">Проверяю operational hard stops…</div>
           <button id="p90RealV3ArmButton" class="action danger" type="button" disabled>P90 REAL v3 OWNER ARM</button>
           <div id="p90RealV3ArmStatus" class="operation-status" aria-live="polite">P90: проверяю exact MAIN/SUB scope…</div>
+          <details id="p90ArmResultPanel" class="operation-status" aria-label="Последний результат P90 OWNER ARM" style="margin-top:6px;overflow-wrap:anywhere">
+            <summary>Последняя операция OWNER ARM · подробности</summary>
+            <div id="p90ArmResultMeta" class="muted">В этой вкладке операций пока не было.</div>
+            <button id="p90ArmCopyResult" type="button" class="action" style="margin:6px 0">Копировать текст</button>
+            <pre id="p90ArmResultText" style="white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto;user-select:text">Операций пока не было.</pre>
+          </details>
           <div id="p90RealV3ArmDetail">P90 REAL v3: проверяю loaded/source identity и observer readiness…</div>
           <div class="muted console-release-status">Scope: MAIN LTC/INJ · SUB DOT/ARB/APT · 10 USDT на Entry · isolated 1x · caps 20/30 USDT. OWNER ARM всегда повторно проверяет full server evidence перед открытием mainnet gate.</div>
           <div id="tradeGateNotice" class="observer-lock"><b>Новые реальные входы запрещены.</b></div>
@@ -908,6 +914,24 @@ function refreshP90RealV3ArmControl(){
   setOperationStatus(status,state,message);
   if(detail)detail.textContent='loaded '+(loaded?loaded.slice(0,12):'—')+' · source '+(source?source.slice(0,12):'—')+' · observer '+observerState+(observerReady?' / ready':' / not ready')+' · mainnet '+(liveGateOpen?'OPEN':'CLOSED');
 }
+const p90ArmHistoryKey='cripta:p90-owner-arm:last-result:v1';
+function recordP90ArmResult(state,message,requestId){
+  const entry={state,message:String(message),requestId:String(requestId),at:new Date().toISOString()};
+  try{sessionStorage.setItem(p90ArmHistoryKey,JSON.stringify(entry))}catch(_){}
+  showP90ArmResult(entry);
+}
+function showP90ArmResult(entry){
+  const panel=document.getElementById('p90ArmResultPanel'),meta=document.getElementById('p90ArmResultMeta'),text=document.getElementById('p90ArmResultText');
+  if(!panel||!meta||!text)return;
+  meta.textContent=entry.at+' · '+entry.state+' · request '+entry.requestId;
+  text.textContent=entry.message;
+  panel.open=entry.state!=='success';
+}
+try{const saved=sessionStorage.getItem(p90ArmHistoryKey);if(saved)showP90ArmResult(JSON.parse(saved))}catch(_){}
+document.getElementById('p90ArmCopyResult')?.addEventListener('click',async()=>{
+  const text=document.getElementById('p90ArmResultText')?.textContent||'';
+  try{await navigator.clipboard.writeText(text)}catch(_){const field=document.getElementById('p90ArmResultText');if(field){const range=document.createRange();range.selectNodeContents(field);window.getSelection()?.removeAllRanges();window.getSelection()?.addRange(range)}}
+});
 async function changeP90RealV3Arm(enabled){
   if(gateChanging)return;
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus');
@@ -919,8 +943,10 @@ async function changeP90RealV3Arm(enabled){
     await loadStrategies(true);
     await confirmGateState(enabled);
     finish('success',enabled?'ГОТОВО · P90 REAL v3 MICRO_LIVE ARMED':'ГОТОВО · P90 REAL v3 DISARMED');
+    recordP90ArmResult('success',enabled?'P90 REAL v3 MICRO_LIVE ARMED':'P90 REAL v3 DISARMED',requestId);
   }catch(e){
-    finish('error',`ОШИБКА · ${e.message}`);
+    finish('error','OWNER ARM отклонён · подробности ниже');
+    recordP90ArmResult('error',e.message,requestId);
     throw e;
   }finally{
     gateChanging=false;
@@ -936,7 +962,7 @@ document.getElementById('p90RealV3ArmButton')?.addEventListener('click',async()=
   const armed=p90RealV3Armed();
   if(armed){
     if(!confirm('Отключить P90 REAL v3?\n\nНовые Entry будут запрещены. Уже открытые позиции продолжат сопровождение Exit.'))return;
-    try{await changeP90RealV3Arm(false)}catch(e){alert(e.message)}
+    try{await changeP90RealV3Arm(false)}catch(e){/* visible in persistent ARM panel */}
     return;
   }
   if(!exactP90RealV3Cohort()){
@@ -944,7 +970,7 @@ document.getElementById('p90RealV3ArmButton')?.addEventListener('click',async()=
     return;
   }
   if(!confirm('P90 REAL v3 OWNER ARM\n\nMAIN: LTCUSDT, INJUSDT · cap 20 USDT\nSUB: DOTUSDT, ARBUSDT, APTUSDT · cap 30 USDT\n10 USDT на Entry · isolated 1x\n\nARM создаст exact release-bound sessions, включит 2 execution permissions и откроет mainnet gate ПОСЛЕДНИМ шагом. Продолжить?'))return;
-  try{await changeP90RealV3Arm(true)}catch(e){alert(e.message)}
+  try{await changeP90RealV3Arm(true)}catch(e){/* visible in persistent ARM panel */}
 });
 async function fetchLiveStateData(){if(liveStateInFlight)return liveStateInFlight;const view=activePanelName()==='liveDesk'?activeTradePage():'open',path=`/api/live/state?view=${encodeURIComponent(view)}`;liveStateInFlight=(async()=>{const r=await fetchWithTimeout(path,{cache:'no-store'},8000);if(!r.ok)throw new Error(`live-state HTTP ${r.status}`);const out=await r.json();lastLiveSuccessAt=Date.now();return out})();try{return await liveStateInFlight}finally{liveStateInFlight=null}}
 async function readLiveStateOnce(){const d=await fetchLiveStateData();renderLiveState(d);return d.live_trading||{}}
