@@ -224,6 +224,33 @@ def test_verified_installer_prunes_release_backups_to_one_previous_with_short_co
     assert "maximum lifetime = 7 * 24h" in rules
     assert "/data/cripta/backups/system/<timestamp>" in rules
 
+
+def test_verified_installer_prunes_runtime_releases_only_after_post_deploy_checks() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+    helper = "runtime_release_retention.py"
+    assert helper in source
+
+    preflight = source.index('validate \\\n  --expected-sha "$EXPECTED_BASELINE"')
+    services_stop = source.index("services_stopped=1")
+    state_commit = source.index(
+        'printf \'%s\\\\n\' "$RELEASE_COMMIT" > "$STATE_ROOT/INSTALLED_COMMIT"'
+    )
+    prune = source.index('prune \\\n  --current-sha "$RELEASE_COMMIT"')
+    deploy_success = source.index("deploy_succeeded=1")
+    final_pass = source.index('echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"')
+
+    assert preflight < services_stop
+    assert state_commit < prune < deploy_success < final_pass
+
+    rules = (ROOT / "docs" / "DEVELOPMENT_RELEASE_RULES_RU.md").read_text(
+        encoding="utf-8"
+    )
+    assert "RUNTIME RELEASE RETENTION" in rules
+    assert "current installed release" in rules
+    assert "exactly 1 immediate previous deployed release" in rules
+    assert "EXPECTED_BASELINE_COMMIT" in rules
+    assert "/srv/cripta/runtime/releases" in rules
+
 def test_verified_installer_manages_download_expansion_unit() -> None:
     source = INSTALLER.read_text(encoding="utf-8")
     assert (
