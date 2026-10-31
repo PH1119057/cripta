@@ -86,11 +86,12 @@ if [[ -n "$EXPECTED_TREE" && "$tree" != "$EXPECTED_TREE" ]]; then die "release t
 pre_gate="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
 pre_permissions="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
 pre_sessions="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
-echo "TRADING_STATE_INFORMATIONAL=gate:$pre_gate permissions:$pre_permissions sessions:$pre_sessions"
+pre_account_sessions="$(sql_scalar "SELECT count(*) FROM control.account_live_arm_sessions WHERE state='ACTIVE'")"
+echo "TRADING_STATE_INFORMATIONAL=gate:$pre_gate permissions:$pre_permissions sessions:$pre_sessions account_sessions:$pre_account_sessions"
 if [[ "$STAGED_OFFLINE" == "1" ]]; then
   # Local facts are necessary, NOT sufficient: approved preflight must also
   # independently verify Exchange positions/orders and restore/rollback.
-  [[ "$pre_gate" == "0" && "$pre_permissions" == "0" && "$pre_sessions" == "0" ]] || die "STAGED_OFFLINE_TRADING_NOT_DISARMED"
+  [[ "$pre_gate" == "0" && "$pre_permissions" == "0" && "$pre_sessions" == "0" && "$pre_account_sessions" == "0" ]] || die "STAGED_OFFLINE_TRADING_NOT_DISARMED"
   pre_hot_positions="$(sql_scalar "SELECT count(*) FROM runtime.hot_positions")"
   pre_hot_orders="$(sql_scalar "SELECT count(*) FROM runtime.hot_orders")"
   [[ "$pre_hot_positions" == "0" && "$pre_hot_orders" == "0" ]] || die "STAGED_OFFLINE_LOCAL_HOT_INVENTORY_NOT_EMPTY"
@@ -645,12 +646,13 @@ done
 gate_after="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
 permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
 sessions_after="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
+account_sessions_after="$(sql_scalar "SELECT count(*) FROM control.account_live_arm_sessions WHERE state='ACTIVE'")"
 # Trading controls are reported, never used as installer go/no-go decisions.
 # A supervisor/runtime may legitimately change trading state during deployment.
-if [[ "$gate_after" == "$pre_gate" && "$permissions_after" == "$pre_permissions" && "$sessions_after" == "$pre_sessions" ]]; then
+if [[ "$gate_after" == "$pre_gate" && "$permissions_after" == "$pre_permissions" && "$sessions_after" == "$pre_sessions" && "$account_sessions_after" == "$pre_account_sessions" ]]; then
   echo "TRADING_CONTROL_UNCHANGED=PASS"
 else
-  echo "TRADING_CONTROL_CHANGED_EXTERNALLY=WARNING before:$pre_gate/$pre_permissions/$pre_sessions after:$gate_after/$permissions_after/$sessions_after" >&2
+  echo "TRADING_CONTROL_CHANGED_EXTERNALLY=WARNING before:$pre_gate/$pre_permissions/$pre_sessions/$pre_account_sessions after:$gate_after/$permissions_after/$sessions_after/$account_sessions_after" >&2
 fi
 # Exchange -> DB synchronization belongs to private runtime reconciliation.
 # Never send Exchange mutations from the installer.
