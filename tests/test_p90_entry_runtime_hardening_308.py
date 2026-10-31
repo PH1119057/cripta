@@ -27,7 +27,9 @@ def test_prearm_requires_both_entry_consumers_and_fresh_health() -> None:
     assert 'f"cripta-universal-entry-consumer@{_SUB_ACCOUNT}.service"' in PREARM
     assert "FROM runtime.entry_consumer_health" in PREARM
     assert 'str(health_state) == "READY"' in PREARM
-    assert "(current - health_observed).total_seconds() <= 8" in PREARM
+    assert "health_checked_at = datetime.now(UTC)" in PREARM
+    assert "(health_checked_at - health_observed).total_seconds() <= 8" in PREARM
+    assert "(current - health_observed).total_seconds() <= 8" not in PREARM
 
 
 def test_runtime_guard_runs_without_signal_and_recovers_expired_admission() -> None:
