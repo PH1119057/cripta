@@ -114,7 +114,14 @@ def _consumer_runtime_readiness(
             "SELECT has_table_privilege(current_user,%s,%s)",
             (table, privilege),
         ).fetchone()
-        allowed = bool(row and (row[0] if not isinstance(row, Mapping) else next(iter(row.values()))))
+        allowed = bool(
+            row
+            and (
+                row[0]
+                if not isinstance(row, Mapping)
+                else next(iter(row.values()))
+            )
+        )
         if not allowed:
             reasons.append(f"DB_PRIVILEGE_MISSING:{table}:{privilege}")
     return not reasons, tuple(dict.fromkeys(reasons))
