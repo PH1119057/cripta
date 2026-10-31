@@ -201,11 +201,10 @@ def test_request_claim_locks_mutable_reservation_not_immutable_request() -> None
         Path(__file__).resolve().parents[1]
         / "operations/connectivity/universal_entry_consumer.py"
     ).read_text(encoding="utf-8")
-    start = source.index("def _next_request(")
-    end = source.index("\ndef _policy_bundle(", start)
-    block = source[start:end]
-    assert "JOIN runtime.capital_reservations c" in block
-    assert "FOR UPDATE OF c SKIP LOCKED" in block
-    assert "FOR UPDATE OF r SKIP LOCKED" not in block
+    assert "_NEXT_REQUEST_SQL" in source
+    assert "JOIN runtime.capital_reservations c" in source
+    assert "FOR UPDATE OF c SKIP LOCKED" in source
+    assert "FOR UPDATE OF r SKIP LOCKED" not in source
+    assert '"EXPLAIN (COSTS FALSE) " + _NEXT_REQUEST_SQL' in source
     assert '("strategy_entry.execution_requests", "UPDATE")' not in source
     assert '("runtime.capital_reservations", "UPDATE")' in source
