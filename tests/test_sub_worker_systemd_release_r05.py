@@ -73,10 +73,11 @@ def test_sub_private_service_requires_exact_credential_and_scoped_write_root() -
     assert "bybit-mainnet.cred" not in unit
 
 
-def test_sub_entry_service_is_explicitly_enableable_without_private_credential_or_exit_clone() -> None:
+def test_sub_entry_service_is_explicitly_enableable_without_private_credential(
+) -> None:
     unit = ENTRY.read_text(encoding="utf-8")
     assert "[Install]\nWantedBy=multi-user.target" in unit
-    assert "Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED" in unit
+    assert "Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=ENABLED" in unit
     assert "universal_entry_consumer.py --sub-account=%i" in unit
     assert "EnvironmentFile=/etc/cripta/private-runtime-%i.env" in unit
     assert "BindsTo=cripta-private-runtime@%i.service" in unit
