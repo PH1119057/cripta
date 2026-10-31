@@ -128,14 +128,6 @@ def _require_symbol_idle(
     ).fetchone()
     if orders != (0,):
         raise ValueError("OWNER_FULL_CONTOUR_SYMBOL_ORDER_OCCUPIED")
-    commands = connection.execute(
-        """SELECT count(*) FROM runtime.trade_commands
-            WHERE trading_account_id=%s AND symbol=%s
-              AND command_type='entry' AND state IN ('queued','running')""",
-        (account_id, symbol),
-    ).fetchone()
-    if commands != (0,):
-        raise ValueError("OWNER_FULL_CONTOUR_SYMBOL_ENTRY_MUTATION_PENDING")
 
 
 def request_run(
