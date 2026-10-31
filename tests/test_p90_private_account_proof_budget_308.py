@@ -31,7 +31,10 @@ def test_account_wide_private_proof_uses_full_fifteen_second_window() -> None:
     )
     account_restart = RESTART[
         RESTART.index("for route in (routes.main, routes.sub):"):
-        RESTART.index("expected_symbols:", RESTART.index("for route in (routes.main, routes.sub):"))
+        RESTART.index(
+            "expected_symbols:",
+            RESTART.index("for route in (routes.main, routes.sub):"),
+        )
     ]
     assert "timeout_seconds=15.0" in account_restart
 
