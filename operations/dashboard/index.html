@@ -897,14 +897,21 @@ function p90RealV3Armed(){
   const rows=(u6StrategyCatalog||[]).filter(item=>ids.has(String(item.strategy_id||''))&&String(item.strategy_version||'')==='2.0-p90l90-real-main-sub-20261028');
   return rows.length===2&&rows.every(item=>Boolean(item.execution_effective_enabled));
 }
+function p90RealV3OwnerArmPresent(){
+  const readiness=window.p90ArmStatus||{};
+  return p90RealV3Armed()
+    || Number(readiness.execution_permissions||0)>0
+    || Number(readiness.live_arm_sessions||0)>0
+    || Number(readiness.account_live_arm_sessions||0)>0;
+}
 function refreshP90RealV3ArmControl(){
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus'),detail=document.getElementById('p90RealV3ArmDetail');
   if(!button||!status)return;
-  const cohort=exactP90RealV3Cohort(),armed=p90RealV3Armed(),inconsistent=liveGateOpen&&!armed,readiness=window.p90ArmStatus||{},blockers=Array.isArray(readiness.blockers)?readiness.blockers:[],knownBlocked=blockers.length>0;
+  const cohort=exactP90RealV3Cohort(),armed=p90RealV3OwnerArmPresent(),exactArmed=p90RealV3Armed(),inconsistent=liveGateOpen&&!exactArmed,readiness=window.p90ArmStatus||{},blockers=Array.isArray(readiness.blockers)?readiness.blockers:[],knownBlocked=blockers.length>0;
   const loaded=String(readiness.loaded_commit||''),source=String(readiness.source_head||''),observerState=String(readiness.observer_state||'UNKNOWN'),observerReady=Boolean(readiness.observer_ready);
   button.textContent=armed?'Отключить P90 REAL v3':'P90 REAL v3 OWNER ARM';
   button.classList.toggle('danger',!armed);
-  button.disabled=gateChanging||!cohort||inconsistent||knownBlocked;
+  button.disabled=gateChanging||(!armed&&(!cohort||inconsistent||knownBlocked));
   let state='warn',message='Локальные проверки PASS · OWNER ARM выполнит свежую full server evidence-проверку';
   if(armed){state='success';message='P90 REAL v3 ARMED · новые Entry разрешены только exact MAIN/SUB scope'}
   else if(inconsistent){state='error';message='Mainnet открыт вне exact P90 arm-state · требуется диагностика'}
@@ -959,7 +966,7 @@ async function changeTradeGate(enabled){if(gateChanging)return;const requestId=`
 tradeGateButton.addEventListener('click',async()=>{if(gateChanging)return;if(liveGateOpen){if(!confirm('Запретить новые реальные входы? Уже открытые позиции останутся доступны для сопровождения и закрытия.'))return;try{await changeTradeGate(false)}catch(e){alert(e.message)}return}if(!liveStateLoaded||!rearmReady){setOperationStatus(tradeOperationStatus,'warn','Новые входы пока нельзя разрешить: устраните причины operational hard stop ниже.');return}if(!confirm('Разрешить новые реальные входы глобально?\n\nРеально исполняться смогут только ACTIVE Strategy с отдельным Execution ON.'))return;try{await changeTradeGate(true)}catch(e){alert(e.message)}});
 document.getElementById('p90RealV3ArmButton')?.addEventListener('click',async()=>{
   if(gateChanging)return;
-  const armed=p90RealV3Armed();
+  const armed=p90RealV3OwnerArmPresent();
   if(armed){
     if(!confirm('Отключить P90 REAL v3?\n\nНовые Entry будут запрещены. Уже открытые позиции продолжат сопровождение Exit.'))return;
     try{await changeP90RealV3Arm(false)}catch(e){/* visible in persistent ARM panel */}
