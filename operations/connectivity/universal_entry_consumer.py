@@ -88,6 +88,56 @@ _REQUIRED_DB_PRIVILEGES = (
 )
 
 
+_NEXT_REQUEST_SQL = """SELECT r.*,a.activation_id,a.enabled AS activation_enabled,
+          a.strategy_id AS activation_strategy_id,
+          a.strategy_version AS activation_strategy_version,
+          a.strategy_config_fingerprint AS activation_strategy_config_fingerprint,
+          p.execution_permission_id,p.enabled_at AS execution_enabled_at,
+          c.state AS capital_reservation_state,
+          c.account_ref AS capital_reservation_account_ref,
+          c.capacity_snapshot_id AS capital_capacity_snapshot_id,
+          c.strategy_execution_binding_id AS capital_binding_id,
+          c.execution_leg AS capital_execution_leg,
+          c.trading_account_id AS capital_trading_account_id,
+          c.identity_status AS capital_identity_status,
+          e.strategy_execution_binding_id AS decision_binding_id,
+          e.execution_leg AS decision_execution_leg,
+          e.trading_account_id AS decision_trading_account_id,
+          e.identity_status AS decision_identity_status
+     FROM strategy_entry.execution_requests r
+     JOIN strategy_entry.strategy_attempts t
+       ON t.strategy_attempt_id=r.strategy_attempt_id
+      AND t.signal_id=r.signal_id
+     JOIN strategy_entry.strategy_activations a
+       ON a.activation_id=t.strategy_activation_id
+      AND a.enabled=true
+     JOIN strategy_entry.execution_permissions p
+       ON p.strategy_id=r.strategy_id
+      AND p.strategy_version=r.strategy_version
+      AND p.strategy_config_fingerprint=r.strategy_config_fingerprint
+      AND p.enabled=true
+      AND p.enabled_at IS NOT NULL
+      AND r.requested_at >= p.enabled_at
+     JOIN runtime.capital_reservations c
+       ON c.reservation_id=r.capital_reservation_id
+      AND c.strategy_attempt_id=r.strategy_attempt_id
+      AND c.trading_account_id=r.trading_account_id
+      AND c.identity_status='PROVEN'
+     LEFT JOIN strategy_entry.entry_decisions e
+       ON e.entry_decision_id=r.entry_decision_id
+      AND e.strategy_attempt_id=r.strategy_attempt_id
+      AND e.signal_id=r.signal_id
+    WHERE r.trading_account_id=%s
+      AND r.identity_status='PROVEN'
+      AND NOT EXISTS (
+          SELECT 1 FROM strategy_entry.execution_dispatches d
+           WHERE d.execution_request_id=r.execution_request_id
+    )
+    ORDER BY r.requested_at,r.execution_request_id
+    LIMIT 1
+    FOR UPDATE OF c SKIP LOCKED"""
+
+
 def _consumer_runtime_readiness(
     connection: psycopg.Connection[Any],
 ) -> tuple[bool, tuple[str, ...]]:
@@ -124,6 +174,16 @@ def _consumer_runtime_readiness(
         )
         if not allowed:
             reasons.append(f"DB_PRIVILEGE_MISSING:{table}:{privilege}")
+    try:
+        connection.execute(
+            "EXPLAIN (COSTS FALSE) " + _NEXT_REQUEST_SQL,
+            (TRADING_ACCOUNT_ID,),
+        ).fetchall()
+    except psycopg.Error as exc:
+        reasons.append(
+            "ENTRY_REQUEST_SQL_PREFLIGHT_FAILED:"
+            + str(exc.sqlstate or type(exc).__name__)
+        )
     return not reasons, tuple(dict.fromkeys(reasons))
 
 
@@ -217,54 +277,7 @@ def _next_request(
     ):
         raise ValueError("CONSUMER_ROUTE_PROCESS_IDENTITY_MISMATCH")
     return connection.execute(
-        """SELECT r.*,a.activation_id,a.enabled AS activation_enabled,
-                  a.strategy_id AS activation_strategy_id,
-                  a.strategy_version AS activation_strategy_version,
-                  a.strategy_config_fingerprint AS activation_strategy_config_fingerprint,
-                  p.execution_permission_id,p.enabled_at AS execution_enabled_at,
-                  c.state AS capital_reservation_state,
-                  c.account_ref AS capital_reservation_account_ref,
-                  c.capacity_snapshot_id AS capital_capacity_snapshot_id,
-                  c.strategy_execution_binding_id AS capital_binding_id,
-                  c.execution_leg AS capital_execution_leg,
-                  c.trading_account_id AS capital_trading_account_id,
-                  c.identity_status AS capital_identity_status,
-                  e.strategy_execution_binding_id AS decision_binding_id,
-                  e.execution_leg AS decision_execution_leg,
-                  e.trading_account_id AS decision_trading_account_id,
-                  e.identity_status AS decision_identity_status
-             FROM strategy_entry.execution_requests r
-             JOIN strategy_entry.strategy_attempts t
-               ON t.strategy_attempt_id=r.strategy_attempt_id
-              AND t.signal_id=r.signal_id
-             JOIN strategy_entry.strategy_activations a
-               ON a.activation_id=t.strategy_activation_id
-              AND a.enabled=true
-             JOIN strategy_entry.execution_permissions p
-               ON p.strategy_id=r.strategy_id
-              AND p.strategy_version=r.strategy_version
-              AND p.strategy_config_fingerprint=r.strategy_config_fingerprint
-              AND p.enabled=true
-              AND p.enabled_at IS NOT NULL
-              AND r.requested_at >= p.enabled_at
-             JOIN runtime.capital_reservations c
-               ON c.reservation_id=r.capital_reservation_id
-              AND c.strategy_attempt_id=r.strategy_attempt_id
-              AND c.trading_account_id=r.trading_account_id
-              AND c.identity_status='PROVEN'
-             LEFT JOIN strategy_entry.entry_decisions e
-               ON e.entry_decision_id=r.entry_decision_id
-              AND e.strategy_attempt_id=r.strategy_attempt_id
-              AND e.signal_id=r.signal_id
-            WHERE r.trading_account_id=%s
-              AND r.identity_status='PROVEN'
-              AND NOT EXISTS (
-                  SELECT 1 FROM strategy_entry.execution_dispatches d
-                   WHERE d.execution_request_id=r.execution_request_id
-            )
-            ORDER BY r.requested_at,r.execution_request_id
-            LIMIT 1
-            FOR UPDATE OF c SKIP LOCKED""",
+        _NEXT_REQUEST_SQL,
         (TRADING_ACCOUNT_ID,),
     ).fetchone()
 
