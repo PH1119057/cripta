@@ -12,6 +12,7 @@ import pytest
 from psycopg.rows import dict_row
 
 import operations.connectivity.universal_entry_consumer as entry_consumer
+from bybit_workbench.entry_pre_dispatch_recovery import release_expired_pre_dispatch
 from bybit_workbench.entry_reservation_lifecycle import (
     finalize_failed_entry_command_reservation,
     mark_entry_order_acknowledged,
@@ -1138,4 +1139,38 @@ def test_synthetic_accepted_request_dispatches_to_trade_command_without_exchange
         assert reservation == {
             "state": "DISPATCHED",
             "state_reason": "DISPATCHED_TO_EXECUTION",
+        }
+
+
+def test_lifecycle_recovery_releases_expired_request_without_consumer() -> None:
+    assert DSN is not None
+    prefix = "independent-expiry-" + uuid4().hex[:10]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(
+            connection,
+            prefix,
+            symbol="ARBUSDT",
+            reservation_state="RESERVED",
+            expires_at=NOW - timedelta(seconds=1),
+        )
+        connection.commit()
+        with connection.transaction():
+            released = release_expired_pre_dispatch(connection, now=NOW)
+        assert released == 1
+        assert connection.execute(
+            "SELECT state FROM runtime.capital_reservations WHERE reservation_id=%s",
+            (ids["reservation_id"],),
+        ).fetchone() == {"state": "RELEASED"}
+        assert connection.execute(
+            """SELECT claim_state FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_slot_claim_id=%s""",
+            (ids["slot_claim_id"],),
+        ).fetchone() == {"claim_state": "RELEASED"}
+        assert connection.execute(
+            """SELECT state,reason FROM strategy_entry.execution_dispatches
+                WHERE execution_request_id=%s""",
+            (ids["execution_request_id"],),
+        ).fetchone() == {
+            "state": "BLOCKED",
+            "reason": "REQUEST_EXPIRED_PRE_DISPATCH",
         }
