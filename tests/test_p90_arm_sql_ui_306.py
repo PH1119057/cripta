@@ -6,7 +6,7 @@ HTML = (ROOT / "operations/dashboard/index.html").read_text()
 
 
 def _arm_sql():
-    return SQL.split("CREATE OR REPLACE FUNCTION control.arm_p90l90_real_v3_account_scope(", 1)[1].split(
+    return SQL.split(\n        "CREATE OR REPLACE FUNCTION control.arm_p90l90_real_v3_account_scope(", 1\n    )[1].split(
         "CREATE OR REPLACE FUNCTION control.disarm_p90l90_real_v3_account_scopes(", 1
     )[0]
 
