@@ -6282,8 +6282,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                       AND arm.release_commit=%s
                                       AND arm.strategy_version=%s
                                       AND arm.strategy_id IN (%s,%s)
-                                      AND act.enabled=true
-                                      AND perm.enabled=true
+                                      AND act.enabled=true AND perm.enabled=true
                                       AND EXISTS (
                                           SELECT 1
                                             FROM control.live_arm_sessions generic_arm
@@ -6306,7 +6305,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             ).fetchall()
                             if len(active_arm_rows) != 1:
                                 raise ValueError(
-                                    "контрольный вход требует exact active P90 account scope"
+                                    "контрольный вход разрешён только для монеты current active MICRO_LIVE cohort с exact P90 account scope"
                                 )
                             test_account_id = str(active_arm_rows[0][0])
                             test_connector_id = str(active_arm_rows[0][1])
