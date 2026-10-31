@@ -5,13 +5,33 @@ INDEX = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
 APP = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
 
 
-def test_right_closed_trade_rail_is_removed_from_active_workspace():
+def test_right_trade_rail_is_visible_and_scoped_to_current_p90():
     assert 'id="closedWorkspaceRail"' in INDEX
-    assert 'id="closedWorkspaceRail" class="workspace-rail"' in INDEX
-    assert 'aria-label="Завершённые сделки и результат" hidden' in INDEX
-    assert "#closedWorkspaceRail{display:none!important}" in INDEX
-    assert "grid-template-columns:minmax(0,18fr) minmax(0,82fr)" in INDEX
-    assert "closedRail.hidden||railRefreshBusy" in INDEX
+    assert 'aria-label="Завершённые сделки текущей P90 REAL v3"' in INDEX
+    assert 'aria-label="Завершённые сделки текущей P90 REAL v3" hidden' not in INDEX
+    assert "#closedWorkspaceRail{display:none!important}" not in INDEX
+    assert "grid-template-columns:minmax(0,18fr) minmax(0,64fr) minmax(0,18fr)" in INDEX
+    assert "main:has(#liveDesk.active)>#closedWorkspaceRail{display:flex;grid-column:3}" in INDEX
+    assert "out.live_trading?.p90_recent_closed" in INDEX
+    assert "out.live_trading?.recent_closed" not in INDEX.split(
+        "/* Right rail is a presentation-only view", 1
+    )[1]
+
+
+def test_backend_p90_closed_projection_excludes_legacy_history():
+    assert '"p90_recent_closed": p90_recent_closed' in APP
+    assert "p90_exact_exit_rows = []" in APP
+    assert "o.identity_status='PROVEN'" in APP
+    assert "o.strategy_id=%s AND o.strategy_version=%s" in APP
+    assert "P90_MAIN_ID" in APP
+    assert "P90_SUB_ID" in APP
+    assert "P90_REAL_V3_VERSION" in APP
+    p90_query = APP.split("p90_exact_exit_rows = connection.execute(", 1)[1].split(
+        ").fetchall()", 1
+    )[0]
+    assert "LEGACY_UNKNOWN" not in p90_query
+    assert "owner_controlled_live_test" not in p90_query
+    assert "recovered_closed_entry_cycles" not in p90_query
 
 
 def test_legacy_generic_gate_controls_are_not_visible():
