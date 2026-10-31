@@ -209,7 +209,8 @@ def test_execution_smoke_fix_routes_exact_account_and_waits_terminal() -> None:
     assert "error LIKE 'EXCHANGE_MUTATION_BARRIER:%%'" in PRIVATE
     assert "control.account_live_arm_sessions arm" in APP
     assert "arm.release_commit=%s" in APP
-    assert "account_connector_id,identity_status" in APP
+    compact_app = "".join(APP.split())
+    assert "account_connector_id,identity_status" in compact_app
     assert "attempt<120" in INDEX
     assert "60 секунд" in INDEX
 
