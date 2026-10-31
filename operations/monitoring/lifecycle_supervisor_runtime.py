@@ -13,6 +13,7 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.entry_pre_dispatch_recovery import release_expired_pre_dispatch
 from bybit_workbench.exchange.bybit.protection_probe import direct_account_snapshot
 from bybit_workbench.exchange.bybit.protection_supervisor_bridge import account_protection_verdicts
 from bybit_workbench.fault_delivery import (
@@ -77,6 +78,36 @@ def _status(payload: dict[str, object]) -> None:
         encoding="utf-8",
     )
     temporary.replace(STATUS_PATH)
+
+
+def _entry_source_health(
+    *,
+    loaded_commit: str,
+    now: datetime,
+) -> tuple[bool, str]:
+    path = Path("/var/lib/cripta/universal_entry_observer/status.json")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        observed_at = datetime.fromisoformat(str(payload.get("updated_at") or ""))
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        return False, f"OBSERVER_STATUS_UNREADABLE:{type(exc).__name__}"
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        return False, "OBSERVER_TIMESTAMP_INVALID"
+    age = (now.astimezone(UTC) - observed_at.astimezone(UTC)).total_seconds()
+    ready = (
+        payload.get("state") == "RUNNING"
+        and payload.get("observer_ready") is True
+        and str(payload.get("source_commit") or "") == loaded_commit
+        and 0 <= age <= 15
+    )
+    if ready:
+        return True, "READY"
+    return False, (
+        "OBSERVER_NOT_READY:"
+        + str(payload.get("state") or "UNKNOWN")
+        + ":"
+        + str(payload.get("reason") or "")
+    )
 
 
 def _owner_alert_sender(payload: dict[str, object]) -> None:
@@ -280,9 +311,17 @@ def main() -> int:
                 account_exposure=exposure_audit.verified_positions,
             )
             retired_arms: tuple[str, ...] = ()
-            # This code never creates new sessions, changes permissions,
-            # or enables mainnet. Unknown Exchange truth leaves old sessions
-            # untouched and the entry guard fail-closed.
+            released_expired_entry_admission = 0
+            # Expired pre-dispatch admission is Exchange-inert and must recover
+            # even when an Entry consumer is down. This never touches a request
+            # that already has an execution_dispatch row.
+            with connection.transaction():
+                released_expired_entry_admission = release_expired_pre_dispatch(
+                    connection,
+                    now=now,
+                )
+            # This code never creates new sessions, permissions or enables mainnet.
+            # It continuously fail-closes NEW Entry on release/runtime-health drift.
             installed_file = Path(
                 os.environ.get(
                     "CRIPTA_RUNTIME_INSTALLED_COMMIT_PATH",
@@ -294,16 +333,24 @@ def main() -> int:
                 if installed_file.is_file() else ""
             )
             if len(loaded_commit) == 40:
+                source_ready, source_detail = _entry_source_health(
+                    loaded_commit=loaded_commit,
+                    now=now,
+                )
                 with connection.transaction():
                     retired_arms = retire_stale_release_arms(
                         connection,
                         loaded_commit=loaded_commit,
                         now=now,
                     )
-                    if retired_arms:
-                        check_release_arm_invariant(
-                            connection, loaded_commit=loaded_commit, now=now
-                        )
+                    check_release_arm_invariant(
+                        connection,
+                        loaded_commit=loaded_commit,
+                        now=now,
+                        require_entry_runtime_health=True,
+                        entry_source_ready=source_ready,
+                        entry_source_detail=source_detail,
+                    )
             with connection.transaction():
                 delivery = process_due_deliveries(
                     connection,
@@ -332,6 +379,7 @@ def main() -> int:
                         "unseen_escalated_this_pass": unseen_dashboard,
                     },
                     "historical_live_arm_retired": list(retired_arms),
+                    "expired_entry_admission_released": released_expired_entry_admission,
                     "critical_delivery": {
                         "configured": bool(OWNER_ALERT_WEBHOOK_URL),
                         "attempted": delivery.attempted,
