@@ -8,6 +8,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import psycopg
+from psycopg import sql
 import pytest
 from psycopg.rows import dict_row
 
@@ -1174,3 +1175,83 @@ def test_lifecycle_recovery_releases_expired_request_without_consumer() -> None:
             "state": "BLOCKED",
             "reason": "REQUEST_EXPIRED_PRE_DISPATCH",
         }
+
+
+def test_request_claim_needs_no_update_on_immutable_execution_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disposable PG privilege regression for the production 2026-10-31 failure."""
+    assert DSN is not None
+    prefix = "request-lock-priv-" + uuid4().hex[:10]
+    role = "entry_consumer_test_" + uuid4().hex[:12]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(
+            connection,
+            prefix,
+            symbol="INJUSDT",
+            reservation_state="RESERVED",
+            expires_at=NOW + timedelta(seconds=30),
+            permission=True,
+        )
+        connection.commit()
+        role_id = sql.Identifier(role)
+        connection.execute(
+            sql.SQL("CREATE ROLE {} NOLOGIN").format(role_id)
+        )
+        connection.execute(
+            sql.SQL(
+                "GRANT USAGE ON SCHEMA strategy_entry,runtime TO {}"
+            ).format(role_id)
+        )
+        connection.execute(
+            sql.SQL(
+                """GRANT SELECT ON
+                       strategy_entry.execution_requests,
+                       strategy_entry.strategy_attempts,
+                       strategy_entry.strategy_activations,
+                       strategy_entry.execution_permissions,
+                       strategy_entry.entry_decisions,
+                       strategy_entry.execution_dispatches
+                   TO {}"""
+            ).format(role_id)
+        )
+        connection.execute(
+            sql.SQL(
+                "GRANT SELECT,UPDATE ON runtime.capital_reservations TO {}"
+            ).format(role_id)
+        )
+        connection.commit()
+        assert connection.execute(
+            "SELECT has_table_privilege(%s,%s,%s)",
+            (role, "strategy_entry.execution_requests", "UPDATE"),
+        ).fetchone() == {"has_table_privilege": False}
+
+        connection.execute(sql.SQL("SET ROLE {}").format(role_id))
+        try:
+            with (
+                monkeypatch.context() as scoped,
+            ):
+                scoped.setattr(
+                    entry_consumer,
+                    "TRADING_ACCOUNT_ID",
+                    ids["trading_account_id"],
+                )
+                scoped.setattr(
+                    entry_consumer,
+                    "ACCOUNT_CONNECTOR_ID",
+                    ids["trading_account_id"][:-3] + "-connector",
+                )
+                row = entry_consumer._next_request(connection)
+                assert row is not None
+                assert row["execution_request_id"] == ids["execution_request_id"]
+        finally:
+            connection.execute("RESET ROLE")
+            connection.rollback()
+
+        connection.execute(
+            sql.SQL("DROP OWNED BY {}").format(role_id)
+        )
+        connection.execute(
+            sql.SQL("DROP ROLE {}").format(role_id)
+        )
+        connection.commit()
