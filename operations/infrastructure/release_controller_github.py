@@ -218,10 +218,10 @@ def _status_checks(
             matches.append(run)
         if not matches:
             raise GitHubEvidenceError(f"REQUIRED_CHECK_MISSING:{context}")
-        if any(
-            run.get("status") != "completed" or run.get("conclusion") != "success"
-            for run in matches
-        ):
+        if any(not isinstance(run.get("id"), int) for run in matches):
+            raise GitHubEvidenceError(f"REQUIRED_CHECK_ID_INVALID:{context}")
+        latest = max(matches, key=lambda run: run["id"])
+        if latest.get("status") != "completed" or latest.get("conclusion") != "success":
             raise GitHubEvidenceError(f"REQUIRED_CHECK_NOT_PASS:{context}")
         result[context] = "success"
 
@@ -238,9 +238,12 @@ def _status_checks(
     ]
     if not quality:
         raise GitHubEvidenceError("QUALITY_WORKFLOW_MISSING")
-    if any(
-        run.get("status") != "completed" or run.get("conclusion") != "success"
-        for run in quality
+    if any(not isinstance(run.get("id"), int) for run in quality):
+        raise GitHubEvidenceError("QUALITY_WORKFLOW_ID_INVALID")
+    latest_quality = max(quality, key=lambda run: run["id"])
+    if (
+        latest_quality.get("status") != "completed"
+        or latest_quality.get("conclusion") != "success"
     ):
         raise GitHubEvidenceError("QUALITY_WORKFLOW_NOT_PASS")
     result["quality"] = "success"
