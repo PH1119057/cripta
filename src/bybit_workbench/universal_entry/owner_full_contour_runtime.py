@@ -370,15 +370,19 @@ def materialize_requested_run(
         store = StrategyEntryStore(connection)
         store.record_evaluation(
             evaluation,
-            bundle.entry_plan,
-            source_ref=f"owner-full-contour-run:{run_id}",
+            provenance=FrozenPolicy.from_mapping(
+                {
+                    "source": RUNTIME_SOURCE,
+                    "diagnostic_run_id": run_id,
+                }
+            ),
         )
         decision = evaluation.decision
         request = evaluation.execution_request
         if decision is None or request is None:
             reason = (
                 "OWNER_FULL_CONTOUR_ENTRY_NOT_ACCEPTED:"
-                + ("NO_DECISION" if decision is None else decision.decision_code.value)
+                + ("NO_DECISION" if decision is None else decision.code.value)
             )
             return _fail(connection, run_id=run_id, now=current, reason=reason)
         set_run_state(
