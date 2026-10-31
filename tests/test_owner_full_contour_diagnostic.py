@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-import bybit_workbench.universal_entry.owner_full_contour_diagnostic as diagnostic
 import bybit_workbench.universal_entry.owner_full_contour_control as control
+import bybit_workbench.universal_entry.owner_full_contour_diagnostic as diagnostic
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import (
     FrozenPolicy,
@@ -213,8 +213,7 @@ def test_execution_smoke_fix_routes_exact_account_and_waits_terminal() -> None:
     assert "error LIKE 'EXCHANGE_MUTATION_BARRIER:%%'" in PRIVATE
     assert "control.account_live_arm_sessions arm" in APP
     assert "arm.release_commit=%s" in APP
-    compact_app = "".join(APP.split())
-    assert "account_connector_id,identity_status" in compact_app
+    assert '"account_connector_id": test_connector_id' in APP
     assert "attempt<120" in INDEX
     assert "60 секунд" in INDEX
 
