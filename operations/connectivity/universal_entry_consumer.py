@@ -1059,24 +1059,6 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     current = (now or datetime.now(UTC)).astimezone(UTC)
     _release_expired_reserved_requests(connection, now=current)
 
-    # A full-contour diagnostic is a durable owner trigger, not a Dashboard-
-    # forged StrategySignal. The exact account consumer materializes it through
-    # UniversalEntryEngine before the ordinary request dispatcher below.
-    refresh_run_lifecycle(
-        connection,
-        trading_account_id=TRADING_ACCOUNT_ID,
-        now=current,
-    )
-    diagnostic_result = materialize_requested_run(
-        connection,
-        trading_account_id=TRADING_ACCOUNT_ID,
-        account_connector_id=ACCOUNT_CONNECTOR_ID,
-        release_commit=LOADED_RELEASE_COMMIT,
-        now=current,
-    )
-    if diagnostic_result and diagnostic_result.startswith("OWNER_DIAGNOSTIC_FAILED:"):
-        return diagnostic_result
-
     if not _execution_gate_enabled(connection):
         return "EXECUTION_GATE_DISARMED"
     # Registry routing is only a prerequisite. Per-request binding/connector,
@@ -1098,7 +1080,30 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         return "ACCOUNT_ENTRY_SAFETY_NOT_READY:" + ",".join(safety_reasons)
     row = _next_request(connection, route=route)
     if row is None:
-        return diagnostic_result or "NO_REQUEST"
+        # Ordinary production requests retain priority. Only after the exact
+        # process/account route and account safety checks passed, and no normal
+        # Entry request is pending, may this consumer inspect an owner
+        # diagnostic trigger.
+        refresh_run_lifecycle(
+            connection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            now=current,
+        )
+        diagnostic_result = materialize_requested_run(
+            connection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            account_connector_id=ACCOUNT_CONNECTOR_ID,
+            release_commit=LOADED_RELEASE_COMMIT,
+            now=current,
+        )
+        if diagnostic_result and diagnostic_result.startswith(
+            "OWNER_DIAGNOSTIC_FAILED:"
+        ):
+            return diagnostic_result
+        if diagnostic_result:
+            row = _next_request(connection, route=route)
+        if row is None:
+            return diagnostic_result or "NO_REQUEST"
     request = _request_from_row(row)
     reservation_state = row.get("capital_reservation_state")
     if (
