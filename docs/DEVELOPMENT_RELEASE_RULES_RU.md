@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.2 · 2026-10-24
+**Версия:** 2.3 · 2026-10-31
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -455,6 +455,48 @@ Current installer contract:
   `CRIPTA_RELEASE_CONTROL_REASON`;
 - installer пишет marker `CONTROL_CHECKPOINT` с UTC creation/expiry metadata;
 - maximum protected age = 604800 seconds.
+
+## 14.1.1 Retention immutable runtime release artifacts
+
+`/srv/cripta/runtime/releases/<release_commit>` хранит immutable runtime
+артефакты exact Git releases. Эти каталоги не являются rollback backup,
+Project Source или отдельным source authority: исходный код остаётся
+восстановим из GitHub `PH1119057/cripta:main`, а rollback deploy использует
+отдельный contract §14.1.
+
+Owner decision 2026-10-31:
+
+```text
+RUNTIME RELEASE RETENTION
+  current installed release
+  + exactly 1 immediate previous deployed release
+```
+
+Правила:
+- immediate previous release определяется только exact
+  `EXPECTED_BASELINE_COMMIT` текущего verified deploy, а не mtime,
+  алфавитной сортировкой или «последним похожим» каталогом;
+- prune разрешён только после успешного cutover, service liveness/runtime
+  checks и записи exact `INSTALLED_COMMIT`; failed/pre-cutover deploy не
+  удаляет historical runtime artifacts;
+- prune ограничен exact root `/srv/cripta/runtime/releases` и только его
+  direct-child каталогами, имя которых строго соответствует
+  `[0-9a-f]{40}`;
+- direct-child symlink, файл, каталог с неканоническим именем или иной
+  неожиданной записью = `HARD_STOP=YES` для prune; неизвестный объект не
+  удаляется;
+- current release и exact `EXPECTED_BASELINE_COMMIT` никогда не удаляются
+  retention pass текущего deploy;
+- перед prune exact `/srv/cripta/runtime/current` обязан разрешаться в
+  `.../releases/$RELEASE_COMMIT`; mismatch блокирует prune;
+- удаление не распространяется на
+  `/data/cripta/research/tooling/releases`,
+  `/srv/cripta/dashboard-ui/releases`, rollback/system backups, Research
+  data, Git worktrees или PostgreSQL data;
+- installer обязан печатать audit markers для retained/pruned runtime release
+  paths и итоговое количество удалённых generation;
+- изменение этого retention contract является owner decision и не даёт права
+  на LIVE/OWNER ARM, Exchange mutation или удаление иных data classes.
 
 ## 14.2 Retention verified system backups
 
