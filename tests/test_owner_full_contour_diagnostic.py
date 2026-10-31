@@ -248,7 +248,6 @@ def test_verified_release_registers_and_readbacks_diagnostic_capability() -> Non
         f"$runtime_release/{installer}\" check"
     )
     assert migration_pos < install_call < check_call
-    install_block = RELEASE_INSTALLER[install_call:check_call]
     assert "runuser -u cripta" in RELEASE_INSTALLER[
         RELEASE_INSTALLER.rfind("runuser -u cripta", 0, install_call):install_call
     ]
