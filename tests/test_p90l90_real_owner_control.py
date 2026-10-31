@@ -104,7 +104,12 @@ def test_p90_technical_evidence_and_owner_arm_are_separate_actions() -> None:
     arm_block = source[arm_handler:catalog_handler]
     assert "prepare_p90l90_real_v3_prearm_evidence(" in evidence_block
     assert "arm_p90l90_real_v3(" not in evidence_block
-    assert "prepare_p90l90_real_v3_prearm_evidence(" not in arm_block
+    # Issue #304: the explicit owner click must renew short-lived technical
+    # evidence, but the evidence-only endpoint must never create an ARM.
+    assert "prepare_p90l90_real_v3_prearm_evidence(" in arm_block
+    assert arm_block.index("prepare_p90l90_real_v3_prearm_evidence(") < (
+        arm_block.index("result = arm_p90l90_real_v3(")
+    )
     assert "arm_p90l90_real_v3(" in arm_block
     assert "OWNER ARM requires explicit confirmation" in arm_block
 
