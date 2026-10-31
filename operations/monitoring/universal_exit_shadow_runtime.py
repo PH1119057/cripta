@@ -239,9 +239,9 @@ def _fetch_owner_diagnostic_observation(
     if not mark.is_finite() or mark <= 0:
         raise RuntimeError("Bybit diagnostic LastPrice invalid")
     directional = (
-        (mark / entry - Decimal("1")) * Decimal("100")
+        ((mark - entry) / entry) * Decimal("100")
         if position.direction is TradeDirection.LONG
-        else (entry / mark - Decimal("1")) * Decimal("100")
+        else ((entry - mark) / entry) * Decimal("100")
     )
     observation_id = "exit-observation-" + fingerprint(
         {
