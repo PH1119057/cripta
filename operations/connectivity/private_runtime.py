@@ -637,7 +637,7 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
     unresolved = connection.execute(
         """SELECT 1 FROM runtime.trade_commands
            WHERE command_type='entry' AND state='running'
-             AND error LIKE 'EXCHANGE_MUTATION_BARRIER:%'
+             AND error LIKE 'EXCHANGE_MUTATION_BARRIER:%%'
              AND (trading_account_id=%s AND identity_status='PROVEN')
            LIMIT 1""",
         (TRADING_ACCOUNT_ID,),
