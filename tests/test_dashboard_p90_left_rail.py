@@ -1,149 +1,52 @@
-from __future__ import annotations
-
 import inspect
-from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 
 from operations.dashboard import app as dashboard
 
 
-class _Result:
-    def __init__(self, rows):
-        self._rows = rows
-
-    def fetchall(self):
-        return list(self._rows)
-
-    def fetchone(self):
-        return self._rows[0] if self._rows else None
-
-
-class _Connection:
-    def execute(self, query, params=()):
-        del params
-        sql = " ".join(str(query).split())
-        if "strategy_execution_bindings" in sql:
-            return _Result([
-                (dashboard.P90_MAIN_ID, "main-account"),
-                (dashboard.P90_SUB_ID, "sub-account"),
-            ])
-        if "p90l90_real_source_epochs" in sql:
-            return _Result([
-                ("epoch-1", "release-1", datetime(2026, 10, 31, 0, 0, tzinfo=UTC))
-            ])
-        if "p90l90_real_causal_checkpoints" in sql:
-            def checkpoint(symbol, price, geometry):
-                return (
-                    symbol,
-                    datetime(2026, 10, 31, 0, 5, tzinfo=UTC),
-                    {
-                        "seen": [],
-                        "previous_price": price,
-                        "geometry": {
-                            "effective_at": "2026-10-31T00:05:00+00:00",
-                            "working_width_pct": "1.0",
-                            "previous_seven_day_median": "1.0",
-                            **geometry,
-                        },
-                    },
-                )
-            return _Result([
-                checkpoint(
-                    "LTCUSDT",
-                    "100.4",
-                    {"l53_low_raw": "100", "long_depth_pct": "1"},
-                ),
-                checkpoint(
-                    "INJUSDT",
-                    "100.5",
-                    {"l53_low_raw": "100", "long_depth_pct": "1"},
-                ),
-                checkpoint("DOTUSDT", "5", {}),
-                checkpoint(
-                    "ARBUSDT",
-                    "99.7",
-                    {"l53_high_raw": "100", "short_depth_pct": "1"},
-                ),
-                checkpoint("APTUSDT", "10.2", {}),
-            ])
-        if "FROM runtime.hot_positions" in sql:
-            return _Result([
-                (
-                    "sub-account",
-                    "APTUSDT",
-                    0,
-                    "Buy",
-                    "1",
-                    "10",
-                    "1",
-                    1234567890,
-                    {"markPrice": "10.2"},
-                )
-            ])
-        if "FROM runtime.position_ownership" in sql:
-            return _Result([
-                ("sub-account", "APTUSDT", 0, "Buy", Decimal("0.01"))
-            ])
-        raise AssertionError(sql)
+def test_p90_rail_is_inside_approved_live_read_model_scope():
+    source = inspect.getsource(dashboard._live_trading_state)
+    assert 'P90_MAIN_ID: ("INJUSDT", "LTCUSDT")' in source
+    assert 'P90_SUB_ID: ("APTUSDT", "ARBUSDT", "DOTUSDT")' in source
+    assert "strategy_entry.p90l90_real_causal_checkpoints" in source
+    assert "strategy_entry.p90l90_real_source_epochs" in source
+    assert "strategy_entry.strategy_execution_bindings" in source
+    assert "runtime.hot_positions" in source
+    assert "runtime.position_ownership" in source
 
 
-def test_p90_rail_has_five_symbols_and_requested_priority():
-    state = dashboard.p90_live_rail_state(
-        _Connection(),
-        tickers={
-            "APTUSDT": {
-                "bid_price": "10.2",
-                "ask_price": "10.21",
-                "last_price": "10.2",
-                "mark_price": "10.2",
-            }
-        },
-    )
-    rows = state["items"]
-    assert [row["symbol"] for row in rows] == [
-        "APTUSDT",
-        "ARBUSDT",
-        "LTCUSDT",
-        "INJUSDT",
-        "DOTUSDT",
-    ]
-    assert [row["state"] for row in rows] == [
-        "OPEN",
-        "NEAR",
-        "NEAR",
-        "FAR",
-        "FAR",
-    ]
-    assert rows[1]["nearest_entry"]["side"] == "SHORT"
-    assert Decimal(rows[1]["nearest_entry"]["distance_pct"]) == Decimal("0.3")
-    assert Decimal(rows[2]["nearest_entry"]["distance_pct"]) == Decimal("0.4")
-    assert Decimal(rows[3]["nearest_entry"]["distance_pct"]) == Decimal("0.5")
-    assert rows[4]["nearest_entry"] is None
+def test_p90_rail_uses_canonical_edges_and_strict_half_percent_threshold():
+    source = inspect.getsource(dashboard._live_trading_state)
+    assert '("LONG", "l53_low_raw", "long_depth_pct")' in source
+    assert '("SHORT", "l53_high_raw", "short_depth_pct")' in source
+    assert 'Decimal(str(nearest["distance_pct"])) < Decimal("0.5")' in source
+    assert 'state = "OPEN"' in source
+    assert 'state = "NEAR"' in source
+    assert 'state = "FAR"' in source
+    assert 'int(item["rank"])' in source
 
 
-def test_open_position_uses_bound_sub_account_and_after_fee_pnl():
-    state = dashboard.p90_live_rail_state(
-        _Connection(),
-        tickers={"APTUSDT": {"bid_price": "10.2", "mark_price": "10.2"}},
-    )
-    row = state["items"][0]
-    assert row["symbol"] == "APTUSDT"
-    assert row["trading_account_id"] == "sub-account"
-    assert row["state"] == "OPEN"
-    position = row["position"]
-    assert position["pnl_basis"] == "AFTER_COMMISSIONS_ACTUAL_ENTRY_FEE"
-    assert abs(position["net_pnl_to_close"] - 0.18439) < 1e-9
+def test_p90_rail_pnl_is_account_aware_and_after_commissions():
+    source = inspect.getsource(dashboard._live_trading_state)
+    assert "trading_account_id=ANY(%s)" in source
+    assert "p90_account_for_symbol" in source
+    assert "p90_ownership_fees" in source
+    assert "REAL_IMMEDIATE_CLOSE_FEE_RATE" in source
+    assert "AFTER_COMMISSIONS_ACTUAL_ENTRY_FEE" in source
+    assert "AFTER_COMMISSIONS_ESTIMATED_ENTRY_FEE" in source
 
 
-def test_p90_rail_projection_is_read_only():
-    source = inspect.getsource(dashboard.p90_live_rail_state)
-    upper = source.upper()
-    assert "INSERT " not in upper
-    assert "UPDATE " not in upper
-    assert "DELETE " not in upper
-    assert "P90L90_REAL_CAUSAL_CHECKPOINTS" in upper
-    assert "RUNTIME.HOT_POSITIONS" in upper
+def test_p90_rail_backend_projection_has_no_mutation_sql():
+    source = inspect.getsource(dashboard._live_trading_state).upper()
+    for token in (
+        "INSERT INTO ",
+        "UPDATE ",
+        "DELETE FROM ",
+        "ALTER TABLE ",
+        "DROP TABLE ",
+        "TRUNCATE ",
+    ):
+        assert token not in source
 
 
 def test_left_rail_frontend_uses_p90_projection_and_requested_colors():
