@@ -1328,12 +1328,17 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
     last_health_at = 0.0
+    last_health_signature: tuple[bool, tuple[str, ...]] | None = None
     with psycopg.connect(DB_DSN, row_factory=dict_row) as connection:
         while running:
             current = datetime.now(UTC)
             ready, reasons = _consumer_runtime_readiness(connection)
             monotonic_now = time.monotonic()
-            if monotonic_now - last_health_at >= HEALTH_SECONDS or not ready:
+            health_signature = (ready, reasons)
+            if (
+                monotonic_now - last_health_at >= HEALTH_SECONDS
+                or health_signature != last_health_signature
+            ):
                 _write_consumer_health(
                     connection,
                     ready=ready,
@@ -1342,6 +1347,7 @@ def main() -> int:
                 )
                 connection.commit()
                 last_health_at = monotonic_now
+                last_health_signature = health_signature
             if not ready:
                 time.sleep(POLL_SECONDS)
                 continue
