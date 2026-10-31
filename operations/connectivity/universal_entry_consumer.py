@@ -1062,25 +1062,27 @@ def _refresh_owner_diagnostic_terminal_exit(
     connection: psycopg.Connection[Any], *, now: datetime,
 ) -> str | None:
     row = connection.execute(
-        """SELECT run_id,strategy_position_id
+        """SELECT run_id,strategy_position_id,entry_execution_request_id
              FROM control.owner_full_contour_diagnostic_runs
             WHERE trading_account_id=%s
-              AND state='POSITION_OPEN'
-              AND strategy_position_id IS NOT NULL
+              AND state IN ('DISPATCHED','POSITION_OPEN')
+              AND entry_execution_request_id IS NOT NULL
             ORDER BY requested_at DESC LIMIT 1""",
         (TRADING_ACCOUNT_ID,),
     ).fetchone()
     if row is None:
         return None
-    position_id = str(row["strategy_position_id"])
     position = connection.execute(
-        """SELECT state FROM runtime.position_ownership
-            WHERE position_id=%s AND trading_account_id=%s
-              AND identity_status='PROVEN'""",
-        (position_id, TRADING_ACCOUNT_ID),
+        """SELECT position_id,state FROM runtime.position_ownership
+            WHERE entry_execution_request_id=%s
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
+            ORDER BY created_at DESC LIMIT 1""",
+        (str(row["entry_execution_request_id"]), TRADING_ACCOUNT_ID),
     ).fetchone()
     if position is None or str(position["state"]) != "CLOSED":
         return None
+    position_id = str(position["position_id"])
     universal_exit = connection.execute(
         """SELECT d.exit_decision_id,r.execution_request_id,
                   x.command_id,c.state
