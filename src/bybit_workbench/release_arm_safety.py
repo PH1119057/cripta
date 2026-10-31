@@ -72,7 +72,8 @@ def check_release_arm_invariant(
         "consumer_failures": [],
     }
     runtime_invalid = False
-    if gate_open and require_entry_runtime_health:
+    runtime_scope_present = bool(gate_open or sessions or permissions)
+    if require_entry_runtime_health and runtime_scope_present:
         expected_accounts = connection.execute(
             """SELECT DISTINCT b.trading_account_id
                  FROM strategy_entry.execution_permissions p
@@ -158,7 +159,8 @@ def check_release_arm_invariant(
                    detected_at,last_checked_at)
                VALUES(%s,%s,%s,%s::jsonb,'OPEN',%s,%s)
                ON CONFLICT (release_commit) WHERE state='OPEN'
-               DO UPDATE SET affected=EXCLUDED.affected,
+               DO UPDATE SET reason=EXCLUDED.reason,
+                             affected=EXCLUDED.affected,
                              last_checked_at=EXCLUDED.last_checked_at""",
             ("release-arm-" + uuid4().hex, loaded_commit or "UNKNOWN",
              reason, json.dumps(affected), instant, instant),
