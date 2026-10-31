@@ -42,7 +42,8 @@ def test_lifecycle_accepts_only_bounded_exact_owner_arm_reload() -> None:
     assert 'state == "RELOADING"' in body
     assert 'reason == "P90_REAL_OWNER_ARM_TO_LIVE_RELOAD"' in body
     assert '(state == "RUNNING" or expected_arm_reload)' in body
-    assert "0 <= age <= 15" in body
+    assert "max_age_seconds = 60 if expected_arm_reload else 15" in body
+    assert "0 <= age <= max_age_seconds" in body
     assert '"WARMUP"' not in body
 
 

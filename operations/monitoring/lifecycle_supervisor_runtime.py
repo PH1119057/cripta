@@ -100,11 +100,17 @@ def _entry_source_health(
         state == "RELOADING"
         and reason == "P90_REAL_OWNER_ARM_TO_LIVE_RELOAD"
     )
+    # Normal observer heartbeats stay strict at 15s. The exact owner-arm
+    # SOURCE_ONLY -> LIVE epoch rebuild may legitimately take longer because it
+    # re-establishes source/private continuity before admitting any new Entry.
+    # PREARM guarantees zero hot Entry before this transition; if the bounded
+    # reload does not complete within 60s the runtime guard still fail-closes.
+    max_age_seconds = 60 if expected_arm_reload else 15
     ready = (
         (state == "RUNNING" or expected_arm_reload)
         and payload.get("observer_ready") is True
         and str(payload.get("source_commit") or "") == loaded_commit
-        and 0 <= age <= 15
+        and 0 <= age <= max_age_seconds
     )
     if ready:
         return True, "READY"
