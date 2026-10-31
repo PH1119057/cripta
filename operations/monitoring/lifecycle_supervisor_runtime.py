@@ -28,6 +28,9 @@ from bybit_workbench.lifecycle_supervisor import (
 )
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
 from bybit_workbench.stale_arm_retirement import retire_stale_release_arms
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+    OWNER_ARM_STAGE_RELOAD_REASON,
+)
 
 DB_DSN = os.environ.get(
     "CRIPTA_DATABASE_DSN",
@@ -98,10 +101,10 @@ def _entry_source_health(
     reason = str(payload.get("reason") or "")
     expected_arm_reload = (
         state == "RELOADING"
-        and reason == "P90_REAL_OWNER_ARM_TO_LIVE_RELOAD"
+        and reason == OWNER_ARM_STAGE_RELOAD_REASON
     )
     # Normal observer heartbeats stay strict at 15s. The exact owner-arm
-    # SOURCE_ONLY -> LIVE epoch rebuild may legitimately take longer because it
+    # SOURCE_ONLY -> staged LIVE epoch rebuild may legitimately take longer because it
     # re-establishes source/private continuity before admitting any new Entry.
     # PREARM guarantees zero hot Entry before this transition; if the bounded
     # reload does not complete within 60s the runtime guard still fail-closes.

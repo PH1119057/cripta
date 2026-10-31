@@ -18,6 +18,9 @@ from .p90l90_strategy_embargo import StrategyHardStopEmbargoPolicy
 from .p90l90_strategy_v2 import v2_authoring_payload
 
 VERSION = "2.0-p90l90-real-main-sub-20261028"
+OWNER_ARM_STAGE_GATE_REASON = "P90L90 REAL v3 owner arm staging"
+OWNER_ARM_OPEN_GATE_REASON = "P90L90 REAL v3 explicitly armed by owner"
+OWNER_ARM_STAGE_RELOAD_REASON = "P90_REAL_OWNER_ARM_STAGE_RELOAD"
 OWNER_SOURCE = "owner-2026-10-28-p90l90-10usdt-market-isolated1x-issue243"
 REQUESTED_USDT = Decimal("10")
 MAX_ACCOUNT_COMMITTED: dict[str, Decimal] = {

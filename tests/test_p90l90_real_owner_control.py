@@ -6,6 +6,7 @@ DASH = ROOT / "operations/dashboard/app.py"
 OBSERVER = ROOT / "operations/monitoring/universal_entry_shadow.py"
 PRIVATE_RUNTIME = ROOT / "operations/connectivity/private_runtime.py"
 CONTROL = ROOT / "src/bybit_workbench/p90l90_real_arm_control.py"
+STAGED_CONTROL = ROOT / "src/bybit_workbench/p90l90_real_staged_arm.py"
 SUB_PRIVATE = ROOT / "operations/systemd/cripta-private-runtime@.service"
 MAIN_PRIVATE_DROPIN = (
     ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf"
@@ -34,15 +35,19 @@ def test_p90_control_db_rail_is_narrow_and_never_opens_mainnet() -> None:
     assert "INSERT INTO control.execution_gate_events" not in sql
 
 
-def test_p90_owner_control_orders_account_arm_before_permissions_before_gate() -> None:
-    source = CONTROL.read_text()
-    account = source.index("control.arm_p90l90_real_v3_account_scope")
-    readback = source.index("account_live_arm_ready", account)
-    permissions = source.index("store.set_execution_permission", readback)
-    gate = source.index("UPDATE control.execution_gates", permissions)
-    assert account < readback < permissions < gate
-    assert '"positions_closed": False' in source
-    assert "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE" in source
+def test_p90_owner_control_stages_before_gate_and_disarm_never_closes_positions() -> None:
+    staged = STAGED_CONTROL.read_text()
+    control = CONTROL.read_text()
+    account = staged.index("control.arm_p90l90_real_v3_account_scope")
+    readback = staged.index("account_live_arm_ready", account)
+    permissions = staged.index("store.set_execution_permission", readback)
+    stage_gate = staged.index("OWNER_ARM_STAGE_GATE_REASON", permissions)
+    finalize = staged.index("def finalize_p90l90_real_v3(")
+    open_gate = staged.index("SET enabled=1,reason=%s", finalize)
+    assert account < readback < permissions < stage_gate < finalize < open_gate
+    assert '"gate_enabled": False' in staged
+    assert '"positions_closed": False' in control
+    assert "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE" in staged
 
 
 def test_p90_dashboard_blocks_generic_partial_controls() -> None:
@@ -57,17 +62,19 @@ def test_p90_dashboard_blocks_generic_partial_controls() -> None:
     assert "_u6_p90_real_v3_arm" in source
 
 
-def test_p90_observer_has_three_state_prearm_real_failclosed_switch() -> None:
+def test_p90_observer_has_source_stage_live_failclosed_switch() -> None:
     source = OBSERVER.read_text()
     prearm = source.index("elif not gate_enabled and not selected:")
-    real = source.index("elif gate_enabled and selected == expected:", prearm)
+    staged = source.index("gate_reason == OWNER_ARM_STAGE_GATE_REASON", prearm)
+    real = source.index("gate_reason == OWNER_ARM_OPEN_GATE_REASON", staged)
     partial = source.index(
         'raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")',
         real,
     )
-    assert prearm < real < partial
-    assert "p90_real_source_only = True" in source[prearm:real]
-    assert "p90_real_live = True" in source[real:partial]
+    assert prearm < staged < real < partial
+    assert "p90_real_source_only = True" in source[prearm:staged]
+    assert "p90_real_staged = True" in source[staged:real]
+    assert "p90_real_live = True" in source[staged:partial]
 
 
 def test_p90_private_runtimes_publish_fresh_mode_and_signed_ipc() -> None:
@@ -95,7 +102,7 @@ def test_p90_private_flat_failure_publishes_only_stable_local_reason() -> None:
     assert "return result" in block
 
 
-def test_p90_technical_evidence_and_owner_arm_are_separate_actions() -> None:
+def test_p90_technical_evidence_and_staged_owner_arm_are_separate_actions() -> None:
     source = DASH.read_text()
     evidence_handler = source.index("def _u6_p90_real_v3_prearm_evidence(")
     arm_handler = source.index("def _u6_p90_real_v3_arm(", evidence_handler)
@@ -103,14 +110,19 @@ def test_p90_technical_evidence_and_owner_arm_are_separate_actions() -> None:
     evidence_block = source[evidence_handler:arm_handler]
     arm_block = source[arm_handler:catalog_handler]
     assert "prepare_p90l90_real_v3_prearm_evidence(" in evidence_block
-    assert "arm_p90l90_real_v3(" not in evidence_block
-    # Issue #304: the explicit owner click must renew short-lived technical
-    # evidence, but the evidence-only endpoint must never create an ARM.
+    assert "stage_p90l90_real_v3(" not in evidence_block
+    assert "finalize_p90l90_real_v3(" not in evidence_block
+    # Explicit owner click renews evidence, stages with gate CLOSED, waits for
+    # exact runtime readiness, and only then finalizes gate OPEN.
     assert "prepare_p90l90_real_v3_prearm_evidence(" in arm_block
+    assert "stage_p90l90_real_v3(" in arm_block
+    assert "_u6_wait_p90_real_v3_stage_ready(" in arm_block
+    assert "finalize_p90l90_real_v3(" in arm_block
     assert arm_block.index("prepare_p90l90_real_v3_prearm_evidence(") < (
-        arm_block.index("result = arm_p90l90_real_v3(")
+        arm_block.index("stage_p90l90_real_v3(")
+    ) < arm_block.index("_u6_wait_p90_real_v3_stage_ready(") < (
+        arm_block.index("finalize_p90l90_real_v3(")
     )
-    assert "arm_p90l90_real_v3(" in arm_block
     assert "OWNER ARM requires explicit confirmation" in arm_block
 
 
