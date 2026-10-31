@@ -428,6 +428,70 @@ def refresh_run_lifecycle(
     state = str(_v(row, "state", 1))
     request_id = _v(row, "entry_execution_request_id", 3)
 
+    if state == "MATERIALIZED" and request_id:
+        dispatch = connection.execute(
+            """SELECT command_id FROM strategy_entry.execution_dispatches
+                WHERE execution_request_id=%s
+                ORDER BY created_at DESC LIMIT 1""",
+            (str(request_id),),
+        ).fetchone()
+        if dispatch is not None:
+            command_id = str(_v(dispatch, "command_id", 0))
+            retire_entry_rights(
+                connection,
+                run_id=run_id,
+                at=now,
+                reason="diagnostic EntryExecutionRequest dispatched",
+            )
+            set_run_state(
+                connection,
+                run_id=run_id,
+                state="DISPATCHED",
+                now=now,
+                lineage={"entry_command_id": command_id},
+            )
+            state = "DISPATCHED"
+        else:
+            event = connection.execute(
+                """SELECT state,reason
+                     FROM strategy_entry.execution_request_state_events
+                    WHERE execution_request_id=%s
+                    ORDER BY occurred_at DESC,created_at DESC LIMIT 1""",
+                (str(request_id),),
+            ).fetchone()
+            if event is not None:
+                request_state = str(_v(event, "state", 0))
+                if request_state == "REQUEST_RECONCILIATION_REQUIRED":
+                    retire_entry_rights(
+                        connection,
+                        run_id=run_id,
+                        at=now,
+                        reason="diagnostic Entry request reconciliation required",
+                    )
+                    set_run_state(
+                        connection,
+                        run_id=run_id,
+                        state="RECONCILIATION_REQUIRED",
+                        now=now,
+                        error=str(_v(event, "reason", 1) or request_state),
+                    )
+                    return "OWNER_DIAGNOSTIC_RECONCILIATION_REQUIRED"
+                if request_state in {"REQUEST_CANCELLED", "REQUEST_EXPIRED"}:
+                    retire_entry_rights(
+                        connection,
+                        run_id=run_id,
+                        at=now,
+                        reason=f"diagnostic Entry request terminal {request_state}",
+                    )
+                    set_run_state(
+                        connection,
+                        run_id=run_id,
+                        state="FAILED",
+                        now=now,
+                        error=str(_v(event, "reason", 1) or request_state),
+                    )
+                    return "OWNER_DIAGNOSTIC_FAILED:" + request_state
+
     if request_id:
         position = connection.execute(
             """SELECT position_id,state
