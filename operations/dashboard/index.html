@@ -908,12 +908,13 @@ function refreshP90RealV3ArmControl(){
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus'),detail=document.getElementById('p90RealV3ArmDetail');
   if(!button||!status)return;
   const cohort=exactP90RealV3Cohort(),armed=p90RealV3OwnerArmPresent(),exactArmed=p90RealV3Armed(),inconsistent=liveGateOpen&&!exactArmed,readiness=window.p90ArmStatus||{},blockers=Array.isArray(readiness.blockers)?readiness.blockers:[],knownBlocked=blockers.length>0;
-  const loaded=String(readiness.loaded_commit||''),source=String(readiness.source_head||''),observerState=String(readiness.observer_state||'UNKNOWN'),observerReady=Boolean(readiness.observer_ready);
+  const loaded=String(readiness.loaded_commit||''),source=String(readiness.source_head||''),observerState=String(readiness.observer_state||'UNKNOWN'),observerReady=Boolean(readiness.observer_ready),gateReason=String(readiness.gate_reason||''),staging=!liveGateOpen&&gateReason==='P90L90 REAL v3 owner arm staging'&&Number(readiness.execution_permissions||0)===2&&Number(readiness.live_arm_sessions||0)===5&&Number(readiness.account_live_arm_sessions||0)===5;
   button.textContent=armed?'Отключить P90 REAL v3':'P90 REAL v3 OWNER ARM';
   button.classList.toggle('danger',!armed);
   button.disabled=gateChanging||(!armed&&(!cohort||inconsistent||knownBlocked));
   let state='warn',message='Локальные проверки PASS · OWNER ARM выполнит свежую full server evidence-проверку';
   if(exactArmed){state='success';message='P90 REAL v3 ARMED · новые Entry разрешены только exact MAIN/SUB scope'}
+  else if(staging){state='warn';message='P90 OWNER ARM: проверяется полный runtime · mainnet gate пока CLOSED'}
   else if(inconsistent){state='error';message='Mainnet открыт вне exact P90 arm-state · требуется диагностика'}
   else if(armed){state='warn';message='P90 owner-arm state DEGRADED · новые Entry запрещены · DISARM доступен'}
   else if(!cohort){state='error';message='P90 exact cohort не найден или не активен'}
@@ -944,10 +945,10 @@ async function changeP90RealV3Arm(enabled){
   if(gateChanging)return;
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus');
   const requestId=`p90-owner-arm-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const finish=beginTimedStatus(status,enabled?'Выполняю P90 REAL v3 OWNER ARM':'Отключаю P90 REAL v3');
+  const finish=beginTimedStatus(status,enabled?'Проверяю P90 REAL v3 перед открытием mainnet gate':'Отключаю P90 REAL v3');
   gateChanging=true;tradeGateButton.disabled=true;if(button)button.disabled=true;
   try{
-    await livePostTimed('/api/p90l90/real-v3/arm',{enabled,confirmed:enabled,request_id:requestId},20000);
+    await livePostTimed('/api/p90l90/real-v3/arm',{enabled,confirmed:enabled,request_id:requestId},75000);
     await loadStrategies(true);
     await confirmGateState(enabled);
     finish('success',enabled?'ГОТОВО · P90 REAL v3 MICRO_LIVE ARMED':'ГОТОВО · P90 REAL v3 DISARMED');
@@ -977,7 +978,7 @@ document.getElementById('p90RealV3ArmButton')?.addEventListener('click',async()=
     setOperationStatus(document.getElementById('p90RealV3ArmStatus'),'error','P90 exact cohort не найден или не активен.');
     return;
   }
-  if(!confirm('P90 REAL v3 OWNER ARM\n\nMAIN: LTCUSDT, INJUSDT · cap 20 USDT\nSUB: DOTUSDT, ARBUSDT, APTUSDT · cap 30 USDT\n10 USDT на Entry · isolated 1x\n\nARM создаст exact release-bound sessions, включит 2 execution permissions и откроет mainnet gate ПОСЛЕДНИМ шагом. Продолжить?'))return;
+  if(!confirm('P90 REAL v3 OWNER ARM\n\nMAIN: LTCUSDT, INJUSDT · cap 20 USDT\nSUB: DOTUSDT, ARBUSDT, APTUSDT · cap 30 USDT\n10 USDT на Entry · isolated 1x\n\nARM сначала подготовит exact runtime при CLOSED gate, дождётся RUNNING/READY и только после повторной проверки откроет mainnet gate ПОСЛЕДНИМ шагом. Если проверка не пройдёт — gate не откроется. Продолжить?'))return;
   try{await changeP90RealV3Arm(true)}catch(e){/* visible in persistent ARM panel */}
 });
 async function fetchLiveStateData(){if(liveStateInFlight)return liveStateInFlight;const view=activePanelName()==='liveDesk'?activeTradePage():'open',path=`/api/live/state?view=${encodeURIComponent(view)}`;liveStateInFlight=(async()=>{const r=await fetchWithTimeout(path,{cache:'no-store'},8000);if(!r.ok)throw new Error(`live-state HTTP ${r.status}`);const out=await r.json();lastLiveSuccessAt=Date.now();return out})();try{return await liveStateInFlight}finally{liveStateInFlight=null}}
