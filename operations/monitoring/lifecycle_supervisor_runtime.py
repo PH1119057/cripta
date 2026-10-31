@@ -94,8 +94,14 @@ def _entry_source_health(
     if observed_at.tzinfo is None or observed_at.utcoffset() is None:
         return False, "OBSERVER_TIMESTAMP_INVALID"
     age = (now.astimezone(UTC) - observed_at.astimezone(UTC)).total_seconds()
+    state = str(payload.get("state") or "")
+    reason = str(payload.get("reason") or "")
+    expected_arm_reload = (
+        state == "RELOADING"
+        and reason == "P90_REAL_OWNER_ARM_TO_LIVE_RELOAD"
+    )
     ready = (
-        payload.get("state") == "RUNNING"
+        (state == "RUNNING" or expected_arm_reload)
         and payload.get("observer_ready") is True
         and str(payload.get("source_commit") or "") == loaded_commit
         and 0 <= age <= 15

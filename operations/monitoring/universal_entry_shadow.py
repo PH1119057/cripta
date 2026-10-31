@@ -547,6 +547,10 @@ def _fetch_server_time() -> datetime:
         ) from exc
 
 
+class ObserverEpochReload(Exception):
+    """Expected in-process topology transition; never a durable observer fault."""
+
+
 class PublicTradeStreamBehind(ConnectionError):
     """REST-proven missing exact identities; recovery must cover the entire set."""
 
@@ -1308,6 +1312,28 @@ def _real_execution_selected_activation_ids(
         )
         in allowed
     )
+
+
+def _require_p90_source_only_epoch_current(
+    connection: Any,
+    bundles: tuple[object, ...],
+    *,
+    allow_live_transition: bool,
+) -> None:
+    """Keep SOURCE_ONLY inert; exact owner arm requests a clean LIVE epoch reload."""
+    selected = _real_execution_selected_activation_ids(connection, bundles)
+    expected = frozenset(
+        cast(Any, item).activation.activation_id for item in bundles
+    )
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
+    gate_enabled = bool(gate and gate[0])
+    if not gate_enabled and not selected:
+        return
+    if allow_live_transition and gate_enabled and selected == expected:
+        raise ObserverEpochReload("P90_REAL_OWNER_ARM_TO_LIVE_RELOAD")
+    raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
 
 
 def _unarmed_multi_account_candidate_bindings(
@@ -2620,13 +2646,11 @@ def _run_observer_epoch(
         # A LIVE gate / permission transition invalidates the SOURCE_ONLY
         # epoch BEFORE any raw fact can turn into an Entry or Exit action.
         if p90_real_source_only:
-            gate = connection.execute(
-                "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
-            ).fetchone()
-            if gate != (False,) or _real_execution_selected_activation_ids(
-                connection, observer_split.p90_real
-            ):
-                raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
+            _require_p90_source_only_epoch_current(
+                connection,
+                observer_split.p90_real,
+                allow_live_transition=not p90_real_force_source_only,
+            )
         if not deduper.accept(fact.fact_id):
             return
         if fact.event_kind == "PUBLIC_TRADE":
@@ -3234,6 +3258,16 @@ def _run_observer_epoch(
             if now_mono >= next_signature:
                 latest_signature = _observer_light_signature(connection)
                 if latest_signature != current_signature:
+                    reload_reason = "StrategyActivation set changed"
+                    if p90_real_source_only:
+                        try:
+                            _require_p90_source_only_epoch_current(
+                                connection,
+                                observer_split.p90_real,
+                                allow_live_transition=not p90_real_force_source_only,
+                            )
+                        except ObserverEpochReload as reload_exc:
+                            reload_reason = str(reload_exc)
                     _observer_status(
                         state="RELOADING",
                         epoch_id=epoch_id,
@@ -3243,7 +3277,7 @@ def _run_observer_epoch(
                         evaluations=evaluations_count,
                         signals=signals_count,
                         warmup_until=warmup_until,
-                        reason="StrategyActivation set changed",
+                        reason=reload_reason,
                         sensor_status=sensor_status(datetime.now(UTC)),
                         strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
                     )
@@ -3369,6 +3403,21 @@ def _run_observer_epoch(
                 )
                 next_status = now_mono + 2.0
         return "STOP"
+    except ObserverEpochReload as reload_exc:
+        _observer_status(
+            state="RELOADING",
+            epoch_id=epoch_id,
+            active_bundles=bundles,
+            symbols=symbols,
+            facts_received=facts_received,
+            evaluations=evaluations_count,
+            signals=signals_count,
+            warmup_until=warmup_until,
+            reason=str(reload_exc),
+            sensor_status=sensor_status(datetime.now(UTC)),
+            strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+        )
+        return "RELOAD"
     finally:
         real_source_broker_stop.set()
         if real_source_broker_thread is not None:
