@@ -14,9 +14,7 @@ from typing import Any
 
 from .fingerprint import fingerprint
 from .owner_full_contour_diagnostic import (
-    MAIN_ID,
     RUNTIME_SOURCE,
-    SUB_ID,
     VERSION,
     strategy_id_for_symbol,
     strategy_scope,
