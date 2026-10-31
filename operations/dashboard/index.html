@@ -45,11 +45,11 @@
     .rail-trade small{display:block;color:var(--muted);overflow-wrap:anywhere}
     .workspace-rail .rail-unknown{color:var(--muted)}
     @media(min-width:1250px){
-      main:has(#liveDesk.active){width:calc(100vw - 24px);max-width:2400px;display:grid;grid-template-columns:minmax(0,18fr) minmax(0,64fr) minmax(0,18fr);column-gap:12px;align-items:start}
+      main:has(#liveDesk.active){width:calc(100vw - 24px);max-width:2400px;display:grid;grid-template-columns:minmax(0,18fr) minmax(0,82fr);column-gap:12px;align-items:start}
       main:has(#liveDesk.active)>:not(.panel):not(.workspace-rail){grid-column:1/-1;min-width:0}
       main:has(#liveDesk.active)>#marketWorkspaceRail{display:flex;grid-column:1}
       main:has(#liveDesk.active)>#liveDesk{grid-column:2;min-width:0}
-      main:has(#liveDesk.active)>#closedWorkspaceRail{display:flex;grid-column:3}
+      main:has(#liveDesk.active)>#closedWorkspaceRail{display:none!important}
       main:has(#liveDesk.active) #liveDesk .core-trading-table{min-width:0}
       main:has(#liveDesk.active) #liveDesk .closed-scroll,main:has(#liveDesk.active) #liveDesk .table-scroll{max-width:100%;overflow-x:auto}
       main:has(#liveDesk.active) #liveDesk .trade-operator-grid{min-width:0}
@@ -139,6 +139,9 @@
     .console-critical{border-color:#873f46;background:#30191e}.console-critical summary{color:#ffc2c2}
     .console-event-note{font-size:10px;padding:4px 2px}
     .console-gate #tradeGateButton{align-self:flex-start;font-size:12px;font-weight:700;padding:8px 13px}
+    #tradeGateButton,#tradeOperationStatus,#tradeGateNotice,#tradeGateReasons,#gatewayReleaseStatus{display:none!important}
+    #closedWorkspaceRail{display:none!important}
+    #p90RealV3ArmDetail{font-size:10px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
     .console-gate .operation-status{font-size:11px;margin:0;padding:6px 8px;font-weight:600}
     .console-gate .observer-lock{font-size:11px;padding:6px 8px}
     .console-gate-reasons,.console-release-status{font-size:10px;line-height:1.3;overflow-wrap:anywhere}
@@ -240,12 +243,13 @@
           </div>
         </section>
         <section class="console-gate" aria-label="Управление шлюзом">
-          <div class="console-header"><b>Торговый шлюз</b><small>Глобальное разрешение новых входов</small></div>
+          <div class="console-header"><b>P90 REAL v3</b><small>Exact MAIN/SUB owner control</small></div>
           <button id="tradeGateButton" class="action danger" type="button">Разрешить новые входы</button>
           <div id="tradeOperationStatus" class="operation-status" aria-live="polite">Проверяю operational hard stops…</div>
           <button id="p90RealV3ArmButton" class="action danger" type="button" disabled>P90 REAL v3 OWNER ARM</button>
           <div id="p90RealV3ArmStatus" class="operation-status" aria-live="polite">P90: проверяю exact MAIN/SUB scope…</div>
-          <div class="muted console-release-status">P90 REAL v3: MAIN LTC/INJ + SUB DOT/ARB/APT · 10 USDT на Entry · isolated 1x · caps 20/30 USDT. Отдельный authenticated OWNER ARM; legacy global gate здесь не используется.</div>
+          <div id="p90RealV3ArmDetail">P90 REAL v3: проверяю loaded/source identity и observer readiness…</div>
+          <div class="muted console-release-status">Scope: MAIN LTC/INJ · SUB DOT/ARB/APT · 10 USDT на Entry · isolated 1x · caps 20/30 USDT. OWNER ARM всегда повторно проверяет full server evidence перед открытием mainnet gate.</div>
           <div id="tradeGateNotice" class="observer-lock"><b>Новые реальные входы запрещены.</b></div>
           <div id="tradeGateReasons" class="muted console-gate-reasons"></div>
           <div id="gatewayReleaseStatus" class="muted console-release-status">Проверка версии и готовности…</div>
@@ -278,7 +282,7 @@
     <article id="closedTradesSection" class="card full core-trading-table"><h2>Завершённые сделки Bybit</h2><div class="muted" style="margin-bottom:10px">Сверху видны сделки за сегодня. Более старые записи находятся ниже во внутренней прокрутке; вся страница из-за них не растягивается. Нажмите строку, чтобы раскрыть причинную карточку.</div><div class="closed-scroll"><table><thead><tr><th>Время</th><th>Монета</th><th>Закрыто</th><th>Цена</th><th>Причина стратегии</th><th>Причина биржи</th><th>После комиссий</th></tr></thead><tbody id="realClosedRows"></tbody></table></div></article>
     <article id="bybitLogSection" class="card full core-trading-table"><h2>Лог Bybit · попытки входа</h2><div class="muted" style="margin-bottom:10px">Технический журнал реальных Entry-заявок. Принятая Bybit лимитная заявка ещё не является открытой сделкой. Здесь видно, ждала ли она fill, была ли отменена без исполнения и по какой причинной причине.</div><div class="closed-scroll"><table style="min-width:1450px"><thead><tr><th>Время</th><th>Монета</th><th>Strategy</th><th>Направление</th><th>Limit</th><th>Bybit order</th><th>Статус</th><th>Fill</th><th>SL / TP</th><th>Причина / итог</th></tr></thead><tbody id="bybitLogRows"><tr><td colspan="10" class="muted">Загрузка журнала Bybit…</td></tr></tbody></table></div></article>
   </section>
-  <aside id="closedWorkspaceRail" class="workspace-rail" aria-label="Завершённые сделки и результат">
+  <aside id="closedWorkspaceRail" class="workspace-rail" aria-label="Завершённые сделки и результат" hidden>
     <h2>Завершённые сделки</h2>
     <div class="rail-periods" role="group" aria-label="Скользящий период статистики">
       <button type="button" data-rail-period="day">24 часа</button>
@@ -889,17 +893,21 @@ function p90RealV3Armed(){
   return rows.length===2&&rows.every(item=>Boolean(item.execution_effective_enabled));
 }
 function refreshP90RealV3ArmControl(){
-  const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus');
+  const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus'),detail=document.getElementById('p90RealV3ArmDetail');
   if(!button||!status)return;
-  const cohort=exactP90RealV3Cohort(),armed=p90RealV3Armed(),inconsistent=liveGateOpen&&!armed;
+  const cohort=exactP90RealV3Cohort(),armed=p90RealV3Armed(),inconsistent=liveGateOpen&&!armed,readiness=window.p90ArmStatus||{},blockers=Array.isArray(readiness.blockers)?readiness.blockers:[],knownBlocked=blockers.length>0;
+  const loaded=String(readiness.loaded_commit||''),source=String(readiness.source_head||''),observerState=String(readiness.observer_state||'UNKNOWN'),observerReady=Boolean(readiness.observer_ready);
   button.textContent=armed?'Отключить P90 REAL v3':'P90 REAL v3 OWNER ARM';
   button.classList.toggle('danger',!armed);
-  button.disabled=gateChanging||!cohort||inconsistent;
-  setOperationStatus(status,armed?'success':inconsistent?'error':cohort?'warn':'error',
-    armed?'P90 REAL v3 ARMED · новые Entry разрешены только exact MAIN/SUB scope':
-    inconsistent?'Mainnet открыт вне exact P90 arm-state · требуется диагностика':
-    cohort?'P90 PREARM cohort найден · ARM выполнит свежую серверную проверку всех evidence gates':
-    'P90 exact cohort не найден или не активен');
+  button.disabled=gateChanging||!cohort||inconsistent||knownBlocked;
+  let state='warn',message='Локальные проверки PASS · OWNER ARM выполнит свежую full server evidence-проверку';
+  if(armed){state='success';message='P90 REAL v3 ARMED · новые Entry разрешены только exact MAIN/SUB scope'}
+  else if(inconsistent){state='error';message='Mainnet открыт вне exact P90 arm-state · требуется диагностика'}
+  else if(!cohort){state='error';message='P90 exact cohort не найден или не активен'}
+  else if(blockers.includes('REMOTE_SOURCE_INSTALLED_IDENTITY_DRIFT')){state='error';message='OWNER ARM заблокирован · source/runtime release identity не совпадает'}
+  else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='error';message='OWNER ARM заблокирован · Universal Entry observer сейчас не готов'}
+  setOperationStatus(status,state,message);
+  if(detail)detail.textContent='loaded '+(loaded?loaded.slice(0,12):'—')+' · source '+(source?source.slice(0,12):'—')+' · observer '+observerState+(observerReady?' / ready':' / not ready')+' · mainnet '+(liveGateOpen?'OPEN':'CLOSED');
 }
 async function changeP90RealV3Arm(enabled){
   if(gateChanging)return;
@@ -1182,9 +1190,9 @@ function renderLiveState(d){
   for(const p of d.live_trading?.positions||[]){p.exchange_mark_price=p.mark_price;p.exchange_unrealised_pnl=p.unrealised_pnl;p.mark_price=p.executable_close_price||p.mark_price}
   if(d.trade_strategy_monitor)tradeStrategyMonitorData=d.trade_strategy_monitor;const lt=d.live_trading||{wallet:null,positions:[]},wallet=lt.wallet,positions=lt.positions||[],num=v=>v==null||v===''?'—':Number(v).toFixed(2)+' USDT';window.currentPositions=positions;renderTradeStrategyControl();
   const currentGateOpen=!!lt.gate?.enabled,previousGate=localStorage.getItem('cripta-last-mainnet-gate'),criticalFaults=lt.critical_faults||[];let operationalAlarms=[];if(previousGate==='1'&&!currentGateOpen)operationalAlarms.push('торговый шлюз закрыт'+(lt.gate?.reason?' · '+String(lt.gate.reason):''));localStorage.setItem('cripta-last-mainnet-gate',currentGateOpen?'1':'0');let seenFaultIds=[];try{seenFaultIds=JSON.parse(localStorage.getItem('cripta-seen-critical-faults')||'[]')}catch(_e){seenFaultIds=[]}const seenFaultSet=new Set(seenFaultIds),newCritical=criticalFaults.filter(x=>!seenFaultSet.has(x.fault_id));if(newCritical.length)operationalAlarms.push('CRITICAL '+newCritical.map(x=>x.fault_code).join(', '));localStorage.setItem('cripta-seen-critical-faults',JSON.stringify(criticalFaults.map(x=>x.fault_id)));if(operationalAlarms.length){queuedSound('alarm')}
-  liveGateOpen=currentGateOpen;rearmReady=!!lt.rearm_ready;liveStateLoaded=true;lastWalletRefreshMs=wallet?Number(wallet.refreshed_at_epoch_ms||0):0;refreshP90RealV3ArmControl();
+  liveGateOpen=currentGateOpen;rearmReady=!!lt.rearm_ready;liveStateLoaded=true;lastWalletRefreshMs=wallet?Number(wallet.refreshed_at_epoch_ms||0):0;window.p90ArmStatus=lt.p90_arm_status||null;refreshP90RealV3ArmControl();
   if(!gateChanging){tradeGateButton.textContent=liveGateOpen?'Запретить новые входы':'Разрешить новые входы';tradeGateButton.classList.toggle('danger',!liveGateOpen);tradeGateButton.disabled=!liveGateOpen&&!rearmReady;setOperationStatus(tradeOperationStatus,liveGateOpen?'success':rearmReady?'warn':'error',liveGateOpen?'Глобальный допуск новых реальных входов открыт':rearmReady?'Новые реальные входы запрещены · hard stop отсутствует':'Новые реальные входы запрещены · действует operational hard stop')}
-  document.getElementById('gateEventMessage').textContent=liveGateOpen?'Шлюз открыт · новые реальные входы разрешены при готовности Strategy':'Шлюз закрыт · новые реальные входы запрещены';renderLiveCriticalEvents(lt);renderMiniLogFeed(lt);tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
+  document.getElementById('gateEventMessage').textContent=liveGateOpen?'Mainnet gate OPEN · разрешения определяет exact P90 arm-state':'Mainnet gate CLOSED · реальные Entry сейчас запрещены';renderLiveCriticalEvents(lt);renderMiniLogFeed(lt);tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
   tradeEquity.textContent=wallet?num(wallet.total_equity):'нет данных';tradeAvailable.textContent=wallet?num(wallet.available_balance):'нет данных';livePositions.textContent=positions.length;const positionReserve=wallet?Number(wallet.reserved_for_positions||0):0,orderReserve=wallet?Number(wallet.reserved_for_orders||0):0,inUse=positionReserve+orderReserve;tradeInUse.textContent=wallet?`${inUse.toFixed(2)} USDT`:'нет данных';tradeInUseDetail.textContent=wallet?`позиции ${positionReserve.toFixed(2)} + заявки ${orderReserve.toFixed(2)} USDT`:'нет account snapshot';tradeBalanceDetail.textContent=wallet?`баланс без текущего результата: ${Number(wallet.wallet_balance||0).toFixed(2)} USDT`:'account snapshot отсутствует';updateOperatorConnection();
   const positionKeys=new Set(positions.map(p=>p.symbol+':'+p.side)),savedPositionKeys=localStorage.getItem('cripta-open-position-keys');if(lastOpenPositions===null&&savedPositionKeys){try{lastOpenPositions=new Set(JSON.parse(savedPositionKeys))}catch(_e){lastOpenPositions=null}}if(lastOpenPositions!==null){for(const key of positionKeys)if(!lastOpenPositions.has(key))entrySound()}lastOpenPositions=positionKeys;localStorage.setItem('cripta-open-position-keys',JSON.stringify([...positionKeys]));
   renderOpenRailPositions(positions);
@@ -1445,7 +1453,8 @@ document.querySelectorAll('[data-rail-period]').forEach(b=>b.addEventListener('c
   railRender();
 }));
 async function railRefresh(){
-  if(railRefreshBusy||document.hidden||!document.getElementById('liveDesk').classList.contains('active'))return;
+  const closedRail=document.getElementById('closedWorkspaceRail');
+  if(!closedRail||closedRail.hidden||railRefreshBusy||document.hidden||!document.getElementById('liveDesk').classList.contains('active'))return;
   railRefreshBusy=true;
   try{
     const resp=await fetch('/api/live/state?view=closed',{cache:'no-store'});
