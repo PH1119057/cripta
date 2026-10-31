@@ -1,6 +1,8 @@
 # Core R02: one independently gated consumer per provisioned SUB TradingAccount.
 # The env file contains registry IDs and safe settings only, NO credentials.
-# No [Install]: deployment must never auto-enable Entry for an account.
+# Installer never auto-enables this template. An exact provisioned TradingAccount
+# may be explicitly enabled by the owner/control rail; DB gate + permission + arm
+# remain independent and fail-closed.
 [Unit]
 Description=Cripta Universal Entry SUB consumer (%i, initially disabled)
 After=network-online.target postgresql.service cripta-private-runtime@%i.service
@@ -31,3 +33,6 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
