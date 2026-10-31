@@ -5256,7 +5256,22 @@ class Handler(BaseHTTPRequestHandler):
     def require_login(self) -> bool:
         if self.session_user():
             return False
-        next_path = quote(urlparse(self.path).path, safe="/")
+        request_path = urlparse(self.path).path
+        next_path = quote(request_path, safe="/")
+        if request_path.startswith("/api/"):
+            self.send_body(
+                401,
+                json.dumps(
+                    {
+                        "error": "AUTH_REQUIRED",
+                        "message": "Сессия Dashboard истекла или недействительна",
+                        "login_url": f"/login?next={next_path}",
+                    },
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+                "application/json; charset=utf-8",
+            )
+            return True
         self.send_response(303)
         self.send_header("Location", f"/login?next={next_path}")
         self.send_header("Content-Length", "0")
