@@ -362,11 +362,15 @@ def retire_entry_rights(
         (current, live_session_id(run_id)),
     )
     active_account = connection.execute(
-        """SELECT count(*) FROM control.account_live_arm_sessions
+        """SELECT count(*) AS active_count
+             FROM control.account_live_arm_sessions
             WHERE account_live_arm_session_id=%s AND state='ACTIVE'""",
         (account_session_id(run_id),),
     ).fetchone()
-    if active_account == (1,):
+    if (
+        active_account is not None
+        and int(_row_value(active_account, "active_count", 0)) == 1
+    ):
         result = connection.execute(
             """SELECT control.disarm_owner_full_contour_account_scope(%s,%s,%s)""",
             (
