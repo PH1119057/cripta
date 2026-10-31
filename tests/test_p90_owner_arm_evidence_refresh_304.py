@@ -52,9 +52,9 @@ def test_failed_stage_is_disarmed_before_error_escapes() -> None:
     assert "if staged:" in src
     assert "disarm_p90l90_real_v3(" in src
     assert "P90_REAL_OWNER_ARM_STAGE_CLEANUP_FAILED" in src
-    assert src.index("stage_p90l90_real_v3(") < src.index(
-        "disarm_p90l90_real_v3("
-    )
+    cleanup = src.index("if staged:")
+    cleanup_disarm = src.index("disarm_p90l90_real_v3(", cleanup)
+    assert src.index("stage_p90l90_real_v3(") < cleanup < cleanup_disarm
 
 
 def test_no_weakening_of_technical_evidence_or_final_arm_gates() -> None:
