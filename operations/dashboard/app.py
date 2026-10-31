@@ -5943,7 +5943,14 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     not operator
                     or not request_id
                     or len(request_id) > 128
-                    or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for ch in request_id)
+                    or any(
+                        ch not in (
+                            "abcdefghijklmnopqrstuvwxyz"
+                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "0123456789_-"
+                        )
+                        for ch in request_id
+                    )
                 ):
                     raise ValueError("OWNER_FULL_CONTOUR_REQUEST_ID_INVALID")
                 with psycopg.connect(
@@ -6271,11 +6278,13 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                        ON act.activation_id=arm.strategy_activation_id
                                       AND act.strategy_id=arm.strategy_id
                                       AND act.strategy_version=arm.strategy_version
-                                      AND act.strategy_config_fingerprint=arm.strategy_config_fingerprint
+                                      AND act.strategy_config_fingerprint=
+                                          arm.strategy_config_fingerprint
                                      JOIN strategy_entry.execution_permissions perm
                                        ON perm.strategy_id=arm.strategy_id
                                       AND perm.strategy_version=arm.strategy_version
-                                      AND perm.strategy_config_fingerprint=arm.strategy_config_fingerprint
+                                      AND perm.strategy_config_fingerprint=
+                                          arm.strategy_config_fingerprint
                                     WHERE arm.state='ACTIVE'
                                       AND arm.deactivated_at IS NULL
                                       AND arm.symbol=%s
@@ -6289,8 +6298,10 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                            WHERE generic_arm.state='ACTIVE'
                                              AND generic_arm.strategy_id=arm.strategy_id
                                              AND generic_arm.strategy_version=arm.strategy_version
-                                             AND generic_arm.strategy_config_fingerprint=arm.strategy_config_fingerprint
-                                             AND generic_arm.strategy_activation_id=arm.strategy_activation_id
+                                             AND generic_arm.strategy_config_fingerprint=
+                                                 arm.strategy_config_fingerprint
+                                             AND generic_arm.strategy_activation_id=
+                                                 arm.strategy_activation_id
                                              AND generic_arm.symbol=arm.symbol
                                              AND generic_arm.release_commit=arm.release_commit
                                       )
@@ -6305,7 +6316,9 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             ).fetchall()
                             if len(active_arm_rows) != 1:
                                 raise ValueError(
-                                    "контрольный вход разрешён только для монеты current active MICRO_LIVE cohort с exact P90 account scope"
+                                    "контрольный вход разрешён только для монеты "
+                                    "current active MICRO_LIVE cohort с exact "
+                                    "P90 account scope"
                                 )
                             test_account_id = str(active_arm_rows[0][0])
                             test_connector_id = str(active_arm_rows[0][1])
