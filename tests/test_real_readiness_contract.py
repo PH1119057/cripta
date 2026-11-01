@@ -115,6 +115,11 @@ def test_dashboard_contains_persistent_friendly_preparation_states():
     assert "запускаем недостающие службы" in ui
     assert "подготовка заблокирована" in ui
     assert "mainnet gate CLOSED" in ui
+    assert (
+        "livePostTimed('/api/p90l90/real-v3/arm',"
+        "{enabled,confirmed:enabled,request_id:requestId},300000)"
+        in ui
+    )
 
 
 def test_verified_release_shell_syntax() -> None:
