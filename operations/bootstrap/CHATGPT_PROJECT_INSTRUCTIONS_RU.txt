@@ -32,13 +32,12 @@ Server-side script/service/job с filesystem write или сменой effective
 Историческое research — evidence, не канон. Не переносить старые Entry/Exit, thresholds, horizons, filters, Strategy parameters/defaults; dataset reuse ≠ policy reuse.
 Торговое изменение: `RESEARCH/EVIDENCE → OWNER DECISION → CANON/NEW STRATEGY VERSION → TEST/SHADOW → LIVE EQUIVALENCE → MICRO_LIVE → LIVE`.
 
-#158 (2026-10-26): owner-approved research методы — RESEARCH_COMPUTE §21.8; LIVE не разрешён.
 
 ## 6. Архитектура
 Owner/consumer — ARCH/TRADING_CONTOUR/OBSERVATION_ANALYTICS/GLOSSARY/MAP, архитектуру не дублировать. Перед чувствительной работой проверить актуальный GitHub main, base и routed docs. Research writes только на data-disk; runtime не зависит напрямую от research artifacts.
 Patch/deploy не включает LIVE молча; re-arm — current LIVE-arm contract + explicit owner approval.
 Real execution smoke — только owner-triggered diagnostic по TC §4.8 / ARCH §7.1, не Strategy. PAPER/REAL: ARCH §7.2, TC §4.9, GLOSSARY §11. R1 SL/TP — TC.
-Dashboard read-only UI/read-model отдельно от trading runtime; restart — только Dashboard backend. Auth/control/mutation — full release.
+Dashboard UI/read-model отдельно от trading runtime; auth/control/mutation — full release. REAL prep: ARCH §52 + DEV §51; bounded Service Start Broker, отдельный explicit OWNER ARM.
 
 ## 7. Отказы, actor и права
 Отказы: DEVELOPMENT_RELEASE §19.5–19.6, MAP §1.4; research — RESEARCH_COMPUTE, коммуникация — CHATGPT_INTERACTION_RULES §11.1. Различать OpenAI upstream tool-security block, SentinelX `command_not_allowed`, Unix `EACCES` (actor/path), job timeout (исход неизвестен), GitHub error.

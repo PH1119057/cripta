@@ -1943,4 +1943,50 @@ Discovery в порядке:
 - После установки независимо проверяются REMOTE_HEAD, SOURCE_HEAD, INSTALLED_COMMIT, LOADED_COMMIT, runtime liveness и runtime behavior.
 - Release Controller не включает mainnet gate, StrategyActivation, execution permissions, OWNER ARM или MICRO_LIVE.
 - Негативные тесты обязательны: отсутствие/истечение approval, replay nonce, неподходящий SHA/baseline/tree, сдвиг main, непрошедший CI, грязный checkout, чужой actor/path, инъекция argv/env, конкурентный release, сбой rollback, попытка LIVE arm.
-- Ввод в эксплуатацию строго: OWNER DECISION → CANON UPDATE → IMPLEMENTATION → TEST → GITHUB → DEPLOY → RUNTIME EVIDENCE. Пока нет проверки deployment нового rail, действует прежний fail-closed контракт. 
+- Ввод в эксплуатацию строго: OWNER DECISION → CANON UPDATE → IMPLEMENTATION → TEST → GITHUB → DEPLOY → RUNTIME EVIDENCE. Пока нет проверки deployment нового rail, действует прежний fail-closed контракт.
+
+## 51. Generic REAL readiness preparation and bounded service-start broker — OWNER DECISION 2026-11-02 (Issue #343)
+
+ARCH §52 owns capability boundaries. This section owns implementation, actor/path, release and recovery gates.
+
+### 51.1 Actors and privilege boundary
+
+`REAL Readiness Coordinator` executes as normal CRIPTA actor `cripta`. It may read service status, write only its approved durable control records and call the broker protocol. It has no general sudo/root/systemd mutation permission.
+
+`Service Start Broker` is the only new privileged owner. Target deployment contract:
+
+```text
+SERVICE                  cripta-real-service-broker.service
+EFFECTIVE_ACTOR          root:cripta
+READ                     exact runtime identity + /var/lib/cripta/release/INSTALLED_COMMIT
+WRITE/CREATE/DELETE      /run/cripta-real-readiness/broker.sock only
+SYSTEMD MUTATION         START only, exact source-allowlisted CRIPTA units
+DB_ROLE                  none
+EXCHANGE CREDENTIALS     none
+OWNER ARM / GATE         forbidden
+ARBITRARY SHELL/UNIT     forbidden
+```
+
+Before install, DEV §§5.1 and 19.1–19.4 must verify exact source/destination paths, owner/group/mode, socket parent, systemd sandbox and the real service users/write paths of every auto-startable unit. `ReadWritePaths=` is not permission evidence. No blanket sudoers rule, `chmod 777`, recursive chown/chmod or Dashboard-as-root is permitted.
+
+### 51.2 Broker protocol and fail-closed start semantics
+
+A request carries a bounded `request_id`, exact 40-hex release and a finite list of unit names already selected by trusted coordinator logic. The broker independently validates syntax, source allowlist and current installed/runtime identity. It invokes systemd without a shell. Only `inactive` + start-eligible may be started. `active` is returned unchanged; `failed`, `activating`, `deactivating`, `unknown`, masked/not-found, identity mismatch or unallowlisted unit returns BLOCKED and causes no other start. No automatic restart/stop/reset-failed/daemon-reload.
+
+Starts are dependency-ordered, bounded by count and deadline, and followed by exact ActiveState readback. `active` alone is not READY: coordinator separately verifies behavior/heartbeat and all trading safety evidence.
+
+### 51.3 Durable preparation and UI contract
+
+Preparation is idempotent by request ID and immutable scope. Reusing an ID with different operator/release/scope is rejected. Only one overlapping active preparation per account/scope is allowed. Persistent states are:
+`REQUESTED, CHECKING, STARTING_SERVICES, RECONCILING, VALIDATING, READY_FOR_OWNER_ARM, BLOCKED`.
+Each transition records timestamp; BLOCKED records stable reason, scope, evidence reference and whether a safe retry is eligible. Browser disconnect/refresh does not synthesize success/failure; UI reloads the server-side record. Unknown in-flight outcome is checked before retry.
+
+The authenticated Dashboard must disable duplicate submit while active and show plain-language phase/progress in the primary control surface. A terminal failure is visible without opening raw logs, with technical details available separately. Genuine DISARM is always reachable when any factual arm/permission/gate state exists.
+
+### 51.4 OWNER ARM remains separate
+
+Preparation, broker starts, daemon startup, reconnect and deploy never create/extend StrategyActivation, execution permissions, generic/account LIVE arms or mainnet gate. After `READY_FOR_OWNER_ARM`, the same owner-approved UI flow MAY immediately invoke the existing exact OWNER ARM transaction only because the owner explicitly clicked the action; final arm must re-check freshness atomically and fail closed. No persisted readiness is durable financial approval.
+
+### 51.5 Tests and release
+
+Required before first production use: allowlist/argument-injection tests; dependency/cycle tests; inactive->start->behavior-ready; active/no-restart; failed/wrong-release/unknown/missing -> BLOCKED; permission denial without escalation; duplicate/concurrent IDs; browser refresh/disconnect; coordinator crash/stale operation recovery; multiple TradingAccounts; existing exposure + preserved Exit; degraded DISARM; no automatic arm/gate. Full quality + disposable PostgreSQL + lifecycle CI must pass. Install uses the verified release process; deploy does not arm. Production verification distinguishes service liveness from behavior and records exact release composition.

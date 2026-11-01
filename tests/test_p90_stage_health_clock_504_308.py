@@ -48,7 +48,7 @@ def test_owner_arm_timeout_hierarchy_covers_full_request_not_only_stage_wait() -
 
     # PREARM evidence runs before the staged runtime wait.  Therefore the
     # browser/proxy budgets must not be collapsed to the stage timeout itself.
-    assert "180000" in body
+    assert "300000" in body
     assert "25000" not in body
     assert "proxy_read_timeout 240s;" in NGINX
     assert "proxy_read_timeout 30s;" not in NGINX

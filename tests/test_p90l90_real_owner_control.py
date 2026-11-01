@@ -105,26 +105,39 @@ def test_p90_private_flat_failure_publishes_only_stable_local_reason() -> None:
 def test_p90_technical_evidence_and_staged_owner_arm_are_separate_actions() -> None:
     source = DASH.read_text()
     evidence_handler = source.index("def _u6_p90_real_v3_prearm_evidence(")
-    arm_handler = source.index("def _u6_p90_real_v3_arm(", evidence_handler)
+    prepare_helper = source.index("def _u6_prepare_p90_real_v3_readiness(", evidence_handler)
+    arm_handler = source.index("def _u6_p90_real_v3_arm(", prepare_helper)
     catalog_handler = source.index("def _u6_financial_account_catalog", arm_handler)
-    evidence_block = source[evidence_handler:arm_handler]
+    evidence_block = source[evidence_handler:prepare_helper]
+    prepare_block = source[prepare_helper:arm_handler]
     arm_block = source[arm_handler:catalog_handler]
+
     assert "prepare_p90l90_real_v3_prearm_evidence(" in evidence_block
     assert "stage_p90l90_real_v3(" not in evidence_block
     assert "finalize_p90l90_real_v3(" not in evidence_block
-    # Explicit owner click renews evidence, stages with gate CLOSED, waits for
-    # exact runtime readiness, and only then finalizes gate OPEN.
-    assert "prepare_p90l90_real_v3_prearm_evidence(" in arm_block
+
+    # Generic technical preparation may recover inactive services, but it
+    # cannot stage or finalize the trading authorization.
+    assert "_wait_p90_real_v3_technical_evidence(" in prepare_block
+    assert "broker_start_services(" in prepare_block
+    assert "mark_real_readiness_ready(" in prepare_block
+    assert "stage_p90l90_real_v3(" not in prepare_block
+    assert "finalize_p90l90_real_v3(" not in prepare_block
+
+    # Explicit owner click prepares first, renews fresh evidence, then stages
+    # with gate CLOSED and only after runtime readiness performs final arm.
+    assert "_u6_prepare_p90_real_v3_readiness(" in arm_block
+    assert "_wait_p90_real_v3_technical_evidence(" in arm_block
     assert "stage_p90l90_real_v3(" in arm_block
     assert "_u6_wait_p90_real_v3_stage_ready(" in arm_block
     assert "finalize_p90l90_real_v3(" in arm_block
-    assert arm_block.index("prepare_p90l90_real_v3_prearm_evidence(") < (
-        arm_block.index("stage_p90l90_real_v3(")
-    ) < arm_block.index("_u6_wait_p90_real_v3_stage_ready(") < (
-        arm_block.index("finalize_p90l90_real_v3(")
-    )
+    assert arm_block.index("_u6_prepare_p90_real_v3_readiness(") < (
+        arm_block.index("_wait_p90_real_v3_technical_evidence(")
+    ) < arm_block.index("stage_p90l90_real_v3(") < (
+        arm_block.index("_u6_wait_p90_real_v3_stage_ready(")
+    ) < arm_block.index("finalize_p90l90_real_v3(")
     assert "OWNER ARM requires explicit confirmation" in arm_block
-
+    assert "P90_REAL_OWNER_ARM_ORIGIN_UNVERIFIED" in arm_block
 
 def test_p90_prearm_operator_script_cannot_owner_arm_or_open_gate() -> None:
     source = PREARM_SCRIPT.read_text()

@@ -23,12 +23,15 @@ def _arm_handler() -> str:
 def test_owner_confirmation_precedes_fresh_evidence_and_stage() -> None:
     src = _arm_handler()
     confirmation = src.index('request.get("confirmed") is not True')
-    refresh = src.index("prepare_p90l90_real_v3_prearm_evidence(")
+    origin = src.index("_u6_financial_account_same_origin(")
+    preparation = src.index("_u6_prepare_p90_real_v3_readiness(")
+    refresh = src.index("_wait_p90_real_v3_technical_evidence(")
     stage = src.index("stage_p90l90_real_v3(")
     wait = src.index("_u6_wait_p90_real_v3_stage_ready(")
     finalize = src.index("finalize_p90l90_real_v3(")
-    assert confirmation < refresh < stage < wait < finalize
-    assert 'if enabled:\n        # A previous PREARM_TECHNICAL_READY' in src
+    assert confirmation < origin < preparation < refresh < stage < wait < finalize
+    assert 'preparation.get("state") != "READY_FOR_OWNER_ARM"' in src
+    assert "P90_REAL_PREPARATION_BLOCKED:" in src
     assert "release_commit=LOADED_RELEASE_COMMIT" in src
     assert "now=datetime.now(UTC)" in src
 

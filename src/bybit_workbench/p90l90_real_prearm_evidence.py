@@ -25,6 +25,7 @@ from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.p90l90_real_arm_control import (
     p90l90_real_v3_contexts_and_routes,
 )
+from bybit_workbench.real_service_profiles import p90_real_v3_service_specs
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
@@ -52,17 +53,9 @@ _MAIN_ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
 _SUB_ACCOUNT = "ta-853ac5fcd58185697396d33cd57459fa"
 _ACCOUNT_BY_STRATEGY = {MAIN_ID: _MAIN_ACCOUNT, SUB_ID: _SUB_ACCOUNT}
 _EVIDENCE_SOURCE = "p90l90-real-v3:technical-prearm-evidence"
-_SERVICE_UNITS = (
-    "cripta-private-runtime.service",
-    f"cripta-private-runtime@{_SUB_ACCOUNT}.service",
-    "cripta-universal-entry-consumer.service",
-    f"cripta-universal-entry-consumer@{_SUB_ACCOUNT}.service",
-    "cripta-lifecycle-supervisor.service",
-    f"cripta-lifecycle-account@{_SUB_ACCOUNT}.service",
-    "cripta-position-supervisor.service",
-    f"cripta-account-position@{_SUB_ACCOUNT}.service",
-    "cripta-dashboard.service",
-)
+_SERVICE_UNITS = tuple(
+    spec.unit for spec in p90_real_v3_service_specs(sub_account_id=_SUB_ACCOUNT)
+) + ("cripta-dashboard.service",)
 
 
 class P90PrearmEvidenceBlocked(ValueError):

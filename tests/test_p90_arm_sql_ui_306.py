@@ -35,7 +35,8 @@ def test_p90_failure_display_is_copyable_persistent_read_only():
     assert 'id="p90ArmResultText"' in HTML
     assert 'id="p90ArmCopyResult"' in HTML
     assert "sessionStorage.setItem(p90ArmHistoryKey" in HTML
-    assert "recordP90ArmResult('error',e.message,requestId)" in HTML
+    assert "const visible=op?.state==='BLOCKED'?p90ReadinessOperationText(op):e.message;" in HTML
+    assert "recordP90ArmResult('error',visible||e.message,requestId)" in HTML
     assert "navigator.clipboard.writeText(text)" in HTML
     assert "try{await changeP90RealV3Arm(true)}catch(e){alert(e.message)}" not in HTML
     assert "try{await changeP90RealV3Arm(false)}catch(e){alert(e.message)}" not in HTML

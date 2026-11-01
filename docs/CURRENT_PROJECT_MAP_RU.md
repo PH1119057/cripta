@@ -4740,3 +4740,13 @@ Status at this documentation commit:
 Implementation must follow Git-first cross-contour release with
 `owner-approved-cross-contour`, tests, verified deploy, bounded prune audit,
 disk verification and fresh P90 pre-arm evidence. LIVE remains OFF.
+
+## 2026-11-02 Generic REAL gate readiness — OWNER DECISION / SOURCE WIP / NOT DEPLOYED
+
+Issue #343; draft PR #344. Owner requires one friendly authenticated operation to recover ordinary inactive required services, verify the complete REAL contour and either reach READY_FOR_OWNER_ARM or show an actionable BLOCKED reason, without routine manual server administration. Architecture/release terms are ARCH §52, DEV §51, GLOSSARY §40.
+
+CHECKED HERE before implementation: GitHub/main and production source baseline were `ba0df328c4fa52fa211af5e3ec22688476b1ae1f`; source checkout clean. SUB `cripta-lifecycle-account@ta-853ac5fcd58185697396d33cd57459fa.service` and `cripta-account-position@ta-853ac5fcd58185697396d33cd57459fa.service` were `inactive`, configured `User=cripta Group=cripta` with account-scoped `ReadWritePaths`. Read/write/traverse access to their existing state roots was separately checked as actor `cripta` and passed; SentinelX actor EACCES on those paths was not treated as service-user failure.
+
+Source WIP branch `cross/generic-real-gate-readiness-343-20261102` first introduced a pure no-I/O generic service planner and tests. Initial GitHub `trade-lifecycle-postgres` succeeded; `quality` correctly rejected three new Ruff diagnostics and the branch fixed them in commit `635c2b94f45dc619975e85e82e497591472b0e44`. This checkpoint does not claim later CI or implementation completion.
+
+Target privileged broker actor/path contract is now canonical in DEV §51 but **not yet installed/proven on production**. No service start/restart, DB migration, Exchange mutation, execution permission, OWNER ARM or mainnet gate change is authorized by this documentation checkpoint. `IMPLEMENTED=PARTIAL SOURCE WIP`; `DEPLOYED=NO`; `RUNTIME BEHAVIOR VERIFIED=NO`.

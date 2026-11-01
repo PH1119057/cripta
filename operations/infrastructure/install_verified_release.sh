@@ -249,6 +249,8 @@ unit_specs=(
   "operations/systemd/cripta-account-enrollment-probe@.service|cripta-account-enrollment-probe@.service|runtime"
   # Inert owner-triggered Release Controller; never auto-enabled or managed.
   "operations/systemd/cripta-release-controller.service|cripta-release-controller.service|runtime"
+  # Generic management-plane broker. It may start only source-allowlisted CRIPTA units.
+  "operations/systemd/cripta-real-service-broker.service|cripta-real-service-broker.service|runtime"
   # Inert SUB-only Lifecycle worker; no auto-enable or implicit started service.
   "operations/systemd/cripta-lifecycle-account@.service|cripta-lifecycle-account@.service|runtime"
   "operations/systemd/cripta-account-position@.service|cripta-account-position@.service|runtime"
@@ -295,6 +297,16 @@ for relative in "${release_controller_files[@]}"; do
 done
 echo "RELEASE_CONTROLLER_SOURCE_PREFLIGHT=PASS"
 
+broker_relative="operations/management/real_service_broker.py"
+broker_candidate="$runtime_release/$broker_relative"
+[[ -f "$broker_candidate" ]] || die "REAL service broker source missing: $broker_relative"
+broker_staged="$controller_stage/real_service_broker.py"
+as_repo_owner git -C "$SOURCE" show "$RELEASE_COMMIT:$broker_relative" > "$broker_staged"
+chmod 0600 "$broker_staged"
+cmp -s "$broker_staged" "$broker_candidate" ||
+  die "REAL service broker candidate differs from exact Git"
+echo "REAL_SERVICE_BROKER_SOURCE_PREFLIGHT=PASS"
+
 stamp="$(date -u +%Y%m%d_%H%M%S)"
 backup="$BACKUP_ROOT/${stamp}_${EXPECTED_BASELINE}_to_${RELEASE_COMMIT}"
 install -d -o root -g root -m 0700 "$backup"
@@ -338,7 +350,7 @@ if [[ -d /etc/systemd/system/cripta-private-runtime.service.d ]]; then
   install -d -m 0700 "$backup/files/etc/systemd/system"
   cp -a /etc/systemd/system/cripta-private-runtime.service.d "$backup/files/etc/systemd/system/"
 fi
-for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /etc/cripta/release.env; do
+for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /etc/cripta/release.env; do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
     install -d -m 0700 "$backup/files/$(dirname "$safe")"
@@ -374,6 +386,7 @@ managed_services=(
   cripta-opportunity-tracker.service
   cripta-position-supervisor.service
   cripta-private-runtime.service
+  cripta-real-service-broker.service
   cripta-safety-observer.service
   cripta-shadow-command-worker.service
   cripta-universal-entry-consumer.service
@@ -494,6 +507,8 @@ migration_files=(
   operations/sql/20261101_subordinate_diagnostic_binding.sql
   operations/sql/20261101_owner_full_contour_diagnostic_v2.sql
   operations/sql/20261101_owner_full_contour_diagnostic_v3.sql
+  # Durable technical readiness state; no Strategy/LIVE/Exchange effect.
+  operations/sql/20261102_real_readiness_operations.sql
   operations/sql/20261007_live_arm_parity_gate.sql
   operations/sql/20261008_r1_entry_cancel_intents.sql
   operations/sql/20261008_exchange_closed_entry_recovery.sql
@@ -614,6 +629,10 @@ install -o root -g root -m 0644 \
 install -o root -g root -m 0644 \
   "$controller_stage/release_controller_github.py" \
   /usr/local/libexec/cripta-release-controller/release_controller_github.py
+install -d -o root -g root -m 0755 /usr/local/libexec/cripta-real-service-broker
+install -o root -g root -m 0755 \
+  "$broker_staged" \
+  /usr/local/libexec/cripta-real-service-broker/real_service_broker.py
 
 install -d -o root -g cripta -m 0750 /etc/cripta
 cat > /etc/cripta/release.env <<EOF
@@ -635,11 +654,26 @@ systemctl disable cripta-release-controller.service >/dev/null
 controller_enabled_state="$(systemctl is-enabled cripta-release-controller.service 2>/dev/null || true)"
 [[ "$controller_enabled_state" == "disabled" ]] ||
   die "release controller must remain disabled/manual-only"
+
+# The management-plane broker must be available before Dashboard accepts an
+# owner preparation click. It has no trading authority and cannot open gate/arms.
+systemctl enable cripta-real-service-broker.service >/dev/null
+systemctl start cripta-real-service-broker.service
+systemctl is-active --quiet cripta-real-service-broker.service ||
+  die "REAL service broker failed after deploy"
+echo "REAL_SERVICE_BROKER=ACTIVE"
+
 for service in "${managed_services[@]}"; do
+  if [[ "$service" == "cripta-real-service-broker.service" ]]; then
+    continue
+  fi
   if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
 done
 for service in "${managed_services[@]}"; do
-  if [[ "${was_active[$service]}" == "1" ]]; then
+  if [[ "$service" == "cripta-real-service-broker.service" ]]; then
+    systemctl is-active --quiet "$service" ||
+      die "REAL service broker became inactive during deploy"
+  elif [[ "${was_active[$service]}" == "1" ]]; then
     systemctl is-active --quiet "$service" || die "service failed after deploy: $service"
   else
     systemctl is-active --quiet "$service" && die "previously inactive service became active: $service"

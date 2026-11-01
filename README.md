@@ -145,3 +145,6 @@ GitHub PR scope checker проверяет изменённые пути, а з�
 
 ## Owner-approved 30d indicators — 2026-10-26
 Точный research-only контракт №10/13/16/23/24/25 принадлежит `docs/RESEARCH_COMPUTE_RULES_RU.md §21.8`; навигация — `docs/DOCUMENTATION_INDEX_RU.md §57`. Только описательное историческое исследование, не LIVE и не автоматический RESEARCH-READY.
+
+## REAL readiness preparation — OWNER DECISION 2026-11-02
+Обычная остановленная служба будущего REAL-контура должна восстанавливаться через generic bounded preparation, а не ручное администрирование владельцем. `REAL Readiness Coordinator` и узкий `Service Start Broker` не заменяют OWNER ARM и не получают торговые права. Канон: ARCH §52, DEVELOPMENT_RELEASE §51, GLOSSARY §40; status: MAP / Issue #343.

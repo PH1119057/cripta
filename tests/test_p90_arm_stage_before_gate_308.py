@@ -72,5 +72,5 @@ def test_observer_stage_builds_full_runtime_but_exposes_no_admission() -> None:
 
 def test_ui_explains_gate_closed_stage_and_allows_bounded_wait() -> None:
     assert "проверяется полный runtime · mainnet gate пока CLOSED" in UI
-    assert "180000" in UI
+    assert "300000" in UI
     assert "Если проверка не пройдёт — gate не откроется." in UI
