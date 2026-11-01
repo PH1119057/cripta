@@ -971,8 +971,19 @@ document.getElementById('p90ArmCopyResult')?.addEventListener('click',async()=>{
 async function changeP90RealV3Arm(enabled){
   if(gateChanging)return;
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus');
-  const requestId=`p90-owner-arm-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const finish=beginTimedStatus(status,enabled?'Проверяю P90 REAL v3 перед открытием mainnet gate':'Отключаю P90 REAL v3');
+  const requestId='p90-owner-arm-'+Date.now()+'-'+Math.random().toString(16).slice(2);
+  const finish=beginTimedStatus(status,enabled?'Проверяю и подготавливаю P90 REAL v3':'Отключаю P90 REAL v3');
+  const progress={done:false};
+  const poll=enabled?(async()=>{
+    while(!progress.done){
+      await new Promise(resolve=>setTimeout(resolve,750));
+      try{
+        await readLiveStateOnce();
+        const op=window.p90ArmStatus?.readiness_operation;
+        if(op)setOperationStatus(status,op.state==='BLOCKED'?'error':'warn',p90ReadinessOperationText(op)+(op.state==='READY_FOR_OWNER_ARM'?' · выполняю финальный OWNER ARM':' · mainnet gate CLOSED'));
+      }catch(_){}
+    }
+  })():Promise.resolve();
   gateChanging=true;tradeGateButton.disabled=true;if(button)button.disabled=true;
   try{
     await livePostTimed('/api/p90l90/real-v3/arm',{enabled,confirmed:enabled,request_id:requestId},180000);
@@ -981,10 +992,15 @@ async function changeP90RealV3Arm(enabled){
     finish('success',enabled?'ГОТОВО · P90 REAL v3 MICRO_LIVE ARMED':'ГОТОВО · P90 REAL v3 DISARMED');
     recordP90ArmResult('success',enabled?'P90 REAL v3 MICRO_LIVE ARMED':'P90 REAL v3 DISARMED',requestId);
   }catch(e){
-    finish('error','OWNER ARM отклонён · подробности ниже');
-    recordP90ArmResult('error',e.message,requestId);
+    await readLiveStateOnce().catch(()=>{});
+    const op=window.p90ArmStatus?.readiness_operation;
+    const visible=op?.state==='BLOCKED'?p90ReadinessOperationText(op):e.message;
+    finish('error',visible||'OWNER ARM отклонён');
+    recordP90ArmResult('error',visible||e.message,requestId);
     throw e;
   }finally{
+    progress.done=true;
+    await poll.catch(()=>{});
     gateChanging=false;
     await readLiveStateOnce().catch(()=>{});
     await loadStrategies(true).catch(()=>{});
