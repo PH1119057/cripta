@@ -466,6 +466,10 @@ def _force_diagnostic_exit(
             {
                 "diagnostic_run_id": run_id,
                 "diagnostic_source": RUNTIME_SOURCE,
+                # A complete ordinary Exit fact snapshot: fallback TP/SL rules
+                # are evaluated as false at zero PnL while the explicit
+                # diagnostic event rule evaluates true.
+                "directional_pnl_pct": "0",
             }
         ),
         source_refs=(
