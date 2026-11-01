@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import json
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -21,9 +21,9 @@ from bybit_workbench.universal_entry.contracts import (
     StrategyActivation,
     TradeDirection,
 )
-from bybit_workbench.universal_entry.materializer import materialize_plans
-from bybit_workbench.universal_entry.fingerprint import canonical_json
 from bybit_workbench.universal_entry import runtime_loader
+from bybit_workbench.universal_entry.fingerprint import canonical_json
+from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 from bybit_workbench.universal_exit.contracts import (
     ExitActionKind,
@@ -164,6 +164,7 @@ def test_mapping_sequence_row_preserves_mapping_and_positional_reads() -> None:
     assert row["second"] == "beta"
     assert row[0] == "alpha"
     assert row[2] == "gamma"
+    assert row[1:3] == ("beta", "gamma")
     assert dict(row) == {
         "first": "alpha",
         "second": "beta",
