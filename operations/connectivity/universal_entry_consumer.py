@@ -14,6 +14,9 @@ from psycopg.rows import dict_row
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
+from bybit_workbench.strategy_execution_binding_policy import (
+    real_binding_allocation_allowed,
+)
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -617,7 +620,11 @@ def _admission_pre_dispatch_status(
         or str(binding["execution_leg"]) != request.execution_leg
         or str(binding["execution_role"]) != "PRIMARY"
         or str(binding["trading_account_id"]) != request.trading_account_id
-        or str(binding["allocation_mode"]) != "DEDICATED_STRATEGY"
+        or not real_binding_allocation_allowed(
+            strategy_id=request.strategy_id,
+            strategy_version=request.strategy_version,
+            allocation_mode=str(binding["allocation_mode"]),
+        )
         or str(binding["binding_state"]) != "ACTIVE"
         or binding["effective_from"].astimezone(UTC) > now
         or (
