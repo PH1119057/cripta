@@ -427,6 +427,65 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
             ),
         )
 
+        # Production regression: the previous diagnostic pre-mutation failure
+        # latched only this SUB account. V3 owner-control may clear that exact
+        # latch only after the fresh flat signed account-mode proof above.
+        prior_run_id = "owner-fc-ci-prior-pre-mutation"
+        prior_command_id = "ue-ci-prior-pre-mutation"
+        prior_at = run_at - timedelta(seconds=1)
+        connection.execute(
+            """INSERT INTO runtime.trade_commands(
+                   command_id,command_type,symbol,payload_json,state,
+                   requested_at_epoch_ms,started_at_epoch_ms,finished_at_epoch_ms,
+                   error,strategy_execution_binding_id,execution_leg,
+                   trading_account_id,identity_status)
+               VALUES(%s,'entry','ARBUSDT','{}'::jsonb,'failed',
+                      %s,%s,%s,'PRE_MUTATION_SAFETY_BLOCK:PreMutationSafetyBlock',
+                      %s,'PRIMARY',%s,'PROVEN')""",
+            (
+                prior_command_id,
+                int(prior_at.timestamp() * 1000),
+                int(prior_at.timestamp() * 1000),
+                int(prior_at.timestamp() * 1000),
+                "binding-owner-full-contour-sub-v2-20261101",
+                SUB_ACCOUNT,
+            ),
+        )
+        connection.execute(
+            """INSERT INTO control.owner_full_contour_diagnostic_runs(
+                   run_id,requested_at,requested_by,source,symbol,direction,
+                   strategy_id,strategy_version,strategy_config_fingerprint,
+                   strategy_activation_id,strategy_execution_binding_id,
+                   trading_account_id,account_connector_id,release_commit,state,
+                   entry_command_id,error,completed_at,updated_at)
+               VALUES(%s,%s,'owner','dashboard:owner-full-contour-diagnostic',
+                      'ARBUSDT','LONG',%s,
+                      '2.0-owner-full-contour-e2e-20261101',%s,
+                      'activation-owner-full-contour-sub-v2-20261101',
+                      'binding-owner-full-contour-sub-v2-20261101',
+                      %s,%s,%s,'FAILED',%s,
+                      'PRE_MUTATION_SAFETY_BLOCK:PreMutationSafetyBlock',
+                      %s,%s)""",
+            (
+                prior_run_id,
+                prior_at,
+                diagnostic.SUB_ID,
+                "d" * 64,
+                SUB_ACCOUNT,
+                diagnostic.SUB_CONNECTOR_ID,
+                release_commit,
+                prior_command_id,
+                prior_at,
+                prior_at,
+            ),
+        )
+        connection.execute(
+            """INSERT INTO runtime.account_entry_safety_blocks(
+                   trading_account_id,account_connector_id,blocked_at,reason)
+               VALUES(%s,%s,%s,'PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED')""",
+            (SUB_ACCOUNT, diagnostic.SUB_CONNECTOR_ID, prior_at),
+        )
+
         # Regression for the production 2026-11-01 authenticated trigger
         # failure: control.execution_gates.enabled is SMALLINT, while the historical v2
         # SECURITY DEFINER account-arm function had compared it with boolean
@@ -443,6 +502,11 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         assert requested["symbol"] == "ARBUSDT"
         assert requested["direction"] == "LONG"
         assert requested["state"] == "REQUESTED"
+        assert connection.execute(
+            """SELECT count(*) FROM runtime.account_entry_safety_blocks
+                WHERE trading_account_id=%s AND account_connector_id=%s""",
+            (SUB_ACCOUNT, diagnostic.SUB_CONNECTOR_ID),
+        ).fetchone() == (0,)
         assert connection.execute(
             "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
         ).fetchone() == (1,)
