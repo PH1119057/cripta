@@ -21,7 +21,7 @@ def start_services(
     release_commit: str,
     units: tuple[str, ...],
     socket_path: Path = DEFAULT_SOCKET,
-    timeout_seconds: float = 30.0,
+    timeout_seconds: float = 75.0,
 ) -> dict[str, Any]:
     if not units:
         return {
