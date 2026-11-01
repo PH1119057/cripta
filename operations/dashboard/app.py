@@ -54,6 +54,26 @@ from bybit_workbench.p90l90_real_staged_arm import (
 from bybit_workbench.p90l90_real_prearm_evidence import (
     prepare_p90l90_real_v3_prearm_evidence,
 )
+from bybit_workbench.real_readiness_control import (
+    begin_operation as begin_real_readiness_operation,
+    latest_operation as latest_real_readiness_operation,
+    mark_blocked as mark_real_readiness_blocked,
+    mark_ready as mark_real_readiness_ready,
+    set_state as set_real_readiness_state,
+)
+from bybit_workbench.real_service_broker_client import (
+    ServiceBrokerClientError,
+    start_services as broker_start_services,
+)
+from bybit_workbench.real_service_profiles import p90_real_v3_service_specs
+from bybit_workbench.real_service_readiness import (
+    ServiceReadinessError,
+    plan_service_starts,
+)
+from bybit_workbench.real_service_runtime import (
+    collect_systemd_snapshots,
+    wait_services_active,
+)
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID as P90_MAIN_ID
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID as P90_SUB_ID
 from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
@@ -5209,6 +5229,216 @@ def _u6_p90_real_v3_prearm_evidence(
     _u6_json(handler, 200, result)
 
 
+P90_REAL_READINESS_SCOPE_KEY = "P90_REAL_V3"
+P90_REAL_MAIN_ACCOUNT_ID = "ta-2122c81ecff14f3b85b102db605212f7"
+P90_REAL_SUB_ACCOUNT_ID = "ta-853ac5fcd58185697396d33cd57459fa"
+
+
+def _readiness_operation_json(value: dict[str, object] | None) -> dict[str, object] | None:
+    if value is None:
+        return None
+    result = dict(value)
+    for key in ("created_at", "updated_at", "completed_at"):
+        item = result.get(key)
+        if isinstance(item, datetime):
+            result[key] = item.isoformat()
+    return result
+
+
+def _mark_p90_readiness_blocked(
+    *,
+    request_id: str,
+    code: str,
+    detail: str,
+    retry_eligible: bool,
+    progress: dict[str, object] | None = None,
+) -> dict[str, object]:
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        mark_real_readiness_blocked(
+            connection,
+            request_id=request_id,
+            code=code,
+            detail=detail,
+            retry_eligible=retry_eligible,
+            now=datetime.now(UTC),
+            progress=progress,
+        )
+        return _readiness_operation_json(
+            latest_real_readiness_operation(
+                connection,
+                scope_key=P90_REAL_READINESS_SCOPE_KEY,
+            )
+        ) or {}
+
+
+def _u6_prepare_p90_real_v3_readiness(
+    *,
+    operator: str,
+    request_id: str,
+) -> dict[str, object]:
+    scope = {
+        "kind": P90_REAL_READINESS_SCOPE_KEY,
+        "strategy_ids": [P90_MAIN_ID, P90_SUB_ID],
+        "trading_account_ids": [
+            P90_REAL_MAIN_ACCOUNT_ID,
+            P90_REAL_SUB_ACCOUNT_ID,
+        ],
+    }
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        operation = begin_real_readiness_operation(
+            connection,
+            request_id=request_id,
+            operator=operator,
+            release_commit=LOADED_RELEASE_COMMIT,
+            scope_key=P90_REAL_READINESS_SCOPE_KEY,
+            scope=scope,
+            now=datetime.now(UTC),
+        )
+    if str(operation.get("state") or "") == "READY_FOR_OWNER_ARM":
+        return _readiness_operation_json(operation) or {}
+
+    specs = p90_real_v3_service_specs(sub_account_id=P90_REAL_SUB_ACCOUNT_ID)
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            set_real_readiness_state(
+                connection,
+                request_id=request_id,
+                state="CHECKING",
+                phase="checking_services",
+                now=datetime.now(UTC),
+                progress={"required_services": len(specs)},
+            )
+
+        snapshots = collect_systemd_snapshots(
+            specs=specs,
+            release_commit=LOADED_RELEASE_COMMIT,
+        )
+        plan = plan_service_starts(
+            release_commit=LOADED_RELEASE_COMMIT,
+            trading_account_id=P90_REAL_SUB_ACCOUNT_ID,
+            account_connector_id="ac-ec57819f875f1bfd929a382d6dc8a125",
+            verified_specs=specs,
+            snapshots=snapshots,
+        )
+        if plan.blockers:
+            return _mark_p90_readiness_blocked(
+                request_id=request_id,
+                code="SERVICE_PREFLIGHT_BLOCKED",
+                detail=";".join(plan.blockers),
+                retry_eligible=False,
+                progress={
+                    "required_services": len(specs),
+                    "service_blockers": list(plan.blockers),
+                },
+            )
+
+        if plan.starts:
+            with psycopg.connect(
+                "dbname=cripta user=cripta host=/var/run/postgresql"
+            ) as connection:
+                set_real_readiness_state(
+                    connection,
+                    request_id=request_id,
+                    state="STARTING_SERVICES",
+                    phase="starting_services",
+                    now=datetime.now(UTC),
+                    progress={
+                        "required_services": len(specs),
+                        "starting": list(plan.starts),
+                    },
+                )
+            broker_result = broker_start_services(
+                request_id=request_id,
+                release_commit=LOADED_RELEASE_COMMIT,
+                units=plan.starts,
+            )
+            active, missing = wait_services_active(specs=specs)
+            if not active:
+                return _mark_p90_readiness_blocked(
+                    request_id=request_id,
+                    code="SERVICE_START_TIMEOUT",
+                    detail=",".join(missing),
+                    retry_eligible=True,
+                    progress={
+                        "broker": broker_result,
+                        "missing_services": list(missing),
+                    },
+                )
+
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            set_real_readiness_state(
+                connection,
+                request_id=request_id,
+                state="RECONCILING",
+                phase="reconciling_runtime",
+                now=datetime.now(UTC),
+                progress={"services_active": len(specs)},
+            )
+        # The existing technical evidence owner performs fresh account,
+        # observer, lifecycle, release and reconciliation checks. A service
+        # being active is deliberately not sufficient.
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            set_real_readiness_state(
+                connection,
+                request_id=request_id,
+                state="VALIDATING",
+                phase="validating_full_evidence",
+                now=datetime.now(UTC),
+                progress={"services_active": len(specs)},
+            )
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as evidence_connection:
+            evidence = prepare_p90l90_real_v3_prearm_evidence(
+                evidence_connection,
+                release_commit=LOADED_RELEASE_COMMIT,
+                now=datetime.now(UTC),
+            )
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            mark_real_readiness_ready(
+                connection,
+                request_id=request_id,
+                now=datetime.now(UTC),
+                progress={
+                    "services_active": len(specs),
+                    "technical_evidence_status": evidence.get("status"),
+                },
+            )
+            return _readiness_operation_json(
+                latest_real_readiness_operation(
+                    connection,
+                    scope_key=P90_REAL_READINESS_SCOPE_KEY,
+                )
+            ) or {}
+    except (ServiceBrokerClientError, ServiceReadinessError, OSError) as exc:
+        return _mark_p90_readiness_blocked(
+            request_id=request_id,
+            code="SERVICE_RECOVERY_FAILED",
+            detail=str(exc),
+            retry_eligible=False,
+        )
+    except Exception as exc:
+        return _mark_p90_readiness_blocked(
+            request_id=request_id,
+            code="TECHNICAL_EVIDENCE_BLOCKED",
+            detail=f"{type(exc).__name__}:{exc}",
+            retry_eligible=False,
+        )
+
+
 def _u6_p90_real_v3_arm(
     handler: object, request: dict[str, object]
 ) -> None:
@@ -5220,10 +5450,19 @@ def _u6_p90_real_v3_arm(
     operator = handler.session_user() or "UNKNOWN"
     request_id = str(request.get("request_id") or secrets.token_hex(12))
     if enabled:
-        # A previous PREARM_TECHNICAL_READY is not a durable LIVE authorization.
-        # Technical evidence expires after 90 seconds. Refresh the full, real
-        # source/account/observer/lifecycle proof only on an explicit owner click.
-        # A failure here must abort before any LIVE-arm session or gate mutation.
+        preparation = _u6_prepare_p90_real_v3_readiness(
+            operator=operator,
+            request_id=request_id,
+        )
+        if preparation.get("state") != "READY_FOR_OWNER_ARM":
+            raise ValueError(
+                "P90_REAL_PREPARATION_BLOCKED:"
+                + str(preparation.get("blocker_code") or "UNKNOWN")
+                + ":"
+                + str(preparation.get("blocker_detail") or "")
+            )
+        # READY_FOR_OWNER_ARM is technical state only. Re-run exact evidence
+        # immediately before the existing staged/final OWNER ARM transaction.
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as evidence_connection:
