@@ -93,7 +93,7 @@ def _current_reference_price(
 ) -> tuple[Decimal, str]:
     row = connection.execute(
         """SELECT e.epoch_id,c.updated_at,
-                  c.entry_checkpoint_json->>'previous_price'
+                  c.entry_checkpoint_json->>'previous_price' AS previous_price
              FROM strategy_entry.p90l90_real_source_epochs e
              JOIN strategy_entry.p90l90_real_causal_checkpoints c
                ON c.epoch_id=e.epoch_id
