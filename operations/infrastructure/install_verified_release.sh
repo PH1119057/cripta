@@ -654,24 +654,31 @@ systemctl disable cripta-release-controller.service >/dev/null
 controller_enabled_state="$(systemctl is-enabled cripta-release-controller.service 2>/dev/null || true)"
 [[ "$controller_enabled_state" == "disabled" ]] ||
   die "release controller must remain disabled/manual-only"
-for service in "${managed_services[@]}"; do
-  if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
-done
-for service in "${managed_services[@]}"; do
-  if [[ "${was_active[$service]}" == "1" ]]; then
-    systemctl is-active --quiet "$service" || die "service failed after deploy: $service"
-  else
-    systemctl is-active --quiet "$service" && die "previously inactive service became active: $service"
-  fi
-done
 
-# Management-plane broker is intentionally available after release even on
-# first install. It has no trading authority and cannot open gate/arms.
+# The management-plane broker must be available before Dashboard accepts an
+# owner preparation click. It has no trading authority and cannot open gate/arms.
 systemctl enable cripta-real-service-broker.service >/dev/null
 systemctl start cripta-real-service-broker.service
 systemctl is-active --quiet cripta-real-service-broker.service ||
   die "REAL service broker failed after deploy"
 echo "REAL_SERVICE_BROKER=ACTIVE"
+
+for service in "${managed_services[@]}"; do
+  if [[ "$service" == "cripta-real-service-broker.service" ]]; then
+    continue
+  fi
+  if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
+done
+for service in "${managed_services[@]}"; do
+  if [[ "$service" == "cripta-real-service-broker.service" ]]; then
+    systemctl is-active --quiet "$service" ||
+      die "REAL service broker became inactive during deploy"
+  elif [[ "${was_active[$service]}" == "1" ]]; then
+    systemctl is-active --quiet "$service" || die "service failed after deploy: $service"
+  else
+    systemctl is-active --quiet "$service" && die "previously inactive service became active: $service"
+  fi
+done
 
 gate_after="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
 permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
