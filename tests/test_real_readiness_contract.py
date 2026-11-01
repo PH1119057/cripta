@@ -119,6 +119,13 @@ def test_dashboard_contains_persistent_friendly_preparation_states():
     assert "проверяем обязательные службы" in ui
     assert "запускаем недостающие службы" in ui
     assert "подготовка заблокирована" in ui
+    assert 'id="p90RealV3ArmButton" class="action danger" type="button" hidden disabled' in ui
+    assert "handleP90RealV3GateClick" in ui
+    assert "Открыть P90 REAL v3" in ui
+    assert (
+        "if(exactP90RealV3Cohort()||p90RealV3OwnerArmPresent())"
+        in ui
+    )
     assert "mainnet gate CLOSED" in ui
     assert (
         "livePostTimed('/api/p90l90/real-v3/arm',"
