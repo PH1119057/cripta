@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.35
+**Версия:** 12.36
 **Дата:** 2026-11-01
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -912,33 +912,53 @@ contract требуется новое подтверждённое `position_mo
 
 OWNER DECISION 2026-11-01: утверждены два разных owner diagnostic capability.
 Existing execution smoke остаётся downstream transport-проверкой без Strategy
-lineage. Новый `Owner-controlled full-contour REAL diagnostic` должен иметь
-отдельную diagnostic Strategy identity и по explicit authenticated owner trigger
-проходить обычный Universal Entry -> real admission -> EntryExecutionRequest ->
-Execution -> StrategyPosition -> Universal Exit lifecycle. Exact risk v1:
-10 USDT, 1x, MARKET, SL -0.5%, TP +0.5% от actual fill; P90 statistics/research
-его исключают. Canon owner: TRADING_CONTOUR §4.8.2 / ARCH §7.1.
+lineage. `Owner-controlled full-contour REAL diagnostic` предназначен для
+детерминированной немедленной проверки всего production lifecycle, чтобы
+естественный рыночный сигнал не был первым end-to-end тестом.
 
-Текущий status split:
+Exact v2 owner decision recorded in Issue #308 at
+`2026-11-01T10:05:57Z`. Diagnostic v2 имеет отдельную immutable version
+`2.0-owner-full-contour-e2e-20261101` и выполняет:
+`authenticated owner trigger -> Universal Entry -> real Entry/Execution ->
+StrategyPosition + confirmed initial protection -> OWNER_FULL_CONTOUR_EXIT_TRIGGER
+-> Universal Exit -> real MARKET close -> terminal reconciliation`.
+Он не ждёт естественный P90 Entry и не ждёт достижения ±0.5% для проверки Exit.
+Initial SL -0.5% остаётся Exchange-resident safety containment; 10 USDT, 1x,
+MARKET, ONE_WAY сохраняются. P90 statistics/research diagnostic identity
+исключают. Canon owner: TRADING_CONTOUR §4.8.2 / ARCH §7.1.
+
+V2 также устраняет зависимость diagnostic от полного P90 OWNER ARM: exact parent
+P90 StrategyActivation + `DEDICATED_STRATEGY` binding остаются owner/route
+proof, но parent P90 execution permission и generic/account OWNER ARM должны
+оставаться OFF. Diagnostic создаёт только собственный scoped Entry permission /
+generic+account arm, открывает global NEW-Entry gate LAST и закрывает его после
+Entry dispatch/terminal failure. Universal Exit продолжает lifecycle при
+закрытом Entry gate.
+
+Current implementation changeset additionally preserves immutable v1 history:
+v1 StrategyCard/EntryPlan/ExitPlan are not rewritten; installer retires exact v1
+activation/binding and installs new v2 activation/binding atomically while fully
+DISARMED. Production-like PostgreSQL regression covers this transition.
+
+Текущий status split для v2 после merge changeset:
 ```text
-FULL_CONTOUR_DIAGNOSTIC_CANON       = YES
-FULL_CONTOUR_DIAGNOSTIC_IMPLEMENTED = YES
-FULL_CONTOUR_DIAGNOSTIC_DEPLOYED    = RUNTIME_EVIDENCE_REQUIRED
+FULL_CONTOUR_DIAGNOSTIC_V2_CANON       = YES
+FULL_CONTOUR_DIAGNOSTIC_V2_IMPLEMENTED = YES
+FULL_CONTOUR_DIAGNOSTIC_V2_DEPLOYED    = RUNTIME_EVIDENCE_REQUIRED
+FULL_CONTOUR_DIAGNOSTIC_V2_REAL_E2E    = NOT CHECKED HERE
 ```
 
-`IMPLEMENTED=YES` означает наличие merged implementation в canonical GitHub
-`main` после PR #325 с production-blocking migration hotfix PR #327 и SQL-tail
-hotfix PR #330. Production attempts on 2026-11-01 additionally proved a
-StrategyExecutionBinding ownership conflict: diagnostic registration cannot use
-a second ACTIVE `DEDICATED_STRATEGY` binding on the already dedicated P90
-TradingAccount.  OWNER DECISION 2026-11-01 therefore requires the exact
-subordinate exception `SUBORDINATE_DIAGNOSTIC` from TRADING_CONTOUR
-§4.8.2/§7.3 and ARCH §7.1; implementation/deploy of that exception remains
-separate evidence and does not imply LIVE.
-`DEPLOYED` нельзя выводить из этого документа: его authoritative status
-задаётся только exact release identity + runtime evidence по §10 project
-status model. Поэтому здесь намеренно нет hard-coded `DEPLOYED=YES/NO`,
-который мог бы устареть без изменения канона.
+Historical v1/subordinate deployment on `e221a5ea...` remains evidence, not v2
+runtime proof. Production readiness finding from the same date: MAIN contains
+historical LTC `ENTRY_EXECUTION_AMBIGUOUS` /
+`EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN` with an unresolved
+`RECONCILIATION_REQUIRED` slot, while SUB was independently clean. V2 permits
+an exact SUB diagnostic to proceed when selected-account/global gates pass;
+unrelated MAIN account-scoped fault does not become a SUB blocker.
+
+`DEPLOYED` и real E2E PASS нельзя выводить из этого документа: authoritative
+status задаётся only exact release identity + runtime/Exchange evidence по §10
+project status model.
 
 IMPLEMENTED / DEPLOYED 2026-09-21:
 - durable `runtime.position_mode_states`;
