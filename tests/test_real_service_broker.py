@@ -5,7 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from operations.management import real_service_broker as broker
+broker = pytest.importorskip(
+    "operations.management.real_service_broker",
+    reason="REAL service broker is a POSIX-only production component",
+)
 
 
 def request(*units: str) -> dict[str, object]:
