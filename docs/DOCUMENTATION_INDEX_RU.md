@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.44
-**Дата:** 2026-10-30
+**Версия:** 3.45
+**Дата:** 2026-11-01
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -373,6 +373,23 @@ Project Source size or Project Instructions bootstrap.
   and does not transfer to another Strategy/version/cohort or wider risk scope.
 - This change does not modify the active 11-file Project Source set, paths,
   mandatory pre-read, routing, README/AGENTS entrypoints or Project Instructions.
+
+## 17.1.5 Deterministic full-contour REAL diagnostic v2 — OWNER DECISION 2026-11-01
+
+- Canonical trading contract: `TRADING_CONTOUR §4.8.2`.
+- Cross-layer ownership boundary: `CRIPTA_ARCHITECTURE_RULES §7.1`.
+- Exact trigger terms: `CRIPTA_GLOSSARY`
+  `OWNER_FULL_CONTOUR_TRIGGER` / `OWNER_FULL_CONTOUR_EXIT_TRIGGER`.
+- Current implementation/deploy evidence mirror: `CURRENT_PROJECT_MAP`.
+- Issue #308 is the durable implementation checkpoint.
+- V2 is a deterministic real end-to-end diagnostic: it injects only the first
+  Entry fact and, after confirmed OPEN + initial protection, one diagnostic
+  ExitObservation. Universal Entry/Execution/Universal Exit retain their normal
+  owners; direct control-plane StrategySignal/EntryDecision/ExitDecision/close
+  shortcuts remain forbidden.
+- The active 11-file Project Source set, document paths, mandatory pre-read,
+  routed reading, README/AGENTS entrypoints and Project Instructions bootstrap
+  are unchanged by this revision.
 
 ## 17.2 Нумерация и ссылки
 
