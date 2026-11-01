@@ -226,6 +226,21 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                    control.account_live_arm_sessions
                TO cripta"""
         )
+        connection.execute(
+            """GRANT UPDATE ON
+                   control.execution_gates,
+                   strategy_entry.execution_permissions,
+                   control.live_arm_sessions,
+                   control.owner_full_contour_diagnostic_runs
+               TO cripta"""
+        )
+        connection.execute(
+            """GRANT INSERT ON
+                   control.execution_gate_events,
+                   control.live_arm_sessions,
+                   control.owner_full_contour_diagnostic_runs
+               TO cripta"""
+        )
         connection.execute("SET SESSION AUTHORIZATION cripta")
         assert connection.execute(
             "SELECT session_user,current_user"
