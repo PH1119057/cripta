@@ -386,4 +386,32 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
             (MAIN_ID, SUB_ID),
         ).fetchone() == (0,)
 
+        # A later verified release must be able to read back the already
+        # installed immutable capability while this diagnostic runtime state is
+        # active. The installer must neither require disarm nor mutate it.
+        install(connection)
+        assert connection.execute(
+            """SELECT count(*) FROM strategy_entry.execution_permissions
+                WHERE enabled=true
+                  AND strategy_id=%s
+                  AND strategy_version=%s""",
+            (diagnostic.SUB_ID, diagnostic.VERSION),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM control.live_arm_sessions
+                WHERE state='ACTIVE'
+                  AND strategy_id=%s
+                  AND strategy_version=%s
+                  AND symbol='ARBUSDT'""",
+            (diagnostic.SUB_ID, diagnostic.VERSION),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM control.account_live_arm_sessions
+                WHERE state='ACTIVE'
+                  AND strategy_id=%s
+                  AND strategy_version=%s
+                  AND symbol='ARBUSDT'""",
+            (diagnostic.SUB_ID, diagnostic.VERSION),
+        ).fetchone() == (1,)
+
         raise RuntimeError("ROLLBACK_OWNER_FULL_CONTOUR_SUBORDINATE")
