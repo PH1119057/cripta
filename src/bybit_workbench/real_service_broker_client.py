@@ -14,6 +14,15 @@ MAX_RESPONSE_BYTES = 65536
 class ServiceBrokerClientError(RuntimeError):
     """Broker unavailable or request rejected."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        response: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.response = response
+
 
 def start_services(
     *,
@@ -60,7 +69,12 @@ def start_services(
         raise ServiceBrokerClientError("SERVICE_BROKER_RESPONSE_INVALID")
     if decoded.get("ok") is not True:
         reason = str(decoded.get("error") or "SERVICE_BROKER_REJECTED")
-        raise ServiceBrokerClientError(reason)
+        units = decoded.get("units")
+        if isinstance(units, list) and units:
+            last = units[-1]
+            if isinstance(last, dict) and last.get("detail"):
+                reason += ":" + str(last["detail"])[:300]
+        raise ServiceBrokerClientError(reason, response=decoded)
     if str(decoded.get("request_id") or "") != request_id:
         raise ServiceBrokerClientError("SERVICE_BROKER_REQUEST_ID_MISMATCH")
     if str(decoded.get("release_commit") or "") != release_commit:
