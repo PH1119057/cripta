@@ -551,6 +551,7 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         # Production regression: the previous diagnostic pre-mutation failure
         # latched only this SUB account. V3 owner-control may clear that exact
         # latch only after the fresh flat signed account-mode proof above.
+        connection.execute("RESET SESSION AUTHORIZATION")
         prior_run_id = "owner-fc-ci-prior-pre-mutation"
         prior_command_id = "ue-ci-prior-pre-mutation"
         prior_at = run_at - timedelta(seconds=1)
@@ -606,6 +607,10 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                VALUES(%s,%s,%s,'PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED')""",
             (SUB_ACCOUNT, diagnostic.SUB_CONNECTOR_ID, prior_at),
         )
+        connection.execute("SET SESSION AUTHORIZATION cripta")
+        assert connection.execute(
+            "SELECT session_user,current_user"
+        ).fetchone() == ("cripta", "cripta")
 
         # Regression for the production 2026-11-01 authenticated trigger
         # failure: control.execution_gates.enabled is SMALLINT, while the historical v2
