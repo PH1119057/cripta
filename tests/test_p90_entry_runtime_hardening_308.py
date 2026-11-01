@@ -91,3 +91,22 @@ def test_observer_latest_coin_context_lookup_is_index_bounded() -> None:
     assert "ORDER BY observed_at DESC" in body
     assert "LIMIT 1" in body
     assert "SELECT DISTINCT ON (linear_instrument_id)" not in body
+
+
+def test_primary_p90_owner_control_is_visible_and_single() -> None:
+    assert (
+        '<button id="tradeGateButton" class="action danger" type="button" hidden>'
+        in DASH
+    )
+    assert (
+        "#tradeGateButton,#tradeOperationStatus,#tradeGateNotice,"
+        "#tradeGateReasons,#gatewayReleaseStatus{display:none!important}"
+        not in DASH
+    )
+    assert (
+        "const primaryP90Control=cohort||armed||preparing||"
+        "operationState==='BLOCKED';"
+        in DASH
+    )
+    assert "tradeGateButton.hidden=!primaryP90Control;" in DASH
+    assert "button.hidden=true;" in DASH
