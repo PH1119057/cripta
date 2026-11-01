@@ -1329,6 +1329,13 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             scope_key=P90_REAL_READINESS_SCOPE_KEY,
         )
         readiness_projection = _readiness_operation_json(readiness_operation)
+        if (
+            readiness_projection is not None
+            and str(readiness_projection.get("release_commit") or "")
+            != LOADED_RELEASE_COMMIT
+        ):
+            p90_arm_status["previous_readiness_operation"] = readiness_projection
+            readiness_projection = None
         p90_arm_status["readiness_operation"] = readiness_projection
         if readiness_projection is not None:
             operation_state = str(readiness_projection.get("state") or "")
@@ -5421,7 +5428,7 @@ def _u6_prepare_p90_real_v3_readiness(
                     f"gate={gate};permissions={permission_count};"
                     f"live_arms={live_arm_count};account_arms={account_arm_count}"
                 ),
-                retry_eligible=False,
+                retry_eligible=True,
             )
 
         with psycopg.connect(
@@ -5554,7 +5561,7 @@ def _u6_prepare_p90_real_v3_readiness(
             request_id=request_id,
             code="SERVICE_PREFLIGHT_BLOCKED",
             detail=str(exc),
-            retry_eligible=False,
+            retry_eligible=True,
         )
     except Exception as exc:
         return _mark_p90_readiness_blocked(
