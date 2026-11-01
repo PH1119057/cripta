@@ -139,6 +139,46 @@ def test_inactive_unit_uses_exact_systemctl_argv(monkeypatch: pytest.MonkeyPatch
     ]
 
 
+def test_request_deadline_prevents_late_second_start(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(broker, "verify_release", lambda _commit: None)
+    monkeypatch.setattr(
+        broker,
+        "_systemctl_show",
+        lambda unit: {
+            "LoadState": "loaded",
+            "ActiveState": "inactive",
+            "FragmentPath": "/etc/systemd/system/" + unit,
+        },
+    )
+    starts: list[str] = []
+    monkeypatch.setattr(
+        broker,
+        "_start_unit",
+        lambda unit: (starts.append(unit) is None or True, "active"),
+    )
+    ticks = iter((0.0, 0.0, 61.0))
+    monkeypatch.setattr(broker.time, "monotonic", lambda: next(ticks))
+    result = broker.handle_request(
+        request(
+            "cripta-private-runtime.service",
+            "cripta-universal-entry-consumer.service",
+        )
+    )
+    assert result["ok"] is False
+    assert result["error"] == "SERVICE_START_DEADLINE_EXCEEDED"
+    assert starts == ["cripta-private-runtime.service"]
+
+
+def test_broker_main_isolates_peer_io_errors() -> None:
+    source = broker.__file__
+    assert source is not None
+    text = open(source, encoding="utf-8").read()
+    assert "except OSError:" in text
+    assert "must not terminate the privileged broker process" in text
+
+
 def test_release_identity_must_match_both_files(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
