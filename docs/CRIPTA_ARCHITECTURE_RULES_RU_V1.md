@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.4
-**Дата:** 2026-10-28
+**Версия:** 3.5
+**Дата:** 2026-11-01
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -474,6 +474,20 @@ The full-contour diagnostic MUST:
   dispatch or terminal failure;
 - fail closed on occupied symbol, stale account truth, closed gate, wrong
   release, missing owner trigger or ambiguous Exchange mutation.
+
+OWNER DECISION 2026-11-01 — the full-contour diagnostic is the single explicit
+exception to ordinary dedicated-account exclusivity.  It is not a second normal
+REAL allocation and does not create a general shared-account mode.  Its exact
+StrategyExecutionBinding uses allocation mode `SUBORDINATE_DIAGNOSTIC` and may
+share only the already dedicated TradingAccount of its exact parent P90 REAL v3
+Strategy.  The parent `DEDICATED_STRATEGY` binding must remain ACTIVE, and the
+parent permission plus release-bound generic/account OWNER ARM for the selected
+symbol must be active before the diagnostic trigger and remain valid through
+Entry dispatch.  The diagnostic keeps the same account-scoped capital,
+physical-slot, private-state and reconciliation owners; it receives no separate
+capital pool, netting right or fallback account.  Ordinary Strategies and
+generic shared-account execution remain governed by the dedicated isolation
+rule in TRADING_CONTOUR §7.3.
 
 Dashboard is control UI only: it MUST NOT synthesize StrategySignal,
 EntryDecision, EntryExecutionRequest or StrategyPosition rows.
