@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import psycopg
-from psycopg.rows import dict_row
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
@@ -50,6 +49,7 @@ from bybit_workbench.universal_entry.owner_full_contour_runtime import (
     materialize_requested_run,
     refresh_run_lifecycle,
 )
+from bybit_workbench.universal_entry.runtime_loader import mapping_sequence_row
 
 CURRENT_ACCOUNT_REF = "BYBIT:UNIFIED"
 CURRENT_POSITION_IDX = 0
@@ -1588,7 +1588,7 @@ def main() -> int:
     next_health_at = 0.0
     ready = False
     reasons: tuple[str, ...] = ("STARTING",)
-    with psycopg.connect(DB_DSN, row_factory=dict_row) as connection:
+    with psycopg.connect(DB_DSN, row_factory=mapping_sequence_row) as connection:
         while running:
             current = datetime.now(UTC)
             monotonic_now = time.monotonic()
