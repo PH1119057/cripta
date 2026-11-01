@@ -19,6 +19,7 @@ from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActi
 from bybit_workbench.universal_entry.dashboard_control import card_from_editable
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
+    _policy as diagnostic_policy,
     MAIN_ACTIVATION_ID as DIAG_MAIN_ACTIVATION_ID,
     MAIN_BINDING_ID as DIAG_MAIN_BINDING_ID,
     MAIN_ID as DIAG_MAIN_ID,
@@ -26,7 +27,6 @@ from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
     SUB_BINDING_ID as DIAG_SUB_BINDING_ID,
     SUB_ID as DIAG_SUB_ID,
     VERSION as DIAG_VERSION,
-    _policy as diagnostic_policy,
 )
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
