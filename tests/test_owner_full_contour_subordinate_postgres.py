@@ -242,27 +242,53 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         install(connection)
 
         rows = connection.execute(
-            """SELECT a.strategy_id,b.trading_account_id,b.allocation_mode,b.binding_state
+            """SELECT a.strategy_id,a.activation_id,
+                      b.strategy_execution_binding_id,b.trading_account_id,
+                      b.allocation_mode,b.binding_state
                  FROM strategy_entry.strategy_activations a
                  JOIN strategy_entry.strategy_execution_bindings b
                    ON b.strategy_activation_id=a.activation_id
-                WHERE a.strategy_version='1.0-owner-full-contour-20261101'
-                ORDER BY a.strategy_id"""
+                WHERE a.strategy_version=%s
+                ORDER BY a.strategy_id""",
+            (DIAG_VERSION,),
         ).fetchall()
         assert rows == [
             (
-                "owner_full_contour_diag_main",
+                DIAG_MAIN_ID,
+                DIAG_MAIN_ACTIVATION_ID,
+                DIAG_MAIN_BINDING_ID,
                 MAIN_ACCOUNT,
                 "SUBORDINATE_DIAGNOSTIC",
                 "ACTIVE",
             ),
             (
-                "owner_full_contour_diag_sub",
+                DIAG_SUB_ID,
+                DIAG_SUB_ACTIVATION_ID,
+                DIAG_SUB_BINDING_ID,
                 SUB_ACCOUNT,
                 "SUBORDINATE_DIAGNOSTIC",
                 "ACTIVE",
             ),
         ]
+
+        old_rows = connection.execute(
+            """SELECT a.strategy_id,a.enabled,a.disabled_at,
+                      b.binding_state,b.effective_to
+                 FROM strategy_entry.strategy_activations a
+                 JOIN strategy_entry.strategy_execution_bindings b
+                   ON b.strategy_activation_id=a.activation_id
+                WHERE a.strategy_version=%s
+                ORDER BY a.strategy_id""",
+            (V1_DIAG_VERSION,),
+        ).fetchall()
+        assert len(old_rows) == 2
+        assert all(
+            enabled is False
+            and disabled_at is not None
+            and binding_state == "INACTIVE"
+            and effective_to is not None
+            for _sid, enabled, disabled_at, binding_state, effective_to in old_rows
+        )
 
         assert connection.execute(
             """SELECT count(*) FROM strategy_entry.strategy_execution_bindings
