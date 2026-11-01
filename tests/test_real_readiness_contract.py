@@ -53,7 +53,12 @@ def test_broker_systemd_unit_is_root_but_narrowly_sandboxed():
     assert "RestrictAddressFamilies=AF_UNIX" in unit
     assert "ReadWritePaths=/run/cripta-real-readiness" in unit
     assert "ProtectSystem=strict" in unit
-    assert "ExecStart=/usr/bin/python3" in unit
+    assert (
+        "ExecStart=/usr/bin/python3 "
+        "/usr/local/libexec/cripta-real-service-broker/real_service_broker.py"
+        in unit
+    )
+    assert "ReadOnlyPaths=/usr/local/libexec/cripta-real-service-broker" in unit
     assert "Environment=PYTHONNOUSERSITE=1" in unit
     assert "AF_INET" not in unit
     assert "sudo" not in unit
@@ -68,6 +73,9 @@ def test_verified_release_installs_broker_and_durable_state_but_does_not_arm():
     assert "systemctl enable cripta-real-service-broker.service" in installer
     assert "systemctl start cripta-real-service-broker.service" in installer
     assert "REAL_SERVICE_BROKER=ACTIVE" in installer
+    assert "REAL_SERVICE_BROKER_SOURCE_PREFLIGHT=PASS" in installer
+    assert "/usr/local/libexec/cripta-real-service-broker" in installer
+    assert '"$broker_staged"' in installer
 
 
 def test_readiness_migration_has_no_trading_effect_writes():
