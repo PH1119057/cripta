@@ -248,6 +248,14 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
     assert "p_release_commit !~ '^[0-9a-f]{40}     OR" not in MIGRATION
 
 
+
+def test_diagnostic_migration_ends_at_single_transaction_commit() -> None:
+    stripped = MIGRATION.rstrip()
+    assert stripped.endswith("COMMIT;")
+    assert stripped.count("\nCOMMIT;") == 1
+    assert "COMMIT;\n\n     OR p_symbol NOT IN" not in stripped
+
+
 def test_verified_release_registers_and_readbacks_diagnostic_capability() -> None:
     migration = "operations/sql/20261101_owner_full_contour_diagnostic.sql"
     installer = (
