@@ -234,9 +234,15 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         connection.execute(
             """GRANT SELECT ON
                    control.execution_gates,
+                   control.owner_full_contour_diagnostic_runs,
                    strategy_entry.execution_permissions,
+                   strategy_entry.strategy_activations,
+                   strategy_entry.strategy_execution_bindings,
                    control.live_arm_sessions,
-                   control.account_live_arm_sessions
+                   control.account_live_arm_sessions,
+                   runtime.hot_positions,
+                   runtime.hot_orders,
+                   runtime.position_ownership
                TO cripta"""
         )
         connection.execute(
@@ -250,6 +256,7 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         connection.execute(
             """GRANT INSERT ON
                    control.execution_gate_events,
+                   strategy_entry.execution_permissions,
                    control.live_arm_sessions,
                    control.owner_full_contour_diagnostic_runs
                TO cripta"""
