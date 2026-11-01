@@ -8,6 +8,11 @@ import pytest
 
 import bybit_workbench.universal_entry.owner_full_contour_control as control
 import bybit_workbench.universal_entry.owner_full_contour_diagnostic as diagnostic
+from bybit_workbench.strategy_execution_binding_policy import (
+    DEDICATED_STRATEGY,
+    SUBORDINATE_DIAGNOSTIC,
+    real_binding_allocation_allowed,
+)
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import (
     FrozenPolicy,
@@ -35,6 +40,18 @@ OBSERVER = (
 ).read_text(encoding="utf-8")
 MIGRATION = (
     ROOT / "operations/sql/20261101_owner_full_contour_diagnostic.sql"
+).read_text(encoding="utf-8")
+SUBORDINATE_MIGRATION = (
+    ROOT / "operations/sql/20261101_subordinate_diagnostic_binding.sql"
+).read_text(encoding="utf-8")
+ENTRY_ADMISSION = (ROOT / "src/bybit_workbench/entry_admission.py").read_text(
+    encoding="utf-8"
+)
+ACCOUNT_ARM = (ROOT / "src/bybit_workbench/account_live_arm.py").read_text(
+    encoding="utf-8"
+)
+OWNER_RUNTIME = (
+    ROOT / "src/bybit_workbench/universal_entry/owner_full_contour_runtime.py"
 ).read_text(encoding="utf-8")
 RELEASE_INSTALLER = (
     ROOT / "operations/infrastructure/install_verified_release.sh"
@@ -256,20 +273,58 @@ def test_diagnostic_migration_ends_at_single_transaction_commit() -> None:
     assert "COMMIT;\n\n     OR p_symbol NOT IN" not in stripped
 
 
+def test_subordinate_binding_mode_is_exact_diagnostic_exception() -> None:
+    assert real_binding_allocation_allowed(
+        strategy_id=diagnostic.MAIN_ID,
+        strategy_version=diagnostic.VERSION,
+        allocation_mode=SUBORDINATE_DIAGNOSTIC,
+    )
+    assert real_binding_allocation_allowed(
+        strategy_id="ordinary_strategy",
+        strategy_version="1",
+        allocation_mode=DEDICATED_STRATEGY,
+    )
+    assert not real_binding_allocation_allowed(
+        strategy_id="ordinary_strategy",
+        strategy_version="1",
+        allocation_mode=SUBORDINATE_DIAGNOSTIC,
+    )
+
+
+def test_subordinate_schema_preserves_dedicated_exclusivity() -> None:
+    assert "allocation_mode IN ('DEDICATED_STRATEGY','SUBORDINATE_DIAGNOSTIC')" in SUBORDINATE_MIGRATION
+    assert "ux_strategy_execution_bindings_subordinate_diagnostic_account" in SUBORDINATE_MIGRATION
+    assert "allocation_mode='SUBORDINATE_DIAGNOSTIC'" in SUBORDINATE_MIGRATION
+    assert "'SUBORDINATE_DIAGNOSTIC','ACTIVE'" in MIGRATION
+    assert "OWNER_FULL_CONTOUR_PARENT_P90_BINDING_NOT_ACTIVE" in MIGRATION
+    assert "b.allocation_mode='SUBORDINATE_DIAGNOSTIC'" in MIGRATION
+
+
+def test_subordinate_mode_is_rechecked_in_real_admission_and_dispatch() -> None:
+    assert "real_binding_allocation_allowed(" in ENTRY_ADMISSION
+    assert "real_binding_allocation_allowed(" in ACCOUNT_ARM
+    assert "real_binding_allocation_allowed(" in ENTRY_CONSUMER
+    assert "require_parent_p90_owner_scope(" in OWNER_RUNTIME
+    assert "require_parent_p90_owner_scope(" in ENTRY_CONSUMER
+
+
 def test_verified_release_registers_and_readbacks_diagnostic_capability() -> None:
     migration = "operations/sql/20261101_owner_full_contour_diagnostic.sql"
+    subordinate = "operations/sql/20261101_subordinate_diagnostic_binding.sql"
     installer = (
         "operations/implementation/install_owner_full_contour_diagnostic.py"
     )
     assert migration in RELEASE_INSTALLER
+    assert subordinate in RELEASE_INSTALLER
     migration_pos = RELEASE_INSTALLER.index(migration)
+    subordinate_pos = RELEASE_INSTALLER.index(subordinate)
     install_call = RELEASE_INSTALLER.index(
         f"$runtime_release/{installer}\" install"
     )
     check_call = RELEASE_INSTALLER.index(
         f"$runtime_release/{installer}\" check"
     )
-    assert migration_pos < install_call < check_call
+    assert migration_pos < subordinate_pos < install_call < check_call
     assert "runuser -u cripta" in RELEASE_INSTALLER[
         RELEASE_INSTALLER.rfind("runuser -u cripta", 0, install_call):install_call
     ]
