@@ -42,6 +42,10 @@ def _count_is_one(row: Any) -> bool:
     return row is not None and int(_row_value(row, "count", 0)) == 1
 
 
+def _count_is_zero(row: Any) -> bool:
+    return row is not None and int(_row_value(row, "count", 0)) == 0
+
+
 def _parent_scope(symbol: str) -> tuple[str, str, str]:
     if symbol.upper() in {"LTCUSDT", "INJUSDT"}:
         return (
@@ -101,7 +105,7 @@ def require_parent_p90_diagnostic_scope(
             WHERE strategy_id=%s AND strategy_version=%s AND enabled=true""",
         (parent, P90_VERSION),
     ).fetchone()
-    if permission != (0,):
+    if not _count_is_zero(permission):
         raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_PERMISSION_MUST_BE_OFF")
     generic = connection.execute(
         """SELECT count(*)
@@ -110,7 +114,7 @@ def require_parent_p90_diagnostic_scope(
               AND symbol=%s AND release_commit=%s AND state='ACTIVE'""",
         (parent, P90_VERSION, symbol, release_commit),
     ).fetchone()
-    if generic != (0,):
+    if not _count_is_zero(generic):
         raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_ARM_MUST_BE_OFF")
     account = connection.execute(
         """SELECT count(*)
@@ -132,7 +136,7 @@ def require_parent_p90_diagnostic_scope(
             connector_id,
         ),
     ).fetchone()
-    if account != (0,):
+    if not _count_is_zero(account):
         raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_MUST_BE_OFF")
 
 
