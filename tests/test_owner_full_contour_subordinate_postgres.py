@@ -15,19 +15,10 @@ from datetime import UTC, datetime
 import psycopg
 import pytest
 
+from bybit_workbench.universal_entry import owner_full_contour_diagnostic as diagnostic
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
 from bybit_workbench.universal_entry.dashboard_control import card_from_editable
 from bybit_workbench.universal_entry.materializer import materialize_plans
-from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
-    MAIN_ACTIVATION_ID as DIAG_MAIN_ACTIVATION_ID,
-    MAIN_BINDING_ID as DIAG_MAIN_BINDING_ID,
-    MAIN_ID as DIAG_MAIN_ID,
-    SUB_ACTIVATION_ID as DIAG_SUB_ACTIVATION_ID,
-    SUB_BINDING_ID as DIAG_SUB_BINDING_ID,
-    SUB_ID as DIAG_SUB_ID,
-    VERSION as DIAG_VERSION,
-    _policy as diagnostic_policy,
-)
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
@@ -75,16 +66,16 @@ def _embargo() -> StrategyHardStopEmbargoPolicy:
     )
 
 
-V1_DIAG_VERSION = "1.0-owner-full-contour-20261101"
+V1_diagnostic.VERSION = "1.0-owner-full-contour-20261101"
 V1_DIAG = (
     (
-        DIAG_MAIN_ID,
+        diagnostic.MAIN_ID,
         MAIN_ACCOUNT,
         "activation-owner-full-contour-main-20261101",
         "binding-owner-full-contour-main-20261101",
     ),
     (
-        DIAG_SUB_ID,
+        diagnostic.SUB_ID,
         SUB_ACCOUNT,
         "activation-owner-full-contour-sub-20261101",
         "binding-owner-full-contour-sub-20261101",
@@ -93,8 +84,8 @@ V1_DIAG = (
 
 
 def _v1_diagnostic_card(strategy_id: str):
-    raw = diagnostic_policy(strategy_id)
-    raw["strategy_version"] = V1_DIAG_VERSION
+    raw = diagnostic._policy(strategy_id)
+    raw["strategy_version"] = V1_diagnostic.VERSION
     raw["exit_policy"]["rules"] = [
         rule
         for rule in raw["exit_policy"]["rules"]
@@ -250,21 +241,21 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                    ON b.strategy_activation_id=a.activation_id
                 WHERE a.strategy_version=%s
                 ORDER BY a.strategy_id""",
-            (DIAG_VERSION,),
+            (diagnostic.VERSION,),
         ).fetchall()
         assert rows == [
             (
-                DIAG_MAIN_ID,
-                DIAG_MAIN_ACTIVATION_ID,
-                DIAG_MAIN_BINDING_ID,
+                diagnostic.MAIN_ID,
+                diagnostic.MAIN_ACTIVATION_ID,
+                diagnostic.MAIN_BINDING_ID,
                 MAIN_ACCOUNT,
                 "SUBORDINATE_DIAGNOSTIC",
                 "ACTIVE",
             ),
             (
-                DIAG_SUB_ID,
-                DIAG_SUB_ACTIVATION_ID,
-                DIAG_SUB_BINDING_ID,
+                diagnostic.SUB_ID,
+                diagnostic.SUB_ACTIVATION_ID,
+                diagnostic.SUB_BINDING_ID,
                 SUB_ACCOUNT,
                 "SUBORDINATE_DIAGNOSTIC",
                 "ACTIVE",
@@ -279,7 +270,7 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                    ON b.strategy_activation_id=a.activation_id
                 WHERE a.strategy_version=%s
                 ORDER BY a.strategy_id""",
-            (V1_DIAG_VERSION,),
+            (V1_diagnostic.VERSION,),
         ).fetchall()
         assert len(old_rows) == 2
         assert all(
