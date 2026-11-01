@@ -932,7 +932,7 @@ function refreshP90RealV3ArmControl(){
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus'),detail=document.getElementById('p90RealV3ArmDetail');
   if(!button||!status)return;
   const cohort=exactP90RealV3Cohort(),armed=p90RealV3OwnerArmPresent(),exactArmed=p90RealV3Armed(),inconsistent=liveGateOpen&&!exactArmed,readiness=window.p90ArmStatus||{},blockers=Array.isArray(readiness.blockers)?readiness.blockers:[],operation=readiness.readiness_operation||null;
-  const operationState=String(operation?.state||''),preparing=['REQUESTED','CHECKING','STARTING_SERVICES','RECONCILING','VALIDATING'].includes(operationState),retryable=operationState==='BLOCKED'&&operation?.retry_eligible===true,nonOperationBlockers=blockers.filter(x=>x!=='REAL_READINESS_OPERATION_ACTIVE'&&!String(x).startsWith('REAL_READINESS_BLOCKED:')),knownBlocked=nonOperationBlockers.length>0||(operationState==='BLOCKED'&&!retryable);
+  const operationState=String(operation?.state||''),preparing=['REQUESTED','CHECKING','STARTING_SERVICES','RECONCILING','VALIDATING'].includes(operationState),retryable=operationState==='BLOCKED'&&operation?.retry_eligible===true,nonOperationBlockers=blockers.filter(x=>x!=='REAL_READINESS_OPERATION_ACTIVE'&&x!=='P90_REAL_OBSERVER_NOT_READY'&&!String(x).startsWith('REAL_READINESS_BLOCKED:')),knownBlocked=nonOperationBlockers.length>0||(operationState==='BLOCKED'&&!retryable);
   const loaded=String(readiness.loaded_commit||''),source=String(readiness.source_head||''),observerState=String(readiness.observer_state||'UNKNOWN'),observerReady=Boolean(readiness.observer_ready),gateReason=String(readiness.gate_reason||''),staging=!liveGateOpen&&gateReason==='P90L90 REAL v3 owner arm staging'&&Number(readiness.execution_permissions||0)===2&&Number(readiness.live_arm_sessions||0)===5&&Number(readiness.account_live_arm_sessions||0)===5;
   button.textContent=armed?'Отключить P90 REAL v3':preparing?'Подготовка P90 REAL v3…':retryable?'Повторить подготовку':'P90 REAL v3 OWNER ARM';
   button.classList.toggle('danger',!armed);
@@ -946,7 +946,7 @@ function refreshP90RealV3ArmControl(){
   else if(armed){state='warn';message='P90 owner-arm state DEGRADED · новые Entry запрещены · DISARM доступен'}
   else if(!cohort){state='error';message='P90 exact cohort не найден или не активен'}
   else if(blockers.includes('REMOTE_SOURCE_INSTALLED_IDENTITY_DRIFT')){state='error';message='OWNER ARM заблокирован · source/runtime release identity не совпадает'}
-  else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='error';message='OWNER ARM заблокирован · Universal Entry observer сейчас не готов'}
+  else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='warn';message='Universal Entry observer сейчас не готов · OWNER ARM сначала выполнит автоматическую подготовку'}
   setOperationStatus(status,state,message);
   if(detail)detail.textContent='loaded '+(loaded?loaded.slice(0,12):'—')+' · source '+(source?source.slice(0,12):'—')+' · observer '+observerState+(observerReady?' / ready':' / not ready')+' · readiness '+(operationState||'—')+' · mainnet '+(liveGateOpen?'OPEN':'CLOSED');
 }
