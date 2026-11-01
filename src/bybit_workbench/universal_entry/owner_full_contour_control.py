@@ -38,6 +38,10 @@ def _row_value(row: Any, key: str, index: int) -> Any:
     return row[index]
 
 
+def _count_is_one(row: Any) -> bool:
+    return row is not None and int(_row_value(row, "count", 0)) == 1
+
+
 def _parent_scope(symbol: str) -> tuple[str, str, str]:
     if symbol.upper() in {"LTCUSDT", "INJUSDT"}:
         return (
@@ -89,7 +93,7 @@ def require_parent_p90_owner_scope(
               AND a.enabled=true AND a.disabled_at IS NULL""",
         (parent_binding, parent_activation, account_id, parent, P90_VERSION),
     ).fetchone()
-    if binding != (1,):
+    if not _count_is_one(binding):
         raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_BINDING_NOT_ACTIVE")
     permission = connection.execute(
         """SELECT count(*)
@@ -97,7 +101,7 @@ def require_parent_p90_owner_scope(
             WHERE strategy_id=%s AND strategy_version=%s AND enabled=true""",
         (parent, P90_VERSION),
     ).fetchone()
-    if permission != (1,):
+    if not _count_is_one(permission):
         raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_PERMISSION_NOT_ACTIVE")
     generic = connection.execute(
         """SELECT count(*)
@@ -106,7 +110,7 @@ def require_parent_p90_owner_scope(
               AND symbol=%s AND release_commit=%s AND state='ACTIVE'""",
         (parent, P90_VERSION, symbol, release_commit),
     ).fetchone()
-    if generic != (1,):
+    if not _count_is_one(generic):
         raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_ARM_NOT_ACTIVE")
     account = connection.execute(
         """SELECT count(*)
@@ -128,7 +132,7 @@ def require_parent_p90_owner_scope(
             connector_id,
         ),
     ).fetchone()
-    if account != (1,):
+    if not _count_is_one(account):
         raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_NOT_ACTIVE")
 
 
