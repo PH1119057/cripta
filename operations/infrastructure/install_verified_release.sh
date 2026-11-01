@@ -492,6 +492,7 @@ migration_files=(
   operations/sql/20261031_entry_consumer_health.sql
   operations/sql/20261101_owner_full_contour_diagnostic.sql
   operations/sql/20261101_subordinate_diagnostic_binding.sql
+  operations/sql/20261101_owner_full_contour_diagnostic_v2.sql
   operations/sql/20261007_live_arm_parity_gate.sql
   operations/sql/20261008_r1_entry_cancel_intents.sql
   operations/sql/20261008_exchange_closed_entry_recovery.sql
