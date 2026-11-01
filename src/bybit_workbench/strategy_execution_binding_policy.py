@@ -33,9 +33,9 @@ def real_binding_allocation_allowed(
     strategy_version: str,
     allocation_mode: str,
 ) -> bool:
-    if allocation_mode == DEDICATED_STRATEGY:
-        return True
-    return (
-        allocation_mode == SUBORDINATE_DIAGNOSTIC
-        and is_owner_full_contour_subordinate_identity(strategy_id, strategy_version)
+    diagnostic = is_owner_full_contour_subordinate_identity(
+        strategy_id, strategy_version
     )
+    if diagnostic:
+        return allocation_mode == SUBORDINATE_DIAGNOSTIC
+    return allocation_mode == DEDICATED_STRATEGY
