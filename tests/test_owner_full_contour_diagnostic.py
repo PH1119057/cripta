@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -42,8 +42,11 @@ OBSERVER = (
 MIGRATION_V1 = (
     ROOT / "operations/sql/20261101_owner_full_contour_diagnostic.sql"
 ).read_text(encoding="utf-8")
-MIGRATION = (
+MIGRATION_V2 = (
     ROOT / "operations/sql/20261101_owner_full_contour_diagnostic_v2.sql"
+).read_text(encoding="utf-8")
+MIGRATION = (
+    ROOT / "operations/sql/20261101_owner_full_contour_diagnostic_v3.sql"
 ).read_text(encoding="utf-8")
 SUBORDINATE_MIGRATION = (
     ROOT / "operations/sql/20261101_subordinate_diagnostic_binding.sql"
@@ -150,22 +153,24 @@ def test_diagnostic_cards_are_exact_materializable_and_execution_ready() -> None
         assert readiness.execution_ready, [reason.code for reason in readiness.reasons]
 
 
-def test_diagnostic_exit_rules_use_exact_half_percent_close() -> None:
+def test_diagnostic_exit_rules_use_exact_two_tenths_percent_close() -> None:
     _card, _activation, _entry, exit_plan = _main_bundle()
     engine = UniversalExitEngine()
-    tp = engine.evaluate(_position(exit_plan), exit_plan, _observation("0.5"))
+    below = engine.evaluate(_position(exit_plan), exit_plan, _observation("0.19"))
+    assert below.status is ExitEvaluationStatus.NO_MATCH
+    tp = engine.evaluate(_position(exit_plan), exit_plan, _observation("0.2"))
     assert tp.status is ExitEvaluationStatus.DECISION_CREATED
     assert tp.decision is not None
-    assert tp.decision.rule_id == "OWNER_DIAGNOSTIC_TP_0_5"
+    assert tp.decision.rule_id == "OWNER_DIAGNOSTIC_TP_0_2"
     assert tp.decision.action_kind is ExitActionKind.CLOSE
     assert tp.decision.requested_mutation.to_dict() == {
         "quantity": "ALL",
         "order_type": "MARKET",
     }
-    sl = engine.evaluate(_position(exit_plan), exit_plan, _observation("-0.5"))
+    sl = engine.evaluate(_position(exit_plan), exit_plan, _observation("-0.2"))
     assert sl.status is ExitEvaluationStatus.DECISION_CREATED
     assert sl.decision is not None
-    assert sl.decision.rule_id == "OWNER_DIAGNOSTIC_SL_0_5"
+    assert sl.decision.rule_id == "OWNER_DIAGNOSTIC_SL_0_2"
     assert sl.decision.action_kind is ExitActionKind.CLOSE
 
 
@@ -283,7 +288,7 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
     assert "/api/owner-full-contour-diagnostic" in INDEX
     assert "owner_full_contour_one_active_run" in MIGRATION_V1
     assert "'REQUESTED','MATERIALIZED','DISPATCHED','POSITION_OPEN'" in MIGRATION_V1
-    assert "OWNER_FULL_CONTOUR_V2_REGISTRATION_REQUIRES_IDLE_DISARMED_STATE" in MIGRATION
+    assert "OWNER_FULL_CONTOUR_V3_REGISTRATION_REQUIRES_IDLE_DISARMED_STATE" in MIGRATION
     assert "OWNER_FULL_CONTOUR_PARENT_P90_RIGHTS_MUST_BE_OFF" in MIGRATION
     account_insert = MIGRATION[MIGRATION.index(
         "INSERT INTO control.account_live_arm_sessions("
@@ -297,14 +302,14 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
 
 
 def test_diagnostic_migration_ends_at_single_transaction_commit() -> None:
-    for migration in (MIGRATION_V1, MIGRATION):
+    for migration in (MIGRATION_V1, MIGRATION_V2, MIGRATION):
         stripped = migration.rstrip()
         assert stripped.endswith("COMMIT;")
         assert stripped.count("\nCOMMIT;") == 1
         assert "COMMIT;\n\n     OR p_symbol NOT IN" not in stripped
 
 
-def test_v2_control_owns_bounded_entry_window_without_parent_p90_arm() -> None:
+def test_v3_control_owns_bounded_entry_window_without_parent_p90_arm() -> None:
     source = Path(
         ROOT / "src/bybit_workbench/universal_entry/owner_full_contour_control.py"
     ).read_text(encoding="utf-8")
@@ -373,28 +378,227 @@ def test_verified_release_registers_and_readbacks_diagnostic_capability() -> Non
     migration = "operations/sql/20261101_owner_full_contour_diagnostic.sql"
     subordinate = "operations/sql/20261101_subordinate_diagnostic_binding.sql"
     migration_v2 = "operations/sql/20261101_owner_full_contour_diagnostic_v2.sql"
+    migration_v3 = "operations/sql/20261101_owner_full_contour_diagnostic_v3.sql"
     installer = (
         "operations/implementation/install_owner_full_contour_diagnostic.py"
     )
     assert migration in RELEASE_INSTALLER
     assert subordinate in RELEASE_INSTALLER
     assert migration_v2 in RELEASE_INSTALLER
+    assert migration_v3 in RELEASE_INSTALLER
     migration_pos = RELEASE_INSTALLER.index(migration)
     subordinate_pos = RELEASE_INSTALLER.index(subordinate)
     migration_v2_pos = RELEASE_INSTALLER.index(migration_v2)
+    migration_v3_pos = RELEASE_INSTALLER.index(migration_v3)
     install_call = RELEASE_INSTALLER.index(
         f"$runtime_release/{installer}\" install"
     )
     check_call = RELEASE_INSTALLER.index(
         f"$runtime_release/{installer}\" check"
     )
-    assert migration_pos < subordinate_pos < migration_v2_pos < install_call < check_call
+    assert (
+        migration_pos
+        < subordinate_pos
+        < migration_v2_pos
+        < migration_v3_pos
+        < install_call
+        < check_call
+    )
     assert "runuser -u cripta" in RELEASE_INSTALLER[
         RELEASE_INSTALLER.rfind("runuser -u cripta", 0, install_call):install_call
     ]
     assert "db_mutation_steps=$((db_mutation_steps + 1))" in RELEASE_INSTALLER[
         install_call:check_call
     ]
+
+
+def test_v3_runtime_waits_for_threshold_after_protected_open() -> None:
+    start = OWNER_RUNTIME.index('if position_state == "OPEN":')
+    end = OWNER_RUNTIME.index(
+        'if position_state == "RECONCILIATION_REQUIRED":',
+        start,
+    )
+    block = OWNER_RUNTIME[start:end]
+    assert "OWNER_DIAGNOSTIC_POSITION_OPEN_WAITING_EXIT_THRESHOLD" in block
+    assert "_force_diagnostic_exit(" not in block
+
+
+class _AccountModePreflightConnection:
+    def __init__(
+        self,
+        *,
+        now: datetime,
+        margin_mode: str = "ISOLATED_MARGIN",
+        unified_status: str = "6",
+        proof_status: str = "PASS",
+        seconds_old: int = 1,
+        positions: int = 0,
+        orders: int = 0,
+    ):
+        observed_ms = int((now.timestamp() - seconds_old) * 1000)
+        self.row = {
+            "completed_at": now - timedelta(seconds=seconds_old),
+            "positions_count": positions,
+            "active_orders_count": orders,
+            "wallet_payload": {
+                control.SIGNED_ACCOUNT_MODE_PROOF_KEY: {
+                    "status": proof_status,
+                    "observed_at_epoch_ms": observed_ms,
+                    "margin_mode": margin_mode,
+                    "unified_margin_status": unified_status,
+                }
+            },
+        }
+
+    def execute(self, _statement, _parameters=()):
+        return _Cursor(self.row)
+
+
+def test_owner_request_account_mode_preflight_matches_real_signed_contract() -> None:
+    now = datetime(2026, 11, 1, 18, 0, tzinfo=UTC)
+    control._require_signed_account_mode_preflight(
+        _AccountModePreflightConnection(now=now),
+        account_id=diagnostic.SUB_ACCOUNT_ID,
+        connector_id=diagnostic.SUB_CONNECTOR_ID,
+        now=now,
+    )
+    with pytest.raises(
+        ValueError,
+        match="OWNER_FULL_CONTOUR_ACCOUNT_NOT_PROVEN_ISOLATED",
+    ):
+        control._require_signed_account_mode_preflight(
+            _AccountModePreflightConnection(now=now, margin_mode="REGULAR_MARGIN"),
+            account_id=diagnostic.SUB_ACCOUNT_ID,
+            connector_id=diagnostic.SUB_CONNECTOR_ID,
+            now=now,
+        )
+    with pytest.raises(
+        ValueError,
+        match="OWNER_FULL_CONTOUR_UNIFIED_ACCOUNT_MODE_UNKNOWN",
+    ):
+        control._require_signed_account_mode_preflight(
+            _AccountModePreflightConnection(now=now, unified_status="1"),
+            account_id=diagnostic.SUB_ACCOUNT_ID,
+            connector_id=diagnostic.SUB_CONNECTOR_ID,
+            now=now,
+        )
+    with pytest.raises(
+        ValueError,
+        match="OWNER_FULL_CONTOUR_ACCOUNT_MODE_PROOF_STALE",
+    ):
+        control._require_signed_account_mode_preflight(
+            _AccountModePreflightConnection(now=now, seconds_old=16),
+            account_id=diagnostic.SUB_ACCOUNT_ID,
+            connector_id=diagnostic.SUB_CONNECTOR_ID,
+            now=now,
+        )
+
+
+def test_sub_private_worker_persists_only_internal_pre_mutation_reason_token() -> None:
+    import ast
+
+    tree = ast.parse(PRIVATE)
+    block_cls = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+        and node.name == "PreMutationSafetyBlock"
+    )
+    safe_error = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_private_worker_safe_error"
+    )
+    namespace = {"BaseException": BaseException}
+    exec(
+        compile(
+            ast.Module(body=[block_cls, safe_error], type_ignores=[]),
+            "private_runtime",
+            "exec",
+        ),
+        namespace,
+    )
+    namespace["_is_sub_private_worker"] = lambda: True
+    block = namespace["PreMutationSafetyBlock"]
+    render = namespace["_private_worker_safe_error"]
+    assert render(
+        block("OWNER_FULL_CONTOUR_ACCOUNT_NOT_PROVEN_ISOLATED")
+    ) == (
+        "PreMutationSafetyBlock:"
+        "OWNER_FULL_CONTOUR_ACCOUNT_NOT_PROVEN_ISOLATED"
+    )
+    assert render(block("provider secret=https://signed.example/x")) == (
+        "PreMutationSafetyBlock"
+    )
+
+
+def test_signed_account_mode_proof_executes_without_persisting_provider_payload() -> None:
+    import ast
+    import time
+
+    tree = ast.parse(PRIVATE)
+    helper = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_signed_account_mode_proof"
+    )
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def api_get(path, params, _key, _secret):
+        calls.append((path, params))
+        return (
+            {
+                "retCode": 0,
+                "retMsg": "sensitive provider text must not persist",
+                "result": {
+                    "marginMode": "ISOLATED_MARGIN",
+                    "unifiedMarginStatus": 6,
+                    "secretExtra": "must-not-persist",
+                },
+            },
+            {},
+        )
+
+    namespace = {"time": time, "api_get": api_get}
+    exec(
+        compile(ast.Module(body=[helper], type_ignores=[]), "private_runtime", "exec"),
+        namespace,
+    )
+    proof = namespace["_signed_account_mode_proof"]("key", "secret")
+    assert calls == [("/v5/account/info", {})]
+    assert proof["status"] == "PASS"
+    assert proof["margin_mode"] == "ISOLATED_MARGIN"
+    assert proof["unified_margin_status"] == "6"
+    assert "retMsg" not in proof
+    assert "secretExtra" not in proof
+
+    namespace["api_get"] = lambda *_args: ({"retCode": 10001, "retMsg": "x"}, {})
+    rejected = namespace["_signed_account_mode_proof"]("key", "secret")
+    assert rejected["status"] == "REJECTED"
+    assert "retMsg" not in rejected
+
+
+def test_private_reconcile_persists_safe_signed_account_mode_proof() -> None:
+    assert 'api_get("/v5/account/info", {}, key, secret)' in PRIVATE
+    assert 'SIGNED_ACCOUNT_MODE_PROOF_KEY = "__cripta_signed_account_mode"' in PRIVATE
+    assert "account_snapshot[SIGNED_ACCOUNT_MODE_PROOF_KEY]" in PRIVATE
+    assert "json.dumps(account_snapshot, ensure_ascii=False)" in PRIVATE
+    assert '"margin_mode"' in PRIVATE
+    assert '"unified_margin_status"' in PRIVATE
+
+
+def test_v3_recovery_is_narrow_security_definer_not_runtime_delete_grant() -> None:
+    assert "recover_owner_full_contour_account_safety" in MIGRATION
+    assert "SECURITY DEFINER" in MIGRATION
+    assert "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED" in MIGRATION
+    assert "OWNER_FULL_CONTOUR_ACCOUNT_RECOVERY_SIGNED_MODE_INVALID" in MIGRATION
+    assert "GRANT DELETE ON runtime.account_entry_safety_blocks" in MIGRATION
+    assert "TO cripta_owner_full_contour_binding" in MIGRATION
+    assert "GRANT DELETE ON runtime.account_entry_safety_blocks TO cripta;" not in MIGRATION
+    assert "GRANT EXECUTE ON FUNCTION" in MIGRATION
+    assert "recover_owner_full_contour_account_safety(text,text,text,timestamptz)" in MIGRATION
 
 
 def test_prestart_recovery_never_replays_stale_execution_smoke_entry() -> None:

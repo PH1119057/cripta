@@ -30,12 +30,17 @@ from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
 
 DB_DSN = "dbname=cripta user=cripta host=/var/run/postgresql"
-APPROVED_AT = datetime(2026, 11, 1, 10, 5, 57, tzinfo=UTC)
+APPROVED_AT = datetime(2026, 11, 1, 18, 11, 14, tzinfo=UTC)
 V1_VERSION = "1.0-owner-full-contour-20261101"
 V1_MAIN_ACTIVATION_ID = "activation-owner-full-contour-main-20261101"
 V1_SUB_ACTIVATION_ID = "activation-owner-full-contour-sub-20261101"
 V1_MAIN_BINDING_ID = "binding-owner-full-contour-main-20261101"
 V1_SUB_BINDING_ID = "binding-owner-full-contour-sub-20261101"
+V2_VERSION = "2.0-owner-full-contour-e2e-20261101"
+V2_MAIN_ACTIVATION_ID = "activation-owner-full-contour-main-v2-20261101"
+V2_SUB_ACTIVATION_ID = "activation-owner-full-contour-sub-v2-20261101"
+V2_MAIN_BINDING_ID = "binding-owner-full-contour-main-v2-20261101"
+V2_SUB_BINDING_ID = "binding-owner-full-contour-sub-v2-20261101"
 
 
 def _require_disarmed(connection: psycopg.Connection) -> None:
@@ -58,7 +63,7 @@ def _require_disarmed(connection: psycopg.Connection) -> None:
         raise RuntimeError("OWNER_FULL_CONTOUR_INSTALL_REQUIRES_ACCOUNT_ARM_OFF")
 
 
-def _retire_v1_activations(connection: psycopg.Connection) -> None:
+def _retire_previous_activations(connection: psycopg.Connection) -> None:
     if connection.execute(
         """SELECT count(*) FROM control.owner_full_contour_diagnostic_runs
             WHERE state IN (
@@ -66,37 +71,53 @@ def _retire_v1_activations(connection: psycopg.Connection) -> None:
               'RECONCILIATION_REQUIRED'
             )"""
     ).fetchone() != (0,):
-        raise RuntimeError("OWNER_FULL_CONTOUR_V2_INSTALL_ACTIVE_RUN_EXISTS")
+        raise RuntimeError("OWNER_FULL_CONTOUR_V3_INSTALL_ACTIVE_RUN_EXISTS")
 
-    rows = connection.execute(
-        """SELECT activation_id,enabled,disabled_at
-             FROM strategy_entry.strategy_activations
-            WHERE strategy_id IN (%s,%s) AND strategy_version=%s
-            ORDER BY activation_id""",
-        (MAIN_ID, SUB_ID, V1_VERSION),
-    ).fetchall()
-    if not rows:
-        return
-    if len(rows) != 2 or {str(row[0]) for row in rows} != {
-        V1_MAIN_ACTIVATION_ID, V1_SUB_ACTIVATION_ID,
-    }:
-        raise RuntimeError("OWNER_FULL_CONTOUR_V1_ACTIVATION_IDENTITY_DRIFT")
+    versions = (
+        (
+            V1_VERSION,
+            {V1_MAIN_ACTIVATION_ID, V1_SUB_ACTIVATION_ID},
+            "SUPERSEDED_BY_DETERMINISTIC_FULL_CONTOUR_V2",
+        ),
+        (
+            V2_VERSION,
+            {V2_MAIN_ACTIVATION_ID, V2_SUB_ACTIVATION_ID},
+            "SUPERSEDED_BY_FULL_CONTOUR_V3",
+        ),
+    )
     now = datetime.now(UTC)
-    for activation_id, enabled, disabled_at in rows:
-        if bool(enabled):
-            connection.execute(
-                """UPDATE strategy_entry.strategy_activations
-                      SET enabled=false,disabled_at=%s,
-                          operator='owner',
-                          source=%s,
-                          change_reason='SUPERSEDED_BY_DETERMINISTIC_FULL_CONTOUR_V2'
-                    WHERE activation_id=%s
-                      AND strategy_version=%s
-                      AND enabled=true""",
-                (now, SOURCE, str(activation_id), V1_VERSION),
+    for version, expected_ids, reason in versions:
+        rows = connection.execute(
+            """SELECT activation_id,enabled,disabled_at
+                 FROM strategy_entry.strategy_activations
+                WHERE strategy_id IN (%s,%s) AND strategy_version=%s
+                ORDER BY activation_id""",
+            (MAIN_ID, SUB_ID, version),
+        ).fetchall()
+        if not rows:
+            continue
+        if len(rows) != 2 or {str(row[0]) for row in rows} != expected_ids:
+            raise RuntimeError(
+                "OWNER_FULL_CONTOUR_PREVIOUS_ACTIVATION_IDENTITY_DRIFT:" + version
             )
-        elif disabled_at is None:
-            raise RuntimeError("OWNER_FULL_CONTOUR_V1_DISABLED_TIMESTAMP_MISSING")
+        for activation_id, enabled, disabled_at in rows:
+            if bool(enabled):
+                connection.execute(
+                    """UPDATE strategy_entry.strategy_activations
+                          SET enabled=false,disabled_at=%s,
+                              operator='owner',
+                              source=%s,
+                              change_reason=%s
+                        WHERE activation_id=%s
+                          AND strategy_version=%s
+                          AND enabled=true""",
+                    (now, SOURCE, reason, str(activation_id), version),
+                )
+            elif disabled_at is None:
+                raise RuntimeError(
+                    "OWNER_FULL_CONTOUR_PREVIOUS_DISABLED_TIMESTAMP_MISSING:"
+                    + version
+                )
 
 
 def _state(connection: psycopg.Connection) -> list[tuple[object, ...]]:
@@ -200,6 +221,30 @@ def _check_exact(
             str(row[1]) != "INACTIVE" or row[2] is None for row in old_bindings
         ):
             raise RuntimeError("OWNER_FULL_CONTOUR_V1_BINDING_NOT_RETIRED")
+
+    v2_activations = connection.execute(
+        """SELECT activation_id,enabled,disabled_at
+             FROM strategy_entry.strategy_activations
+            WHERE strategy_id IN (%s,%s) AND strategy_version=%s
+            ORDER BY activation_id""",
+        (MAIN_ID, SUB_ID, V2_VERSION),
+    ).fetchall()
+    if v2_activations:
+        if len(v2_activations) != 2 or any(
+            bool(row[1]) or row[2] is None for row in v2_activations
+        ):
+            raise RuntimeError("OWNER_FULL_CONTOUR_V2_ACTIVATION_NOT_RETIRED")
+        v2_bindings = connection.execute(
+            """SELECT strategy_execution_binding_id,binding_state,effective_to
+                 FROM strategy_entry.strategy_execution_bindings
+                WHERE strategy_execution_binding_id IN (%s,%s)
+                ORDER BY strategy_execution_binding_id""",
+            (V2_MAIN_BINDING_ID, V2_SUB_BINDING_ID),
+        ).fetchall()
+        if len(v2_bindings) != 2 or any(
+            str(row[1]) != "INACTIVE" or row[2] is None for row in v2_bindings
+        ):
+            raise RuntimeError("OWNER_FULL_CONTOUR_V2_BINDING_NOT_RETIRED")
     return rows
 
 
@@ -220,7 +265,7 @@ def install(connection: psycopg.Connection) -> None:
     # First installation remains fail-closed and is allowed only from a fully
     # disarmed baseline.
     _require_disarmed(connection)
-    _retire_v1_activations(connection)
+    _retire_previous_activations(connection)
 
     store = StrategyEntryStore(connection)
     for card in cards(approved_at=APPROVED_AT):

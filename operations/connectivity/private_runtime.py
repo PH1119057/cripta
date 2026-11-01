@@ -129,6 +129,7 @@ LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lowe
 OWNER_DIAGNOSTIC_DISPATCH_GATE_REASON = (
     "owner full-contour diagnostic Entry window closed: diagnostic Entry dispatched"
 )
+SIGNED_ACCOUNT_MODE_PROOF_KEY = "__cripta_signed_account_mode"
 # Credential provenance is proved from the exact systemd mount/config,
 # independently of identity.account_connectors DB rows and secret payload fields.
 MOUNTED_CREDENTIAL_REF = ""
@@ -399,8 +400,16 @@ def _is_sub_private_worker() -> bool:
 
 
 def _private_worker_safe_error(exc: BaseException) -> str:
-    """SUB diagnostics must never persist signed URLs or provider responses."""
+    """SUB diagnostics may persist only whitelisted internal stable tokens."""
     if _is_sub_private_worker():
+        message = str(exc).strip()
+        if isinstance(exc, PreMutationSafetyBlock) and (
+            message.startswith("OWNER_FULL_CONTOUR_")
+            or message.startswith("CRITICAL_LIFECYCLE_FAULT:")
+        ):
+            safe_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:-")
+            if 0 < len(message) <= 180 and set(message) <= safe_chars:
+                return f"{type(exc).__name__}:{message}"
         return type(exc).__name__
     return f"{type(exc).__name__}: {exc}"
 
@@ -4767,6 +4776,42 @@ def _complete_exchange_inventory(
     raise ExchangeReadUnavailable(f"{endpoint} inventory exceeded {max_pages} pages")
 
 
+def _signed_account_mode_proof(key: str, secret: str) -> dict[str, object]:
+    """Return only safe account-mode facts from signed /v5/account/info."""
+    observed_ms = int(time.time() * 1000)
+    try:
+        payload, _ = api_get("/v5/account/info", {}, key, secret)
+    except Exception:
+        return {
+            "status": "UNAVAILABLE",
+            "observed_at_epoch_ms": observed_ms,
+        }
+    try:
+        ret_code = int(payload.get("retCode", -1))
+    except (TypeError, ValueError):
+        return {
+            "status": "INVALID",
+            "observed_at_epoch_ms": observed_ms,
+        }
+    result = payload.get("result")
+    if ret_code != 0:
+        return {
+            "status": "REJECTED",
+            "observed_at_epoch_ms": observed_ms,
+        }
+    if not isinstance(result, dict):
+        return {
+            "status": "INVALID",
+            "observed_at_epoch_ms": observed_ms,
+        }
+    return {
+        "status": "PASS",
+        "observed_at_epoch_ms": observed_ms,
+        "margin_mode": str(result.get("marginMode") or ""),
+        "unified_margin_status": str(result.get("unifiedMarginStatus") or ""),
+    }
+
+
 def reconcile(
     connection: psycopg.Connection, key: str, secret: str, reason: str
 ) -> tuple[int, int]:
@@ -4855,6 +4900,10 @@ def reconcile(
         account = ((wallet.get("result") or {}).get("list") or [{}])[0]
         if str(account.get("accountType") or "") != "UNIFIED":
             raise ExchangeReadUnavailable("reconciliation wallet accountType is not UNIFIED")
+        account_snapshot = dict(account)
+        account_snapshot[SIGNED_ACCOUNT_MODE_PROOF_KEY] = _signed_account_mode_proof(
+            key, secret
+        )
 
         now = int(time.time() * 1000)
         mode_refs = {
@@ -4914,7 +4963,7 @@ def reconcile(
                     len(position_list),
                     len(active_order_list),
                     json.dumps(mode_refs, ensure_ascii=False),
-                    json.dumps(account, ensure_ascii=False),
+                    json.dumps(account_snapshot, ensure_ascii=False),
                     generation_id,
                 ),
             )

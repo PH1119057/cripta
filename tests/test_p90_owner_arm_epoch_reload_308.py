@@ -66,9 +66,9 @@ def _signature(
     return (
         ("MAINNET_GATE", str(gate)),
         (
-            "activation-owner-full-contour-sub-v2-20261101",
+            "activation-owner-full-contour-sub-v3-20261101",
             "owner_full_contour_diag_sub",
-            "2.0-owner-full-contour-e2e-20261101",
+            "3.0-owner-full-contour-e2e-20261101",
             "diag-fp",
             diagnostic_activation_updated,
             "diag-entry",

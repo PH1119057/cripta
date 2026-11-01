@@ -947,6 +947,23 @@ FULL_CONTOUR_DIAGNOSTIC_V2_IMPLEMENTED = YES
 FULL_CONTOUR_DIAGNOSTIC_V2_DEPLOYED    = RUNTIME_EVIDENCE_REQUIRED
 FULL_CONTOUR_DIAGNOSTIC_V2_REAL_E2E    = NOT CHECKED HERE
 ```
+OWNER DECISION 2026-11-01: v3 supersedes v2 for new diagnostic runs without
+rewriting v1/v2 history. Current target identity:
+`3.0-owner-full-contour-e2e-20261101`.
+V3 changes bounded diagnostic thresholds to initial Exchange stop `-0.2%` and
+ordinary diagnostic TP/SL `+0.2% / -0.2%`, disables automatic immediate
+post-OPEN forced Exit, and requires fresh signed account-mode proof
+(`ISOLATED_MARGIN`, allowed unified status) **before** gate-open. Exact
+owner-control may clear only a prior diagnostic pre-mutation account safety
+latch after fresh flat/account-mode/fault proof; runtime actor retains no
+generic DELETE right.
+
+```text
+FULL_CONTOUR_DIAGNOSTIC_V3_CANON       = YES
+FULL_CONTOUR_DIAGNOSTIC_V3_IMPLEMENTED = YES
+FULL_CONTOUR_DIAGNOSTIC_V3_DEPLOYED    = NO
+FULL_CONTOUR_DIAGNOSTIC_V3_REAL_E2E    = NOT CHECKED HERE
+```
 
 Historical v1/subordinate deployment on `e221a5ea...` remains evidence, not v2
 runtime proof. Production readiness finding from the same date: MAIN contains

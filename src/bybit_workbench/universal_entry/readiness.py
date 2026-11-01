@@ -275,20 +275,32 @@ def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
 
 def _owner_full_contour_diagnostic_policy(card: StrategyCard) -> bool:
     """Exact owner-triggered diagnostic policy; never a market-observer Strategy."""
-    diagnostic_rules_by_version = {
-        "1.0-owner-full-contour-20261101": {
-            "OWNER_DIAGNOSTIC_TP_0_5",
-            "OWNER_DIAGNOSTIC_SL_0_5",
-        },
-        "2.0-owner-full-contour-e2e-20261101": {
-            "OWNER_DIAGNOSTIC_FORCE_CLOSE",
-            "OWNER_DIAGNOSTIC_TP_0_5",
-            "OWNER_DIAGNOSTIC_SL_0_5",
-        },
+    diagnostic_contracts = {
+        "1.0-owner-full-contour-20261101": (
+            {"OWNER_DIAGNOSTIC_TP_0_5", "OWNER_DIAGNOSTIC_SL_0_5"},
+            "0.5",
+        ),
+        "2.0-owner-full-contour-e2e-20261101": (
+            {
+                "OWNER_DIAGNOSTIC_FORCE_CLOSE",
+                "OWNER_DIAGNOSTIC_TP_0_5",
+                "OWNER_DIAGNOSTIC_SL_0_5",
+            },
+            "0.5",
+        ),
+        "3.0-owner-full-contour-e2e-20261101": (
+            {
+                "OWNER_DIAGNOSTIC_FORCE_CLOSE",
+                "OWNER_DIAGNOSTIC_TP_0_2",
+                "OWNER_DIAGNOSTIC_SL_0_2",
+            },
+            "0.2",
+        ),
     }
-    expected_rule_ids = diagnostic_rules_by_version.get(card.strategy_version)
-    if expected_rule_ids is None:
+    diagnostic_contract = diagnostic_contracts.get(card.strategy_version)
+    if diagnostic_contract is None:
         return False
+    expected_rule_ids, expected_stop_loss_pct = diagnostic_contract
     scopes = {
         "owner_full_contour_diag_main": ("INJUSDT", "LTCUSDT"),
         "owner_full_contour_diag_sub": ("APTUSDT", "ARBUSDT", "DOTUSDT"),
@@ -330,7 +342,7 @@ def _owner_full_contour_diagnostic_policy(card: StrategyCard) -> bool:
         and capital.get("max_simultaneous_committed_usdt") == "10"
         and capital.get("max_open_positions_per_symbol") == 1
         and initial.get("stop_loss_enabled") is True
-        and initial.get("stop_loss_pct") == "0.5"
+        and initial.get("stop_loss_pct") == expected_stop_loss_pct
         and initial.get("exchange_resident_required") is True
         and initial.get("take_profit_enabled") is False
         and initial.get("trigger_by") == "LastPrice"
@@ -345,7 +357,7 @@ def _owner_full_contour_diagnostic_policy(card: StrategyCard) -> bool:
         and emergency == {
             "enabled": True,
             "terminal_loss_containment": "INITIAL_PROTECTION",
-            "initial_stop_loss_pct": "0.5",
+            "initial_stop_loss_pct": expected_stop_loss_pct,
             "operator_kill": "MAINNET_GATE_OFF",
         }
     )

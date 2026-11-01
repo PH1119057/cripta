@@ -89,17 +89,72 @@ V1_DIAG = (
     ),
 )
 
+V2_DIAG_VERSION = "2.0-owner-full-contour-e2e-20261101"
+V2_DIAG = (
+    (
+        diagnostic.MAIN_ID,
+        MAIN_ACCOUNT,
+        "activation-owner-full-contour-main-v2-20261101",
+        "binding-owner-full-contour-main-v2-20261101",
+    ),
+    (
+        diagnostic.SUB_ID,
+        SUB_ACCOUNT,
+        "activation-owner-full-contour-sub-v2-20261101",
+        "binding-owner-full-contour-sub-v2-20261101",
+    ),
+)
+
+
+def _historical_diagnostic_policy(
+    strategy_id: str,
+    *,
+    version: str,
+    include_forced_exit: bool,
+) -> dict[str, object]:
+    raw = diagnostic._policy(strategy_id)
+    raw["strategy_version"] = version
+    raw["exit_policy"]["exit_plan_version"] = "owner-full-contour-fixed-05-v1"
+    raw["exit_policy"]["hard_stop"]["value"] = "0.5"
+    raw["exit_policy"]["take_profit"]["value"] = "0.5"
+    for rule in raw["exit_policy"]["rules"]:
+        if rule["rule_id"] == "OWNER_DIAGNOSTIC_TP_0_2":
+            rule["rule_id"] = "OWNER_DIAGNOSTIC_TP_0_5"
+            rule["predicate"]["params"]["value"] = "0.5"
+        elif rule["rule_id"] == "OWNER_DIAGNOSTIC_SL_0_2":
+            rule["rule_id"] = "OWNER_DIAGNOSTIC_SL_0_5"
+            rule["predicate"]["params"]["value"] = "-0.5"
+    if not include_forced_exit:
+        raw["exit_policy"]["rules"] = [
+            rule
+            for rule in raw["exit_policy"]["rules"]
+            if rule["rule_id"] != "OWNER_DIAGNOSTIC_FORCE_CLOSE"
+        ]
+    raw["protection_policy"]["initial_protection"]["stop_loss_pct"] = "0.5"
+    raw["lifecycle_policy"]["emergency_policy"]["initial_stop_loss_pct"] = "0.5"
+    return raw
+
+
+def _v2_diagnostic_card(strategy_id: str):
+    return card_from_editable(
+        _historical_diagnostic_policy(
+            strategy_id,
+            version=V2_DIAG_VERSION,
+            include_forced_exit=True,
+        ),
+        approved_at=datetime(2026, 11, 1, 10, 5, 57, tzinfo=UTC),
+        approved_source="owner-2026-11-01-full-contour-real-diagnostic-v2",
+        validate_authoring=False,
+    )
+
 
 def _v1_diagnostic_card(strategy_id: str):
-    raw = diagnostic._policy(strategy_id)
-    raw["strategy_version"] = V1_DIAG_VERSION
-    raw["exit_policy"]["rules"] = [
-        rule
-        for rule in raw["exit_policy"]["rules"]
-        if rule["rule_id"] != "OWNER_DIAGNOSTIC_FORCE_CLOSE"
-    ]
     return card_from_editable(
-        raw,
+        _historical_diagnostic_policy(
+            strategy_id,
+            version=V1_DIAG_VERSION,
+            include_forced_exit=False,
+        ),
         approved_at=datetime(2026, 10, 31, 20, 55, tzinfo=UTC),
         approved_source="owner-2026-11-01-full-contour-real-diagnostic",
         validate_authoring=False,
@@ -221,6 +276,53 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                 ),
             )
 
+        retired_at = datetime(2026, 11, 1, 10, 5, 57, tzinfo=UTC)
+        connection.execute(
+            """UPDATE strategy_entry.strategy_activations
+                  SET enabled=false,disabled_at=%s
+                WHERE strategy_version=%s""",
+            (retired_at, V1_DIAG_VERSION),
+        )
+        connection.execute(
+            """UPDATE strategy_entry.strategy_execution_bindings
+                  SET binding_state='INACTIVE',effective_to=%s
+                WHERE strategy_activation_id=ANY(%s)""",
+            (retired_at, [row[2] for row in V1_DIAG]),
+        )
+
+        for strategy_id, account, activation_id, binding_id in V2_DIAG:
+            card = _v2_diagnostic_card(strategy_id)
+            activation = StrategyActivation(
+                activation_id=activation_id,
+                strategy_id=card.strategy_id,
+                strategy_version=card.strategy_version,
+                strategy_config_fingerprint=card.strategy_config_fingerprint,
+                enabled=True,
+                enabled_at=retired_at,
+                scope=FrozenPolicy.from_mapping(
+                    {"mode": "OWNER_FULL_CONTOUR_DIAGNOSTIC"}
+                ),
+                operator="owner",
+                source="OWNER_FULL_CONTOUR_V2_CI",
+            )
+            entry, exit_plan = materialize_plans(card, activation)
+            store.insert_strategy_card(card)
+            store.insert_activation(activation, reason="production-like diagnostic v2")
+            store.insert_entry_plan(entry)
+            store.insert_exit_plan(exit_plan)
+            connection.execute(
+                """INSERT INTO strategy_entry.strategy_execution_bindings(
+                       strategy_execution_binding_id,strategy_activation_id,
+                       execution_leg,execution_role,trading_account_id,
+                       allocation_mode,binding_state,effective_from,
+                       operator,source,reason)
+                   VALUES(%s,%s,'PRIMARY','PRIMARY',%s,
+                          'SUBORDINATE_DIAGNOSTIC','ACTIVE',%s,
+                          'owner','OWNER_FULL_CONTOUR_V2_CI',
+                          'production-like v2 before v3 upgrade')""",
+                (binding_id, activation_id, account, retired_at),
+            )
+
         # production has this historical control-plane table; current
         # operations/sql lineage does not create it in this disposable suite.
         # Reuse the exact schema already exercised by test_release_arm_postgres.
@@ -323,6 +425,25 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
             for _sid, enabled, disabled_at, binding_state, effective_to in old_rows
         )
 
+        v2_rows = connection.execute(
+            """SELECT a.strategy_id,a.enabled,a.disabled_at,
+                      b.binding_state,b.effective_to
+                 FROM strategy_entry.strategy_activations a
+                 JOIN strategy_entry.strategy_execution_bindings b
+                   ON b.strategy_activation_id=a.activation_id
+                WHERE a.strategy_version=%s
+                ORDER BY a.strategy_id""",
+            (V2_DIAG_VERSION,),
+        ).fetchall()
+        assert len(v2_rows) == 2
+        assert all(
+            enabled is False
+            and disabled_at is not None
+            and binding_state == "INACTIVE"
+            and effective_to is not None
+            for _sid, enabled, disabled_at, binding_state, effective_to in v2_rows
+        )
+
         assert connection.execute(
             """SELECT count(*) FROM strategy_entry.strategy_execution_bindings
                 WHERE binding_state='ACTIVE'
@@ -365,21 +486,32 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                 SUB_ACCOUNT,
             ),
         )
+        account_mode_proof = {
+            "__cripta_signed_account_mode": {
+                "status": "PASS",
+                "observed_at_epoch_ms": int(run_at.timestamp() * 1000),
+                "margin_mode": "ISOLATED_MARGIN",
+                "unified_margin_status": "6",
+            }
+        }
         connection.execute(
             """INSERT INTO runtime.account_state_generations(
                    generation_id,account_ref,reason,state,started_at,completed_at,
                    account_type,total_equity,wallet_balance,available_balance,
                    positions_count,active_orders_count,position_mode_refs,
-                   wallet_payload,error,trading_account_id,identity_status)
+                   wallet_payload,error,trading_account_id,account_connector_id,
+                   identity_status)
                VALUES(%s,'BYBIT:UNIFIED','owner-full-contour-ci','COMPLETE',
-                      %s,%s,'UNIFIED',100,100,100,0,0,%s::jsonb,'{}'::jsonb,
-                      '',%s,'PROVEN')""",
+                      %s,%s,'UNIFIED',100,100,100,0,0,%s::jsonb,%s::jsonb,
+                      '',%s,%s,'PROVEN')""",
             (
                 generation_id,
                 run_at,
                 run_at,
                 json.dumps({"ARBUSDT": position_mode_ref}),
+                json.dumps(account_mode_proof),
                 SUB_ACCOUNT,
+                diagnostic.SUB_CONNECTOR_ID,
             ),
         )
         connection.execute(
@@ -416,8 +548,72 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
             ),
         )
 
+        # Production regression: the previous diagnostic pre-mutation failure
+        # latched only this SUB account. V3 owner-control may clear that exact
+        # latch only after the fresh flat signed account-mode proof above.
+        connection.execute("RESET SESSION AUTHORIZATION")
+        prior_run_id = "owner-fc-ci-prior-pre-mutation"
+        prior_command_id = "ue-ci-prior-pre-mutation"
+        prior_at = run_at - timedelta(seconds=1)
+        connection.execute(
+            """INSERT INTO runtime.trade_commands(
+                   command_id,command_type,symbol,payload_json,state,
+                   requested_at_epoch_ms,started_at_epoch_ms,finished_at_epoch_ms,
+                   error,strategy_execution_binding_id,execution_leg,
+                   trading_account_id,identity_status)
+               VALUES(%s,'entry','ARBUSDT','{}'::jsonb,'failed',
+                      %s,%s,%s,'PRE_MUTATION_SAFETY_BLOCK:PreMutationSafetyBlock',
+                      %s,'PRIMARY',%s,'PROVEN')""",
+            (
+                prior_command_id,
+                int(prior_at.timestamp() * 1000),
+                int(prior_at.timestamp() * 1000),
+                int(prior_at.timestamp() * 1000),
+                "binding-owner-full-contour-sub-v2-20261101",
+                SUB_ACCOUNT,
+            ),
+        )
+        connection.execute(
+            """INSERT INTO control.owner_full_contour_diagnostic_runs(
+                   run_id,requested_at,requested_by,source,symbol,direction,
+                   strategy_id,strategy_version,strategy_config_fingerprint,
+                   strategy_activation_id,strategy_execution_binding_id,
+                   trading_account_id,account_connector_id,release_commit,state,
+                   entry_command_id,error,completed_at,updated_at)
+               VALUES(%s,%s,'owner','dashboard:owner-full-contour-diagnostic',
+                      'ARBUSDT','LONG',%s,
+                      '2.0-owner-full-contour-e2e-20261101',%s,
+                      'activation-owner-full-contour-sub-v2-20261101',
+                      'binding-owner-full-contour-sub-v2-20261101',
+                      %s,%s,%s,'FAILED',%s,
+                      'PRE_MUTATION_SAFETY_BLOCK:PreMutationSafetyBlock',
+                      %s,%s)""",
+            (
+                prior_run_id,
+                prior_at,
+                diagnostic.SUB_ID,
+                "d" * 64,
+                SUB_ACCOUNT,
+                diagnostic.SUB_CONNECTOR_ID,
+                release_commit,
+                prior_command_id,
+                prior_at,
+                prior_at,
+            ),
+        )
+        connection.execute(
+            """INSERT INTO runtime.account_entry_safety_blocks(
+                   trading_account_id,account_connector_id,blocked_at,reason)
+               VALUES(%s,%s,%s,'PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED')""",
+            (SUB_ACCOUNT, diagnostic.SUB_CONNECTOR_ID, prior_at),
+        )
+        connection.execute("SET SESSION AUTHORIZATION cripta")
+        assert connection.execute(
+            "SELECT session_user,current_user"
+        ).fetchone() == ("cripta", "cripta")
+
         # Regression for the production 2026-11-01 authenticated trigger
-        # failure: control.execution_gates.enabled is SMALLINT, while the v2
+        # failure: control.execution_gates.enabled is SMALLINT, while the historical v2
         # SECURITY DEFINER account-arm function had compared it with boolean
         # false. Exercise the exact owner request path as runtime role cripta.
         requested = request_run(
@@ -432,6 +628,11 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         assert requested["symbol"] == "ARBUSDT"
         assert requested["direction"] == "LONG"
         assert requested["state"] == "REQUESTED"
+        assert connection.execute(
+            """SELECT count(*) FROM runtime.account_entry_safety_blocks
+                WHERE trading_account_id=%s AND account_connector_id=%s""",
+            (SUB_ACCOUNT, diagnostic.SUB_CONNECTOR_ID),
+        ).fetchone() == (0,)
         assert connection.execute(
             "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
         ).fetchone() == (1,)

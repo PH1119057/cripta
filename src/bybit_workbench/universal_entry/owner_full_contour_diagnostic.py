@@ -16,8 +16,8 @@ from decimal import Decimal, InvalidOperation
 from .contracts import StrategyCard
 from .dashboard_control import card_from_editable, strategy_authoring_template
 
-VERSION = "2.0-owner-full-contour-e2e-20261101"
-SOURCE = "owner-2026-11-01-full-contour-real-diagnostic-v2"
+VERSION = "3.0-owner-full-contour-e2e-20261101"
+SOURCE = "owner-2026-11-01-full-contour-real-diagnostic-v3"
 RUNTIME_SOURCE = "owner_full_contour_real_diagnostic"
 TRIGGER_EVENT_KIND = "OWNER_FULL_CONTOUR_TRIGGER"
 EXIT_TRIGGER_EVENT_KIND = "OWNER_FULL_CONTOUR_EXIT_TRIGGER"
@@ -25,10 +25,10 @@ ENTRY_WINDOW_GATE_REASON = "owner full-contour diagnostic Entry window"
 
 MAIN_ID = "owner_full_contour_diag_main"
 SUB_ID = "owner_full_contour_diag_sub"
-MAIN_ACTIVATION_ID = "activation-owner-full-contour-main-v2-20261101"
-SUB_ACTIVATION_ID = "activation-owner-full-contour-sub-v2-20261101"
-MAIN_BINDING_ID = "binding-owner-full-contour-main-v2-20261101"
-SUB_BINDING_ID = "binding-owner-full-contour-sub-v2-20261101"
+MAIN_ACTIVATION_ID = "activation-owner-full-contour-main-v3-20261101"
+SUB_ACTIVATION_ID = "activation-owner-full-contour-sub-v3-20261101"
+MAIN_BINDING_ID = "binding-owner-full-contour-main-v3-20261101"
+SUB_BINDING_ID = "binding-owner-full-contour-sub-v3-20261101"
 
 MAIN_ACCOUNT_ID = "ta-2122c81ecff14f3b85b102db605212f7"
 SUB_ACCOUNT_ID = "ta-853ac5fcd58185697396d33cd57459fa"
@@ -41,8 +41,8 @@ SYMBOLS = frozenset(MAIN_SYMBOLS + SUB_SYMBOLS)
 
 REQUESTED_USDT = Decimal("10")
 LEVERAGE = 1
-STOP_LOSS_PCT = Decimal("0.5")
-TAKE_PROFIT_PCT = Decimal("0.5")
+STOP_LOSS_PCT = Decimal("0.2")
+TAKE_PROFIT_PCT = Decimal("0.2")
 
 
 def strategy_id_for_symbol(symbol: str) -> str:
@@ -120,7 +120,7 @@ def _policy(strategy_id: str) -> dict[str, object]:
         "context_ranking_policy": {"enabled": False},
     }
     raw["exit_policy"] = {
-        "exit_plan_version": "owner-full-contour-fixed-05-v1",
+        "exit_plan_version": "owner-full-contour-fixed-02-v1",
         "conflict_policy": {
             "mode": "PRIORITY",
             "priority_order": "HIGHER_WINS",
@@ -146,7 +146,7 @@ def _policy(strategy_id: str) -> dict[str, object]:
                 },
             },
             {
-                "rule_id": "OWNER_DIAGNOSTIC_TP_0_5",
+                "rule_id": "OWNER_DIAGNOSTIC_TP_0_2",
                 "priority": 200,
                 "repeat_policy": "ONCE_PER_POSITION",
                 "required_fact_paths": ["fact.directional_pnl_pct"],
@@ -164,7 +164,7 @@ def _policy(strategy_id: str) -> dict[str, object]:
                 },
             },
             {
-                "rule_id": "OWNER_DIAGNOSTIC_SL_0_5",
+                "rule_id": "OWNER_DIAGNOSTIC_SL_0_2",
                 "priority": 100,
                 "repeat_policy": "ONCE_PER_POSITION",
                 "required_fact_paths": ["fact.directional_pnl_pct"],
