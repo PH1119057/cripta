@@ -5382,6 +5382,7 @@ def _u6_prepare_p90_real_v3_readiness(
         return _readiness_operation_json(operation) or {}
 
     specs = p90_real_v3_service_specs(sub_account_id=P90_REAL_SUB_ACCOUNT_ID)
+    broker_result: dict[str, object] | None = None
     try:
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
@@ -5460,7 +5461,11 @@ def _u6_prepare_p90_real_v3_readiness(
                 state="RECONCILING",
                 phase="reconciling_runtime",
                 now=datetime.now(UTC),
-                progress={"services_active": len(specs)},
+                progress={
+                    "services_active": len(specs),
+                    "requested_starts": list(plan.starts),
+                    "broker_result": broker_result,
+                },
             )
         # The existing technical evidence owner performs fresh account,
         # observer, lifecycle, release and reconciliation checks. A service
@@ -5486,6 +5491,8 @@ def _u6_prepare_p90_real_v3_readiness(
                 now=datetime.now(UTC),
                 progress={
                     "services_active": len(specs),
+                    "requested_starts": list(plan.starts),
+                    "broker_result": broker_result,
                     "technical_evidence_status": evidence.get("status"),
                 },
             )
