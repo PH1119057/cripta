@@ -73,6 +73,11 @@ from bybit_workbench.exchange.bybit.time_calibration import (
     build_bybit_time_calibration,
 )
 from bybit_workbench.universal_entry.market_watch import compute_r1_l53_stable_zone
+from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
+    MAIN_ID as OWNER_FULL_CONTOUR_MAIN_ID,
+    SUB_ID as OWNER_FULL_CONTOUR_SUB_ID,
+    VERSION as OWNER_FULL_CONTOUR_VERSION,
+)
 from bybit_workbench.universal_entry.r1_strategy import R1_STRATEGY_IDS, R1_SYMBOLS, R1_VERSION
 
 from bybit_workbench.exchange_recovery import prove_orphan_closed_cycle
@@ -120,6 +125,10 @@ PROCESS_STARTED_AT_MS = int(time.time() * 1000)
 ACCOUNT_REF = "BYBIT:UNIFIED"
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
+LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
+OWNER_DIAGNOSTIC_DISPATCH_GATE_REASON = (
+    "owner full-contour diagnostic Entry window closed: diagnostic Entry dispatched"
+)
 # Credential provenance is proved from the exact systemd mount/config,
 # independently of identity.account_connectors DB rows and secret payload fields.
 MOUNTED_CREDENTIAL_REF = ""
@@ -613,12 +622,104 @@ def _critical_lifecycle_fault_code(connection: psycopg.Connection) -> str | None
     return None if row is None else str(row[0])
 
 
-def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
+def _dispatched_owner_diagnostic_allows_closed_gate(
+    connection: psycopg.Connection,
+    *,
+    command_id: str,
+) -> bool:
+    """Recognize only an exact diagnostic command already handed to Execution."""
+    if (
+        not command_id
+        or not TRADING_ACCOUNT_ID
+        or not ACCOUNT_CONNECTOR_ID
+        or len(LOADED_RELEASE_COMMIT) != 40
+        or any(char not in "0123456789abcdef" for char in LOADED_RELEASE_COMMIT)
+    ):
+        return False
+    row = connection.execute(
+        """SELECT r.state,r.strategy_id,r.strategy_version,
+                  r.trading_account_id,r.account_connector_id,r.release_commit,
+                  r.entry_execution_request_id,r.entry_command_id,
+                  c.command_type,c.state,c.trading_account_id,c.identity_status,
+                  d.state,g.enabled,g.reason,
+                  EXISTS(
+                    SELECT 1 FROM strategy_entry.execution_permissions p
+                     WHERE p.strategy_id=r.strategy_id
+                       AND p.strategy_version=r.strategy_version
+                       AND p.strategy_config_fingerprint=r.strategy_config_fingerprint
+                       AND p.enabled=true
+                  ),
+                  EXISTS(
+                    SELECT 1 FROM control.live_arm_sessions l
+                     WHERE l.strategy_id=r.strategy_id
+                       AND l.strategy_version=r.strategy_version
+                       AND l.symbol=r.symbol
+                       AND l.release_commit=r.release_commit
+                       AND l.state='ACTIVE'
+                  ),
+                  EXISTS(
+                    SELECT 1 FROM control.account_live_arm_sessions a
+                     WHERE a.strategy_id=r.strategy_id
+                       AND a.strategy_version=r.strategy_version
+                       AND a.symbol=r.symbol
+                       AND a.release_commit=r.release_commit
+                       AND a.trading_account_id=r.trading_account_id
+                       AND a.state='ACTIVE'
+                  )
+             FROM control.owner_full_contour_diagnostic_runs r
+             JOIN runtime.trade_commands c
+               ON c.command_id=r.entry_command_id
+             JOIN strategy_entry.execution_dispatches d
+               ON d.execution_request_id=r.entry_execution_request_id
+              AND d.command_id=r.entry_command_id
+              AND d.strategy_id=r.strategy_id
+              AND d.strategy_version=r.strategy_version
+              AND d.strategy_config_fingerprint=r.strategy_config_fingerprint
+             JOIN control.execution_gates g ON g.mode='mainnet'
+            WHERE r.entry_command_id=%s""",
+        (command_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    return (
+        str(row[0]) == "DISPATCHED"
+        and str(row[1]) in {OWNER_FULL_CONTOUR_MAIN_ID, OWNER_FULL_CONTOUR_SUB_ID}
+        and str(row[2]) == OWNER_FULL_CONTOUR_VERSION
+        and str(row[3]) == TRADING_ACCOUNT_ID
+        and str(row[4]) == ACCOUNT_CONNECTOR_ID
+        and str(row[5]) == LOADED_RELEASE_COMMIT
+        and bool(row[6])
+        and str(row[7]) == command_id
+        and str(row[8]) == "entry"
+        and str(row[9]) == "queued"
+        and str(row[10]) == TRADING_ACCOUNT_ID
+        and str(row[11]) == "PROVEN"
+        and str(row[12]) == "DISPATCHED"
+        and not bool(row[13])
+        and str(row[14]) == OWNER_DIAGNOSTIC_DISPATCH_GATE_REASON
+        and not bool(row[15])
+        and not bool(row[16])
+        and not bool(row[17])
+    )
+
+
+def entry_runtime_readiness(
+    connection: psycopg.Connection,
+    *,
+    command_id: str | None = None,
+) -> tuple[bool, str]:
     gate = connection.execute(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
     ).fetchone()
     if not gate or not bool(gate[0]):
-        return False, "NEW_ENTRY_GATE_DISARMED"
+        if not (
+            command_id
+            and _dispatched_owner_diagnostic_allows_closed_gate(
+                connection,
+                command_id=command_id,
+            )
+        ):
+            return False, "NEW_ENTRY_GATE_DISARMED"
     private = status.get("private", {})
     if not isinstance(private, dict) or private.get("state") != "connected":
         return False, "PRIVATE_WS_NOT_CONNECTED"
@@ -3846,7 +3947,10 @@ def command_worker_loop(key: str, secret: str) -> None:
             continue
         command_id=str(row[0])
         if str(row[1]) == "entry":
-            ready, readiness_reason = entry_runtime_readiness(connection)
+            ready, readiness_reason = entry_runtime_readiness(
+                connection,
+                command_id=command_id,
+            )
             if not ready:
                 connection.execute(
                     """UPDATE runtime.trade_commands
