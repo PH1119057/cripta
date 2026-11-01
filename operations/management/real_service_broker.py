@@ -78,24 +78,37 @@ def verify_release(requested: str) -> None:
         raise BrokerError("RELEASE_IDENTITY_MISMATCH")
 
 
-def _systemctl_show(unit: str) -> dict[str, str]:
-    result = subprocess.run(
-        [
-            "/usr/bin/systemctl",
-            "show",
-            unit,
-            "-p",
-            "LoadState",
-            "-p",
-            "ActiveState",
-            "-p",
-            "FragmentPath",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=8,
-    )
+def _systemctl_show(
+    unit: str,
+    *,
+    deadline: float | None = None,
+) -> dict[str, str]:
+    timeout = 8.0
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise BrokerError("SERVICE_START_DEADLINE_EXCEEDED")
+        timeout = min(timeout, remaining)
+    try:
+        result = subprocess.run(
+            [
+                "/usr/bin/systemctl",
+                "show",
+                unit,
+                "-p",
+                "LoadState",
+                "-p",
+                "ActiveState",
+                "-p",
+                "FragmentPath",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise BrokerError(f"SERVICE_STATE_TIMEOUT:{unit}") from exc
     if result.returncode != 0:
         raise BrokerError(f"SERVICE_STATE_UNREADABLE:{unit}")
     values: dict[str, str] = {}
@@ -108,27 +121,38 @@ def _systemctl_show(unit: str) -> dict[str, str]:
     return values
 
 
-def _start_unit(unit: str) -> tuple[bool, str]:
-    result = subprocess.run(
-        ["/usr/bin/systemctl", "start", unit],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
+def _start_unit(unit: str, *, deadline: float) -> tuple[bool, str]:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return False, "SERVICE_START_DEADLINE_EXCEEDED"
+    try:
+        result = subprocess.run(
+            ["/usr/bin/systemctl", "start", unit],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=min(20.0, remaining),
+        )
+    except subprocess.TimeoutExpired:
+        return False, "systemctl start timed out"
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip().replace("\n", " ")[:300]
         return False, detail or "systemctl start failed"
-    deadline = time.monotonic() + 10.0
     state = "unknown"
     while time.monotonic() <= deadline:
-        state = _systemctl_show(unit).get("ActiveState", "") or "unknown"
+        try:
+            state = (
+                _systemctl_show(unit, deadline=deadline).get("ActiveState", "")
+                or "unknown"
+            )
+        except BrokerError as exc:
+            return False, str(exc)
         if state == "active":
             return True, "active"
         if state in {"failed", "deactivating"}:
             return False, state
         time.sleep(0.2)
-    return False, state
+    return False, "SERVICE_START_DEADLINE_EXCEEDED"
 
 
 def handle_request(payload: dict[str, Any]) -> dict[str, Any]:
@@ -152,15 +176,17 @@ def handle_request(payload: dict[str, Any]) -> dict[str, Any]:
 
     verify_release(release_commit)
 
+    request_deadline = time.monotonic() + MAX_START_REQUEST_SECONDS
     before: dict[str, str] = {}
     for unit in normalized:
-        state = _systemctl_show(unit).get("ActiveState", "")
+        state = _systemctl_show(unit, deadline=request_deadline).get(
+            "ActiveState", ""
+        )
         if state not in ALLOWED_PRE_STATES:
             raise BrokerError(f"SERVICE_NOT_RECOVERABLE:{unit}:{state or 'unknown'}")
         before[unit] = state
 
     results: list[dict[str, object]] = []
-    request_deadline = time.monotonic() + MAX_START_REQUEST_SECONDS
     for unit in normalized:
         if time.monotonic() > request_deadline:
             return {
@@ -176,8 +202,12 @@ def handle_request(payload: dict[str, Any]) -> dict[str, Any]:
                 {"unit": unit, "before": "active", "after": "active", "started": False}
             )
             continue
-        ok, detail = _start_unit(unit)
-        after = "active" if ok else _systemctl_show(unit).get("ActiveState", "unknown")
+        ok, detail = _start_unit(unit, deadline=request_deadline)
+        after = "active" if ok else (
+            detail
+            if detail in {"inactive", "failed", "deactivating"}
+            else "unknown"
+        )
         results.append(
             {
                 "unit": unit,
