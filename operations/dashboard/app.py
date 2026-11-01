@@ -5498,6 +5498,8 @@ def _u6_p90_real_v3_arm(
         raise ValueError("P90 REAL v3 ARM enabled must be boolean")
     if enabled and request.get("confirmed") is not True:
         raise ValueError("P90 REAL v3 OWNER ARM requires explicit confirmation")
+    if enabled and not _u6_financial_account_same_origin(handler):
+        raise ValueError("P90_REAL_OWNER_ARM_ORIGIN_UNVERIFIED")
     operator = handler.session_user() or "UNKNOWN"
     request_id = str(request.get("request_id") or secrets.token_hex(12))
     if enabled:
