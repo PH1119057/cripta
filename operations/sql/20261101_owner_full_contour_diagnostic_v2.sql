@@ -366,7 +366,7 @@ BEGIN
   END IF;
 
   IF (SELECT enabled FROM control.execution_gates WHERE mode='mainnet')
-       IS DISTINCT FROM false
+       IS DISTINCT FROM 0
      OR (SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true)
        <> 1
      OR NOT EXISTS (
