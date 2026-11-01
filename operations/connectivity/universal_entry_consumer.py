@@ -39,7 +39,7 @@ from bybit_workbench.universal_entry.execution_bridge import (
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 from bybit_workbench.universal_entry.owner_full_contour_control import (
-    require_parent_p90_owner_scope,
+    require_parent_p90_diagnostic_scope,
     set_run_state as set_owner_diagnostic_run_state,
 )
 from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
@@ -609,7 +609,7 @@ def _admission_pre_dispatch_status(
         if not ACCOUNT_CONNECTOR_ID or not LOADED_RELEASE_COMMIT:
             return "BINDING_INVALID", "OWNER_FULL_CONTOUR_PARENT_SCOPE_CONTEXT_MISSING"
         try:
-            require_parent_p90_owner_scope(
+            require_parent_p90_diagnostic_scope(
                 connection,
                 symbol=request.symbol,
                 account_id=request.trading_account_id,
@@ -1193,8 +1193,28 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     current = (now or datetime.now(UTC)).astimezone(UTC)
     _release_expired_reserved_requests(connection, now=current)
 
+    # Diagnostic lifecycle completion must continue after its bounded NEW-Entry
+    # window closes. Exit ownership is independent of the global Entry gate.
+    diagnostic_lifecycle = refresh_run_lifecycle(
+        connection,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        now=current,
+    )
+    terminal_result = _refresh_owner_diagnostic_terminal_exit(
+        connection,
+        now=current,
+    )
+    if terminal_result:
+        return terminal_result
+    command_result = _refresh_owner_diagnostic_command_failure(
+        connection,
+        now=current,
+    )
+    if command_result:
+        return command_result
+
     if not _execution_gate_enabled(connection):
-        return "EXECUTION_GATE_DISARMED"
+        return diagnostic_lifecycle or "EXECUTION_GATE_DISARMED"
     # Registry routing is only a prerequisite. Per-request binding/connector,
     # independently authenticated private credentials and LIVE arm remain
     # separately required; no cross-account worker fallback.
@@ -1218,23 +1238,6 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         # process/account route and account safety checks passed, and no normal
         # Entry request is pending, may this consumer inspect an owner
         # diagnostic trigger.
-        refresh_run_lifecycle(
-            connection,
-            trading_account_id=TRADING_ACCOUNT_ID,
-            now=current,
-        )
-        terminal_result = _refresh_owner_diagnostic_terminal_exit(
-            connection,
-            now=current,
-        )
-        if terminal_result:
-            return terminal_result
-        command_result = _refresh_owner_diagnostic_command_failure(
-            connection,
-            now=current,
-        )
-        if command_result:
-            return command_result
         diagnostic_result = materialize_requested_run(
             connection,
             trading_account_id=TRADING_ACCOUNT_ID,
