@@ -19,6 +19,7 @@ from bybit_workbench.universal_entry import owner_full_contour_diagnostic as dia
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
 from bybit_workbench.universal_entry.dashboard_control import card_from_editable
 from bybit_workbench.universal_entry.materializer import materialize_plans
+from bybit_workbench.universal_entry.owner_full_contour_control import request_run
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
@@ -214,15 +215,50 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                 ),
             )
 
+        # production has this historical control-plane table; current
+        # operations/sql lineage does not create it in this disposable suite.
+        # Reuse the exact schema already exercised by test_release_arm_postgres.
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS control.execution_gate_events(
+                id bigint generated always as identity primary key,
+                at_epoch_ms bigint not null,mode text not null,
+                previous_enabled boolean not null,requested_enabled boolean not null,
+                resulting_enabled boolean not null,reason text not null,
+                source text not null,origin text not null,request_id text not null,
+                settings_version text,created_at timestamptz default now())"""
+        )
+
         # Match production's already-existing read rights used by the inert
         # installer preflight.  This is disposable-fixture parity only; the
         # release does not grant new runtime privileges.
         connection.execute(
             """GRANT SELECT ON
                    control.execution_gates,
+                   control.owner_full_contour_diagnostic_runs,
+                   strategy_entry.execution_permissions,
+                   strategy_entry.strategy_activations,
+                   strategy_entry.strategy_execution_bindings,
+                   control.live_arm_sessions,
+                   control.account_live_arm_sessions,
+                   runtime.hot_positions,
+                   runtime.hot_orders,
+                   runtime.position_ownership
+               TO cripta"""
+        )
+        connection.execute(
+            """GRANT UPDATE ON
+                   control.execution_gates,
                    strategy_entry.execution_permissions,
                    control.live_arm_sessions,
-                   control.account_live_arm_sessions
+                   control.owner_full_contour_diagnostic_runs
+               TO cripta"""
+        )
+        connection.execute(
+            """GRANT INSERT ON
+                   control.execution_gate_events,
+                   strategy_entry.execution_permissions,
+                   control.live_arm_sessions,
+                   control.owner_full_contour_diagnostic_runs
                TO cripta"""
         )
         connection.execute("SET SESSION AUTHORIZATION cripta")
@@ -298,6 +334,56 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         assert connection.execute(
             """SELECT count(*) FROM control.account_live_arm_sessions
                 WHERE state='ACTIVE'"""
+        ).fetchone() == (0,)
+
+        # Regression for the production 2026-11-01 authenticated trigger
+        # failure: control.execution_gates.enabled is SMALLINT, while the v2
+        # SECURITY DEFINER account-arm function had compared it with boolean
+        # false. Exercise the exact owner request path as runtime role cripta.
+        requested = request_run(
+            connection,
+            request_id="owner-fc-ci-arb-long",
+            symbol="ARBUSDT",
+            direction="LONG",
+            operator="owner",
+            release_commit="f" * 40,
+            now=AT,
+        )
+        assert requested["symbol"] == "ARBUSDT"
+        assert requested["direction"] == "LONG"
+        assert requested["state"] == "REQUESTED"
+        assert connection.execute(
+            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM strategy_entry.execution_permissions
+                WHERE enabled=true
+                  AND strategy_id=%s
+                  AND strategy_version=%s""",
+            (diagnostic.SUB_ID, diagnostic.VERSION),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM control.live_arm_sessions
+                WHERE state='ACTIVE'
+                  AND strategy_id=%s
+                  AND strategy_version=%s
+                  AND symbol='ARBUSDT'""",
+            (diagnostic.SUB_ID, diagnostic.VERSION),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM control.account_live_arm_sessions
+                WHERE state='ACTIVE'
+                  AND strategy_id=%s
+                  AND strategy_version=%s
+                  AND symbol='ARBUSDT'
+                  AND trading_account_id=%s""",
+            (diagnostic.SUB_ID, diagnostic.VERSION, SUB_ACCOUNT),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM strategy_entry.execution_permissions
+                WHERE enabled=true
+                  AND strategy_id IN (%s,%s)""",
+            (MAIN_ID, SUB_ID),
         ).fetchone() == (0,)
 
         raise RuntimeError("ROLLBACK_OWNER_FULL_CONTOUR_SUBORDINATE")
