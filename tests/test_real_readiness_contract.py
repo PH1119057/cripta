@@ -107,6 +107,7 @@ def test_dashboard_contains_persistent_friendly_preparation_states():
     assert "подготовка заблокирована" in ui
     assert "mainnet gate CLOSED" in ui
 
+
 def test_verified_release_shell_syntax() -> None:
     bash = shutil.which("bash")
     if bash is None:
