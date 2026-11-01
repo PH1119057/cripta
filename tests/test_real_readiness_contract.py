@@ -70,6 +70,11 @@ def test_broker_systemd_unit_is_root_but_narrowly_sandboxed():
     assert "ReadOnlyPaths=/usr/local/libexec/cripta-real-service-broker" in unit
     assert "Environment=PYTHONNOUSERSITE=1" in unit
     assert "AF_INET" not in unit
+    broker_source = (
+        ROOT / "operations/management/real_service_broker.py"
+    ).read_text(encoding="utf-8")
+    assert 'DASHBOARD_CGROUP = "/system.slice/cripta-dashboard.service"' in broker_source
+    assert "_peer_is_dashboard(pid)" in broker_source
     assert "sudo" not in unit
 
 
