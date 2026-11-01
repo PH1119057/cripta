@@ -154,11 +154,12 @@ def test_request_deadline_prevents_late_second_start(
         },
     )
     starts: list[str] = []
-    monkeypatch.setattr(
-        broker,
-        "_start_unit",
-        lambda unit: (starts.append(unit) is None or True, "active"),
-    )
+
+    def start(unit: str) -> tuple[bool, str]:
+        starts.append(unit)
+        return True, "active"
+
+    monkeypatch.setattr(broker, "_start_unit", start)
     ticks = iter((0.0, 0.0, 61.0))
     monkeypatch.setattr(broker.time, "monotonic", lambda: next(ticks))
     result = broker.handle_request(
