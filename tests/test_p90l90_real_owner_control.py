@@ -139,6 +139,16 @@ def test_p90_technical_evidence_and_staged_owner_arm_are_separate_actions() -> N
     assert "OWNER ARM requires explicit confirmation" in arm_block
     assert "P90_REAL_OWNER_ARM_ORIGIN_UNVERIFIED" in arm_block
 
+def test_p90_technical_evidence_requires_fresh_universal_exit_owner() -> None:
+    source = PREARM_EVIDENCE.read_text()
+    assert "/var/lib/cripta/universal_exit_shadow/status.json" in source
+    assert '"Universal Exit owner status"' in source
+    assert 'exit_owner.get("state") == "RUNNING"' in source
+    assert 'exit_owner.get("execution_rights") == "NONE"' in source
+    assert 'exit_owner.get("blocked_count")' in source
+    assert '"Universal Exit owner not exact/fresh"' in source
+
+
 def test_p90_prearm_operator_script_cannot_owner_arm_or_open_gate() -> None:
     source = PREARM_SCRIPT.read_text()
     assert "prearm_p90l90_real_v3" in source
