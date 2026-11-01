@@ -67,6 +67,8 @@ from bybit_workbench.universal_entry.market_watch import GenericOiPoint
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
     ENTRY_WINDOW_GATE_REASON as OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON,
+    MAIN_ID as OWNER_FULL_CONTOUR_MAIN_ID,
+    SUB_ID as OWNER_FULL_CONTOUR_SUB_ID,
 )
 from bybit_workbench.universal_entry.oi30s_source import (
     CurrentOiResponse,
@@ -1293,6 +1295,58 @@ def _observer_light_signature(connection: Any) -> tuple[tuple[str, ...], ...]:
         *(tuple(str(item) for item in row) for row in rows),
         *(("BINDING", *(str(item) for item in row)) for row in binding_rows),
     )
+
+
+OWNER_FULL_CONTOUR_SIGNATURE_STRATEGY_IDS = frozenset(
+    {OWNER_FULL_CONTOUR_MAIN_ID, OWNER_FULL_CONTOUR_SUB_ID}
+)
+OWNER_FULL_CONTOUR_GATE_CLOSE_PREFIX = (
+    OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON + " closed:"
+)
+
+
+def _owner_full_contour_signature_transition_compatible(
+    current_signature: tuple[tuple[str, ...], ...],
+    latest_signature: tuple[tuple[str, ...], ...],
+    *,
+    gate_reason: str,
+) -> bool:
+    """Ignore only exact diagnostic gate/permission churn, never topology drift."""
+    if (
+        current_signature == latest_signature
+        or len(current_signature) != len(latest_signature)
+        or not current_signature
+        or not latest_signature
+        or current_signature[0][0] != "MAINNET_GATE"
+        or latest_signature[0][0] != "MAINNET_GATE"
+        or not (
+            gate_reason == OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON
+            or gate_reason.startswith(OWNER_FULL_CONTOUR_GATE_CLOSE_PREFIX)
+        )
+    ):
+        return False
+
+    def normalized(
+        signature: tuple[tuple[str, ...], ...],
+    ) -> tuple[tuple[str, ...], ...]:
+        rows: list[tuple[str, ...]] = []
+        for index, row in enumerate(signature):
+            if index == 0:
+                rows.append(("MAINNET_GATE", "OWNER_FULL_CONTOUR_WINDOW"))
+                continue
+            if row and row[0] == "BINDING":
+                rows.append(row)
+                continue
+            if (
+                len(row) == 9
+                and row[1] in OWNER_FULL_CONTOUR_SIGNATURE_STRATEGY_IDS
+            ):
+                rows.append((*row[:7], "OWNER_FULL_CONTOUR_PERMISSION", ""))
+                continue
+            rows.append(row)
+        return tuple(rows)
+
+    return normalized(current_signature) == normalized(latest_signature)
 
 
 def _real_execution_selected_activation_ids(
@@ -3360,11 +3414,23 @@ def _run_observer_epoch(
             if now_mono >= next_signature:
                 latest_signature = _observer_light_signature(connection)
                 if latest_signature != current_signature:
+                    gate_row = connection.execute(
+                        "SELECT enabled,reason FROM control.execution_gates "
+                        "WHERE mode='mainnet'"
+                    ).fetchone()
+                    gate_reason_now = str(gate_row[1] or "") if gate_row else ""
+                    if (
+                        p90_real_source_only
+                        and _owner_full_contour_signature_transition_compatible(
+                            current_signature,
+                            latest_signature,
+                            gate_reason=gate_reason_now,
+                        )
+                    ):
+                        current_signature = latest_signature
+                        next_signature = now_mono + 1.0
+                        continue
                     if p90_real_staged:
-                        gate_row = connection.execute(
-                            "SELECT enabled,reason FROM control.execution_gates "
-                            "WHERE mode='mainnet'"
-                        ).fetchone()
                         selected_now = _real_execution_selected_activation_ids(
                             connection, observer_split.p90_real
                         )
