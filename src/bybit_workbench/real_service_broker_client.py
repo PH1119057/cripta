@@ -47,8 +47,11 @@ def start_services(
     }
     data = (json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8")
     response = b""
+    unix_family = getattr(socket, "AF_UNIX", None)
+    if unix_family is None:
+        raise ServiceBrokerClientError("SERVICE_BROKER_UNAVAILABLE")
     try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        with socket.socket(unix_family, socket.SOCK_STREAM) as client:
             client.settimeout(timeout_seconds)
             client.connect(str(socket_path))
             client.sendall(data)
@@ -69,9 +72,9 @@ def start_services(
         raise ServiceBrokerClientError("SERVICE_BROKER_RESPONSE_INVALID")
     if decoded.get("ok") is not True:
         reason = str(decoded.get("error") or "SERVICE_BROKER_REJECTED")
-        units = decoded.get("units")
-        if isinstance(units, list) and units:
-            last = units[-1]
+        response_units = decoded.get("units")
+        if isinstance(response_units, list) and response_units:
+            last = response_units[-1]
             if isinstance(last, dict) and last.get("detail"):
                 reason += ":" + str(last["detail"])[:300]
         raise ServiceBrokerClientError(reason, response=decoded)
