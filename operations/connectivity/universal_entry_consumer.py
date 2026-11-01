@@ -40,6 +40,7 @@ from bybit_workbench.universal_entry.execution_bridge import (
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 from bybit_workbench.universal_entry.owner_full_contour_control import (
     require_parent_p90_diagnostic_scope,
+    retire_entry_rights as retire_owner_diagnostic_entry_rights,
     set_run_state as set_owner_diagnostic_run_state,
 )
 from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
@@ -105,6 +106,9 @@ _REQUIRED_DB_PRIVILEGES = (
     ("control.owner_full_contour_diagnostic_runs", "UPDATE"),
     ("control.live_arm_sessions", "SELECT"),
     ("control.live_arm_sessions", "UPDATE"),
+    ("control.execution_gates", "SELECT"),
+    ("control.execution_gates", "UPDATE"),
+    ("control.execution_gate_events", "INSERT"),
 )
 
 
@@ -542,6 +546,51 @@ def _publish_command(
         occurred_at=now,
         reason="DISPATCHED_TO_EXECUTION",
         payload={"command_id": prepared.command_id},
+    )
+
+
+def _finalize_owner_diagnostic_dispatch(
+    connection: psycopg.Connection[Any],
+    prepared: PreparedRuntimeEntryCommand,
+    *,
+    now: datetime,
+) -> None:
+    if not is_diagnostic_strategy(prepared.strategy_id, prepared.strategy_version):
+        return
+    row = connection.execute(
+        """SELECT run_id,state
+             FROM control.owner_full_contour_diagnostic_runs
+            WHERE entry_execution_request_id=%s
+              AND strategy_id=%s
+              AND strategy_version=%s
+              AND trading_account_id=%s
+            ORDER BY requested_at DESC
+            FOR UPDATE""",
+        (
+            prepared.execution_request_id,
+            prepared.strategy_id,
+            prepared.strategy_version,
+            prepared.trading_account_id,
+        ),
+    ).fetchall()
+    if len(row) != 1 or str(row[0]["state"]) != "MATERIALIZED":
+        raise RuntimeError("OWNER_FULL_CONTOUR_DISPATCH_RUN_IDENTITY_INVALID")
+    run_id = str(row[0]["run_id"])
+    set_owner_diagnostic_run_state(
+        connection,
+        run_id=run_id,
+        state="DISPATCHED",
+        now=now,
+        lineage={
+            "entry_execution_request_id": prepared.execution_request_id,
+            "entry_command_id": prepared.command_id,
+        },
+    )
+    retire_owner_diagnostic_entry_rights(
+        connection,
+        run_id=run_id,
+        at=now,
+        reason="diagnostic Entry dispatched",
     )
 
 
@@ -1500,6 +1549,11 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         return "BLOCKED:STRUCTURAL_ERROR"
     with connection.transaction():
         _publish_command(connection, prepared, now=current)
+        _finalize_owner_diagnostic_dispatch(
+            connection,
+            prepared,
+            now=current,
+        )
     return f"DISPATCHED:{prepared.command_id}"
 
 
