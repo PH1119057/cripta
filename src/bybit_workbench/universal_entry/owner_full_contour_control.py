@@ -14,7 +14,9 @@ from typing import Any
 
 from .fingerprint import fingerprint
 from .owner_full_contour_diagnostic import (
+    MAIN_ID,
     RUNTIME_SOURCE,
+    SUB_ID,
     VERSION,
     strategy_id_for_symbol,
     strategy_scope,
@@ -70,6 +72,147 @@ def live_session_id(run_id: str) -> str:
 
 def account_session_id(run_id: str) -> str:
     return "owner-fc-account-" + fingerprint({"run_id": run_id})[:32]
+
+
+DISPATCH_GATE_CLOSE_REASON = (
+    "owner full-contour diagnostic Entry window closed: diagnostic Entry dispatched"
+)
+
+
+def dispatched_entry_command_continuation_allowed(
+    connection: Any,
+    *,
+    command_id: str,
+    trading_account_id: str,
+    account_connector_id: str,
+    release_commit: str,
+) -> bool:
+    """Prove one already-dispatched diagnostic command may finish its handoff.
+
+    The diagnostic NEW-Entry window is closed immediately after durable
+    REQUEST_DISPATCHED.  That closure must block every *new* Entry, but it must
+    not invalidate the exact command that the Universal Entry owner already
+    handed to Execution.  This exception is deliberately narrower than LIVE arm:
+    it is valid only for one exact queued command/run/release whose temporary
+    permission and arms are already retired by that same dispatch.
+    """
+    if (
+        not command_id
+        or not trading_account_id
+        or not account_connector_id
+        or len(release_commit) != 40
+    ):
+        return False
+    row = connection.execute(
+        """SELECT r.state AS run_state,
+                  r.strategy_id,
+                  r.strategy_version,
+                  r.trading_account_id AS run_trading_account_id,
+                  r.account_connector_id,
+                  r.release_commit,
+                  r.entry_execution_request_id,
+                  r.entry_command_id,
+                  c.command_type,
+                  c.state AS command_state,
+                  c.trading_account_id AS command_trading_account_id,
+                  c.identity_status AS command_identity_status,
+                  d.state AS dispatch_state,
+                  g.enabled AS gate_enabled,
+                  g.reason AS gate_reason,
+                  EXISTS(
+                    SELECT 1
+                      FROM strategy_entry.execution_permissions p
+                     WHERE p.strategy_id=r.strategy_id
+                       AND p.strategy_version=r.strategy_version
+                       AND p.strategy_config_fingerprint=r.strategy_config_fingerprint
+                       AND p.enabled=true
+                  ) AS permission_active,
+                  EXISTS(
+                    SELECT 1
+                      FROM control.live_arm_sessions l
+                     WHERE l.live_arm_session_id=%s
+                       AND l.state='ACTIVE'
+                  ) AS generic_arm_active,
+                  EXISTS(
+                    SELECT 1
+                      FROM control.account_live_arm_sessions a
+                     WHERE a.account_live_arm_session_id=%s
+                       AND a.state='ACTIVE'
+                  ) AS account_arm_active,
+                  EXISTS(
+                    SELECT 1
+                      FROM control.execution_gate_events e
+                     WHERE e.mode='mainnet'
+                       AND e.request_id=r.run_id
+                       AND e.previous_enabled=true
+                       AND e.requested_enabled=false
+                       AND e.resulting_enabled=false
+                       AND e.reason=%s
+                  ) AS exact_gate_close_event
+             FROM control.owner_full_contour_diagnostic_runs r
+             JOIN runtime.trade_commands c
+               ON c.command_id=r.entry_command_id
+             JOIN strategy_entry.execution_dispatches d
+               ON d.execution_request_id=r.entry_execution_request_id
+              AND d.command_id=r.entry_command_id
+             JOIN control.execution_gates g
+               ON g.mode='mainnet'
+            WHERE r.entry_command_id=%s""",
+        (
+            live_session_id_for_command(connection, command_id),
+            account_session_id_for_command(connection, command_id),
+            DISPATCH_GATE_CLOSE_REASON,
+            command_id,
+        ),
+    ).fetchone()
+    if row is None:
+        return False
+    strategy_id = str(_row_value(row, "strategy_id", 1))
+    return (
+        str(_row_value(row, "run_state", 0)) == "DISPATCHED"
+        and strategy_id in {MAIN_ID, SUB_ID}
+        and str(_row_value(row, "strategy_version", 2)) == VERSION
+        and str(_row_value(row, "run_trading_account_id", 3)) == trading_account_id
+        and str(_row_value(row, "account_connector_id", 4)) == account_connector_id
+        and str(_row_value(row, "release_commit", 5)) == release_commit
+        and bool(_row_value(row, "entry_execution_request_id", 6))
+        and str(_row_value(row, "entry_command_id", 7)) == command_id
+        and str(_row_value(row, "command_type", 8)) == "entry"
+        and str(_row_value(row, "command_state", 9)) == "queued"
+        and str(_row_value(row, "command_trading_account_id", 10)) == trading_account_id
+        and str(_row_value(row, "command_identity_status", 11)) == "PROVEN"
+        and str(_row_value(row, "dispatch_state", 12)) == "DISPATCHED"
+        and not bool(_row_value(row, "gate_enabled", 13))
+        and str(_row_value(row, "gate_reason", 14)) == DISPATCH_GATE_CLOSE_REASON
+        and not bool(_row_value(row, "permission_active", 15))
+        and not bool(_row_value(row, "generic_arm_active", 16))
+        and not bool(_row_value(row, "account_arm_active", 17))
+        and bool(_row_value(row, "exact_gate_close_event", 18))
+    )
+
+
+def live_session_id_for_command(connection: Any, command_id: str) -> str:
+    row = connection.execute(
+        """SELECT run_id
+             FROM control.owner_full_contour_diagnostic_runs
+            WHERE entry_command_id=%s""",
+        (command_id,),
+    ).fetchone()
+    if row is None:
+        return ""
+    return live_session_id(str(_row_value(row, "run_id", 0)))
+
+
+def account_session_id_for_command(connection: Any, command_id: str) -> str:
+    row = connection.execute(
+        """SELECT run_id
+             FROM control.owner_full_contour_diagnostic_runs
+            WHERE entry_command_id=%s""",
+        (command_id,),
+    ).fetchone()
+    if row is None:
+        return ""
+    return account_session_id(str(_row_value(row, "run_id", 0)))
 
 
 def require_parent_p90_diagnostic_scope(
