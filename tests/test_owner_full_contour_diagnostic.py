@@ -157,7 +157,7 @@ def test_diagnostic_exit_rules_use_exact_two_tenths_percent_close() -> None:
     _card, _activation, _entry, exit_plan = _main_bundle()
     engine = UniversalExitEngine()
     below = engine.evaluate(_position(exit_plan), exit_plan, _observation("0.19"))
-    assert below.status is ExitEvaluationStatus.NO_DECISION
+    assert below.status is ExitEvaluationStatus.NO_MATCH
     tp = engine.evaluate(_position(exit_plan), exit_plan, _observation("0.2"))
     assert tp.status is ExitEvaluationStatus.DECISION_CREATED
     assert tp.decision is not None
