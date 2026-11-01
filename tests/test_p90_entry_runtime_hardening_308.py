@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONSUMER = (ROOT / "operations/connectivity/universal_entry_consumer.py").read_text()
 PREARM = (ROOT / "src/bybit_workbench/p90l90_real_prearm_evidence.py").read_text()
+SERVICE_PROFILE = (ROOT / "src/bybit_workbench/real_service_profiles.py").read_text()
 SAFETY = (ROOT / "src/bybit_workbench/release_arm_safety.py").read_text()
 LIFECYCLE = (ROOT / "operations/monitoring/lifecycle_supervisor_runtime.py").read_text()
 DASH = (ROOT / "operations/dashboard/index.html").read_text()
@@ -23,8 +24,9 @@ def test_consumer_health_schema_is_durable_and_least_privilege() -> None:
 
 
 def test_prearm_requires_both_entry_consumers_and_fresh_health() -> None:
-    assert '"cripta-universal-entry-consumer.service"' in PREARM
-    assert 'f"cripta-universal-entry-consumer@{_SUB_ACCOUNT}.service"' in PREARM
+    assert 'ServiceSpec("cripta-universal-entry-consumer.service"' in SERVICE_PROFILE
+    assert 'f"cripta-universal-entry-consumer@{sub_account_id}.service"' in SERVICE_PROFILE
+    assert "p90_real_v3_service_specs(sub_account_id=_SUB_ACCOUNT)" in PREARM
     assert "FROM runtime.entry_consumer_health" in PREARM
     assert 'str(health_state) == "READY"' in PREARM
     assert "health_checked_at = datetime.now(UTC)" in PREARM
@@ -58,7 +60,8 @@ def test_dashboard_disarm_is_available_even_when_readiness_is_blocked() -> None:
     assert "function p90RealV3OwnerArmPresent()" in DASH
     assert "Number(readiness.live_arm_sessions||0)>0" in DASH
     assert "Number(readiness.account_live_arm_sessions||0)>0" in DASH
-    assert "button.disabled=gateChanging||(!armed&&(!cohort||inconsistent||knownBlocked));" in DASH
+    assert "button.disabled=gateChanging||preparing||(!armed&&(!cohort||inconsistent||knownBlocked));" in DASH
+    assert "!armed&&" in DASH
     assert "const armed=p90RealV3OwnerArmPresent();" in DASH
     assert '"execution_permissions": int(p90_arm_facts[0])' in DASH_APP
     assert '"live_arm_sessions": int(p90_arm_facts[1])' in DASH_APP
