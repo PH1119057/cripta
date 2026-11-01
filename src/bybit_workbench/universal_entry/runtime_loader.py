@@ -41,8 +41,8 @@ class MappingSequenceRow(dict[str, object]):
     column order until they are normalized individually.
     """
 
-    def __getitem__(self, key: str | int) -> object:
-        if isinstance(key, int):
+    def __getitem__(self, key: str | int | slice) -> object:
+        if isinstance(key, (int, slice)):
             return tuple(self.values())[key]
         return super().__getitem__(key)
 
