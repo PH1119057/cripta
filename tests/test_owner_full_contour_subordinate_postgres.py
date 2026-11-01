@@ -89,6 +89,22 @@ V1_DIAG = (
     ),
 )
 
+V2_DIAG_VERSION = "2.0-owner-full-contour-e2e-20261101"
+V2_DIAG = (
+    (
+        diagnostic.MAIN_ID,
+        MAIN_ACCOUNT,
+        "activation-owner-full-contour-main-v2-20261101",
+        "binding-owner-full-contour-main-v2-20261101",
+    ),
+    (
+        diagnostic.SUB_ID,
+        SUB_ACCOUNT,
+        "activation-owner-full-contour-sub-v2-20261101",
+        "binding-owner-full-contour-sub-v2-20261101",
+    ),
+)
+
 
 def _v1_diagnostic_card(strategy_id: str):
     raw = diagnostic._policy(strategy_id)
