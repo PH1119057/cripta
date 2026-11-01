@@ -19,6 +19,7 @@ from bybit_workbench.universal_entry import owner_full_contour_diagnostic as dia
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
 from bybit_workbench.universal_entry.dashboard_control import card_from_editable
 from bybit_workbench.universal_entry.materializer import materialize_plans
+from bybit_workbench.universal_entry.owner_full_contour_control import request_run
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
@@ -298,6 +299,56 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         assert connection.execute(
             """SELECT count(*) FROM control.account_live_arm_sessions
                 WHERE state='ACTIVE'"""
+        ).fetchone() == (0,)
+
+        # Regression for the production 2026-11-01 authenticated trigger
+        # failure: control.execution_gates.enabled is SMALLINT, while the v2
+        # SECURITY DEFINER account-arm function had compared it with boolean
+        # false. Exercise the exact owner request path as runtime role cripta.
+        requested = request_run(
+            connection,
+            request_id="owner-fc-ci-arb-long",
+            symbol="ARBUSDT",
+            direction="LONG",
+            operator="owner",
+            release_commit="f" * 40,
+            now=AT,
+        )
+        assert requested["symbol"] == "ARBUSDT"
+        assert requested["direction"] == "LONG"
+        assert requested["state"] == "REQUESTED"
+        assert connection.execute(
+            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM strategy_entry.execution_permissions
+                WHERE enabled=true
+                  AND strategy_id=%s
+                  AND strategy_version=%s""",
+            (diagnostic.SUB_ID, diagnostic.VERSION),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM control.live_arm_sessions
+                WHERE state='ACTIVE'
+                  AND strategy_id=%s
+                  AND strategy_version=%s
+                  AND symbol='ARBUSDT'""",
+            (diagnostic.SUB_ID, diagnostic.VERSION),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM control.account_live_arm_sessions
+                WHERE state='ACTIVE'
+                  AND strategy_id=%s
+                  AND strategy_version=%s
+                  AND symbol='ARBUSDT'
+                  AND trading_account_id=%s""",
+            (diagnostic.SUB_ID, diagnostic.VERSION, SUB_ACCOUNT),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            """SELECT count(*) FROM strategy_entry.execution_permissions
+                WHERE enabled=true
+                  AND strategy_id IN (%s,%s)""",
+            (MAIN_ID, SUB_ID),
         ).fetchone() == (0,)
 
         raise RuntimeError("ROLLBACK_OWNER_FULL_CONTOUR_SUBORDINATE")
