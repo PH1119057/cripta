@@ -17,6 +17,7 @@ import socket
 import stat
 import struct
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -109,8 +110,16 @@ def _start_unit(unit: str) -> tuple[bool, str]:
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip().replace("\n", " ")[:300]
         return False, detail or "systemctl start failed"
-    state = _systemctl_show(unit).get("ActiveState", "")
-    return state == "active", state or "unknown"
+    deadline = time.monotonic() + 10.0
+    state = "unknown"
+    while time.monotonic() <= deadline:
+        state = _systemctl_show(unit).get("ActiveState", "") or "unknown"
+        if state == "active":
+            return True, "active"
+        if state in {"failed", "deactivating"}:
+            return False, state
+        time.sleep(0.2)
+    return False, state
 
 
 def handle_request(payload: dict[str, Any]) -> dict[str, Any]:
