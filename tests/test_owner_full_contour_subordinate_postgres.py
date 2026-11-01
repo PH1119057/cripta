@@ -215,6 +215,19 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                 ),
             )
 
+        # production has this historical control-plane table; current
+        # operations/sql lineage does not create it in this disposable suite.
+        # Reuse the exact schema already exercised by test_release_arm_postgres.
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS control.execution_gate_events(
+                id bigint generated always as identity primary key,
+                at_epoch_ms bigint not null,mode text not null,
+                previous_enabled boolean not null,requested_enabled boolean not null,
+                resulting_enabled boolean not null,reason text not null,
+                source text not null,origin text not null,request_id text not null,
+                settings_version text,created_at timestamptz default now())"""
+        )
+
         # Match production's already-existing read rights used by the inert
         # installer preflight.  This is disposable-fixture parity only; the
         # release does not grant new runtime privileges.
