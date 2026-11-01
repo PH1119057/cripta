@@ -36,7 +36,8 @@ def test_r6b1_atomic_admission_rechecks_binding_before_reservation() -> None:
     assert "strategy execution binding disappeared before admission" in transaction
     assert "strategy execution binding is not active for admission" in transaction
     assert 'str(binding[3]) != "PRIMARY"' in transaction
-    assert 'str(binding[4]) != "DEDICATED_STRATEGY"' in transaction
+    assert "real_binding_allocation_allowed(" in transaction
+    assert "allocation_mode=str(binding[4])" in transaction
     assert "binding[10] is not True" in transaction
     assert "account state generation TradingAccount mismatch" in transaction
     assert "trading_account_id=%s" in transaction
