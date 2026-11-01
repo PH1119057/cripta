@@ -249,6 +249,8 @@ unit_specs=(
   "operations/systemd/cripta-account-enrollment-probe@.service|cripta-account-enrollment-probe@.service|runtime"
   # Inert owner-triggered Release Controller; never auto-enabled or managed.
   "operations/systemd/cripta-release-controller.service|cripta-release-controller.service|runtime"
+  # Generic management-plane broker. It may start only source-allowlisted CRIPTA units.
+  "operations/systemd/cripta-real-service-broker.service|cripta-real-service-broker.service|runtime"
   # Inert SUB-only Lifecycle worker; no auto-enable or implicit started service.
   "operations/systemd/cripta-lifecycle-account@.service|cripta-lifecycle-account@.service|runtime"
   "operations/systemd/cripta-account-position@.service|cripta-account-position@.service|runtime"
@@ -374,6 +376,7 @@ managed_services=(
   cripta-opportunity-tracker.service
   cripta-position-supervisor.service
   cripta-private-runtime.service
+  cripta-real-service-broker.service
   cripta-safety-observer.service
   cripta-shadow-command-worker.service
   cripta-universal-entry-consumer.service
@@ -494,6 +497,8 @@ migration_files=(
   operations/sql/20261101_subordinate_diagnostic_binding.sql
   operations/sql/20261101_owner_full_contour_diagnostic_v2.sql
   operations/sql/20261101_owner_full_contour_diagnostic_v3.sql
+  # Durable technical readiness state; no Strategy/LIVE/Exchange effect.
+  operations/sql/20261102_real_readiness_operations.sql
   operations/sql/20261007_live_arm_parity_gate.sql
   operations/sql/20261008_r1_entry_cancel_intents.sql
   operations/sql/20261008_exchange_closed_entry_recovery.sql
@@ -645,6 +650,14 @@ for service in "${managed_services[@]}"; do
     systemctl is-active --quiet "$service" && die "previously inactive service became active: $service"
   fi
 done
+
+# Management-plane broker is intentionally available after release even on
+# first install. It has no trading authority and cannot open gate/arms.
+systemctl enable cripta-real-service-broker.service >/dev/null
+systemctl start cripta-real-service-broker.service
+systemctl is-active --quiet cripta-real-service-broker.service ||
+  die "REAL service broker failed after deploy"
+echo "REAL_SERVICE_BROKER=ACTIVE"
 
 gate_after="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
 permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
