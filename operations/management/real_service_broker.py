@@ -30,7 +30,12 @@ REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ACCOUNT_UNIT_RE = re.compile(
     r"^cripta-(?:private-runtime|universal-entry-consumer|"
-    r"lifecycle-account|account-position)@ta-[a-z0-9]{32}\.service$"
+    r"lifecycle-account|account-position)@(ta-[a-z0-9]{32})\.service$"
+)
+ALLOWED_ACCOUNT_IDS = frozenset(
+    {
+        "ta-853ac5fcd58185697396d33cd57459fa",
+    }
 )
 GLOBAL_UNITS = frozenset(
     {
@@ -50,7 +55,10 @@ class BrokerError(ValueError):
 
 
 def _is_allowed_unit(unit: str) -> bool:
-    return unit in GLOBAL_UNITS or bool(ACCOUNT_UNIT_RE.fullmatch(unit))
+    if unit in GLOBAL_UNITS:
+        return True
+    match = ACCOUNT_UNIT_RE.fullmatch(unit)
+    return bool(match and match.group(1) in ALLOWED_ACCOUNT_IDS)
 
 
 def _read_commit(path: Path) -> str:
