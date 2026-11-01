@@ -253,7 +253,7 @@ def install(connection: psycopg.Connection) -> None:
             "SELECT strategy_entry.register_owner_full_contour_binding(%s,%s,%s)",
             (binding_id, activation_id, account_id),
         )
-    _check_exact(connection)
+    _check_exact(connection, require_execution_off=True)
 
 
 def main() -> int:
