@@ -276,6 +276,53 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                 ),
             )
 
+        retired_at = datetime(2026, 11, 1, 10, 5, 57, tzinfo=UTC)
+        connection.execute(
+            """UPDATE strategy_entry.strategy_activations
+                  SET enabled=false,disabled_at=%s
+                WHERE strategy_version=%s""",
+            (retired_at, V1_DIAG_VERSION),
+        )
+        connection.execute(
+            """UPDATE strategy_entry.strategy_execution_bindings
+                  SET binding_state='INACTIVE',effective_to=%s
+                WHERE strategy_activation_id=ANY(%s)""",
+            (retired_at, [row[2] for row in V1_DIAG]),
+        )
+
+        for strategy_id, account, activation_id, binding_id in V2_DIAG:
+            card = _v2_diagnostic_card(strategy_id)
+            activation = StrategyActivation(
+                activation_id=activation_id,
+                strategy_id=card.strategy_id,
+                strategy_version=card.strategy_version,
+                strategy_config_fingerprint=card.strategy_config_fingerprint,
+                enabled=True,
+                enabled_at=retired_at,
+                scope=FrozenPolicy.from_mapping(
+                    {"mode": "OWNER_FULL_CONTOUR_DIAGNOSTIC"}
+                ),
+                operator="owner",
+                source="OWNER_FULL_CONTOUR_V2_CI",
+            )
+            entry, exit_plan = materialize_plans(card, activation)
+            store.insert_strategy_card(card)
+            store.insert_activation(activation, reason="production-like diagnostic v2")
+            store.insert_entry_plan(entry)
+            store.insert_exit_plan(exit_plan)
+            connection.execute(
+                """INSERT INTO strategy_entry.strategy_execution_bindings(
+                       strategy_execution_binding_id,strategy_activation_id,
+                       execution_leg,execution_role,trading_account_id,
+                       allocation_mode,binding_state,effective_from,
+                       operator,source,reason)
+                   VALUES(%s,%s,'PRIMARY','PRIMARY',%s,
+                          'SUBORDINATE_DIAGNOSTIC','ACTIVE',%s,
+                          'owner','OWNER_FULL_CONTOUR_V2_CI',
+                          'production-like v2 before v3 upgrade')""",
+                (binding_id, activation_id, account, retired_at),
+            )
+
         # production has this historical control-plane table; current
         # operations/sql lineage does not create it in this disposable suite.
         # Reuse the exact schema already exercised by test_release_arm_postgres.
