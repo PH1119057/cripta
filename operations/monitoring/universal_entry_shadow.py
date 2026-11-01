@@ -2200,13 +2200,16 @@ def _run_observer_epoch(
             ):
                 raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
             p90_real_source_only = True
-        elif _p90_source_only_gate_compatible(
-            gate_enabled=gate_enabled,
-            gate_reason=gate_reason,
-            selected=selected,
+        elif not gate_enabled and not selected:
+            # Normal pre-arm state: source/private topology only, no execution.
+            p90_real_source_only = True
+        elif (
+            gate_enabled
+            and gate_reason == OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON
+            and not selected
         ):
-            # Normal pre-arm or exact owner diagnostic Entry window:
-            # parent P90 remains source-only with no execution selection.
+            # Exact owner diagnostic window keeps parent P90 source-only and
+            # preserves its active price checkpoint epoch.
             p90_real_source_only = True
         elif (
             not gate_enabled
