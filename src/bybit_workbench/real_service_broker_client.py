@@ -47,9 +47,10 @@ def start_services(
     }
     data = (json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8")
     response = b""
-    unix_family = getattr(socket, "AF_UNIX", None)
-    if unix_family is None:
-        raise ServiceBrokerClientError("SERVICE_BROKER_UNAVAILABLE")
+    # Production is POSIX-only. The numeric fallback lets cross-platform unit
+    # tests exercise the protocol through a fake socket without weakening the
+    # real Linux failure path: an unsupported real socket still raises OSError.
+    unix_family: int = int(getattr(socket, "AF_UNIX", 1))
     try:
         with socket.socket(unix_family, socket.SOCK_STREAM) as client:
             client.settimeout(timeout_seconds)
