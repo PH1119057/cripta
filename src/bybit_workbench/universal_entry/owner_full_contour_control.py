@@ -32,6 +32,9 @@ ACTIVE_STATES = (
     "RECONCILIATION_REQUIRED",
 )
 
+SIGNED_ACCOUNT_MODE_PROOF_KEY = "__cripta_signed_account_mode"
+SIGNED_ACCOUNT_MODE_MAX_AGE_SECONDS = 15
+
 
 def _row_value(row: Any, key: str, index: int) -> Any:
     if isinstance(row, dict):
@@ -176,6 +179,93 @@ def _require_symbol_idle(
         raise ValueError("OWNER_FULL_CONTOUR_SYMBOL_ORDER_OCCUPIED")
 
 
+def _require_signed_account_mode_preflight(
+    connection: Any,
+    *,
+    account_id: str,
+    connector_id: str,
+    now: datetime,
+) -> None:
+    row = connection.execute(
+        """SELECT completed_at,positions_count,active_orders_count,wallet_payload
+             FROM runtime.account_state_generations
+            WHERE trading_account_id=%s
+              AND account_connector_id=%s
+              AND account_ref='BYBIT:UNIFIED'
+              AND identity_status='PROVEN'
+              AND state='COMPLETE'
+              AND completed_at IS NOT NULL
+            ORDER BY completed_at DESC,generation_id DESC
+            LIMIT 1""",
+        (account_id, connector_id),
+    ).fetchone()
+    if row is None:
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_MODE_PROOF_MISSING")
+    completed_at = _row_value(row, "completed_at", 0)
+    if not isinstance(completed_at, datetime) or completed_at.tzinfo is None:
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_MODE_PROOF_TIME_INVALID")
+    age = (now.astimezone(UTC) - completed_at.astimezone(UTC)).total_seconds()
+    if age < 0 or age > SIGNED_ACCOUNT_MODE_MAX_AGE_SECONDS:
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_MODE_PROOF_STALE")
+    if (
+        int(_row_value(row, "positions_count", 1) or 0) != 0
+        or int(_row_value(row, "active_orders_count", 2) or 0) != 0
+    ):
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_NOT_FLAT")
+    wallet_payload = _row_value(row, "wallet_payload", 3)
+    if not isinstance(wallet_payload, dict):
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_MODE_PROOF_MISSING")
+    proof = wallet_payload.get(SIGNED_ACCOUNT_MODE_PROOF_KEY)
+    if not isinstance(proof, dict):
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_MODE_PROOF_MISSING")
+    status = str(proof.get("status") or "")
+    try:
+        observed_ms = int(proof.get("observed_at_epoch_ms") or 0)
+    except (TypeError, ValueError):
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_MODE_PROOF_TIME_INVALID") from None
+    proof_at = datetime.fromtimestamp(observed_ms / 1000, tz=UTC)
+    proof_age = (now.astimezone(UTC) - proof_at).total_seconds()
+    if proof_age < 0 or proof_age > SIGNED_ACCOUNT_MODE_MAX_AGE_SECONDS:
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_MODE_PROOF_STALE")
+    if status != "PASS":
+        raise ValueError("OWNER_FULL_CONTOUR_SIGNED_ACCOUNT_READ_NOT_OK")
+    if str(proof.get("margin_mode") or "") != "ISOLATED_MARGIN":
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_NOT_PROVEN_ISOLATED")
+    if str(proof.get("unified_margin_status") or "") not in {"3", "4", "5", "6"}:
+        raise ValueError("OWNER_FULL_CONTOUR_UNIFIED_ACCOUNT_MODE_UNKNOWN")
+
+
+def _recover_diagnostic_account_safety_if_proven(
+    connection: Any,
+    *,
+    account_id: str,
+    connector_id: str,
+    release_commit: str,
+    now: datetime,
+) -> None:
+    row = connection.execute(
+        """SELECT reason
+             FROM runtime.account_entry_safety_blocks
+            WHERE trading_account_id=%s AND account_connector_id=%s""",
+        (account_id, connector_id),
+    ).fetchone()
+    if row is None:
+        return
+    if str(_row_value(row, "reason", 0)) != "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED":
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_SAFETY_BLOCKED")
+    result = connection.execute(
+        """SELECT control.recover_owner_full_contour_account_safety(
+                    %s,%s,%s,%s)
+                  AS trading_account_id""",
+        (account_id, connector_id, release_commit, now.astimezone(UTC)),
+    ).fetchone()
+    if (
+        result is None
+        or str(_row_value(result, "trading_account_id", 0)) != account_id
+    ):
+        raise RuntimeError("OWNER_FULL_CONTOUR_ACCOUNT_SAFETY_RECOVERY_FAILED")
+
+
 def request_run(
     connection: Any,
     *,
@@ -233,6 +323,20 @@ def request_run(
         (list(ACTIVE_STATES),),
     ).fetchone() != (0,):
         raise ValueError("OWNER_FULL_CONTOUR_ANOTHER_RUN_ACTIVE")
+
+    _require_signed_account_mode_preflight(
+        connection,
+        account_id=account_id,
+        connector_id=connector_id,
+        now=current,
+    )
+    _recover_diagnostic_account_safety_if_proven(
+        connection,
+        account_id=account_id,
+        connector_id=connector_id,
+        release_commit=release_commit,
+        now=current,
+    )
 
     strategy = connection.execute(
         """SELECT a.strategy_config_fingerprint,b.binding_state
