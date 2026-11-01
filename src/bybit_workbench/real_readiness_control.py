@@ -76,6 +76,24 @@ def begin_operation(
             or _fingerprint(result["scope_json"]) != fingerprint
         ):
             raise RealReadinessControlError("READINESS_REQUEST_ID_CONFLICT")
+        updated_at = result["updated_at"]
+        if (
+            result["state"] in ACTIVE_STATES
+            and isinstance(updated_at, datetime)
+            and updated_at.tzinfo is not None
+            and current - updated_at.astimezone(UTC) > STALE_AFTER
+        ):
+            connection.execute(
+                """UPDATE control.real_readiness_operations
+                      SET state='BLOCKED',phase='interrupted',
+                          blocker_code='COORDINATOR_INTERRUPTED',
+                          blocker_detail='stale nonterminal readiness operation',
+                          retry_eligible=true,updated_at=%s,completed_at=%s
+                    WHERE request_id=%s AND state=ANY(%s)""",
+                (current, current, request_id, list(ACTIVE_STATES)),
+            )
+            return get_operation(connection, request_id=request_id)
+        result["_existing"] = True
         return result
 
     active = connection.execute(
@@ -92,6 +110,7 @@ def begin_operation(
         active_id, updated_at = active
         if (
             not isinstance(updated_at, datetime)
+            or updated_at.tzinfo is None
             or current - updated_at.astimezone(UTC) <= STALE_AFTER
         ):
             raise RealReadinessControlError(
@@ -128,7 +147,9 @@ def begin_operation(
             current,
         ),
     )
-    return get_operation(connection, request_id=request_id)
+    result = get_operation(connection, request_id=request_id)
+    result["_existing"] = False
+    return result
 
 
 def set_state(
