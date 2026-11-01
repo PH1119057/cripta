@@ -30,10 +30,8 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_card
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
-from bybit_workbench.universal_entry.runtime_loader import (
-    load_strategy_bundle_exact_identity,
-    mapping_sequence_row,
-)
+from bybit_workbench.universal_entry.runtime_loader import load_strategy_bundle_exact_identity
+from operations.connectivity.universal_entry_consumer import mapping_sequence_row
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
 from operations.implementation.install_owner_full_contour_diagnostic import install
 
@@ -348,6 +346,7 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         # Production-path fixtures for the full-contour materializer.  They
         # deliberately stop before any Exchange mutation: the tested boundary is
         # the ordinary EntryExecutionRequest durable handoff.
+        run_at = datetime.now(UTC)
         release_commit = "f" * 40
         position_mode_ref = "pmode-owner-fc-ci-arb"
         generation_id = "acctgen-owner-fc-ci-arb"
@@ -361,9 +360,9 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                       %s,%s,%s,'{}'::jsonb,%s,'PROVEN')""",
             (
                 position_mode_ref,
-                AT,
-                AT,
-                AT + timedelta(minutes=10),
+                run_at,
+                run_at,
+                run_at + timedelta(minutes=10),
                 SUB_ACCOUNT,
             ),
         )
@@ -378,8 +377,8 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                       '',%s,'PROVEN')""",
             (
                 generation_id,
-                AT,
-                AT,
+                run_at,
+                run_at,
                 json.dumps({"ARBUSDT": position_mode_ref}),
                 SUB_ACCOUNT,
             ),
@@ -389,7 +388,7 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                    epoch_id,source_commit,market_source_id,opened_at,
                    source_ws_ready_at,native_mirror_ready_at,status)
                VALUES(%s,%s,'ms-bybit-mainnet-public-v1',%s,%s,%s,'ACTIVE')""",
-            (epoch_id, release_commit, AT, AT, AT),
+            (epoch_id, release_commit, run_at, run_at, run_at),
         )
         connection.execute(
             """INSERT INTO strategy_entry.p90l90_real_causal_checkpoints(
@@ -413,8 +412,8 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                 ),
                 release_commit,
                 release_commit,
-                AT,
-                AT,
+                run_at,
+                run_at,
             ),
         )
 
@@ -429,7 +428,7 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
             direction="LONG",
             operator="owner",
             release_commit=release_commit,
-            now=AT,
+            now=run_at,
         )
         assert requested["symbol"] == "ARBUSDT"
         assert requested["direction"] == "LONG"
@@ -526,7 +525,7 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
             trading_account_id=SUB_ACCOUNT,
             account_connector_id=diagnostic.SUB_CONNECTOR_ID,
             release_commit=release_commit,
-            now=AT,
+            now=run_at,
         )
         assert materialized is not None
         assert materialized.startswith("OWNER_DIAGNOSTIC_MATERIALIZED:")
