@@ -106,16 +106,55 @@ V2_DIAG = (
 )
 
 
-def _v1_diagnostic_card(strategy_id: str):
+def _historical_diagnostic_policy(
+    strategy_id: str,
+    *,
+    version: str,
+    include_forced_exit: bool,
+) -> dict[str, object]:
     raw = diagnostic._policy(strategy_id)
-    raw["strategy_version"] = V1_DIAG_VERSION
-    raw["exit_policy"]["rules"] = [
-        rule
-        for rule in raw["exit_policy"]["rules"]
-        if rule["rule_id"] != "OWNER_DIAGNOSTIC_FORCE_CLOSE"
-    ]
+    raw["strategy_version"] = version
+    raw["exit_policy"]["exit_plan_version"] = "owner-full-contour-fixed-05-v1"
+    raw["exit_policy"]["hard_stop"]["value"] = "0.5"
+    raw["exit_policy"]["take_profit"]["value"] = "0.5"
+    for rule in raw["exit_policy"]["rules"]:
+        if rule["rule_id"] == "OWNER_DIAGNOSTIC_TP_0_2":
+            rule["rule_id"] = "OWNER_DIAGNOSTIC_TP_0_5"
+            rule["predicate"]["params"]["value"] = "0.5"
+        elif rule["rule_id"] == "OWNER_DIAGNOSTIC_SL_0_2":
+            rule["rule_id"] = "OWNER_DIAGNOSTIC_SL_0_5"
+            rule["predicate"]["params"]["value"] = "-0.5"
+    if not include_forced_exit:
+        raw["exit_policy"]["rules"] = [
+            rule
+            for rule in raw["exit_policy"]["rules"]
+            if rule["rule_id"] != "OWNER_DIAGNOSTIC_FORCE_CLOSE"
+        ]
+    raw["protection_policy"]["initial_protection"]["stop_loss_pct"] = "0.5"
+    raw["lifecycle_policy"]["emergency_policy"]["initial_stop_loss_pct"] = "0.5"
+    return raw
+
+
+def _v2_diagnostic_card(strategy_id: str):
     return card_from_editable(
-        raw,
+        _historical_diagnostic_policy(
+            strategy_id,
+            version=V2_DIAG_VERSION,
+            include_forced_exit=True,
+        ),
+        approved_at=datetime(2026, 11, 1, 10, 5, 57, tzinfo=UTC),
+        approved_source="owner-2026-11-01-full-contour-real-diagnostic-v2",
+        validate_authoring=False,
+    )
+
+
+def _v1_diagnostic_card(strategy_id: str):
+    return card_from_editable(
+        _historical_diagnostic_policy(
+            strategy_id,
+            version=V1_DIAG_VERSION,
+            include_forced_exit=False,
+        ),
         approved_at=datetime(2026, 10, 31, 20, 55, tzinfo=UTC),
         approved_source="owner-2026-11-01-full-contour-real-diagnostic",
         validate_authoring=False,
