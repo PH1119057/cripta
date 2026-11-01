@@ -416,8 +416,13 @@ class _Cursor:
 
 
 class _RetireDictRowConnection:
-    def __init__(self):
+    def __init__(self, disarm_session_id: str | None = None):
         self.calls: list[tuple[str, tuple[object, ...]]] = []
+        self.disarm_session_id = (
+            disarm_session_id
+            if disarm_session_id is not None
+            else control.account_session_id("owner-fc-test")
+        )
 
     def execute(self, statement, parameters=()):
         self.calls.append((statement, tuple(parameters)))
@@ -432,10 +437,26 @@ class _RetireDictRowConnection:
         if "SELECT count(*) AS active_count" in statement:
             return _Cursor({"active_count": 1})
         if "SELECT control.disarm_owner_full_contour_account_scope" in statement:
-            return _Cursor((control.account_session_id("owner-fc-test"),))
+            return _Cursor(
+                {"account_live_arm_session_id": self.disarm_session_id}
+            )
         if "SELECT enabled FROM control.execution_gates" in statement:
             return _Cursor({"enabled": True})
         return _Cursor(None)
+
+
+def test_retire_entry_rights_rejects_mismatched_dict_row_disarm_result() -> None:
+    connection = _RetireDictRowConnection(disarm_session_id="wrong-session")
+    with pytest.raises(
+        RuntimeError,
+        match="OWNER_FULL_CONTOUR_ACCOUNT_DISARM_FAILED",
+    ):
+        control.retire_entry_rights(
+            connection,
+            run_id="owner-fc-test",
+            at=datetime(2026, 11, 1, tzinfo=UTC),
+            reason="test dispatch",
+        )
 
 
 def test_entry_consumer_atomically_retires_diagnostic_rights_after_dispatch() -> None:
