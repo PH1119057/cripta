@@ -5459,7 +5459,7 @@ def _u6_prepare_p90_real_v3_readiness(
                 request_id=request_id,
                 code="SERVICE_PREFLIGHT_BLOCKED",
                 detail=";".join(plan.blockers),
-                retry_eligible=False,
+                retry_eligible=True,
                 progress={
                     "required_services": len(specs),
                     "service_blockers": list(plan.blockers),
@@ -5526,7 +5526,11 @@ def _u6_prepare_p90_real_v3_readiness(
                 state="VALIDATING",
                 phase="validating_full_evidence",
                 now=datetime.now(UTC),
-                progress={"services_active": len(specs)},
+                progress={
+                    "services_active": len(specs),
+                    "requested_starts": list(plan.starts),
+                    "broker_result": broker_result,
+                },
             )
         evidence = _wait_p90_real_v3_technical_evidence()
         with psycopg.connect(
