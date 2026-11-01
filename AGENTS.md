@@ -163,3 +163,6 @@ resume existing branch/worktree, не reset/overwrite; ambiguity -> HARD_STOP
 
 ## Owner-approved 30d indicators — 2026-10-26
 Точный research-only контракт №10/13/16/23/24/25 принадлежит `docs/RESEARCH_COMPUTE_RULES_RU.md §21.8`; навигация — `docs/DOCUMENTATION_INDEX_RU.md §57`. Только описательное историческое исследование, не LIVE и не автоматический RESEARCH-READY.
+
+## Generic REAL readiness control
+Для owner-initiated REAL preparation не встраивать `sudo/systemctl` в Dashboard/runtime. Использовать ARCH §52 + DEV §51: unprivileged durable coordinator, exact allowlisted Service Start Broker, behavior verification, visible BLOCKED, separate explicit OWNER ARM and always-available DISARM. Перед broker/service mutation обязательны DEV §§5.1,19.1–19.4 + MAP §1.4.
