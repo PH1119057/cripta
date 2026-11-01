@@ -1,7 +1,7 @@
 [Unit]
 Description=Cripta bounded REAL service-start broker
 After=local-fs.target
-ConditionPathExists=/srv/cripta/runtime/current/operations/management/real_service_broker.py
+ConditionPathExists=/usr/local/libexec/cripta-real-service-broker/real_service_broker.py
 ConditionPathExists=/var/lib/cripta/release/INSTALLED_COMMIT
 
 [Service]
@@ -12,7 +12,7 @@ UMask=0007
 Environment=PYTHONPATH=
 Environment=PYTHONNOUSERSITE=1
 Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/usr/bin/python3 /srv/cripta/runtime/current/operations/management/real_service_broker.py
+ExecStart=/usr/bin/python3 /usr/local/libexec/cripta-real-service-broker/real_service_broker.py
 Restart=on-failure
 RestartSec=2
 TimeoutStartSec=20
@@ -30,6 +30,7 @@ ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX
+ReadOnlyPaths=/usr/local/libexec/cripta-real-service-broker
 ReadOnlyPaths=/srv/cripta/runtime/current
 ReadOnlyPaths=/var/lib/cripta/release
 ReadWritePaths=/run/cripta-real-readiness
