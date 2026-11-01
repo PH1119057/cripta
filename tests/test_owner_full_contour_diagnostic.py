@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -437,9 +437,7 @@ class _AccountModePreflightConnection:
     ):
         observed_ms = int((now.timestamp() - seconds_old) * 1000)
         self.row = {
-            "completed_at": now - __import__("datetime").timedelta(
-                seconds=seconds_old
-            ),
+            "completed_at": now - timedelta(seconds=seconds_old),
             "positions_count": positions,
             "active_orders_count": orders,
             "wallet_payload": {
