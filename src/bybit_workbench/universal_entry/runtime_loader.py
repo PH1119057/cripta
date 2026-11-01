@@ -5,7 +5,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
+
+from psycopg.rows import dict_row
 
 from .contracts import (
     CandidateCooldown,
@@ -27,8 +29,36 @@ from .contracts import (
 from .materializer import materialize_plans
 
 
+RuntimeRow = Sequence[object] | Mapping[str, object]
+
+
+class MappingSequenceRow(dict[str, object]):
+    """Mapping row that also preserves legacy positional reads.
+
+    Universal Entry historically mixed tuple-style row[index] readers with
+    psycopg dict_row readers.  Keep Mapping semantics for production code while
+    allowing already-reviewed positional consumers to read the same SELECT
+    column order until they are normalized individually.
+    """
+
+    def __getitem__(self, key: str | int) -> object:
+        if isinstance(key, int):
+            return tuple(self.values())[key]
+        return super().__getitem__(key)
+
+
+def mapping_sequence_row(cursor: Any) -> Any:
+    """psycopg row factory: dict_row semantics plus positional compatibility."""
+    make_dict = dict_row(cursor)
+
+    def make_row(values: Sequence[Any]) -> MappingSequenceRow:
+        return MappingSequenceRow(make_dict(values))
+
+    return make_row
+
+
 class RuntimeCursorLike(Protocol):
-    def fetchall(self) -> list[tuple[object, ...]]: ...
+    def fetchall(self) -> list[RuntimeRow]: ...
 
 
 class RuntimeConnectionLike(Protocol):
@@ -55,6 +85,12 @@ class ActiveStrategyBundle:
             self.entry_plan.entry_plan_fingerprint,
             self.exit_plan.exit_plan_fingerprint,
         )
+
+
+def _row_value(row: RuntimeRow, key: str, index: int) -> object:
+    if isinstance(row, Mapping):
+        return row[key]
+    return row[index]
 
 
 def _mapping(value: object, label: str) -> dict[str, object]:
@@ -292,31 +328,48 @@ def load_strategy_bundle_exact_identity(
         raise RuntimeError("exact Strategy bundle is ambiguous")
     row = rows[0]
     card = strategy_card_from_storage(
-        row[11], approved_at=row[12], approved_source=row[13]
+        _row_value(row, "card_json", 11),
+        approved_at=_row_value(row, "approved_at", 12),
+        approved_source=_row_value(row, "approved_source", 13),
     )
     activation = StrategyActivation(
-        activation_id=str(row[0]),
-        strategy_id=str(row[1]),
-        strategy_version=str(row[2]),
-        strategy_config_fingerprint=str(row[3]),
-        enabled=bool(row[4]),
-        enabled_at=_aware(row[5], "enabled_at"),
-        disabled_at=None if row[6] is None else _aware(row[6], "disabled_at"),
-        scope=FrozenPolicy.from_mapping(_mapping(row[7], "activation.scope")),
-        operator=str(row[8]),
-        source=str(row[9]),
+        activation_id=str(_row_value(row, "activation_id", 0)),
+        strategy_id=str(_row_value(row, "strategy_id", 1)),
+        strategy_version=str(_row_value(row, "strategy_version", 2)),
+        strategy_config_fingerprint=str(
+            _row_value(row, "strategy_config_fingerprint", 3)
+        ),
+        enabled=bool(_row_value(row, "enabled", 4)),
+        enabled_at=_aware(_row_value(row, "enabled_at", 5), "enabled_at"),
+        disabled_at=(
+            None
+            if _row_value(row, "disabled_at", 6) is None
+            else _aware(_row_value(row, "disabled_at", 6), "disabled_at")
+        ),
+        scope=FrozenPolicy.from_mapping(
+            _mapping(_row_value(row, "scope", 7), "activation.scope")
+        ),
+        operator=str(_row_value(row, "operator", 8)),
+        source=str(_row_value(row, "source", 9)),
     )
     entry_plan, exit_plan = materialize_plans(card, activation)
-    if entry_plan.entry_plan_fingerprint != str(row[14]):
+    if entry_plan.entry_plan_fingerprint != str(
+        _row_value(row, "entry_plan_fingerprint", 14)
+    ):
         raise RuntimeError("exact Strategy bundle EntryPlan fingerprint mismatch")
-    if exit_plan.exit_plan_fingerprint != str(row[15]):
+    if exit_plan.exit_plan_fingerprint != str(
+        _row_value(row, "exit_plan_fingerprint", 15)
+    ):
         raise RuntimeError("exact Strategy bundle ExitPlan fingerprint mismatch")
     return ActiveStrategyBundle(
         card,
         activation,
         entry_plan,
         exit_plan,
-        _aware(row[10], "activation.updated_at"),
+        _aware(
+            _row_value(row, "updated_at", 10),
+            "activation.updated_at",
+        ),
     )
 
 
@@ -346,9 +399,10 @@ def load_active_strategy_bundles(
            WHERE a.enabled=true
            ORDER BY a.activation_id,ep.entry_plan_fingerprint,xp.exit_plan_fingerprint"""
     ).fetchall()
-    by_activation: dict[str, list[tuple[object, ...]]] = {}
+    by_activation: dict[str, list[RuntimeRow]] = {}
     for row in rows:
-        by_activation.setdefault(str(row[0]), []).append(row)
+        activation_id = str(_row_value(row, "activation_id", 0))
+        by_activation.setdefault(activation_id, []).append(row)
     bundles: list[ActiveStrategyBundle] = []
     for activation_id, matches in sorted(by_activation.items()):
         if len(matches) != 1:
@@ -357,28 +411,42 @@ def load_active_strategy_bundles(
             )
         row = matches[0]
         card = strategy_card_from_storage(
-            row[11], approved_at=row[12], approved_source=row[13]
+            _row_value(row, "card_json", 11),
+            approved_at=_row_value(row, "approved_at", 12),
+            approved_source=_row_value(row, "approved_source", 13),
         )
         activation = StrategyActivation(
             activation_id=activation_id,
-            strategy_id=str(row[1]),
-            strategy_version=str(row[2]),
-            strategy_config_fingerprint=str(row[3]),
-            enabled=bool(row[4]),
-            enabled_at=_aware(row[5], "enabled_at"),
-            disabled_at=None if row[6] is None else _aware(row[6], "disabled_at"),
-            scope=FrozenPolicy.from_mapping(_mapping(row[7], "activation.scope")),
-            operator=str(row[8]),
-            source=str(row[9]),
+            strategy_id=str(_row_value(row, "strategy_id", 1)),
+            strategy_version=str(_row_value(row, "strategy_version", 2)),
+            strategy_config_fingerprint=str(
+                _row_value(row, "strategy_config_fingerprint", 3)
+            ),
+            enabled=bool(_row_value(row, "enabled", 4)),
+            enabled_at=_aware(_row_value(row, "enabled_at", 5), "enabled_at"),
+            disabled_at=(
+                None
+                if _row_value(row, "disabled_at", 6) is None
+                else _aware(_row_value(row, "disabled_at", 6), "disabled_at")
+            ),
+            scope=FrozenPolicy.from_mapping(
+                _mapping(_row_value(row, "scope", 7), "activation.scope")
+            ),
+            operator=str(_row_value(row, "operator", 8)),
+            source=str(_row_value(row, "source", 9)),
         )
         if not activation.enabled:
             raise RuntimeError("disabled activation leaked into active query")
         entry_plan, exit_plan = materialize_plans(card, activation)
-        if entry_plan.entry_plan_fingerprint != str(row[14]):
+        if entry_plan.entry_plan_fingerprint != str(
+            _row_value(row, "entry_plan_fingerprint", 14)
+        ):
             raise RuntimeError(
                 f"active Strategy {activation_id} EntryPlan fingerprint mismatch"
             )
-        if exit_plan.exit_plan_fingerprint != str(row[15]):
+        if exit_plan.exit_plan_fingerprint != str(
+            _row_value(row, "exit_plan_fingerprint", 15)
+        ):
             raise RuntimeError(
                 f"active Strategy {activation_id} ExitPlan fingerprint mismatch"
             )
@@ -388,7 +456,10 @@ def load_active_strategy_bundles(
                 activation,
                 entry_plan,
                 exit_plan,
-                _aware(row[10], "activation.updated_at"),
+                _aware(
+                    _row_value(row, "updated_at", 10),
+                    "activation.updated_at",
+                ),
             )
         )
     return tuple(bundles)
