@@ -2,8 +2,9 @@
 
 Reproduces the production failure where a second ACTIVE DEDICATED_STRATEGY
 binding collided with the already dedicated P90 MAIN/SUB accounts.  The exact
-diagnostic v1 must install as SUBORDINATE_DIAGNOSTIC while both parent P90
-bindings remain ACTIVE and dedicated.  No execution permission/LIVE arm is
+production-like upgrade must retire immutable diagnostic v1 activation/binding
+lineage and install diagnostic v2 as SUBORDINATE_DIAGNOSTIC while both parent
+P90 bindings remain ACTIVE and dedicated.  No execution permission/LIVE arm is
 created.
 """
 from __future__ import annotations
@@ -15,7 +16,18 @@ import psycopg
 import pytest
 
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
+from bybit_workbench.universal_entry.dashboard_control import card_from_editable
 from bybit_workbench.universal_entry.materializer import materialize_plans
+from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
+    MAIN_ACTIVATION_ID as DIAG_MAIN_ACTIVATION_ID,
+    MAIN_BINDING_ID as DIAG_MAIN_BINDING_ID,
+    MAIN_ID as DIAG_MAIN_ID,
+    SUB_ACTIVATION_ID as DIAG_SUB_ACTIVATION_ID,
+    SUB_BINDING_ID as DIAG_SUB_BINDING_ID,
+    SUB_ID as DIAG_SUB_ID,
+    VERSION as DIAG_VERSION,
+    _policy as diagnostic_policy,
+)
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
@@ -60,6 +72,39 @@ def _embargo() -> StrategyHardStopEmbargoPolicy:
             "close_existing_positions": False,
             "domain": "STRATEGY_VERSION",
         }
+    )
+
+
+V1_DIAG_VERSION = "1.0-owner-full-contour-20261101"
+V1_DIAG = (
+    (
+        DIAG_MAIN_ID,
+        MAIN_ACCOUNT,
+        "activation-owner-full-contour-main-20261101",
+        "binding-owner-full-contour-main-20261101",
+    ),
+    (
+        DIAG_SUB_ID,
+        SUB_ACCOUNT,
+        "activation-owner-full-contour-sub-20261101",
+        "binding-owner-full-contour-sub-20261101",
+    ),
+)
+
+
+def _v1_diagnostic_card(strategy_id: str):
+    raw = diagnostic_policy(strategy_id)
+    raw["strategy_version"] = V1_DIAG_VERSION
+    raw["exit_policy"]["rules"] = [
+        rule
+        for rule in raw["exit_policy"]["rules"]
+        if rule["rule_id"] != "OWNER_DIAGNOSTIC_FORCE_CLOSE"
+    ]
+    return card_from_editable(
+        raw,
+        approved_at=datetime(2026, 10, 31, 20, 55, tzinfo=UTC),
+        approved_source="owner-2026-11-01-full-contour-real-diagnostic",
+        validate_authoring=False,
     )
 
 
@@ -136,6 +181,46 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                           'ACTIVE',%s,'CI','disposable',
                           'parent P90 binding for subordinate diagnostic')""",
                 (binding_id, activation_id, account, AT),
+            )
+
+        # Reproduce production's already-installed immutable v1 diagnostic
+        # activation/binding pair before upgrading to deterministic v2.
+        for strategy_id, account, activation_id, binding_id in V1_DIAG:
+            card = _v1_diagnostic_card(strategy_id)
+            activation = StrategyActivation(
+                activation_id=activation_id,
+                strategy_id=card.strategy_id,
+                strategy_version=card.strategy_version,
+                strategy_config_fingerprint=card.strategy_config_fingerprint,
+                enabled=True,
+                enabled_at=datetime(2026, 10, 31, 20, 55, tzinfo=UTC),
+                scope=FrozenPolicy.from_mapping(
+                    {"mode": "OWNER_FULL_CONTOUR_DIAGNOSTIC"}
+                ),
+                operator="owner",
+                source="OWNER_FULL_CONTOUR_V1_CI",
+            )
+            entry, exit_plan = materialize_plans(card, activation)
+            store.insert_strategy_card(card)
+            store.insert_activation(activation, reason="production-like diagnostic v1")
+            store.insert_entry_plan(entry)
+            store.insert_exit_plan(exit_plan)
+            connection.execute(
+                """INSERT INTO strategy_entry.strategy_execution_bindings(
+                       strategy_execution_binding_id,strategy_activation_id,
+                       execution_leg,execution_role,trading_account_id,
+                       allocation_mode,binding_state,effective_from,
+                       operator,source,reason)
+                   VALUES(%s,%s,'PRIMARY','PRIMARY',%s,
+                          'SUBORDINATE_DIAGNOSTIC','ACTIVE',%s,
+                          'owner','OWNER_FULL_CONTOUR_V1_CI',
+                          'production-like v1 before upgrade')""",
+                (
+                    binding_id,
+                    activation_id,
+                    account,
+                    datetime(2026, 10, 31, 20, 55, tzinfo=UTC),
+                ),
             )
 
         # Match production's already-existing read rights used by the inert
