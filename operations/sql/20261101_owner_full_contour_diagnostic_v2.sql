@@ -198,6 +198,10 @@ BEGIN
          AND trading_account_id=v_account
          AND allocation_mode='SUBORDINATE_DIAGNOSTIC'
          AND binding_state='INACTIVE'
+  ) AND EXISTS (
+      SELECT 1 FROM strategy_entry.strategy_cards
+       WHERE strategy_id=v_strategy
+         AND strategy_version='1.0-owner-full-contour-20261101'
   ) THEN
     RAISE EXCEPTION 'OWNER_FULL_CONTOUR_V1_BINDING_NOT_EXACT';
   END IF;
