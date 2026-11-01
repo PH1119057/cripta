@@ -21,6 +21,14 @@ from bybit_workbench.account_state_generation import (
 from bybit_workbench.entry_admission import PostgresEntryAdmissionPort
 from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.strategy_position_binding import exchange_position_key
+from bybit_workbench.universal_exit.contracts import (
+    ExitActionKind,
+    ExitEvaluationStatus,
+    ExitObservation,
+)
+from bybit_workbench.universal_exit.engine import UniversalExitEngine
+from bybit_workbench.universal_exit.loader import load_exit_binding, prior_once_rule_ids
+from bybit_workbench.universal_exit.storage import PostgresExitShadowStore
 
 from .contracts import (
     DataQuality,
@@ -34,11 +42,12 @@ from .contracts import (
 from .engine import UniversalEntryEngine
 from .owner_full_contour_control import (
     ACTIVE_STATES,
-    require_parent_p90_owner_scope,
+    require_parent_p90_diagnostic_scope,
     retire_entry_rights,
     set_run_state,
 )
 from .owner_full_contour_diagnostic import (
+    EXIT_TRIGGER_EVENT_KIND,
     RUNTIME_SOURCE,
     TRIGGER_EVENT_KIND,
     is_diagnostic_strategy,
@@ -281,7 +290,7 @@ def materialize_requested_run(
                 connection, run_id=run_id, now=current,
                 reason="OWNER_FULL_CONTOUR_GENERIC_ARM_NOT_ACTIVE",
             )
-        require_parent_p90_owner_scope(
+        require_parent_p90_diagnostic_scope(
             connection,
             symbol=symbol,
             account_id=trading_account_id,
@@ -412,6 +421,91 @@ def materialize_requested_run(
         )
 
 
+def _force_diagnostic_exit(
+    connection: Any,
+    *,
+    run_id: str,
+    strategy_position_id: str,
+    now: datetime,
+) -> str:
+    existing = connection.execute(
+        """SELECT exit_decision_id
+             FROM strategy_exit.exit_decisions
+            WHERE strategy_position_id=%s
+              AND rule_id='OWNER_DIAGNOSTIC_FORCE_CLOSE'
+            ORDER BY decided_at,exit_decision_id
+            LIMIT 1""",
+        (strategy_position_id,),
+    ).fetchone()
+    if existing is not None:
+        return "OWNER_DIAGNOSTIC_EXIT_ALREADY_DECIDED:" + str(
+            _v(existing, "exit_decision_id", 0)
+        )
+
+    position, plan = load_exit_binding(
+        connection,
+        strategy_position_id=strategy_position_id,
+    )
+    if not is_diagnostic_strategy(position.strategy_id, position.strategy_version):
+        raise RuntimeError("OWNER_FULL_CONTOUR_EXIT_POSITION_IDENTITY_INVALID")
+    if position.initial_protection_confirmed_at is None:
+        return "OWNER_DIAGNOSTIC_POSITION_OPEN_WAITING_PROTECTION:" + strategy_position_id
+
+    observation = ExitObservation(
+        observation_id=(
+            "owner-full-contour-exit-"
+            + run_id.removeprefix("owner-fc-")
+        ),
+        strategy_position_id=strategy_position_id,
+        symbol=position.symbol,
+        event_at=now.astimezone(UTC),
+        observed_at=now.astimezone(UTC),
+        received_at=now.astimezone(UTC),
+        event_kind=EXIT_TRIGGER_EVENT_KIND,
+        attributes=FrozenPolicy.from_mapping(
+            {
+                "diagnostic_run_id": run_id,
+                "diagnostic_source": RUNTIME_SOURCE,
+            }
+        ),
+        source_refs=(
+            f"owner-full-contour-run:{run_id}",
+            f"strategy-position:{strategy_position_id}",
+        ),
+    )
+    evaluation = UniversalExitEngine().evaluate(
+        position,
+        plan,
+        observation,
+        prior_once_rule_ids=prior_once_rule_ids(
+            connection,
+            strategy_position_id=strategy_position_id,
+            exit_plan_fingerprint=plan.exit_plan_fingerprint,
+        ),
+    )
+    decision = evaluation.decision
+    if (
+        evaluation.status is not ExitEvaluationStatus.DECISION_CREATED
+        or decision is None
+        or decision.action_kind is not ExitActionKind.CLOSE
+        or decision.rule_id != "OWNER_DIAGNOSTIC_FORCE_CLOSE"
+        or decision.requested_mutation.to_dict()
+        != {"quantity": "ALL", "order_type": "MARKET"}
+    ):
+        raise RuntimeError(
+            "OWNER_FULL_CONTOUR_FORCED_EXIT_NOT_CREATED:"
+            + evaluation.status.value
+            + ":"
+            + evaluation.reason
+        )
+    PostgresExitShadowStore(connection).record(
+        evaluation,
+        position=position,
+        plan=plan,
+    )
+    return "OWNER_DIAGNOSTIC_EXIT_DECIDED:" + decision.exit_decision_id
+
+
 def refresh_run_lifecycle(
     connection: Any,
     *,
@@ -499,7 +593,7 @@ def refresh_run_lifecycle(
 
     if request_id:
         position = connection.execute(
-            """SELECT position_id,state
+            """SELECT position_id,state,initial_protection_confirmed_at
                  FROM runtime.position_ownership
                 WHERE entry_execution_request_id=%s
                   AND trading_account_id=%s
@@ -510,12 +604,38 @@ def refresh_run_lifecycle(
         if position is not None:
             position_id = str(_v(position, "position_id", 0))
             position_state = str(_v(position, "state", 1))
-            if position_state == "OPEN" and state != "POSITION_OPEN":
-                set_run_state(
-                    connection, run_id=run_id, state="POSITION_OPEN", now=now,
-                    lineage={"strategy_position_id": position_id},
-                )
-                return "OWNER_DIAGNOSTIC_POSITION_OPEN:" + position_id
+            if position_state == "OPEN":
+                if state != "POSITION_OPEN":
+                    set_run_state(
+                        connection, run_id=run_id, state="POSITION_OPEN", now=now,
+                        lineage={"strategy_position_id": position_id},
+                    )
+                    state = "POSITION_OPEN"
+                if _v(position, "initial_protection_confirmed_at", 2) is None:
+                    return (
+                        "OWNER_DIAGNOSTIC_POSITION_OPEN_WAITING_PROTECTION:"
+                        + position_id
+                    )
+                try:
+                    return _force_diagnostic_exit(
+                        connection,
+                        run_id=run_id,
+                        strategy_position_id=position_id,
+                        now=now,
+                    )
+                except (RuntimeError, ValueError, KeyError) as exc:
+                    set_run_state(
+                        connection,
+                        run_id=run_id,
+                        state="RECONCILIATION_REQUIRED",
+                        now=now,
+                        lineage={"strategy_position_id": position_id},
+                        error=(
+                            "OWNER_FULL_CONTOUR_FORCED_EXIT_FAILED:"
+                            + f"{type(exc).__name__}:{exc}"
+                        ),
+                    )
+                    return "OWNER_DIAGNOSTIC_RECONCILIATION_REQUIRED"
             if position_state == "RECONCILIATION_REQUIRED":
                 set_run_state(
                     connection, run_id=run_id,
