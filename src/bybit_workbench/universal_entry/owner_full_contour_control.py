@@ -452,14 +452,19 @@ def retire_entry_rights(
         and int(_row_value(active_account, "active_count", 0)) == 1
     ):
         result = connection.execute(
-            """SELECT control.disarm_owner_full_contour_account_scope(%s,%s,%s)""",
+            """SELECT control.disarm_owner_full_contour_account_scope(%s,%s,%s)
+                      AS account_live_arm_session_id""",
             (
                 account_session_id(run_id),
                 current,
                 f"{RUNTIME_SOURCE}:{run_id}",
             ),
         ).fetchone()
-        if result != (account_session_id(run_id),):
+        if (
+            result is None
+            or str(_row_value(result, "account_live_arm_session_id", 0))
+            != account_session_id(run_id)
+        ):
             raise RuntimeError("OWNER_FULL_CONTOUR_ACCOUNT_DISARM_FAILED")
 
     gate = connection.execute(
