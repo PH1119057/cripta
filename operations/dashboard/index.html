@@ -949,7 +949,7 @@ function refreshP90RealV3ArmControl(){
   else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='warn';message='Universal Entry observer сейчас не готов · OWNER ARM сначала выполнит автоматическую подготовку'}
   setOperationStatus(status,state,message);
   const primaryP90Control=cohort||armed||preparing||operationState==='BLOCKED';
-  button.hidden=primaryP90Control;
+  button.hidden=true;
   if(primaryP90Control&&!gateChanging){
     tradeGateButton.textContent=armed?'Закрыть P90 REAL v3':preparing?'Подготовка P90 REAL v3…':retryable?'Повторить подготовку P90':'Открыть P90 REAL v3';
     tradeGateButton.classList.toggle('danger',!armed);
