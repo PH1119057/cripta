@@ -55,6 +55,7 @@ from bybit_workbench.universal_entry.runtime_loader import MappingSequenceRow
 CURRENT_ACCOUNT_REF = "BYBIT:UNIFIED"
 CURRENT_POSITION_IDX = 0
 
+
 def mapping_sequence_row(cursor: Any) -> Any:
     """dict semantics plus positional compatibility for the legacy Entry call graph."""
     make_dict = dict_row(cursor)
