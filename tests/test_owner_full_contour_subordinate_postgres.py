@@ -9,23 +9,29 @@ created.
 """
 from __future__ import annotations
 
+import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import psycopg
 import pytest
+from psycopg.rows import tuple_row
 
 from bybit_workbench.universal_entry import owner_full_contour_diagnostic as diagnostic
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
 from bybit_workbench.universal_entry.dashboard_control import card_from_editable
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.owner_full_contour_control import request_run
+from bybit_workbench.universal_entry.owner_full_contour_runtime import (
+    materialize_requested_run,
+)
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
+from operations.connectivity.universal_entry_consumer import mapping_sequence_row
 from operations.implementation.install_owner_full_contour_diagnostic import install
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -336,6 +342,80 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                 WHERE state='ACTIVE'"""
         ).fetchone() == (0,)
 
+        # Production-path fixtures for the full-contour materializer.  They
+        # deliberately stop before any Exchange mutation: the tested boundary is
+        # the ordinary EntryExecutionRequest durable handoff.
+        run_at = datetime.now(UTC)
+        release_commit = "f" * 40
+        position_mode_ref = "pmode-owner-fc-ci-arb"
+        generation_id = "acctgen-owner-fc-ci-arb"
+        epoch_id = "p90-real-epoch-" + ("a" * 40)
+        connection.execute(
+            """INSERT INTO runtime.position_mode_states(
+                   position_mode_state_ref,exchange,account_ref,product_category,
+                   instrument,position_mode,position_idx,observed_at,received_at,
+                   fresh_until,provenance,trading_account_id,identity_status)
+               VALUES(%s,'BYBIT','BYBIT:UNIFIED','LINEAR','ARBUSDT','ONE_WAY',0,
+                      %s,%s,%s,'{}'::jsonb,%s,'PROVEN')""",
+            (
+                position_mode_ref,
+                run_at,
+                run_at,
+                run_at + timedelta(minutes=10),
+                SUB_ACCOUNT,
+            ),
+        )
+        connection.execute(
+            """INSERT INTO runtime.account_state_generations(
+                   generation_id,account_ref,reason,state,started_at,completed_at,
+                   account_type,total_equity,wallet_balance,available_balance,
+                   positions_count,active_orders_count,position_mode_refs,
+                   wallet_payload,error,trading_account_id,identity_status)
+               VALUES(%s,'BYBIT:UNIFIED','owner-full-contour-ci','COMPLETE',
+                      %s,%s,'UNIFIED',100,100,100,0,0,%s::jsonb,'{}'::jsonb,
+                      '',%s,'PROVEN')""",
+            (
+                generation_id,
+                run_at,
+                run_at,
+                json.dumps({"ARBUSDT": position_mode_ref}),
+                SUB_ACCOUNT,
+            ),
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.p90l90_real_source_epochs(
+                   epoch_id,source_commit,market_source_id,opened_at,
+                   source_ws_ready_at,native_mirror_ready_at,status)
+               VALUES(%s,%s,'ms-bybit-mainnet-public-v1',%s,%s,%s,'ACTIVE')""",
+            (epoch_id, release_commit, run_at, run_at, run_at),
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.p90l90_real_causal_checkpoints(
+                   epoch_id,symbol,checkpoint_json,entry_checkpoint_json,
+                   source_commit,writer_release_commit,generation,
+                   created_at,updated_at)
+               VALUES(%s,'ARBUSDT',%s::jsonb,%s::jsonb,%s,%s,1,%s,%s)""",
+            (
+                epoch_id,
+                json.dumps(
+                    {
+                        "schema": "P90L90_CAUSAL_TRANSPORT_JOIN_V1",
+                        "symbol": "ARBUSDT",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "schema": "P90L90_CAUSAL_ENTRY_RESTART_V1",
+                        "previous_price": "0.50",
+                    }
+                ),
+                release_commit,
+                release_commit,
+                run_at,
+                run_at,
+            ),
+        )
+
         # Regression for the production 2026-11-01 authenticated trigger
         # failure: control.execution_gates.enabled is SMALLINT, while the v2
         # SECURITY DEFINER account-arm function had compared it with boolean
@@ -346,8 +426,8 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
             symbol="ARBUSDT",
             direction="LONG",
             operator="owner",
-            release_commit="f" * 40,
-            now=AT,
+            release_commit=release_commit,
+            now=run_at,
         )
         assert requested["symbol"] == "ARBUSDT"
         assert requested["direction"] == "LONG"
@@ -385,6 +465,52 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                   AND strategy_id IN (%s,%s)""",
             (MAIN_ID, SUB_ID),
         ).fetchone() == (0,)
+
+        # The actual Universal Entry process uses this Mapping-compatible row
+        # factory so downstream legacy positional readers remain safe while
+        # Mapping consumers continue to see dict semantics.
+        connection.row_factory = mapping_sequence_row
+        probe = connection.execute(
+            "SELECT 'alpha'::text AS first, 'beta'::text AS second, "
+            "'gamma'::text AS third"
+        ).fetchone()
+        assert probe is not None
+        assert probe["second"] == "beta"
+        assert probe[0] == "alpha"
+        assert probe[1:3] == ("beta", "gamma")
+        assert dict(probe) == {
+            "first": "alpha",
+            "second": "beta",
+            "third": "gamma",
+        }
+
+        materialized = materialize_requested_run(
+            connection,
+            trading_account_id=SUB_ACCOUNT,
+            account_connector_id=diagnostic.SUB_CONNECTOR_ID,
+            release_commit=release_commit,
+            now=run_at,
+        )
+        assert materialized is not None
+        assert materialized.startswith("OWNER_DIAGNOSTIC_MATERIALIZED:")
+        run = connection.execute(
+            """SELECT state,signal_id,strategy_attempt_id,entry_decision_id,
+                      entry_execution_request_id,entry_command_id
+                 FROM control.owner_full_contour_diagnostic_runs
+                WHERE run_id=%s""",
+            (requested["run_id"],),
+        ).fetchone()
+        assert run is not None
+        assert run["state"] == "MATERIALIZED"
+        assert run["signal_id"]
+        assert run["strategy_attempt_id"]
+        assert run["entry_decision_id"]
+        assert run["entry_execution_request_id"]
+        assert run["entry_command_id"] is None
+
+        # Restore the installer's real tuple-row contract for the existing
+        # release-readback assertion below.
+        connection.row_factory = tuple_row
 
         # A later verified release must be able to read back the already
         # installed immutable capability while this diagnostic runtime state is

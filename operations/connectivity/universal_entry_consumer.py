@@ -54,6 +54,26 @@ from bybit_workbench.universal_entry.owner_full_contour_runtime import (
 CURRENT_ACCOUNT_REF = "BYBIT:UNIFIED"
 CURRENT_POSITION_IDX = 0
 
+
+class MappingSequenceRow(dict[str, object]):
+    """Mapping row with legacy positional access for the Universal Entry call graph."""
+
+    def __getitem__(self, key: str | int | slice) -> object:
+        if isinstance(key, (int, slice)):
+            return tuple(self.values())[key]
+        return super().__getitem__(key)
+
+
+def mapping_sequence_row(cursor: Any) -> Any:
+    """dict semantics plus positional compatibility for the legacy Entry call graph."""
+    make_dict = dict_row(cursor)
+
+    def make_row(values: list[Any] | tuple[Any, ...]) -> MappingSequenceRow:
+        return MappingSequenceRow(make_dict(values))
+
+    return make_row
+
+
 DB_DSN = os.environ.get(
     "CRIPTA_DATABASE_DSN",
     "dbname=cripta user=cripta host=/var/run/postgresql application_name=universal-entry-consumer",
@@ -1588,7 +1608,7 @@ def main() -> int:
     next_health_at = 0.0
     ready = False
     reasons: tuple[str, ...] = ("STARTING",)
-    with psycopg.connect(DB_DSN, row_factory=dict_row) as connection:
+    with psycopg.connect(DB_DSN, row_factory=mapping_sequence_row) as connection:
         while running:
             current = datetime.now(UTC)
             monotonic_now = time.monotonic()
