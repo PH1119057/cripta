@@ -138,6 +138,17 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                 (binding_id, activation_id, account, AT),
             )
 
+        # Match production's already-existing read rights used by the inert
+        # installer preflight.  This is disposable-fixture parity only; the
+        # release does not grant new runtime privileges.
+        connection.execute(
+            """GRANT SELECT ON
+                   control.execution_gates,
+                   strategy_entry.execution_permissions,
+                   control.live_arm_sessions,
+                   control.account_live_arm_sessions
+               TO cripta"""
+        )
         connection.execute("SET SESSION AUTHORIZATION cripta")
         assert connection.execute(
             "SELECT session_user,current_user"
