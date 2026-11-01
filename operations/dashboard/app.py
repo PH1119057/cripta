@@ -5459,7 +5459,7 @@ def _u6_prepare_p90_real_v3_readiness(
                 request_id=request_id,
                 code="SERVICE_PREFLIGHT_BLOCKED",
                 detail=";".join(plan.blockers),
-                retry_eligible=True,
+                retry_eligible=False,
                 progress={
                     "required_services": len(specs),
                     "service_blockers": list(plan.blockers),
@@ -5569,7 +5569,7 @@ def _u6_prepare_p90_real_v3_readiness(
             request_id=request_id,
             code="SERVICE_PREFLIGHT_BLOCKED",
             detail=str(exc),
-            retry_eligible=True,
+            retry_eligible=False,
         )
     except Exception as exc:
         return _mark_p90_readiness_blocked(
