@@ -1193,31 +1193,9 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     current = (now or datetime.now(UTC)).astimezone(UTC)
     _release_expired_reserved_requests(connection, now=current)
 
-    # Diagnostic lifecycle completion must continue after its bounded NEW-Entry
-    # window closes. Exit ownership is independent of the global Entry gate.
-    diagnostic_lifecycle = refresh_run_lifecycle(
-        connection,
-        trading_account_id=TRADING_ACCOUNT_ID,
-        now=current,
-    )
-    terminal_result = _refresh_owner_diagnostic_terminal_exit(
-        connection,
-        now=current,
-    )
-    if terminal_result:
-        return terminal_result
-    command_result = _refresh_owner_diagnostic_command_failure(
-        connection,
-        now=current,
-    )
-    if command_result:
-        return command_result
-
-    if not _execution_gate_enabled(connection):
-        return diagnostic_lifecycle or "EXECUTION_GATE_DISARMED"
-    # Registry routing is only a prerequisite. Per-request binding/connector,
-    # independently authenticated private credentials and LIVE arm remain
-    # separately required; no cross-account worker fallback.
+    # Process/account route identity is the first runtime ownership gate.
+    # Diagnostic lifecycle completion may continue with NEW-Entry gate closed,
+    # but never through an unproven or different account connector.
     try:
         route = ConsumerWorkerRoute(TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID)
     except ValueError:
@@ -1225,6 +1203,29 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     route_check = check_consumer_worker_route(connection, route=route)
     if not route_check.ready:
         return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY:" + ",".join(route_check.reasons)
+
+    if not _execution_gate_enabled(connection):
+        diagnostic_lifecycle = refresh_run_lifecycle(
+            connection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            now=current,
+        )
+        terminal_result = _refresh_owner_diagnostic_terminal_exit(
+            connection,
+            now=current,
+        )
+        if terminal_result:
+            return terminal_result
+        command_result = _refresh_owner_diagnostic_command_failure(
+            connection,
+            now=current,
+        )
+        if command_result:
+            return command_result
+        return diagnostic_lifecycle or "EXECUTION_GATE_DISARMED"
+    # Registry routing is only a prerequisite. Per-request binding/connector,
+    # independently authenticated private credentials and LIVE arm remain
+    # separately required; no cross-account worker fallback.
     safety_ready, safety_reasons = account_entry_safety_ready(
         connection,
         trading_account_id=route.trading_account_id,
