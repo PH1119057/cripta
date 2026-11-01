@@ -25,6 +25,7 @@ Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30
 Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90
 Environment=CRIPTA_P90_REAL_PRIVATE_IPC=ENABLED
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/operations/connectivity:/srv/cripta/runtime/current/research/server/connectivity
+EnvironmentFile=/etc/cripta/release.env
 EnvironmentFile=/etc/cripta/private-runtime-%i.env
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/private_runtime.py --sub-account=%i
 LoadCredentialEncrypted=bybit-sub-%i:/etc/cripta/credentials/bybit-sub-%i.cred

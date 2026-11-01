@@ -59,6 +59,7 @@ def test_sub_private_service_requires_exact_credential_and_scoped_write_root() -
     assert "Environment=CRIPTA_BOT_INSTANCE_ID=private-sub-%i" in unit
     assert "Environment=CRIPTA_BYBIT_CREDENTIAL_NAME=bybit-sub-%i" in unit
     assert "Environment=CRIPTA_PRIVATE_STATUS_DIR=/var/lib/cripta/private_runtime/sub-%i" in unit
+    assert "EnvironmentFile=/etc/cripta/release.env" in unit
     assert "EnvironmentFile=/etc/cripta/private-runtime-%i.env" in unit
     assert (
         "LoadCredentialEncrypted=bybit-sub-%i:/etc/cripta/credentials/bybit-sub-%i.cred"
@@ -98,6 +99,7 @@ def test_sub_entry_service_is_explicitly_enableable_without_private_credential(
 
 def test_existing_main_private_service_is_not_changed_into_sub_template() -> None:
     current = EXISTING_MAIN.read_text(encoding="utf-8")
+    assert "EnvironmentFile=/etc/cripta/release.env" in current
     assert "bybit-mainnet.cred" in current
     assert "private_runtime.py\n" in current
     assert "--sub-account=" not in current

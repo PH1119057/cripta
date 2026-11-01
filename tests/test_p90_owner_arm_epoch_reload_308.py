@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,6 +8,51 @@ OBSERVER = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
 LIFECYCLE = (
     ROOT / "operations/monitoring/lifecycle_supervisor_runtime.py"
 ).read_text(encoding="utf-8")
+
+
+def _source_only_gate_compatible():
+    tree = ast.parse(OBSERVER)
+    node = next(
+        item
+        for item in tree.body
+        if isinstance(item, ast.FunctionDef)
+        and item.name == "_p90_source_only_gate_compatible"
+    )
+    namespace = {
+        "OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON":
+            "owner full-contour diagnostic Entry window",
+    }
+    exec(
+        compile(ast.Module(body=[node], type_ignores=[]), "observer", "exec"),
+        namespace,
+    )
+    return namespace["_p90_source_only_gate_compatible"]
+
+
+def test_owner_diagnostic_gate_keeps_parent_p90_source_only_epoch_stable() -> None:
+    compatible = _source_only_gate_compatible()
+    assert compatible(gate_enabled=False, gate_reason="", selected=frozenset())
+    assert compatible(
+        gate_enabled=True,
+        gate_reason="owner full-contour diagnostic Entry window",
+        selected=frozenset(),
+    )
+    assert not compatible(
+        gate_enabled=True,
+        gate_reason="owner full-contour diagnostic Entry window",
+        selected=frozenset({"activation-p90"}),
+    )
+    assert not compatible(
+        gate_enabled=True,
+        gate_reason="unrelated gate reason",
+        selected=frozenset(),
+    )
+
+
+def test_source_only_guards_use_same_diagnostic_compatibility_predicate() -> None:
+    assert OBSERVER.count("_p90_source_only_gate_compatible(") >= 2
+    assert "OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON" in OBSERVER
+    assert "elif not gate_enabled and not selected:" in OBSERVER
 
 
 def test_exact_owner_arm_stage_is_clean_epoch_reload_not_runtime_fault() -> None:

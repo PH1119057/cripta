@@ -14,6 +14,7 @@ from typing import Any
 
 from .fingerprint import fingerprint
 from .owner_full_contour_diagnostic import (
+    ENTRY_WINDOW_GATE_REASON,
     RUNTIME_SOURCE,
     VERSION,
     strategy_id_for_symbol,
@@ -370,7 +371,7 @@ def request_run(
     if result != (scoped_session,):
         raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_ARM_WRITE_FAILED")
 
-    gate_reason = "owner full-contour diagnostic Entry window"
+    gate_reason = ENTRY_WINDOW_GATE_REASON
     connection.execute(
         """UPDATE control.execution_gates
               SET enabled=1,reason=%s,updated_at_epoch_ms=%s
