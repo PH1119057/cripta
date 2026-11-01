@@ -25,6 +25,11 @@ def test_p90_profile_is_first_consumer_of_generic_service_contract():
     assert f"cripta-lifecycle-account@{SUB}.service" in names
     assert f"cripta-account-position@{SUB}.service" in names
     assert "cripta-dashboard.service" not in names
+    # P90 Exit is composed inside the Universal Entry Observer and dispatched
+    # through the account-local private runtimes. The generic legacy Exit
+    # services explicitly exclude P90 REAL v3 and must not become false gates.
+    assert "cripta-universal-exit-shadow.service" not in names
+    assert "cripta-universal-exit-consumer.service" not in names
 
     snapshots = {
         item.unit: ServiceSnapshot(item.unit, UnitState.INACTIVE, SHA, True)
