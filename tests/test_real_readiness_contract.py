@@ -78,6 +78,11 @@ def test_verified_release_installs_broker_and_durable_state_but_does_not_arm():
     assert "systemctl enable cripta-real-service-broker.service" in installer
     assert "systemctl start cripta-real-service-broker.service" in installer
     assert "REAL_SERVICE_BROKER=ACTIVE" in installer
+    broker_start = installer.index("systemctl start cripta-real-service-broker.service")
+    dashboard_restore = installer.index(
+        'if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi'
+    )
+    assert broker_start < dashboard_restore
     assert "REAL_SERVICE_BROKER_SOURCE_PREFLIGHT=PASS" in installer
     assert "/usr/local/libexec/cripta-real-service-broker" in installer
     assert '"$broker_staged"' in installer
