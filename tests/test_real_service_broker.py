@@ -33,6 +33,24 @@ def test_allowlist_is_narrow():
     )
 
 
+def test_broker_accepts_only_dashboard_cgroup(tmp_path) -> None:
+    pid = 4321
+    cgroup = tmp_path / str(pid)
+    cgroup.mkdir()
+    (cgroup / "cgroup").write_text(
+        "0::/system.slice/cripta-dashboard.service\n",
+        encoding="utf-8",
+    )
+    assert broker._peer_is_dashboard(pid, proc_root=tmp_path)
+
+    (cgroup / "cgroup").write_text(
+        "0::/system.slice/cripta-private-runtime.service\n",
+        encoding="utf-8",
+    )
+    assert not broker._peer_is_dashboard(pid, proc_root=tmp_path)
+    assert not broker._peer_is_dashboard(0, proc_root=tmp_path)
+
+
 def test_request_rejects_extra_fields(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(broker, "verify_release", lambda _commit: None)
     payload = request("cripta-private-runtime.service")
