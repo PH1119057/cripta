@@ -24,7 +24,7 @@ def _fingerprint(scope: Mapping[str, object]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _row_dict(row: object) -> dict[str, object]:
+def _row_dict(row: Any) -> dict[str, object]:
     if row is None:
         raise RealReadinessControlError("READINESS_OPERATION_NOT_FOUND")
     keys = (
@@ -69,11 +69,13 @@ def begin_operation(
     ).fetchone()
     if existing is not None:
         result = _row_dict(existing)
+        existing_scope = result["scope_json"]
         if (
             result["requested_by"] != operator
             or result["release_commit"] != release_commit
             or result["scope_key"] != scope_key
-            or _fingerprint(result["scope_json"]) != fingerprint
+            or not isinstance(existing_scope, Mapping)
+            or _fingerprint(existing_scope) != fingerprint
         ):
             raise RealReadinessControlError("READINESS_REQUEST_ID_CONFLICT")
         updated_at = result["updated_at"]
