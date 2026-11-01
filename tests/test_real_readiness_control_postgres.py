@@ -144,6 +144,38 @@ def test_stale_operation_is_durably_blocked_before_replacement_request() -> None
         assert new["_existing"] is False
 
 
+def test_prior_release_active_operation_is_superseded_immediately() -> None:
+    assert DSN is not None
+    token = uuid4().hex
+    scope_key = "scope-release-" + token
+    old_id = "ready-old-release-" + token
+    new_id = "ready-new-release-" + token
+    now = datetime(2026, 11, 2, 0, 25, tzinfo=UTC)
+    with psycopg.connect(DSN) as connection:
+        connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        connection.execute("SET ROLE cripta")
+        _begin(
+            connection,
+            request_id=old_id,
+            scope_key=scope_key,
+            now=now,
+            release="a" * 40,
+        )
+        new = _begin(
+            connection,
+            request_id=new_id,
+            scope_key=scope_key,
+            now=now + timedelta(seconds=1),
+            release="b" * 40,
+        )
+        old = get_operation(connection, request_id=old_id)
+        assert old["state"] == "BLOCKED"
+        assert old["blocker_code"] == "RELEASE_SUPERSEDED"
+        assert old["retry_eligible"] is True
+        assert new["state"] == "REQUESTED"
+        assert new["release_commit"] == "b" * 40
+
+
 def test_readiness_progress_ready_and_blocked_are_durable() -> None:
     assert DSN is not None
     token = uuid4().hex
