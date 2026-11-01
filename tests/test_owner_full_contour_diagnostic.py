@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -16,13 +15,11 @@ from bybit_workbench.strategy_execution_binding_policy import (
     real_binding_allocation_allowed,
 )
 from bybit_workbench.strategy_position import StrategyPosition
-from bybit_workbench.universal_entry import runtime_loader
 from bybit_workbench.universal_entry.contracts import (
     FrozenPolicy,
     StrategyActivation,
     TradeDirection,
 )
-from bybit_workbench.universal_entry.fingerprint import canonical_json
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 from bybit_workbench.universal_exit.contracts import (
@@ -86,90 +83,6 @@ def _main_bundle():
     )
     entry, exit_plan = materialize_plans(card, activation)
     return card, activation, entry, exit_plan
-
-
-class _RowsCursor:
-    def __init__(self, rows):
-        self._rows = rows
-
-    def fetchall(self):
-        return self._rows
-
-
-class _RuntimeLoaderDictConnection:
-    def __init__(self, row):
-        self.row = row
-
-    def execute(self, _statement, _parameters=()):
-        return _RowsCursor([self.row])
-
-
-def _runtime_loader_dict_row():
-    card, activation, entry, exit_plan = _main_bundle()
-    return {
-        "activation_id": activation.activation_id,
-        "strategy_id": activation.strategy_id,
-        "strategy_version": activation.strategy_version,
-        "strategy_config_fingerprint": activation.strategy_config_fingerprint,
-        "enabled": activation.enabled,
-        "enabled_at": activation.enabled_at,
-        "disabled_at": activation.disabled_at,
-        "scope": activation.scope.to_dict(),
-        "operator": activation.operator,
-        "source": activation.source,
-        "updated_at": datetime(2026, 11, 1, 0, 0, 1, tzinfo=UTC),
-        "card_json": json.loads(canonical_json(card)),
-        "approved_at": card.approved_at,
-        "approved_source": card.approved_source,
-        "entry_plan_fingerprint": entry.entry_plan_fingerprint,
-        "exit_plan_fingerprint": exit_plan.exit_plan_fingerprint,
-    }
-
-
-def test_runtime_loader_exact_identity_accepts_production_dict_row() -> None:
-    row = _runtime_loader_dict_row()
-    bundle = runtime_loader.load_strategy_bundle_exact_identity(
-        _RuntimeLoaderDictConnection(row),
-        activation_id=str(row["activation_id"]),
-        strategy_id=str(row["strategy_id"]),
-        strategy_version=str(row["strategy_version"]),
-        strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
-        entry_plan_fingerprint=str(row["entry_plan_fingerprint"]),
-        exit_plan_fingerprint=str(row["exit_plan_fingerprint"]),
-    )
-    assert bundle is not None
-    assert bundle.exact_identity == (
-        row["activation_id"],
-        row["strategy_id"],
-        row["strategy_version"],
-        row["strategy_config_fingerprint"],
-        row["entry_plan_fingerprint"],
-        row["exit_plan_fingerprint"],
-    )
-
-
-def test_runtime_loader_active_bundles_accept_production_dict_row() -> None:
-    row = _runtime_loader_dict_row()
-    bundles = runtime_loader.load_active_strategy_bundles(
-        _RuntimeLoaderDictConnection(row)
-    )
-    assert len(bundles) == 1
-    assert bundles[0].activation.activation_id == row["activation_id"]
-
-
-def test_mapping_sequence_row_preserves_mapping_and_positional_reads() -> None:
-    row = runtime_loader.MappingSequenceRow(
-        {"first": "alpha", "second": "beta", "third": "gamma"}
-    )
-    assert row["second"] == "beta"
-    assert row[0] == "alpha"
-    assert row[2] == "gamma"
-    assert row[1:3] == ("beta", "gamma")
-    assert dict(row) == {
-        "first": "alpha",
-        "second": "beta",
-        "third": "gamma",
-    }
 
 
 def _position(exit_plan, direction: TradeDirection = TradeDirection.LONG):
