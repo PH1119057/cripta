@@ -55,6 +55,7 @@ from bybit_workbench.p90l90_real_prearm_evidence import (
     prepare_p90l90_real_v3_prearm_evidence,
 )
 from bybit_workbench.real_readiness_control import (
+    RealReadinessControlError,
     begin_operation as begin_real_readiness_operation,
     latest_operation as latest_real_readiness_operation,
     mark_blocked as mark_real_readiness_blocked,
@@ -5314,20 +5315,35 @@ def _u6_prepare_p90_real_v3_readiness(
             P90_REAL_SUB_ACCOUNT_ID,
         ],
     }
-    with psycopg.connect(
-        "dbname=cripta user=cripta host=/var/run/postgresql"
-    ) as connection:
-        connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-        operation = begin_real_readiness_operation(
-            connection,
-            request_id=request_id,
-            operator=operator,
-            release_commit=LOADED_RELEASE_COMMIT,
-            scope_key=P90_REAL_READINESS_SCOPE_KEY,
-            scope=scope,
-            now=datetime.now(UTC),
-        )
-    if str(operation.get("state") or "") == "READY_FOR_OWNER_ARM":
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+            operation = begin_real_readiness_operation(
+                connection,
+                request_id=request_id,
+                operator=operator,
+                release_commit=LOADED_RELEASE_COMMIT,
+                scope_key=P90_REAL_READINESS_SCOPE_KEY,
+                scope=scope,
+                now=datetime.now(UTC),
+            )
+    except RealReadinessControlError as exc:
+        if str(exc).startswith("READINESS_OPERATION_ALREADY_ACTIVE:"):
+            with psycopg.connect(
+                "dbname=cripta user=cripta host=/var/run/postgresql"
+            ) as connection:
+                return _readiness_operation_json(
+                    latest_real_readiness_operation(
+                        connection,
+                        scope_key=P90_REAL_READINESS_SCOPE_KEY,
+                    )
+                ) or {}
+        raise
+
+    operation_state = str(operation.get("state") or "")
+    if operation_state != "REQUESTED" or operation.get("_existing") is True:
         return _readiness_operation_json(operation) or {}
 
     specs = p90_real_v3_service_specs(sub_account_id=P90_REAL_SUB_ACCOUNT_ID)
@@ -5451,10 +5467,17 @@ def _u6_prepare_p90_real_v3_readiness(
                     scope_key=P90_REAL_READINESS_SCOPE_KEY,
                 )
             ) or {}
-    except (ServiceBrokerClientError, ServiceReadinessError, OSError) as exc:
+    except (ServiceBrokerClientError, OSError) as exc:
         return _mark_p90_readiness_blocked(
             request_id=request_id,
             code="SERVICE_RECOVERY_FAILED",
+            detail=str(exc),
+            retry_eligible=True,
+        )
+    except ServiceReadinessError as exc:
+        return _mark_p90_readiness_blocked(
+            request_id=request_id,
+            code="SERVICE_PREFLIGHT_BLOCKED",
             detail=str(exc),
             retry_eligible=False,
         )
@@ -5463,7 +5486,7 @@ def _u6_prepare_p90_real_v3_readiness(
             request_id=request_id,
             code="TECHNICAL_EVIDENCE_BLOCKED",
             detail=f"{type(exc).__name__}:{exc}",
-            retry_eligible=False,
+            retry_eligible=True,
         )
 
 
