@@ -297,6 +297,16 @@ for relative in "${release_controller_files[@]}"; do
 done
 echo "RELEASE_CONTROLLER_SOURCE_PREFLIGHT=PASS"
 
+broker_relative="operations/management/real_service_broker.py"
+broker_candidate="$runtime_release/$broker_relative"
+[[ -f "$broker_candidate" ]] || die "REAL service broker source missing: $broker_relative"
+broker_staged="$controller_stage/real_service_broker.py"
+as_repo_owner git -C "$SOURCE" show "$RELEASE_COMMIT:$broker_relative" > "$broker_staged"
+chmod 0600 "$broker_staged"
+cmp -s "$broker_staged" "$broker_candidate" ||
+  die "REAL service broker candidate differs from exact Git"
+echo "REAL_SERVICE_BROKER_SOURCE_PREFLIGHT=PASS"
+
 stamp="$(date -u +%Y%m%d_%H%M%S)"
 backup="$BACKUP_ROOT/${stamp}_${EXPECTED_BASELINE}_to_${RELEASE_COMMIT}"
 install -d -o root -g root -m 0700 "$backup"
@@ -340,7 +350,7 @@ if [[ -d /etc/systemd/system/cripta-private-runtime.service.d ]]; then
   install -d -m 0700 "$backup/files/etc/systemd/system"
   cp -a /etc/systemd/system/cripta-private-runtime.service.d "$backup/files/etc/systemd/system/"
 fi
-for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /etc/cripta/release.env; do
+for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /etc/cripta/release.env; do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
     install -d -m 0700 "$backup/files/$(dirname "$safe")"
@@ -619,6 +629,10 @@ install -o root -g root -m 0644 \
 install -o root -g root -m 0644 \
   "$controller_stage/release_controller_github.py" \
   /usr/local/libexec/cripta-release-controller/release_controller_github.py
+install -d -o root -g root -m 0755 /usr/local/libexec/cripta-real-service-broker
+install -o root -g root -m 0755 \
+  "$broker_staged" \
+  /usr/local/libexec/cripta-real-service-broker/real_service_broker.py
 
 install -d -o root -g cripta -m 0750 /etc/cripta
 cat > /etc/cripta/release.env <<EOF
