@@ -297,8 +297,14 @@ def test_subordinate_binding_mode_is_exact_diagnostic_exception() -> None:
 
 
 def test_subordinate_schema_preserves_dedicated_exclusivity() -> None:
-    assert "allocation_mode IN ('DEDICATED_STRATEGY','SUBORDINATE_DIAGNOSTIC')" in SUBORDINATE_MIGRATION
-    assert "ux_strategy_execution_bindings_subordinate_diagnostic_account" in SUBORDINATE_MIGRATION
+    assert (
+        "allocation_mode IN ('DEDICATED_STRATEGY','SUBORDINATE_DIAGNOSTIC')"
+        in SUBORDINATE_MIGRATION
+    )
+    assert (
+        "ux_strategy_execution_bindings_subordinate_diagnostic_account"
+        in SUBORDINATE_MIGRATION
+    )
     assert "allocation_mode='SUBORDINATE_DIAGNOSTIC'" in SUBORDINATE_MIGRATION
     assert "'SUBORDINATE_DIAGNOSTIC','ACTIVE'" in MIGRATION
     assert "OWNER_FULL_CONTOUR_PARENT_P90_BINDING_NOT_ACTIVE" in MIGRATION
