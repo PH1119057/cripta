@@ -531,6 +531,18 @@ def refresh_run_lifecycle(
     state = str(_v(row, "state", 1))
     request_id = _v(row, "entry_execution_request_id", 3)
 
+    if state == "REQUESTED":
+        gate = connection.execute(
+            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        ).fetchone()
+        if gate is None or not bool(_v(gate, "enabled", 0)):
+            return _fail(
+                connection,
+                run_id=run_id,
+                now=now,
+                reason="OWNER_FULL_CONTOUR_ENTRY_GATE_CLOSED_BEFORE_MATERIALIZATION",
+            )
+
     if state == "MATERIALIZED" and request_id:
         dispatch = connection.execute(
             """SELECT command_id FROM strategy_entry.execution_dispatches

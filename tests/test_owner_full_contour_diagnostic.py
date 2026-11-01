@@ -8,6 +8,7 @@ import pytest
 
 import bybit_workbench.universal_entry.owner_full_contour_control as control
 import bybit_workbench.universal_entry.owner_full_contour_diagnostic as diagnostic
+import bybit_workbench.universal_entry.owner_full_contour_runtime as owner_runtime
 from bybit_workbench.strategy_execution_binding_policy import (
     DEDICATED_STRATEGY,
     SUBORDINATE_DIAGNOSTIC,
@@ -456,6 +457,66 @@ def test_entry_consumer_atomically_retires_diagnostic_rights_after_dispatch() ->
     assert 'state="DISPATCHED"' in helper_body
     assert "entry_command_id" in helper_body
     assert "retire_owner_diagnostic_entry_rights(" in helper_body
+
+
+class _RequestedGateClosedConnection:
+    def __init__(self):
+        self.calls: list[tuple[str, tuple[object, ...]]] = []
+
+    def execute(self, statement, parameters=()):
+        params = tuple(parameters)
+        self.calls.append((statement, params))
+        if (
+            "FROM control.owner_full_contour_diagnostic_runs" in statement
+            and "state=ANY" in statement
+        ):
+            return _Cursor(
+                {
+                    "run_id": "owner-fc-test",
+                    "state": "REQUESTED",
+                    "entry_command_id": None,
+                    "entry_execution_request_id": None,
+                    "strategy_position_id": None,
+                }
+            )
+        if "SELECT enabled FROM control.execution_gates" in statement:
+            return _Cursor({"enabled": 0})
+        if "SELECT strategy_id,strategy_version,strategy_config_fingerprint" in statement:
+            return _Cursor(
+                {
+                    "strategy_id": diagnostic.SUB_ID,
+                    "strategy_version": diagnostic.VERSION,
+                    "strategy_config_fingerprint": "f" * 64,
+                }
+            )
+        if "SELECT count(*) AS active_count" in statement:
+            return _Cursor({"active_count": 1})
+        if "SELECT control.disarm_owner_full_contour_account_scope" in statement:
+            return _Cursor((control.account_session_id("owner-fc-test"),))
+        return _Cursor(None)
+
+
+def test_requested_diagnostic_fails_and_disarms_when_entry_gate_was_closed() -> None:
+    connection = _RequestedGateClosedConnection()
+    result = owner_runtime.refresh_run_lifecycle(
+        connection,
+        trading_account_id=diagnostic.SUB_ACCOUNT_ID,
+        now=datetime(2026, 11, 1, tzinfo=UTC),
+    )
+    assert result == (
+        "OWNER_DIAGNOSTIC_FAILED:"
+        "OWNER_FULL_CONTOUR_ENTRY_GATE_CLOSED_BEFORE_MATERIALIZATION"
+    )
+    sql = "\n".join(statement for statement, _params in connection.calls)
+    assert "UPDATE strategy_entry.execution_permissions" in sql
+    assert "UPDATE control.live_arm_sessions" in sql
+    assert "SELECT control.disarm_owner_full_contour_account_scope" in sql
+    assert "SET state=%s" in sql
+    assert any(
+        params and params[0] == "FAILED"
+        for statement, params in connection.calls
+        if "UPDATE control.owner_full_contour_diagnostic_runs" in statement
+    )
 
 
 def test_retire_entry_rights_handles_dict_row_and_disarms_account_scope() -> None:
