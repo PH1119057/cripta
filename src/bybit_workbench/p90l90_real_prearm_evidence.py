@@ -17,8 +17,6 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
-from bybit_workbench.real_service_profiles import p90_real_v3_service_specs
-
 from bybit_workbench.live_arm_readiness import (
     evaluate_live_arm,
     scope_for_check,
@@ -27,6 +25,7 @@ from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.p90l90_real_arm_control import (
     p90l90_real_v3_contexts_and_routes,
 )
+from bybit_workbench.real_service_profiles import p90_real_v3_service_specs
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
