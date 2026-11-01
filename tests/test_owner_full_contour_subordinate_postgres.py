@@ -31,8 +31,8 @@ from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
 from bybit_workbench.universal_entry.runtime_loader import load_strategy_bundle_exact_identity
-from operations.connectivity.universal_entry_consumer import mapping_sequence_row
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
+from operations.connectivity.universal_entry_consumer import mapping_sequence_row
 from operations.implementation.install_owner_full_contour_diagnostic import install
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
