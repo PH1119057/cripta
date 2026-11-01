@@ -437,6 +437,27 @@ class _RetireDictRowConnection:
         return _Cursor(None)
 
 
+def test_entry_consumer_atomically_retires_diagnostic_rights_after_dispatch() -> None:
+    assert "retire_owner_diagnostic_entry_rights" in ENTRY_CONSUMER
+    publish = ENTRY_CONSUMER.index("_publish_command(connection, prepared, now=current)")
+    finalize = ENTRY_CONSUMER.index(
+        "_finalize_owner_diagnostic_dispatch(",
+        publish,
+    )
+    transaction = ENTRY_CONSUMER.rfind(
+        "with connection.transaction():",
+        0,
+        publish,
+    )
+    assert transaction < publish < finalize
+    helper = ENTRY_CONSUMER.index("def _finalize_owner_diagnostic_dispatch(")
+    helper_end = ENTRY_CONSUMER.index("def _generation_pre_dispatch_status(", helper)
+    helper_body = ENTRY_CONSUMER[helper:helper_end]
+    assert 'state="DISPATCHED"' in helper_body
+    assert "entry_command_id" in helper_body
+    assert "retire_owner_diagnostic_entry_rights(" in helper_body
+
+
 def test_retire_entry_rights_handles_dict_row_and_disarms_account_scope() -> None:
     connection = _RetireDictRowConnection()
     control.retire_entry_rights(
