@@ -129,13 +129,14 @@ def plan_service_starts(
         if snapshot.unit != name or not isinstance(snapshot.state, UnitState):
             blockers.append(f"SERVICE_STATE_UNVERIFIED:{name}")
             continue
-        if snapshot.loaded_commit is not None and snapshot.loaded_commit != release_commit:
+        if snapshot.loaded_commit is None:
+            blockers.append(f"SERVICE_RELEASE_UNVERIFIED:{name}")
+            continue
+        if snapshot.loaded_commit != release_commit:
             blockers.append(f"SERVICE_RELEASE_MISMATCH:{name}")
             continue
         if snapshot.state == UnitState.ACTIVE:
-            if snapshot.loaded_commit is None:
-                blockers.append(f"SERVICE_RELEASE_UNVERIFIED:{name}")
-            elif spec.required_for_entry and not snapshot.behavior_ready:
+            if spec.required_for_entry and not snapshot.behavior_ready:
                 blockers.append(f"SERVICE_BEHAVIOR_NOT_READY:{name}")
         elif snapshot.state == UnitState.INACTIVE and spec.start_when_inactive:
             starts.append(name)
