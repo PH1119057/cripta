@@ -73,6 +73,9 @@ from bybit_workbench.exchange.bybit.time_calibration import (
     build_bybit_time_calibration,
 )
 from bybit_workbench.universal_entry.market_watch import compute_r1_l53_stable_zone
+from bybit_workbench.universal_entry.owner_full_contour_control import (
+    dispatched_entry_command_continuation_allowed,
+)
 from bybit_workbench.universal_entry.r1_strategy import R1_STRATEGY_IDS, R1_SYMBOLS, R1_VERSION
 
 from bybit_workbench.exchange_recovery import prove_orphan_closed_cycle
@@ -120,6 +123,7 @@ PROCESS_STARTED_AT_MS = int(time.time() * 1000)
 ACCOUNT_REF = "BYBIT:UNIFIED"
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
+LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
 # Credential provenance is proved from the exact systemd mount/config,
 # independently of identity.account_connectors DB rows and secret payload fields.
 MOUNTED_CREDENTIAL_REF = ""
@@ -613,12 +617,26 @@ def _critical_lifecycle_fault_code(connection: psycopg.Connection) -> str | None
     return None if row is None else str(row[0])
 
 
-def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
+def entry_runtime_readiness(
+    connection: psycopg.Connection,
+    *,
+    command_id: str | None = None,
+) -> tuple[bool, str]:
     gate = connection.execute(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
     ).fetchone()
     if not gate or not bool(gate[0]):
-        return False, "NEW_ENTRY_GATE_DISARMED"
+        if not (
+            command_id
+            and dispatched_entry_command_continuation_allowed(
+                connection,
+                command_id=command_id,
+                trading_account_id=TRADING_ACCOUNT_ID,
+                account_connector_id=ACCOUNT_CONNECTOR_ID,
+                release_commit=LOADED_RELEASE_COMMIT,
+            )
+        ):
+            return False, "NEW_ENTRY_GATE_DISARMED"
     private = status.get("private", {})
     if not isinstance(private, dict) or private.get("state") != "connected":
         return False, "PRIVATE_WS_NOT_CONNECTED"
@@ -3846,7 +3864,10 @@ def command_worker_loop(key: str, secret: str) -> None:
             continue
         command_id=str(row[0])
         if str(row[1]) == "entry":
-            ready, readiness_reason = entry_runtime_readiness(connection)
+            ready, readiness_reason = entry_runtime_readiness(
+                connection,
+                command_id=command_id,
+            )
             if not ready:
                 connection.execute(
                     """UPDATE runtime.trade_commands
