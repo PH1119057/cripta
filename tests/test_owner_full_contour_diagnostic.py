@@ -279,6 +279,11 @@ def test_subordinate_binding_mode_is_exact_diagnostic_exception() -> None:
         strategy_version=diagnostic.VERSION,
         allocation_mode=SUBORDINATE_DIAGNOSTIC,
     )
+    assert not real_binding_allocation_allowed(
+        strategy_id=diagnostic.MAIN_ID,
+        strategy_version=diagnostic.VERSION,
+        allocation_mode=DEDICATED_STRATEGY,
+    )
     assert real_binding_allocation_allowed(
         strategy_id="ordinary_strategy",
         strategy_version="1",
