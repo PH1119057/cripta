@@ -99,7 +99,7 @@ def begin_operation(
         return result
 
     active = connection.execute(
-        """SELECT request_id,updated_at
+        """SELECT request_id,release_commit,updated_at
              FROM control.real_readiness_operations
             WHERE scope_key=%s
               AND state=ANY(%s)
@@ -109,26 +109,36 @@ def begin_operation(
         (scope_key, list(ACTIVE_STATES)),
     ).fetchone()
     if active is not None:
-        active_id, updated_at = active
-        if (
+        active_id, active_release, updated_at = active
+        superseded = str(active_release) != release_commit
+        stale = (
             not isinstance(updated_at, datetime)
             or updated_at.tzinfo is None
-            or current - updated_at.astimezone(UTC) <= STALE_AFTER
-        ):
+            or current - updated_at.astimezone(UTC) > STALE_AFTER
+        )
+        if not superseded and not stale:
             raise RealReadinessControlError(
                 "READINESS_OPERATION_ALREADY_ACTIVE:" + str(active_id)
             )
+        blocker_code = (
+            "RELEASE_SUPERSEDED" if superseded else "COORDINATOR_INTERRUPTED"
+        )
+        blocker_detail = (
+            "nonterminal readiness operation belongs to prior release"
+            if superseded
+            else "stale nonterminal readiness operation"
+        )
         connection.execute(
             """UPDATE control.real_readiness_operations
                   SET state='BLOCKED',
                       phase='interrupted',
-                      blocker_code='COORDINATOR_INTERRUPTED',
-                      blocker_detail='stale nonterminal readiness operation',
+                      blocker_code=%s,
+                      blocker_detail=%s,
                       retry_eligible=true,
                       updated_at=%s,
                       completed_at=%s
                 WHERE request_id=%s""",
-            (current, current, active_id),
+            (blocker_code, blocker_detail, current, current, active_id),
         )
 
     connection.execute(
