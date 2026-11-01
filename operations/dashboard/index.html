@@ -1021,7 +1021,10 @@ document.getElementById('p90RealV3ArmButton')?.addEventListener('click',async()=
     setOperationStatus(document.getElementById('p90RealV3ArmStatus'),'error','P90 exact cohort не найден или не активен.');
     return;
   }
-  if(!confirm('P90 REAL v3 OWNER ARM\n\nMAIN: LTCUSDT, INJUSDT · cap 20 USDT\nSUB: DOTUSDT, ARBUSDT, APTUSDT · cap 30 USDT\n10 USDT на Entry · isolated 1x\n\nARM сначала подготовит exact runtime при CLOSED gate, дождётся RUNNING/READY и только после повторной проверки откроет mainnet gate ПОСЛЕДНИМ шагом. Если проверка не пройдёт — gate не откроется. Продолжить?'))return;
+  const readinessOp=window.p90ArmStatus?.readiness_operation;
+  if(readinessOp?.state==='BLOCKED'&&readinessOp?.retry_eligible===true){
+    if(!confirm('ПОВТОРИТЬ ТЕХНИЧЕСКУЮ ПОДГОТОВКУ?\n\n'+p90ReadinessOperationText(readinessOp)+'\n\nБудет выполнена новая полная проверка. OWNER ARM и mainnet gate изменятся только если все проверки пройдут.'))return;
+  }else if(!confirm('P90 REAL v3 OWNER ARM\n\nMAIN: LTCUSDT, INJUSDT · cap 20 USDT\nSUB: DOTUSDT, ARBUSDT, APTUSDT · cap 30 USDT\n10 USDT на Entry · isolated 1x\n\nARM сначала подготовит exact runtime при CLOSED gate, дождётся RUNNING/READY и только после повторной проверки откроет mainnet gate ПОСЛЕДНИМ шагом. Если проверка не пройдёт — gate не откроется. Продолжить?'))return;
   try{await changeP90RealV3Arm(true)}catch(e){/* visible in persistent ARM panel */}
 });
 async function fetchLiveStateData(){if(liveStateInFlight)return liveStateInFlight;const view=activePanelName()==='liveDesk'?activeTradePage():'open',path=`/api/live/state?view=${encodeURIComponent(view)}`;liveStateInFlight=(async()=>{const r=await fetchWithTimeout(path,{cache:'no-store'},8000);if(!r.ok)throw new Error(`live-state HTTP ${r.status}`);const out=await r.json();lastLiveSuccessAt=Date.now();return out})();try{return await liveStateInFlight}finally{liveStateInFlight=null}}
