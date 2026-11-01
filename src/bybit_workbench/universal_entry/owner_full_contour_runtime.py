@@ -34,6 +34,7 @@ from .contracts import (
 from .engine import UniversalEntryEngine
 from .owner_full_contour_control import (
     ACTIVE_STATES,
+    require_parent_p90_owner_scope,
     retire_entry_rights,
     set_run_state,
 )
@@ -280,6 +281,13 @@ def materialize_requested_run(
                 connection, run_id=run_id, now=current,
                 reason="OWNER_FULL_CONTOUR_GENERIC_ARM_NOT_ACTIVE",
             )
+        require_parent_p90_owner_scope(
+            connection,
+            symbol=symbol,
+            account_id=trading_account_id,
+            connector_id=account_connector_id,
+            release_commit=release_commit,
+        )
         account_ready, reasons = account_live_arm_ready(
             connection,
             strategy_activation_id=bundle.activation.activation_id,
