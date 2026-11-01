@@ -112,10 +112,6 @@ def dispatched_entry_command_continuation_allowed(
                   r.release_commit,
                   r.entry_execution_request_id,
                   r.entry_command_id,
-                  c.command_type,
-                  c.state AS command_state,
-                  c.trading_account_id AS command_trading_account_id,
-                  c.identity_status AS command_identity_status,
                   d.state AS dispatch_state,
                   g.enabled AS gate_enabled,
                   g.reason AS gate_reason,
@@ -150,8 +146,6 @@ def dispatched_entry_command_continuation_allowed(
                        AND e.reason=%s
                   ) AS exact_gate_close_event
              FROM control.owner_full_contour_diagnostic_runs r
-             JOIN runtime.trade_commands c
-               ON c.command_id=r.entry_command_id
              JOIN strategy_entry.execution_dispatches d
                ON d.execution_request_id=r.entry_execution_request_id
               AND d.command_id=r.entry_command_id
@@ -177,17 +171,13 @@ def dispatched_entry_command_continuation_allowed(
         and str(_row_value(row, "release_commit", 5)) == release_commit
         and bool(_row_value(row, "entry_execution_request_id", 6))
         and str(_row_value(row, "entry_command_id", 7)) == command_id
-        and str(_row_value(row, "command_type", 8)) == "entry"
-        and str(_row_value(row, "command_state", 9)) == "queued"
-        and str(_row_value(row, "command_trading_account_id", 10)) == trading_account_id
-        and str(_row_value(row, "command_identity_status", 11)) == "PROVEN"
-        and str(_row_value(row, "dispatch_state", 12)) == "DISPATCHED"
-        and not bool(_row_value(row, "gate_enabled", 13))
-        and str(_row_value(row, "gate_reason", 14)) == DISPATCH_GATE_CLOSE_REASON
-        and not bool(_row_value(row, "permission_active", 15))
-        and not bool(_row_value(row, "generic_arm_active", 16))
-        and not bool(_row_value(row, "account_arm_active", 17))
-        and bool(_row_value(row, "exact_gate_close_event", 18))
+        and str(_row_value(row, "dispatch_state", 8)) == "DISPATCHED"
+        and not bool(_row_value(row, "gate_enabled", 9))
+        and str(_row_value(row, "gate_reason", 10)) == DISPATCH_GATE_CLOSE_REASON
+        and not bool(_row_value(row, "permission_active", 11))
+        and not bool(_row_value(row, "generic_arm_active", 12))
+        and not bool(_row_value(row, "account_arm_active", 13))
+        and bool(_row_value(row, "exact_gate_close_event", 14))
     )
 
 
