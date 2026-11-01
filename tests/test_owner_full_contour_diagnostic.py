@@ -480,6 +480,93 @@ def test_entry_consumer_atomically_retires_diagnostic_rights_after_dispatch() ->
     assert "retire_owner_diagnostic_entry_rights(" in helper_body
 
 
+def test_private_runtime_dispatched_diagnostic_continuation_is_exact() -> None:
+    import ast
+    import types
+
+    tree = ast.parse(PRIVATE)
+    helper = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_dispatched_owner_diagnostic_allows_closed_gate"
+    )
+
+    class Cursor:
+        def __init__(self, row):
+            self.row = row
+
+        def fetchone(self):
+            return self.row
+
+    class Connection:
+        def __init__(self, row):
+            self.row = row
+
+        def execute(self, _statement, _parameters=()):
+            return Cursor(self.row)
+
+    exact = (
+        "DISPATCHED",
+        diagnostic.SUB_ID,
+        diagnostic.VERSION,
+        diagnostic.SUB_ACCOUNT_ID,
+        diagnostic.SUB_CONNECTOR_ID,
+        "a" * 40,
+        "request-test",
+        "command-test",
+        "entry",
+        "queued",
+        diagnostic.SUB_ACCOUNT_ID,
+        "PROVEN",
+        "DISPATCHED",
+        0,
+        "owner full-contour diagnostic Entry window closed: diagnostic Entry dispatched",
+        False,
+        False,
+        False,
+    )
+    globals_ = {
+        "psycopg": types.SimpleNamespace(Connection=object),
+        "TRADING_ACCOUNT_ID": diagnostic.SUB_ACCOUNT_ID,
+        "ACCOUNT_CONNECTOR_ID": diagnostic.SUB_CONNECTOR_ID,
+        "LOADED_RELEASE_COMMIT": "a" * 40,
+        "OWNER_FULL_CONTOUR_MAIN_ID": diagnostic.MAIN_ID,
+        "OWNER_FULL_CONTOUR_SUB_ID": diagnostic.SUB_ID,
+        "OWNER_FULL_CONTOUR_VERSION": diagnostic.VERSION,
+        "OWNER_DIAGNOSTIC_DISPATCH_GATE_REASON": exact[14],
+    }
+    exec(
+        compile(ast.Module(body=[helper], type_ignores=[]), "source", "exec"),
+        globals_,
+    )
+    check = globals_["_dispatched_owner_diagnostic_allows_closed_gate"]
+    assert check(Connection(exact), command_id="command-test")
+
+    wrong_reason = list(exact)
+    wrong_reason[14] = "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED"
+    assert not check(Connection(tuple(wrong_reason)), command_id="command-test")
+
+    permission_still_active = list(exact)
+    permission_still_active[15] = True
+    assert not check(
+        Connection(tuple(permission_still_active)),
+        command_id="command-test",
+    )
+
+    wrong_account = list(exact)
+    wrong_account[10] = diagnostic.MAIN_ACCOUNT_ID
+    assert not check(Connection(tuple(wrong_account)), command_id="command-test")
+
+
+def test_private_runtime_passes_command_id_into_entry_readiness() -> None:
+    assert "command_id: str | None = None" in PRIVATE
+    assert "_dispatched_owner_diagnostic_allows_closed_gate(" in PRIVATE
+    assert "command_id=command_id" in PRIVATE
+    assert 'return False, "NEW_ENTRY_GATE_DISARMED"' in PRIVATE
+    assert 'return False, "PRIVATE_WS_NOT_CONNECTED"' in PRIVATE
+
+
 class _RequestedGateClosedConnection:
     def __init__(self):
         self.calls: list[tuple[str, tuple[object, ...]]] = []
