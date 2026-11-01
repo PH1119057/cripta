@@ -1316,3 +1316,24 @@ Never discard irreplaceable trading, execution, fee, ownership, operator, safety
 ## 50. Permanent bounded Release Controller — OWNER DECISION 2026-10-30
 
 Release Controller — control-plane capability, not Strategy, Entry, Exit or Execution owner. Permanent bounded SentinelX command may invoke only a uniquely authorized exact-release request, never an arbitrary privileged shell. The existing verified installer retains deployment ownership; full approval, actor/path and recovery contract belongs to DEVELOPMENT_RELEASE §50.5. This is target architecture tracked by Issue #288, not an already deployed service.
+
+## 52. Generic REAL readiness recovery control plane — OWNER DECISION 2026-11-02 (Issue #343)
+
+Owner requires one authenticated operator flow to prepare a REAL execution contour without manual Linux administration for ordinary recoverable service downtime. This capability is infrastructure/control-plane, not Strategy, Entry, Exit or Execution policy.
+
+**BEFORE:** Dashboard/P90 pre-arm reads service state and fails at the first inactive required unit; service start is external/manual. **AFTER:** a reusable `REAL Readiness Coordinator` owns durable technical preparation state and a separate least-privilege `Service Start Broker` owns only bounded OS service-start capability. Dashboard is an authenticated initiator/status consumer. Existing Strategy, Entry, Execution, Lifecycle, AccountState and Exit owners retain all trading semantics and safety evidence; no capability is transferred to the broker.
+
+The Service Start Broker:
+- may only start an exact CRIPTA service identity admitted by reviewed source allowlist and exact request scope;
+- never accepts arbitrary shell, arbitrary systemd unit, stop/restart/daemon-reload, filesystem permission repair, DB mutation, Exchange credentials, Strategy activation, execution permission, OWNER ARM or mainnet gate mutation;
+- does not restart an already active service; `failed`, ambiguous, wrong-release, masked or behavior-unhealthy state is BLOCKED rather than auto-repaired;
+- verifies exact installed/runtime release identity before each bounded start request and returns machine-readable per-unit evidence.
+
+The REAL Readiness Coordinator:
+- runs without OS privilege escalation and records one idempotent request bound to operator, exact release and exact Strategy/TradingAccount/AccountConnector scope;
+- derives the required service set from the approved runtime route/profile supplied by the current execution contour; P90 may be the first consumer but is not the architecture owner;
+- after any bounded starts, re-checks service behavior/heartbeats plus existing release/account/reconciliation/protection/Exit/admission evidence;
+- reports durable `REQUESTED -> CHECKING -> STARTING_SERVICES -> RECONCILING -> VALIDATING -> READY_FOR_OWNER_ARM | BLOCKED`;
+- never converts technical readiness into financial authorization. OWNER ARM remains a separate explicit authenticated authorization and fresh atomic final check; DISARM stays available even in degraded state.
+
+Existing exposure is never auto-closed to make preparation pass. New Entry remains fail-closed while preparation is incomplete or BLOCKED; protection, Exit and reconciliation for existing positions continue under their current owners. Implementation/privileged actor/path rules are owned by DEVELOPMENT_RELEASE §51; stable terms by GLOSSARY §40; dated host status by CURRENT_PROJECT_MAP.
