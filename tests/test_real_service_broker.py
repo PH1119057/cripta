@@ -22,6 +22,7 @@ def request(*units: str) -> dict[str, object]:
 
 def test_allowlist_is_narrow():
     assert broker._is_allowed_unit("cripta-universal-entry-consumer.service")
+    assert broker._is_allowed_unit("cripta-universal-exit-shadow.service")
     assert broker._is_allowed_unit(
         "cripta-lifecycle-account@ta-853ac5fcd58185697396d33cd57459fa.service"
     )
