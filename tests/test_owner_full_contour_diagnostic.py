@@ -466,7 +466,10 @@ class _RequestedGateClosedConnection:
     def execute(self, statement, parameters=()):
         params = tuple(parameters)
         self.calls.append((statement, params))
-        if "FROM control.owner_full_contour_diagnostic_runs" in statement and "state=ANY" in statement:
+        if (
+            "FROM control.owner_full_contour_diagnostic_runs" in statement
+            and "state=ANY" in statement
+        ):
             return _Cursor(
                 {
                     "run_id": "owner-fc-test",
