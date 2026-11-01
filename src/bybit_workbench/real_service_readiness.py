@@ -6,10 +6,10 @@ immutable exact-release account-route registry.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
 import re
-from typing import Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from enum import StrEnum
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _UNIT = re.compile(r"^cripta-[a-z0-9][a-z0-9-]*(?:@[a-z0-9][a-z0-9-]*)?\.service$")
@@ -21,7 +21,7 @@ class ServiceReadinessError(ValueError):
     """Stable, operator-reportable fail-closed planning failure."""
 
 
-class UnitState(str, Enum):
+class UnitState(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     FAILED = "failed"
