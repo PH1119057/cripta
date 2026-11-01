@@ -63,7 +63,11 @@ def test_dashboard_disarm_is_available_even_when_readiness_is_blocked() -> None:
     assert "function p90RealV3OwnerArmPresent()" in DASH
     assert "Number(readiness.live_arm_sessions||0)>0" in DASH
     assert "Number(readiness.account_live_arm_sessions||0)>0" in DASH
-    assert "button.disabled=gateChanging||preparing||(!armed&&(!cohort||inconsistent||knownBlocked));" in DASH
+    assert (
+        "button.disabled=gateChanging||preparing||"
+        "(!armed&&(!cohort||inconsistent||knownBlocked));"
+        in DASH
+    )
     assert "!armed&&" in DASH
     assert "const armed=p90RealV3OwnerArmPresent();" in DASH
     assert '"execution_permissions": int(p90_arm_facts[0])' in DASH_APP
