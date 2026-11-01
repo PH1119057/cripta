@@ -1019,3 +1019,11 @@ position/pending/reconciliation gates. Старый checkpoint сохраняе�
 ## Release Controller — OWNER DECISION 2026-10-30
 
 `Release Controller` — постоянный узкий management-plane entrypoint для проверенного exact GitHub-main deploy; один разрешённый SentinelX command не означает произвольный sudo, выбор SHA или OWNER ARM. `RELEASE_REQUEST_APPROVED` — отдельно аутентифицированная однократная заявка для exact SHA, baseline и nonce; это не разрешение MICRO_LIVE. `RELEASE_CONTROLLER_VERIFIED` — только после реализации, тестов, deploy и runtime evidence. Owner: DEVELOPMENT_RELEASE §50.5; tracking: Issue #288.
+
+## 40. REAL readiness control-plane terminology — OWNER DECISION 2026-11-02
+
+**REAL Readiness Coordinator** — непривилегированный control-plane owner технической подготовки exact REAL scope. Ведёт durable state запроса, определяет required service profile через утверждённый execution route, вызывает только bounded broker, затем собирает существующие readiness/reconciliation/account/Exit evidence. Не является Strategy/Entry/Exit owner и не выдаёт OWNER ARM.
+
+**Service Start Broker** — отдельный least-privilege OS control owner, которому разрешён только bounded `START` заранее допущенных CRIPTA systemd units при exact release identity. Не принимает arbitrary shell/unit, не делает restart/stop/permission repair, не имеет DB/Exchange/LIVE rights.
+
+**REAL preparation operation** — idempotent owner-initiated technical operation from `REQUESTED` through checking/start/reconciliation/validation to `READY_FOR_OWNER_ARM` or `BLOCKED`. `READY_FOR_OWNER_ARM` retains the existing GLOSSARY meaning: technical status only, not trading authorization.
