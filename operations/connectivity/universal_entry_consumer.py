@@ -39,7 +39,11 @@ from bybit_workbench.universal_entry.execution_bridge import (
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 from bybit_workbench.universal_entry.owner_full_contour_control import (
+    require_parent_p90_owner_scope,
     set_run_state as set_owner_diagnostic_run_state,
+)
+from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
+    is_diagnostic_strategy,
 )
 from bybit_workbench.universal_entry.owner_full_contour_runtime import (
     materialize_requested_run,
@@ -601,6 +605,20 @@ def _admission_pre_dispatch_status(
         or str(row.get("decision_identity_status") or "") != "PROVEN"
     ):
         return "BINDING_INVALID", "ENTRY_DECISION_BINDING_LINEAGE_MISMATCH"
+    if is_diagnostic_strategy(request.strategy_id, request.strategy_version):
+        if not ACCOUNT_CONNECTOR_ID or not LOADED_RELEASE_COMMIT:
+            return "BINDING_INVALID", "OWNER_FULL_CONTOUR_PARENT_SCOPE_CONTEXT_MISSING"
+        try:
+            require_parent_p90_owner_scope(
+                connection,
+                symbol=request.symbol,
+                account_id=request.trading_account_id,
+                connector_id=ACCOUNT_CONNECTOR_ID,
+                release_commit=LOADED_RELEASE_COMMIT,
+            )
+        except ValueError as exc:
+            return "BINDING_INVALID", str(exc)
+
     binding = connection.execute(
         """SELECT b.strategy_activation_id,b.execution_leg,b.execution_role,
                   b.trading_account_id,b.allocation_mode,b.binding_state,
