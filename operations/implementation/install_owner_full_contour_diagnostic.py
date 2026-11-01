@@ -124,7 +124,7 @@ def _state(connection: psycopg.Connection) -> list[tuple[object, ...]]:
     ).fetchall()
 
 
-def _check_exact(connection: psycopg.Connection) -> list[tuple[object, ...]]:
+def _check_exact(\n    connection: psycopg.Connection,\n    *,\n    require_execution_off: bool,\n) -> list[tuple[object, ...]]:
     expected_cards = {card.strategy_id: card for card in cards(approved_at=APPROVED_AT)}
     rows = _state(connection)
     if len(rows) != 2:
@@ -166,7 +166,7 @@ def _check_exact(connection: psycopg.Connection) -> list[tuple[object, ...]]:
             raise RuntimeError(
                 f"OWNER_FULL_CONTOUR_INSTALLED_IDENTITY_DRIFT:{strategy_id}"
             )
-    if connection.execute(
+    if require_execution_off and connection.execute(
         """SELECT count(*) FROM strategy_entry.execution_permissions
             WHERE strategy_id IN (%s,%s) AND enabled=true""",
         (MAIN_ID, SUB_ID),
@@ -200,16 +200,22 @@ def _check_exact(connection: psycopg.Connection) -> list[tuple[object, ...]]:
 
 
 def install(connection: psycopg.Connection) -> None:
-    _require_disarmed(connection)
     existing = connection.execute(
         """SELECT count(*) FROM strategy_entry.strategy_cards
             WHERE strategy_id IN (%s,%s) AND strategy_version=%s""",
         (MAIN_ID, SUB_ID, VERSION),
     ).fetchone()
     if existing != (0,):
-        _check_exact(connection)
+        # Subsequent verified releases only read back the already-installed,
+        # immutable diagnostic capability. Runtime permission/arm state is
+        # owned by Execution/Lifecycle and is informational to the release
+        # installer; do not require or mutate a disarmed runtime here.
+        _check_exact(connection, require_execution_off=False)
         return
 
+    # First installation remains fail-closed and is allowed only from a fully
+    # disarmed baseline.
+    _require_disarmed(connection)
     _retire_v1_activations(connection)
 
     store = StrategyEntryStore(connection)
@@ -256,7 +262,9 @@ def main() -> int:
             install(connection)
             connection.commit()
         else:
-            _check_exact(connection)
+            # Readback is structural. A running diagnostic may legitimately
+            # hold temporary permission/arms; the check must not own them.
+            _check_exact(connection, require_execution_off=False)
             connection.rollback()
         rows = _state(connection)
     print(
