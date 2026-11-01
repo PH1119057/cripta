@@ -1006,7 +1006,7 @@ async function ownerTestEntry(){const symbol=ownerTestSymbol.value,direction=own
 ownerTestEntryButton.addEventListener('click',ownerTestEntry);
 async function ownerFullContourDiagnostic(symbol,direction){
   const requestId=`owner-fc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  if(!confirm(`СКВОЗНОЙ REAL‑ТЕСТ\n\n${symbol} · ${direction}\n10 USDT · 1x · MARKET\nHard-stop −0,5% · Exit +0,5%\n\nЭто реальная диагностическая сделка. Будут проверены обычные Strategy → Entry → admission → Execution → Bybit → StrategyPosition → Universal Exit. В P90‑статистику тест не входит. Продолжить?`))return;
+  if(!confirm(`СКВОЗНОЙ REAL‑ТЕСТ\n\n${symbol} · ${direction}\n10 USDT · 1x · MARKET\nHard-stop −0,2% · Exit +0,2%\n\nЭто реальная диагностическая сделка. Будут проверены обычные Strategy → Entry → admission → Execution → Bybit → StrategyPosition → Universal Exit. В P90‑статистику тест не входит. Продолжить?`))return;
   tradeCommandStatus.textContent=`${symbol}: создаю owner trigger сквозного REAL‑теста`;
   try{
     const accepted=await livePostTimed('/api/owner-full-contour-diagnostic',{symbol,direction,confirmed:true,request_id:requestId},12000);
@@ -1018,8 +1018,8 @@ async function ownerFullContourDiagnostic(symbol,direction){
       renderLiveState(d);
       if(run.state==='FAILED'||run.state==='RECONCILIATION_REQUIRED')throw new Error(run.error||diagnosticStateRu(run.state));
       if(run.state==='POSITION_OPEN'){
-        tradeCommandStatus.textContent=`${symbol}: сквозной Entry подтверждён · позиция открыта, Universal Exit сопровождает ±0,5%`;
-        alert(`${symbol}: сквозной REAL‑тест дошёл до реальной StrategyPosition. Exit +0,5% / hard-stop −0,5% теперь сопровождается production-контуром.`);
+        tradeCommandStatus.textContent=`${symbol}: сквозной Entry подтверждён · позиция открыта, Universal Exit сопровождает ±0,2%`;
+        alert(`${symbol}: сквозной REAL‑тест дошёл до реальной StrategyPosition. Exit +0,2% / hard-stop −0,2% теперь сопровождается production-контуром.`);
         return;
       }
       if(run.state==='CLOSED'){
