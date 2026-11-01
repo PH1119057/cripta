@@ -52,6 +52,7 @@ from bybit_workbench.p90l90_real_staged_arm import (
     stage_p90l90_real_v3,
 )
 from bybit_workbench.p90l90_real_prearm_evidence import (
+    P90PrearmEvidenceBlocked,
     prepare_p90l90_real_v3_prearm_evidence,
 )
 from bybit_workbench.real_readiness_control import (
@@ -5302,6 +5303,32 @@ def _mark_p90_readiness_blocked(
         ) or {}
 
 
+def _wait_p90_real_v3_technical_evidence(
+    *,
+    timeout_seconds: float = 30.0,
+) -> dict[str, object]:
+    deadline = time.monotonic() + timeout_seconds
+    last_error: P90PrearmEvidenceBlocked | None = None
+    while True:
+        try:
+            with psycopg.connect(
+                "dbname=cripta user=cripta host=/var/run/postgresql"
+            ) as evidence_connection:
+                return prepare_p90l90_real_v3_prearm_evidence(
+                    evidence_connection,
+                    release_commit=LOADED_RELEASE_COMMIT,
+                    now=datetime.now(UTC),
+                )
+        except P90PrearmEvidenceBlocked as exc:
+            last_error = exc
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(1.0)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("P90_REAL_TECHNICAL_EVIDENCE_UNREACHABLE")
+
+
 def _u6_prepare_p90_real_v3_readiness(
     *,
     operator: str,
@@ -5454,14 +5481,7 @@ def _u6_prepare_p90_real_v3_readiness(
                 now=datetime.now(UTC),
                 progress={"services_active": len(specs)},
             )
-        with psycopg.connect(
-            "dbname=cripta user=cripta host=/var/run/postgresql"
-        ) as evidence_connection:
-            evidence = prepare_p90l90_real_v3_prearm_evidence(
-                evidence_connection,
-                release_commit=LOADED_RELEASE_COMMIT,
-                now=datetime.now(UTC),
-            )
+        evidence = _wait_p90_real_v3_technical_evidence()
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
@@ -5529,14 +5549,7 @@ def _u6_p90_real_v3_arm(
             )
         # READY_FOR_OWNER_ARM is technical state only. Re-run exact evidence
         # immediately before the existing staged/final OWNER ARM transaction.
-        with psycopg.connect(
-            "dbname=cripta user=cripta host=/var/run/postgresql"
-        ) as evidence_connection:
-            prepare_p90l90_real_v3_prearm_evidence(
-                evidence_connection,
-                release_commit=LOADED_RELEASE_COMMIT,
-                now=datetime.now(UTC),
-            )
+        _wait_p90_real_v3_technical_evidence(timeout_seconds=5.0)
     if not enabled:
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
