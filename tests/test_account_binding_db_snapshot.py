@@ -97,24 +97,24 @@ def test_db_snapshot_shared_account_is_blocked():
 
 
 def test_exact_owner_diagnostic_is_excluded_from_ordinary_binding_readiness():
-    diagnostic_activation = "activation-owner-full-contour-main-v2-20261101"
+    diagnostic_activation = "activation-owner-full-contour-main-v3-20261101"
     db = FakeConnection(
         ["activation-1", diagnostic_activation],
         [
             binding("b-1", "activation-1", "shared"),
             binding(
-                "binding-owner-full-contour-main-v2-20261101",
+                "binding-owner-full-contour-main-v3-20261101",
                 diagnostic_activation,
                 "shared",
                 allocation_mode="SUBORDINATE_DIAGNOSTIC",
                 strategy_id="owner_full_contour_diag_main",
-                strategy_version="2.0-owner-full-contour-e2e-20261101",
+                strategy_version="3.0-owner-full-contour-e2e-20261101",
             ),
         ],
         strategy_identity={
             diagnostic_activation: (
                 "owner_full_contour_diag_main",
-                "2.0-owner-full-contour-e2e-20261101",
+                "3.0-owner-full-contour-e2e-20261101",
             )
         },
     )
