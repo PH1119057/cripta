@@ -12,6 +12,9 @@ from bybit_workbench.account_binding_readiness import (
     BindingReadiness,
     check_binding_readiness,
 )
+from bybit_workbench.strategy_execution_binding_policy import (
+    is_owner_full_contour_subordinate_identity,
+)
 
 
 def read_binding_readiness(connection: Any, *, now: datetime) -> BindingReadiness:
@@ -25,13 +28,14 @@ def read_binding_readiness(connection: Any, *, now: datetime) -> BindingReadines
         raise ValueError("readiness evaluation requires timezone-aware now")
     instant = now.astimezone(UTC)
     strategies = connection.execute(
-        """SELECT activation_id FROM strategy_entry.strategy_activations
+        """SELECT activation_id,strategy_id,strategy_version
+             FROM strategy_entry.strategy_activations
             WHERE enabled=true ORDER BY activation_id"""
     ).fetchall()
     bindings = connection.execute(
         """SELECT b.strategy_execution_binding_id,b.strategy_activation_id,
                   b.trading_account_id,b.execution_leg,b.allocation_mode,
-                  b.binding_state
+                  b.binding_state,a.strategy_id,a.strategy_version
              FROM strategy_entry.strategy_execution_bindings b
              JOIN strategy_entry.strategy_activations a
                ON a.activation_id=b.strategy_activation_id
@@ -43,12 +47,22 @@ def read_binding_readiness(connection: Any, *, now: datetime) -> BindingReadines
                      b.strategy_execution_binding_id""",
         (instant, instant),
     ).fetchall()
+    ordinary_strategy_ids = [
+        row[0]
+        for row in strategies
+        if not is_owner_full_contour_subordinate_identity(str(row[1]), str(row[2]))
+    ]
     field_names = (
         "strategy_execution_binding_id", "strategy_activation_id",
         "trading_account_id", "execution_leg", "allocation_mode",
         "binding_state",
     )
+    ordinary_bindings = [
+        dict(zip(field_names, row[:6], strict=True))
+        for row in bindings
+        if not is_owner_full_contour_subordinate_identity(str(row[6]), str(row[7]))
+    ]
     return check_binding_readiness(
-        active_strategy_ids=[row[0] for row in strategies],
-        active_bindings=[dict(zip(field_names, row, strict=True)) for row in bindings],
+        active_strategy_ids=ordinary_strategy_ids,
+        active_bindings=ordinary_bindings,
     )

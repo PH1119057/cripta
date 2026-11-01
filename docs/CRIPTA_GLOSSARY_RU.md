@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.12
-**Дата:** 2026-10-30
+**Версия:** 3.13
+**Дата:** 2026-11-01
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -872,6 +872,16 @@ The term alone does not define hedge/arbitrage policy.
 one TradingAccount is not concurrently shared by independent REAL
 StrategyActivations. One Strategy may own several accounts through distinct
 ExecutionLegs.
+
+**SUBORDINATE_DIAGNOSTIC account allocation** — exact exceptional
+StrategyExecutionBinding allocation mode for the owner-controlled full-contour
+REAL diagnostic only.  It may coexist with one exact parent P90 REAL v3
+`DEDICATED_STRATEGY` binding on the same TradingAccount because the diagnostic
+is a temporary subordinate verification capability rather than an independent
+normal Strategy allocation.  It does not authorize generic shared accounts,
+cross-Strategy capital pooling, internal netting, fallback routing or a second
+independent dedicated owner.  Exact scope and lifetime are owned by
+TRADING_CONTOUR §4.8.2 / §7.3 and ARCH §7.1.
 
 **CrossVenueMarketContext** — derived strategy-agnostic context combining facts
 from several Venue/MarketSource identities while preserving contributor

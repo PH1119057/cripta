@@ -58,7 +58,8 @@ def _state(connection: psycopg.Connection) -> list[tuple[object, ...]]:
         """SELECT a.strategy_id,a.strategy_version,a.strategy_config_fingerprint,
                   a.activation_id,a.enabled,
                   ep.entry_plan_fingerprint,xp.exit_plan_fingerprint,
-                  b.strategy_execution_binding_id,b.trading_account_id,b.binding_state
+                  b.strategy_execution_binding_id,b.trading_account_id,b.binding_state,
+                  b.allocation_mode
              FROM strategy_entry.strategy_activations a
              JOIN strategy_entry.entry_plans ep
                ON ep.strategy_id=a.strategy_id
@@ -108,11 +109,12 @@ def _check_exact(connection: psycopg.Connection) -> list[tuple[object, ...]]:
             str(row[1]), str(row[2]), str(row[3]), bool(row[4]),
             str(row[5]), str(row[6]),
             str(row[7] or ""), str(row[8] or ""), str(row[9] or ""),
+            str(row[10] or ""),
         )
         wanted = (
             VERSION, card.strategy_config_fingerprint, activation_id, True,
             entry_plan.entry_plan_fingerprint, exit_plan.exit_plan_fingerprint,
-            binding_id, account_id, "ACTIVE",
+            binding_id, account_id, "ACTIVE", "SUBORDINATE_DIAGNOSTIC",
         )
         if actual != wanted:
             raise RuntimeError(

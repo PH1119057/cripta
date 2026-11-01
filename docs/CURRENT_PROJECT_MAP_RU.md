@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.34
-**Дата:** 2026-10-31
+**Версия:** 12.35
+**Дата:** 2026-11-01
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -927,7 +927,14 @@ FULL_CONTOUR_DIAGNOSTIC_DEPLOYED    = RUNTIME_EVIDENCE_REQUIRED
 ```
 
 `IMPLEMENTED=YES` означает наличие merged implementation в canonical GitHub
-`main` после PR #325 с production-blocking migration hotfix PR #327.
+`main` после PR #325 с production-blocking migration hotfix PR #327 и SQL-tail
+hotfix PR #330. Production attempts on 2026-11-01 additionally proved a
+StrategyExecutionBinding ownership conflict: diagnostic registration cannot use
+a second ACTIVE `DEDICATED_STRATEGY` binding on the already dedicated P90
+TradingAccount.  OWNER DECISION 2026-11-01 therefore requires the exact
+subordinate exception `SUBORDINATE_DIAGNOSTIC` from TRADING_CONTOUR
+§4.8.2/§7.3 and ARCH §7.1; implementation/deploy of that exception remains
+separate evidence and does not imply LIVE.
 `DEPLOYED` нельзя выводить из этого документа: его authoritative status
 задаётся только exact release identity + runtime evidence по §10 project
 status model. Поэтому здесь намеренно нет hard-coded `DEPLOYED=YES/NO`,

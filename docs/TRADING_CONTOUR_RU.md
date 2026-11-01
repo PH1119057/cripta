@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.3
-**Дата:** 2026-10-30
+**Версия:** 3.4
+**Дата:** 2026-11-01
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -1163,6 +1163,8 @@ dynamic trailing/BE   = disabled
 geometry Exit         = disabled
 statistics            = excluded from P90 Strategy/research performance
 concurrency           = at most one active full-contour diagnostic run
+binding allocation    = SUBORDINATE_DIAGNOSTIC
+parent account        = exact current P90 REAL v3 TradingAccount for the symbol
 ```
 
 Mandatory gates:
@@ -1174,7 +1176,16 @@ Mandatory gates:
 - selected symbol has no open position, active non-reduce-only order, pending
   Entry mutation or unresolved diagnostic run;
 - diagnostic Strategy has its own exact StrategyCard / EntryPlan / ExitPlan /
-  activation / binding / permission / LIVE-arm lineage;
+  activation / `SUBORDINATE_DIAGNOSTIC` binding / permission / LIVE-arm lineage;
+- the diagnostic binding may share only the exact parent P90 REAL v3
+  TradingAccount.  That account MUST simultaneously retain one ACTIVE parent
+  `DEDICATED_STRATEGY` binding for the exact P90 Strategy/version; no second
+  independent dedicated owner, fallback account, cross-Strategy capital pool or
+  internal netting is authorized;
+- the exact parent P90 execution permission, release-bound generic OWNER ARM and
+  account-scoped OWNER ARM for the selected symbol MUST be active at trigger and
+  remain valid through diagnostic Entry dispatch.  Loss/drift of parent scope is
+  fail-closed;
 - diagnostic permission/LIVE-arm is scoped only to the explicit run and is
   retired after successful Entry dispatch or terminal failure so it cannot act
   as a standing autonomous Strategy right;
@@ -1376,7 +1387,18 @@ are Strategy-owned and require their own approved Strategy contract; the mere
 existence of multiple bindings does not create an arbitrage policy.
 
 Sharing one TradingAccount across independent REAL Strategies, internal netting
-or cross-Strategy capital pooling remains forbidden until separately approved.
+or cross-Strategy capital pooling remains forbidden.  The only current explicit
+exception is the owner-controlled full-contour diagnostic from §4.8.2: it is a
+subordinate diagnostic capability, not an independent normal REAL allocation.
+
+For that exact exception, allocation mode `SUBORDINATE_DIAGNOSTIC` may coexist
+with exactly one ACTIVE parent `DEDICATED_STRATEGY` binding on the same
+TradingAccount.  It is valid only for
+`owner_full_contour_diag_main|sub / 1.0-owner-full-contour-20261101`, only on
+the exact corresponding P90 REAL v3 account, and only while the parent owner
+scope described in §4.8.2 is valid.  Generic account sharing remains forbidden;
+ordinary binding readiness/fan-out MUST NOT treat
+`SUBORDINATE_DIAGNOSTIC` as a generally eligible allocation mode.
 
 ### 7.3.1 Strategy fan-out, capacity and protected opening — OWNER DECISION 2026-10-20
 

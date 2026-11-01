@@ -14,6 +14,9 @@ from psycopg.rows import dict_row
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
+from bybit_workbench.strategy_execution_binding_policy import (
+    real_binding_allocation_allowed,
+)
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -36,7 +39,11 @@ from bybit_workbench.universal_entry.execution_bridge import (
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 from bybit_workbench.universal_entry.owner_full_contour_control import (
+    require_parent_p90_owner_scope,
     set_run_state as set_owner_diagnostic_run_state,
+)
+from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
+    is_diagnostic_strategy,
 )
 from bybit_workbench.universal_entry.owner_full_contour_runtime import (
     materialize_requested_run,
@@ -598,6 +605,20 @@ def _admission_pre_dispatch_status(
         or str(row.get("decision_identity_status") or "") != "PROVEN"
     ):
         return "BINDING_INVALID", "ENTRY_DECISION_BINDING_LINEAGE_MISMATCH"
+    if is_diagnostic_strategy(request.strategy_id, request.strategy_version):
+        if not ACCOUNT_CONNECTOR_ID or not LOADED_RELEASE_COMMIT:
+            return "BINDING_INVALID", "OWNER_FULL_CONTOUR_PARENT_SCOPE_CONTEXT_MISSING"
+        try:
+            require_parent_p90_owner_scope(
+                connection,
+                symbol=request.symbol,
+                account_id=request.trading_account_id,
+                connector_id=ACCOUNT_CONNECTOR_ID,
+                release_commit=LOADED_RELEASE_COMMIT,
+            )
+        except ValueError as exc:
+            return "BINDING_INVALID", str(exc)
+
     binding = connection.execute(
         """SELECT b.strategy_activation_id,b.execution_leg,b.execution_role,
                   b.trading_account_id,b.allocation_mode,b.binding_state,
@@ -617,7 +638,11 @@ def _admission_pre_dispatch_status(
         or str(binding["execution_leg"]) != request.execution_leg
         or str(binding["execution_role"]) != "PRIMARY"
         or str(binding["trading_account_id"]) != request.trading_account_id
-        or str(binding["allocation_mode"]) != "DEDICATED_STRATEGY"
+        or not real_binding_allocation_allowed(
+            strategy_id=request.strategy_id,
+            strategy_version=request.strategy_version,
+            allocation_mode=str(binding["allocation_mode"]),
+        )
         or str(binding["binding_state"]) != "ACTIVE"
         or binding["effective_from"].astimezone(UTC) > now
         or (

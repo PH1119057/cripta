@@ -763,7 +763,9 @@ class _R06ArmDB:
             return _R06Rows([("control.account_live_arm_sessions",)])
         if "FROM control.account_live_arm_sessions s" in query:
             if params[1] == self.expected_binding and params[2] == self.expected_account:
-                return _R06Rows([(f"owner-arm-{self.expected_account}",)])
+                return _R06Rows([
+                    (f"owner-arm-{self.expected_account}", "DEDICATED_STRATEGY")
+                ])
             return _R06Rows([])
         raise AssertionError("unexpected R06 offline arm query")
 

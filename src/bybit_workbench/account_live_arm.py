@@ -11,6 +11,10 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from bybit_workbench.strategy_execution_binding_policy import (
+    real_binding_allocation_allowed,
+)
+
 
 def account_live_arm_ready(
     connection: Any,
@@ -52,7 +56,7 @@ def account_live_arm_ready(
     if schema_ref is None:
         return False, ("ACCOUNT_LIVE_ARM_SCHEMA_NOT_INSTALLED",)
     rows = connection.execute(
-        """SELECT s.account_live_arm_session_id
+        """SELECT s.account_live_arm_session_id,b.allocation_mode
              FROM control.account_live_arm_sessions s
              JOIN strategy_entry.strategy_execution_bindings b
                ON b.strategy_execution_binding_id=s.strategy_execution_binding_id
@@ -77,7 +81,6 @@ def account_live_arm_ready(
               AND b.strategy_activation_id=s.strategy_activation_id
               AND b.trading_account_id=s.trading_account_id
               AND b.binding_state='ACTIVE'
-              AND b.allocation_mode='DEDICATED_STRATEGY'
               AND b.effective_from<=%s
               AND (b.effective_to IS NULL OR b.effective_to>%s)
               AND a.status='ACTIVE'
@@ -103,4 +106,15 @@ def account_live_arm_ready(
     ).fetchall()
     if len(rows) != 1:
         return False, ("EXACT_ACCOUNT_RELEASE_OWNER_ARM_NOT_ACTIVE",)
+    allocation_mode = (
+        str(rows[0].get("allocation_mode") or "")
+        if isinstance(rows[0], Mapping)
+        else str(rows[0][1])
+    )
+    if not real_binding_allocation_allowed(
+        strategy_id=strategy_id,
+        strategy_version=strategy_version,
+        allocation_mode=allocation_mode,
+    ):
+        return False, ("ACCOUNT_BINDING_ALLOCATION_MODE_INVALID",)
     return True, ()
