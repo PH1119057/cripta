@@ -544,6 +544,14 @@ def test_dispatched_diagnostic_continues_only_after_exact_dispatch_gate_close() 
     )
 
 
+def test_private_runtime_uses_command_identity_for_closed_gate_continuation() -> None:
+    assert "dispatched_entry_command_continuation_allowed" in PRIVATE
+    assert "command_id: str | None = None" in PRIVATE
+    assert "command_id=command_id" in PRIVATE
+    assert 'return False, "NEW_ENTRY_GATE_DISARMED"' in PRIVATE
+    assert 'return False, "PRIVATE_WS_NOT_CONNECTED"' in PRIVATE
+
+
 class _RequestedGateClosedConnection:
     def __init__(self):
         self.calls: list[tuple[str, tuple[object, ...]]] = []
