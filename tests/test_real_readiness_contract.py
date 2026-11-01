@@ -95,6 +95,12 @@ def test_verified_release_installs_broker_and_durable_state_but_does_not_arm():
     assert "REAL_SERVICE_BROKER_SOURCE_PREFLIGHT=PASS" in installer
     assert "/usr/local/libexec/cripta-real-service-broker" in installer
     assert '"$broker_staged"' in installer
+    managed = installer.split("managed_services=(", 1)[1].split("\n)", 1)[0]
+    assert "cripta-real-service-broker.service" in managed
+    recovery = installer.split("restore_pre_cutover_services()", 1)[1].split(
+        "release_exit_handler()", 1
+    )[0]
+    assert 'for service in "${managed_services[@]}"' in recovery
 
 
 def test_readiness_migration_has_no_trading_effect_writes():
