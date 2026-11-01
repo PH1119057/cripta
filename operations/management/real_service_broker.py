@@ -48,6 +48,7 @@ GLOBAL_UNITS = frozenset(
     }
 )
 ALLOWED_PRE_STATES = frozenset({"active", "inactive"})
+DASHBOARD_CGROUP = "/system.slice/cripta-dashboard.service"
 
 
 class BrokerError(ValueError):
@@ -203,10 +204,34 @@ def handle_request(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _peer_uid(connection: socket.socket) -> int:
-    raw = connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
-    _pid, uid, _gid = struct.unpack("3i", raw)
-    return uid
+def _peer_credentials(connection: socket.socket) -> tuple[int, int]:
+    raw = connection.getsockopt(
+        socket.SOL_SOCKET,
+        socket.SO_PEERCRED,
+        struct.calcsize("3i"),
+    )
+    pid, uid, _gid = struct.unpack("3i", raw)
+    return pid, uid
+
+
+def _peer_is_dashboard(
+    pid: int,
+    *,
+    proc_root: Path = Path("/proc"),
+) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        lines = (proc_root / str(pid) / "cgroup").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    except OSError:
+        return False
+    return any(
+        line == "0::" + DASHBOARD_CGROUP
+        or line.endswith(":" + DASHBOARD_CGROUP)
+        for line in lines
+    )
 
 
 def _reply(connection: socket.socket, payload: dict[str, Any]) -> None:
@@ -217,7 +242,8 @@ def _reply(connection: socket.socket, payload: dict[str, Any]) -> None:
 
 def _serve_client(connection: socket.socket, allowed_uid: int) -> None:
     connection.settimeout(5.0)
-    if _peer_uid(connection) != allowed_uid:
+    pid, uid = _peer_credentials(connection)
+    if uid != allowed_uid or not _peer_is_dashboard(pid):
         _reply(connection, {"ok": False, "error": "PEER_NOT_ALLOWED"})
         return
     data = b""
