@@ -5308,7 +5308,6 @@ def _wait_p90_real_v3_technical_evidence(
     timeout_seconds: float = 30.0,
 ) -> dict[str, object]:
     deadline = time.monotonic() + timeout_seconds
-    last_error: P90PrearmEvidenceBlocked | None = None
     while True:
         try:
             with psycopg.connect(
@@ -5319,14 +5318,10 @@ def _wait_p90_real_v3_technical_evidence(
                     release_commit=LOADED_RELEASE_COMMIT,
                     now=datetime.now(UTC),
                 )
-        except P90PrearmEvidenceBlocked as exc:
-            last_error = exc
+        except P90PrearmEvidenceBlocked:
             if time.monotonic() >= deadline:
                 raise
             time.sleep(1.0)
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError("P90_REAL_TECHNICAL_EVIDENCE_UNREACHABLE")
 
 
 def _u6_prepare_p90_real_v3_readiness(
