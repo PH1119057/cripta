@@ -66,7 +66,7 @@ def _embargo() -> StrategyHardStopEmbargoPolicy:
     )
 
 
-V1_diagnostic.VERSION = "1.0-owner-full-contour-20261101"
+V1_DIAG_VERSION = "1.0-owner-full-contour-20261101"
 V1_DIAG = (
     (
         diagnostic.MAIN_ID,
@@ -85,7 +85,7 @@ V1_DIAG = (
 
 def _v1_diagnostic_card(strategy_id: str):
     raw = diagnostic._policy(strategy_id)
-    raw["strategy_version"] = V1_diagnostic.VERSION
+    raw["strategy_version"] = V1_DIAG_VERSION
     raw["exit_policy"]["rules"] = [
         rule
         for rule in raw["exit_policy"]["rules"]
@@ -270,7 +270,7 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                    ON b.strategy_activation_id=a.activation_id
                 WHERE a.strategy_version=%s
                 ORDER BY a.strategy_id""",
-            (V1_diagnostic.VERSION,),
+            (V1_DIAG_VERSION,),
         ).fetchall()
         assert len(old_rows) == 2
         assert all(
