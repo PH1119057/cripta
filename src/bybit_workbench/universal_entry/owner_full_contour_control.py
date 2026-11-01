@@ -38,8 +38,18 @@ def _row_value(row: Any, key: str, index: int) -> Any:
     return row[index]
 
 
-def _parent_strategy(symbol: str) -> str:
-    return P90_MAIN_ID if symbol.upper() in {"LTCUSDT", "INJUSDT"} else P90_SUB_ID
+def _parent_scope(symbol: str) -> tuple[str, str, str]:
+    if symbol.upper() in {"LTCUSDT", "INJUSDT"}:
+        return (
+            P90_MAIN_ID,
+            "activation-p90l90-real-main-20261029-v3",
+            "binding-p90l90-real-main-20261029-v3",
+        )
+    return (
+        P90_SUB_ID,
+        "activation-p90l90-real-sub-20261029-v3",
+        "binding-p90l90-real-sub-20261029-v3",
+    )
 
 
 def _run_id(request_id: str) -> str:
@@ -54,7 +64,7 @@ def account_session_id(run_id: str) -> str:
     return "owner-fc-account-" + fingerprint({"run_id": run_id})[:32]
 
 
-def _require_parent_p90_owner_scope(
+def require_parent_p90_owner_scope(
     connection: Any,
     *,
     symbol: str,
@@ -62,7 +72,25 @@ def _require_parent_p90_owner_scope(
     connector_id: str,
     release_commit: str,
 ) -> None:
-    parent = _parent_strategy(symbol)
+    parent, parent_activation, parent_binding = _parent_scope(symbol)
+    binding = connection.execute(
+        """SELECT count(*)
+             FROM strategy_entry.strategy_execution_bindings b
+             JOIN strategy_entry.strategy_activations a
+               ON a.activation_id=b.strategy_activation_id
+            WHERE b.strategy_execution_binding_id=%s
+              AND b.strategy_activation_id=%s
+              AND b.trading_account_id=%s
+              AND b.execution_leg='PRIMARY'
+              AND b.execution_role='PRIMARY'
+              AND b.allocation_mode='DEDICATED_STRATEGY'
+              AND b.binding_state='ACTIVE'
+              AND a.strategy_id=%s AND a.strategy_version=%s
+              AND a.enabled=true AND a.disabled_at IS NULL""",
+        (parent_binding, parent_activation, account_id, parent, P90_VERSION),
+    ).fetchone()
+    if binding != (1,):
+        raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_BINDING_NOT_ACTIVE")
     permission = connection.execute(
         """SELECT count(*)
              FROM strategy_entry.execution_permissions
@@ -84,10 +112,21 @@ def _require_parent_p90_owner_scope(
         """SELECT count(*)
              FROM control.account_live_arm_sessions
             WHERE strategy_id=%s AND strategy_version=%s
+              AND strategy_activation_id=%s
+              AND strategy_execution_binding_id=%s
               AND symbol=%s AND release_commit=%s
               AND trading_account_id=%s AND account_connector_id=%s
               AND state='ACTIVE' AND deactivated_at IS NULL""",
-        (parent, P90_VERSION, symbol, release_commit, account_id, connector_id),
+        (
+            parent,
+            P90_VERSION,
+            parent_activation,
+            parent_binding,
+            symbol,
+            release_commit,
+            account_id,
+            connector_id,
+        ),
     ).fetchone()
     if account != (1,):
         raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_NOT_ACTIVE")
@@ -158,7 +197,7 @@ def request_run(
     if gate != (True,):
         raise ValueError("OWNER_FULL_CONTOUR_MAINNET_GATE_NOT_OPEN")
 
-    _require_parent_p90_owner_scope(
+    require_parent_p90_owner_scope(
         connection,
         symbol=selected_symbol,
         account_id=account_id,
