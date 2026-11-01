@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.45
-**Дата:** 2026-11-01
+**Версия:** 3.46
+**Дата:** 2026-11-02
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1569,3 +1569,8 @@ mandatory pre-read and routing are unchanged; no README/AGENTS/bootstrap update
 is required. This is research measurement canon only and does not change
 Strategy/Entry/Exit/Execution, DB, services, deployment or LIVE.
 
+# 61. Generic REAL readiness recovery and friendly owner gate — OWNER DECISION 2026-11-02
+
+Owner requires reusable technical preparation for REAL scopes: authenticated owner intent -> durable readiness operation -> bounded start of recoverably inactive required CRIPTA services -> behavior/account/reconciliation validation -> READY_FOR_OWNER_ARM or visible BLOCKED. Architecture owner/boundary: ARCH §52. Actor/path, broker protocol, state machine, tests and release: DEVELOPMENT_RELEASE §51. Terms: GLOSSARY §40. Dated implementation/runtime status: MAP 2026-11-02 checkpoint. Tracking: Issue #343 / draft PR #344.
+
+This change does not add a Project Source file or change mandatory pre-read/routing paths; current set remains 11. Root README/AGENTS and Project Instructions bootstrap are synchronized because the new server-side privileged control-plane rule is bootstrap-relevant. No documentation statement alone installs the broker, starts a service or authorizes LIVE.
