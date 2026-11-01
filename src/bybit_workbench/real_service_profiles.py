@@ -35,10 +35,9 @@ def p90_real_v3_service_specs(*, sub_account_id: str) -> tuple[ServiceSpec, ...]
             (private_sub, "cripta-universal-entry-observer.service"),
             True,
         ),
-        ServiceSpec("cripta-universal-exit-shadow.service", (), True),
         ServiceSpec(
             "cripta-lifecycle-supervisor.service",
-            ("cripta-private-runtime.service", "cripta-universal-exit-shadow.service"),
+            ("cripta-private-runtime.service",),
             True,
         ),
         ServiceSpec(lifecycle_sub, (private_sub,), True),
@@ -48,13 +47,4 @@ def p90_real_v3_service_specs(*, sub_account_id: str) -> tuple[ServiceSpec, ...]
             True,
         ),
         ServiceSpec(position_sub, (private_sub,), True),
-        ServiceSpec(
-            "cripta-universal-exit-consumer.service",
-            (
-                "cripta-private-runtime.service",
-                private_sub,
-                "cripta-universal-exit-shadow.service",
-            ),
-            True,
-        ),
     )
