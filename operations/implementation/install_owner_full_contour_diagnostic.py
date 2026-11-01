@@ -124,7 +124,11 @@ def _state(connection: psycopg.Connection) -> list[tuple[object, ...]]:
     ).fetchall()
 
 
-def _check_exact(\n    connection: psycopg.Connection,\n    *,\n    require_execution_off: bool,\n) -> list[tuple[object, ...]]:
+def _check_exact(
+    connection: psycopg.Connection,
+    *,
+    require_execution_off: bool,
+) -> list[tuple[object, ...]]:
     expected_cards = {card.strategy_id: card for card in cards(approved_at=APPROVED_AT)}
     rows = _state(connection)
     if len(rows) != 2:
