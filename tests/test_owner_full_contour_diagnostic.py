@@ -480,6 +480,70 @@ def test_entry_consumer_atomically_retires_diagnostic_rights_after_dispatch() ->
     assert "retire_owner_diagnostic_entry_rights(" in helper_body
 
 
+class _DispatchedDiagnosticGateConnection:
+    def __init__(
+        self,
+        *,
+        gate_reason: str = control.DISPATCH_GATE_CLOSE_REASON,
+        permission_active: bool = False,
+    ):
+        self.gate_reason = gate_reason
+        self.permission_active = permission_active
+
+    def execute(self, statement, parameters=()):
+        if "SELECT run_id" in statement and "entry_command_id=%s" in statement:
+            return _Cursor({"run_id": "owner-fc-test"})
+        if "AS run_state" in statement and "exact_gate_close_event" in statement:
+            return _Cursor(
+                {
+                    "run_state": "DISPATCHED",
+                    "strategy_id": diagnostic.SUB_ID,
+                    "strategy_version": diagnostic.VERSION,
+                    "run_trading_account_id": diagnostic.SUB_ACCOUNT_ID,
+                    "account_connector_id": diagnostic.SUB_CONNECTOR_ID,
+                    "release_commit": "a" * 40,
+                    "entry_execution_request_id": "request-test",
+                    "entry_command_id": "command-test",
+                    "command_type": "entry",
+                    "command_state": "queued",
+                    "command_trading_account_id": diagnostic.SUB_ACCOUNT_ID,
+                    "command_identity_status": "PROVEN",
+                    "dispatch_state": "DISPATCHED",
+                    "gate_enabled": False,
+                    "gate_reason": self.gate_reason,
+                    "permission_active": self.permission_active,
+                    "generic_arm_active": False,
+                    "account_arm_active": False,
+                    "exact_gate_close_event": True,
+                }
+            )
+        return _Cursor(None)
+
+
+def test_dispatched_diagnostic_continues_only_after_exact_dispatch_gate_close() -> None:
+    assert control.dispatched_entry_command_continuation_allowed(
+        _DispatchedDiagnosticGateConnection(),
+        command_id="command-test",
+        trading_account_id=diagnostic.SUB_ACCOUNT_ID,
+        account_connector_id=diagnostic.SUB_CONNECTOR_ID,
+        release_commit="a" * 40,
+    )
+    assert not control.dispatched_entry_command_continuation_allowed(
+        _DispatchedDiagnosticGateConnection(gate_reason="safety block"),
+        command_id="command-test",
+        trading_account_id=diagnostic.SUB_ACCOUNT_ID,
+        account_connector_id=diagnostic.SUB_CONNECTOR_ID,
+        release_commit="a" * 40,
+    )
+    assert not control.dispatched_entry_command_continuation_allowed(
+        _DispatchedDiagnosticGateConnection(permission_active=True),
+        command_id="command-test",
+        trading_account_id=diagnostic.SUB_ACCOUNT_ID,
+        account_connector_id=diagnostic.SUB_CONNECTOR_ID,
+        release_commit="a" * 40,
+    )
+
+
 class _RequestedGateClosedConnection:
     def __init__(self):
         self.calls: list[tuple[str, tuple[object, ...]]] = []
