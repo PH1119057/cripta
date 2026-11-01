@@ -533,6 +533,53 @@ def test_sub_private_worker_persists_only_internal_pre_mutation_reason_token() -
     )
 
 
+def test_signed_account_mode_proof_executes_without_persisting_provider_payload() -> None:
+    import ast
+    import time
+
+    tree = ast.parse(PRIVATE)
+    helper = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_signed_account_mode_proof"
+    )
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def api_get(path, params, _key, _secret):
+        calls.append((path, params))
+        return (
+            {
+                "retCode": 0,
+                "retMsg": "sensitive provider text must not persist",
+                "result": {
+                    "marginMode": "ISOLATED_MARGIN",
+                    "unifiedMarginStatus": 6,
+                    "secretExtra": "must-not-persist",
+                },
+            },
+            {},
+        )
+
+    namespace = {"time": time, "api_get": api_get}
+    exec(
+        compile(ast.Module(body=[helper], type_ignores=[]), "private_runtime", "exec"),
+        namespace,
+    )
+    proof = namespace["_signed_account_mode_proof"]("key", "secret")
+    assert calls == [("/v5/account/info", {})]
+    assert proof["status"] == "PASS"
+    assert proof["margin_mode"] == "ISOLATED_MARGIN"
+    assert proof["unified_margin_status"] == "6"
+    assert "retMsg" not in proof
+    assert "secretExtra" not in proof
+
+    namespace["api_get"] = lambda *_args: ({"retCode": 10001, "retMsg": "x"}, {})
+    rejected = namespace["_signed_account_mode_proof"]("key", "secret")
+    assert rejected["status"] == "REJECTED"
+    assert "retMsg" not in rejected
+
+
 def test_private_reconcile_persists_safe_signed_account_mode_proof() -> None:
     assert 'api_get("/v5/account/info", {}, key, secret)' in PRIVATE
     assert 'SIGNED_ACCOUNT_MODE_PROOF_KEY = "__cripta_signed_account_mode"' in PRIVATE
