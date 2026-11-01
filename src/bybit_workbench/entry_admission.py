@@ -18,6 +18,9 @@ from bybit_workbench.capital_reservation import (
     PostgresCapitalReservationPort,
 )
 from bybit_workbench.exchange_position_identity import exchange_position_key
+from bybit_workbench.strategy_execution_binding_policy import (
+    real_binding_allocation_allowed,
+)
 from bybit_workbench.universal_entry.fingerprint import fingerprint
 
 
@@ -226,7 +229,11 @@ class PostgresEntryAdmissionPort:
                 )
             if (
                 str(binding[3]) != "PRIMARY"
-                or str(binding[4]) != "DEDICATED_STRATEGY"
+                or not real_binding_allocation_allowed(
+                    strategy_id=request.strategy_id,
+                    strategy_version=request.strategy_version,
+                    allocation_mode=str(binding[4]),
+                )
                 or str(binding[5]) != "ACTIVE"
                 or effective_from > now
                 or (effective_to is not None and effective_to <= now)
