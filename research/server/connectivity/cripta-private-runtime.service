@@ -10,6 +10,7 @@ Group=cripta
 Environment=PYTHONUNBUFFERED=1
 Environment=CRIPTA_TRADING_ACCOUNT_ID=ta-2122c81ecff14f3b85b102db605212f7
 Environment=CRIPTA_ACCOUNT_CONNECTOR_ID=ac-ed73de20410548d6841aeafa5f196f70
+EnvironmentFile=/etc/cripta/release.env
 WorkingDirectory=/srv/cripta/runtime/current
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/private_runtime.py
 LoadCredentialEncrypted=bybit-mainnet:/etc/cripta/credentials/bybit-mainnet.cred
