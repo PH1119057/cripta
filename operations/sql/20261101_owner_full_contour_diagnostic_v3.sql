@@ -527,8 +527,7 @@ BEGIN
     INTO v_reason,v_blocked_at
     FROM runtime.account_entry_safety_blocks
    WHERE trading_account_id=p_account_id
-     AND account_connector_id=p_connector_id
-   FOR UPDATE;
+     AND account_connector_id=p_connector_id;
   IF NOT FOUND THEN
     RETURN p_account_id;
   END IF;
