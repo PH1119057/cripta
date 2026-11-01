@@ -104,6 +104,9 @@ DECLARE
   v_connector text;
   v_activation text;
   v_binding text;
+  v_parent_strategy text;
+  v_parent_activation text;
+  v_parent_binding text;
   v_symbols jsonb;
 BEGIN
   IF session_user <> 'cripta'
@@ -130,12 +133,18 @@ BEGIN
     v_connector:='ac-ed73de20410548d6841aeafa5f196f70';
     v_activation:='activation-owner-full-contour-main-20261101';
     v_binding:='binding-owner-full-contour-main-20261101';
+    v_parent_strategy:='p90l90_legacy_main_ltc_inj';
+    v_parent_activation:='activation-p90l90-real-main-20261029-v3';
+    v_parent_binding:='binding-p90l90-real-main-20261029-v3';
     v_symbols:='["INJUSDT","LTCUSDT"]'::jsonb;
   ELSIF v_strategy='owner_full_contour_diag_sub' THEN
     v_account:='ta-853ac5fcd58185697396d33cd57459fa';
     v_connector:='ac-ec57819f875f1bfd929a382d6dc8a125';
     v_activation:='activation-owner-full-contour-sub-20261101';
     v_binding:='binding-owner-full-contour-sub-20261101';
+    v_parent_strategy:='p90l90_legacy_sub_dot_arb_apt';
+    v_parent_activation:='activation-p90l90-real-sub-20261029-v3';
+    v_parent_binding:='binding-p90l90-real-sub-20261029-v3';
     v_symbols:='["APTUSDT","ARBUSDT","DOTUSDT"]'::jsonb;
   ELSE
     RAISE EXCEPTION 'OWNER_FULL_CONTOUR_STRATEGY_NOT_APPROVED';
@@ -209,6 +218,26 @@ BEGIN
     RAISE EXCEPTION 'OWNER_FULL_CONTOUR_PLAN_MISSING';
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1
+      FROM strategy_entry.strategy_execution_bindings b
+      JOIN strategy_entry.strategy_activations a
+        ON a.activation_id=b.strategy_activation_id
+     WHERE b.strategy_execution_binding_id=v_parent_binding
+       AND b.strategy_activation_id=v_parent_activation
+       AND b.trading_account_id=v_account
+       AND b.execution_leg='PRIMARY'
+       AND b.execution_role='PRIMARY'
+       AND b.allocation_mode='DEDICATED_STRATEGY'
+       AND b.binding_state='ACTIVE'
+       AND a.strategy_id=v_parent_strategy
+       AND a.strategy_version='2.0-p90l90-real-main-sub-20261028'
+       AND a.enabled=true
+       AND a.disabled_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'OWNER_FULL_CONTOUR_PARENT_P90_BINDING_NOT_ACTIVE';
+  END IF;
+
   IF EXISTS (
     SELECT 1 FROM strategy_entry.strategy_execution_bindings
      WHERE strategy_activation_id=v_activation
@@ -223,7 +252,7 @@ BEGIN
     operator,source,reason
   ) VALUES (
     v_binding,v_activation,'PRIMARY','PRIMARY',v_account,
-    'DEDICATED_STRATEGY','ACTIVE',transaction_timestamp(),NULL,
+    'SUBORDINATE_DIAGNOSTIC','ACTIVE',transaction_timestamp(),NULL,
     'owner','OWNER_FULL_CONTOUR_DIAGNOSTIC_20261101',
     'DIAGNOSTIC_CAPABILITY_ONLY_EXECUTION_PERMISSION_OFF'
   );
@@ -260,6 +289,8 @@ DECLARE
   v_expected_activation text;
   v_expected_binding text;
   v_parent_strategy text;
+  v_parent_activation text;
+  v_parent_binding text;
 BEGIN
   IF session_user <> 'cripta'
      OR p_source NOT LIKE 'dashboard:owner-full-contour-diagnostic:%'
@@ -276,6 +307,8 @@ BEGIN
     v_expected_activation:='activation-owner-full-contour-main-20261101';
     v_expected_binding:='binding-owner-full-contour-main-20261101';
     v_parent_strategy:='p90l90_legacy_main_ltc_inj';
+    v_parent_activation:='activation-p90l90-real-main-20261029-v3';
+    v_parent_binding:='binding-p90l90-real-main-20261029-v3';
   ELSE
     v_expected_strategy:='owner_full_contour_diag_sub';
     v_expected_account:='ta-853ac5fcd58185697396d33cd57459fa';
@@ -283,6 +316,8 @@ BEGIN
     v_expected_activation:='activation-owner-full-contour-sub-20261101';
     v_expected_binding:='binding-owner-full-contour-sub-20261101';
     v_parent_strategy:='p90l90_legacy_sub_dot_arb_apt';
+    v_parent_activation:='activation-p90l90-real-sub-20261029-v3';
+    v_parent_binding:='binding-p90l90-real-sub-20261029-v3';
   END IF;
 
   IF (p_strategy_id,p_account_id,p_connector_id,p_activation_id,p_binding_id)
@@ -308,7 +343,7 @@ BEGIN
          AND b.binding_state='ACTIVE'
          AND b.execution_leg='PRIMARY'
          AND b.execution_role='PRIMARY'
-         AND b.allocation_mode='DEDICATED_STRATEGY'
+         AND b.allocation_mode='SUBORDINATE_DIAGNOSTIC'
   ) THEN
     RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_ARM_BINDING_NOT_READY';
   END IF;
@@ -346,6 +381,10 @@ BEGIN
   IF NOT EXISTS (
       SELECT 1
         FROM control.account_live_arm_sessions s
+        JOIN strategy_entry.strategy_execution_bindings b
+          ON b.strategy_execution_binding_id=s.strategy_execution_binding_id
+        JOIN strategy_entry.strategy_activations a
+          ON a.activation_id=b.strategy_activation_id
        WHERE s.trading_account_id=p_account_id
          AND s.account_connector_id=p_connector_id
          AND s.strategy_id=v_parent_strategy
@@ -354,6 +393,17 @@ BEGIN
          AND s.release_commit=p_release_commit
          AND s.state='ACTIVE'
          AND s.deactivated_at IS NULL
+         AND b.strategy_execution_binding_id=v_parent_binding
+         AND b.strategy_activation_id=v_parent_activation
+         AND b.trading_account_id=p_account_id
+         AND b.execution_leg='PRIMARY'
+         AND b.execution_role='PRIMARY'
+         AND b.allocation_mode='DEDICATED_STRATEGY'
+         AND b.binding_state='ACTIVE'
+         AND a.strategy_id=v_parent_strategy
+         AND a.strategy_version='2.0-p90l90-real-main-sub-20261028'
+         AND a.enabled=true
+         AND a.disabled_at IS NULL
   ) THEN
     RAISE EXCEPTION 'OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_NOT_ACTIVE';
   END IF;
