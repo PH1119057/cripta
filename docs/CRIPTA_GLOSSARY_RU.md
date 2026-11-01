@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.13
+**Версия:** 3.14
 **Дата:** 2026-11-01
 **Статус:** обязательный канонический терминологический контракт
 
@@ -89,6 +89,18 @@ StrategyPosition + exact ExitPlan, наблюдает разрешённые п�
 **ExitDecision** — формализованное решение Exit Engine выполнить конкретную
 разрешённую ExitPlan мутацию: protection change, reduce, close или иной
 предусмотренный планом action.
+
+**OWNER_FULL_CONTOUR_TRIGGER** — exact authenticated owner diagnostic fact,
+который имитирует только первый причинный факт «Entry condition сработал» для
+отдельной full-contour diagnostic Strategy. Он не является рыночным сигналом P90
+и не разрешает Dashboard создавать StrategySignal/EntryDecision напрямую.
+
+**OWNER_FULL_CONTOUR_EXIT_TRIGGER** — exact одноразовый diagnostic
+ExitObservation, который разрешён только после доказанного OPEN
+StrategyPosition той же full-contour diagnostic Strategy и подтверждённой
+initial protection. Он проходит через обычный Universal Exit Engine и может
+создать только ExitPlan-owned CLOSE decision. Это не direct close command и не
+обход Universal Exit/Execution.
 
 # 3. StrategySignal
 

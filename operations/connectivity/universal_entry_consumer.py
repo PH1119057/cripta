@@ -39,7 +39,8 @@ from bybit_workbench.universal_entry.execution_bridge import (
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 from bybit_workbench.universal_entry.owner_full_contour_control import (
-    require_parent_p90_owner_scope,
+    require_parent_p90_diagnostic_scope,
+    retire_entry_rights as retire_owner_diagnostic_entry_rights,
     set_run_state as set_owner_diagnostic_run_state,
 )
 from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
@@ -105,6 +106,9 @@ _REQUIRED_DB_PRIVILEGES = (
     ("control.owner_full_contour_diagnostic_runs", "UPDATE"),
     ("control.live_arm_sessions", "SELECT"),
     ("control.live_arm_sessions", "UPDATE"),
+    ("control.execution_gates", "SELECT"),
+    ("control.execution_gates", "UPDATE"),
+    ("control.execution_gate_events", "INSERT"),
 )
 
 
@@ -545,6 +549,51 @@ def _publish_command(
     )
 
 
+def _finalize_owner_diagnostic_dispatch(
+    connection: psycopg.Connection[Any],
+    prepared: PreparedRuntimeEntryCommand,
+    *,
+    now: datetime,
+) -> None:
+    if not is_diagnostic_strategy(prepared.strategy_id, prepared.strategy_version):
+        return
+    row = connection.execute(
+        """SELECT run_id,state
+             FROM control.owner_full_contour_diagnostic_runs
+            WHERE entry_execution_request_id=%s
+              AND strategy_id=%s
+              AND strategy_version=%s
+              AND trading_account_id=%s
+            ORDER BY requested_at DESC
+            FOR UPDATE""",
+        (
+            prepared.execution_request_id,
+            prepared.strategy_id,
+            prepared.strategy_version,
+            prepared.trading_account_id,
+        ),
+    ).fetchall()
+    if len(row) != 1 or str(row[0]["state"]) != "MATERIALIZED":
+        raise RuntimeError("OWNER_FULL_CONTOUR_DISPATCH_RUN_IDENTITY_INVALID")
+    run_id = str(row[0]["run_id"])
+    set_owner_diagnostic_run_state(
+        connection,
+        run_id=run_id,
+        state="DISPATCHED",
+        now=now,
+        lineage={
+            "entry_execution_request_id": prepared.execution_request_id,
+            "entry_command_id": prepared.command_id,
+        },
+    )
+    retire_owner_diagnostic_entry_rights(
+        connection,
+        run_id=run_id,
+        at=now,
+        reason="diagnostic Entry dispatched",
+    )
+
+
 def _generation_pre_dispatch_status(
     connection: psycopg.Connection[Any],
     row: Mapping[str, object],
@@ -609,7 +658,7 @@ def _admission_pre_dispatch_status(
         if not ACCOUNT_CONNECTOR_ID or not LOADED_RELEASE_COMMIT:
             return "BINDING_INVALID", "OWNER_FULL_CONTOUR_PARENT_SCOPE_CONTEXT_MISSING"
         try:
-            require_parent_p90_owner_scope(
+            require_parent_p90_diagnostic_scope(
                 connection,
                 symbol=request.symbol,
                 account_id=request.trading_account_id,
@@ -1193,11 +1242,9 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     current = (now or datetime.now(UTC)).astimezone(UTC)
     _release_expired_reserved_requests(connection, now=current)
 
-    if not _execution_gate_enabled(connection):
-        return "EXECUTION_GATE_DISARMED"
-    # Registry routing is only a prerequisite. Per-request binding/connector,
-    # independently authenticated private credentials and LIVE arm remain
-    # separately required; no cross-account worker fallback.
+    # Process/account route identity is the first runtime ownership gate.
+    # Diagnostic lifecycle completion may continue with NEW-Entry gate closed,
+    # but never through an unproven or different account connector.
     try:
         route = ConsumerWorkerRoute(TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID)
     except ValueError:
@@ -1205,20 +1252,9 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     route_check = check_consumer_worker_route(connection, route=route)
     if not route_check.ready:
         return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY:" + ",".join(route_check.reasons)
-    safety_ready, safety_reasons = account_entry_safety_ready(
-        connection,
-        trading_account_id=route.trading_account_id,
-        account_connector_id=route.account_connector_id,
-    )
-    if not safety_ready:
-        return "ACCOUNT_ENTRY_SAFETY_NOT_READY:" + ",".join(safety_reasons)
-    row = _next_request(connection, route=route)
-    if row is None:
-        # Ordinary production requests retain priority. Only after the exact
-        # process/account route and account safety checks passed, and no normal
-        # Entry request is pending, may this consumer inspect an owner
-        # diagnostic trigger.
-        refresh_run_lifecycle(
+
+    if not _execution_gate_enabled(connection):
+        diagnostic_lifecycle = refresh_run_lifecycle(
             connection,
             trading_account_id=TRADING_ACCOUNT_ID,
             now=current,
@@ -1235,6 +1271,23 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         )
         if command_result:
             return command_result
+        return diagnostic_lifecycle or "EXECUTION_GATE_DISARMED"
+    # Registry routing is only a prerequisite. Per-request binding/connector,
+    # independently authenticated private credentials and LIVE arm remain
+    # separately required; no cross-account worker fallback.
+    safety_ready, safety_reasons = account_entry_safety_ready(
+        connection,
+        trading_account_id=route.trading_account_id,
+        account_connector_id=route.account_connector_id,
+    )
+    if not safety_ready:
+        return "ACCOUNT_ENTRY_SAFETY_NOT_READY:" + ",".join(safety_reasons)
+    row = _next_request(connection, route=route)
+    if row is None:
+        # Ordinary production requests retain priority. Only after the exact
+        # process/account route and account safety checks passed, and no normal
+        # Entry request is pending, may this consumer inspect an owner
+        # diagnostic trigger.
         diagnostic_result = materialize_requested_run(
             connection,
             trading_account_id=TRADING_ACCOUNT_ID,
@@ -1496,6 +1549,11 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         return "BLOCKED:STRUCTURAL_ERROR"
     with connection.transaction():
         _publish_command(connection, prepared, now=current)
+        _finalize_owner_diagnostic_dispatch(
+            connection,
+            prepared,
+            now=current,
+        )
     return f"DISPATCHED:{prepared.command_id}"
 
 

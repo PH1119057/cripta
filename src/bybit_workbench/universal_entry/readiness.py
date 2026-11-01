@@ -275,7 +275,19 @@ def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
 
 def _owner_full_contour_diagnostic_policy(card: StrategyCard) -> bool:
     """Exact owner-triggered diagnostic policy; never a market-observer Strategy."""
-    if card.strategy_version != "1.0-owner-full-contour-20261101":
+    diagnostic_rules_by_version = {
+        "1.0-owner-full-contour-20261101": {
+            "OWNER_DIAGNOSTIC_TP_0_5",
+            "OWNER_DIAGNOSTIC_SL_0_5",
+        },
+        "2.0-owner-full-contour-e2e-20261101": {
+            "OWNER_DIAGNOSTIC_FORCE_CLOSE",
+            "OWNER_DIAGNOSTIC_TP_0_5",
+            "OWNER_DIAGNOSTIC_SL_0_5",
+        },
+    }
+    expected_rule_ids = diagnostic_rules_by_version.get(card.strategy_version)
+    if expected_rule_ids is None:
         return False
     scopes = {
         "owner_full_contour_diag_main": ("INJUSDT", "LTCUSDT"),
@@ -325,7 +337,7 @@ def _owner_full_contour_diagnostic_policy(card: StrategyCard) -> bool:
         and initial.get("tpsl_mode") == "Full"
         and isinstance(rules, list)
         and {str(item.get("rule_id") or "") for item in rules if isinstance(item, Mapping)}
-            == {"OWNER_DIAGNOSTIC_TP_0_5", "OWNER_DIAGNOSTIC_SL_0_5"}
+            == expected_rule_ids
         and _mapping(exit_policy.get("execution_policy"))
             == {"max_request_age_seconds": 10}
         and lifecycle.get("position_mode") == "ONE_WAY"

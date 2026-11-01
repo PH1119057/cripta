@@ -42,6 +42,10 @@ def _count_is_one(row: Any) -> bool:
     return row is not None and int(_row_value(row, "count", 0)) == 1
 
 
+def _count_is_zero(row: Any) -> bool:
+    return row is not None and int(_row_value(row, "count", 0)) == 0
+
+
 def _parent_scope(symbol: str) -> tuple[str, str, str]:
     if symbol.upper() in {"LTCUSDT", "INJUSDT"}:
         return (
@@ -68,7 +72,7 @@ def account_session_id(run_id: str) -> str:
     return "owner-fc-account-" + fingerprint({"run_id": run_id})[:32]
 
 
-def require_parent_p90_owner_scope(
+def require_parent_p90_diagnostic_scope(
     connection: Any,
     *,
     symbol: str,
@@ -101,8 +105,8 @@ def require_parent_p90_owner_scope(
             WHERE strategy_id=%s AND strategy_version=%s AND enabled=true""",
         (parent, P90_VERSION),
     ).fetchone()
-    if not _count_is_one(permission):
-        raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_PERMISSION_NOT_ACTIVE")
+    if not _count_is_zero(permission):
+        raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_PERMISSION_MUST_BE_OFF")
     generic = connection.execute(
         """SELECT count(*)
              FROM control.live_arm_sessions
@@ -110,8 +114,8 @@ def require_parent_p90_owner_scope(
               AND symbol=%s AND release_commit=%s AND state='ACTIVE'""",
         (parent, P90_VERSION, symbol, release_commit),
     ).fetchone()
-    if not _count_is_one(generic):
-        raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_ARM_NOT_ACTIVE")
+    if not _count_is_zero(generic):
+        raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_ARM_MUST_BE_OFF")
     account = connection.execute(
         """SELECT count(*)
              FROM control.account_live_arm_sessions
@@ -132,8 +136,8 @@ def require_parent_p90_owner_scope(
             connector_id,
         ),
     ).fetchone()
-    if not _count_is_one(account):
-        raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_NOT_ACTIVE")
+    if not _count_is_zero(account):
+        raise ValueError("OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_MUST_BE_OFF")
 
 
 def _require_symbol_idle(
@@ -196,12 +200,24 @@ def request_run(
     if selected_symbol not in symbols:
         raise ValueError("OWNER_FULL_CONTOUR_SYMBOL_SCOPE_INVALID")
     gate = connection.execute(
-        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet' FOR UPDATE"
     ).fetchone()
-    if gate != (True,):
-        raise ValueError("OWNER_FULL_CONTOUR_MAINNET_GATE_NOT_OPEN")
+    if gate != (False,):
+        raise ValueError("OWNER_FULL_CONTOUR_MAINNET_GATE_MUST_START_CLOSED")
+    if connection.execute(
+        "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true"
+    ).fetchone() != (0,):
+        raise ValueError("OWNER_FULL_CONTOUR_OTHER_EXECUTION_PERMISSION_ACTIVE")
+    if connection.execute(
+        "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'"
+    ).fetchone() != (0,):
+        raise ValueError("OWNER_FULL_CONTOUR_OTHER_LIVE_ARM_ACTIVE")
+    if connection.execute(
+        "SELECT count(*) FROM control.account_live_arm_sessions WHERE state='ACTIVE'"
+    ).fetchone() != (0,):
+        raise ValueError("OWNER_FULL_CONTOUR_OTHER_ACCOUNT_ARM_ACTIVE")
 
-    require_parent_p90_owner_scope(
+    require_parent_p90_diagnostic_scope(
         connection,
         symbol=selected_symbol,
         account_id=account_id,
@@ -353,6 +369,27 @@ def request_run(
     ).fetchone()
     if result != (scoped_session,):
         raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_ARM_WRITE_FAILED")
+
+    gate_reason = "owner full-contour diagnostic Entry window"
+    connection.execute(
+        """UPDATE control.execution_gates
+              SET enabled=1,reason=%s,updated_at_epoch_ms=%s
+            WHERE mode='mainnet' AND enabled=0""",
+        (gate_reason, int(current.timestamp() * 1000)),
+    )
+    connection.execute(
+        """INSERT INTO control.execution_gate_events(
+             at_epoch_ms,mode,previous_enabled,requested_enabled,
+             resulting_enabled,reason,source,origin,request_id,settings_version)
+           VALUES(%s,'mainnet',false,true,true,%s,%s,'owner',%s,%s)""",
+        (
+            int(current.timestamp() * 1000),
+            gate_reason,
+            source,
+            run_id,
+            VERSION,
+        ),
+    )
     return {
         "run_id": run_id,
         "strategy_id": strategy_id,
@@ -424,6 +461,32 @@ def retire_entry_rights(
         ).fetchone()
         if result != (account_session_id(run_id),):
             raise RuntimeError("OWNER_FULL_CONTOUR_ACCOUNT_DISARM_FAILED")
+
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet' FOR UPDATE"
+    ).fetchone()
+    if gate is not None and bool(_row_value(gate, "enabled", 0)):
+        gate_reason = "owner full-contour diagnostic Entry window closed: " + reason
+        connection.execute(
+            """UPDATE control.execution_gates
+                  SET enabled=0,reason=%s,updated_at_epoch_ms=%s
+                WHERE mode='mainnet' AND enabled=1""",
+            (gate_reason, int(current.timestamp() * 1000)),
+        )
+        connection.execute(
+            """INSERT INTO control.execution_gate_events(
+                 at_epoch_ms,mode,previous_enabled,requested_enabled,
+                 resulting_enabled,reason,source,origin,request_id,
+                 settings_version)
+               VALUES(%s,'mainnet',true,false,false,%s,%s,'runtime',%s,%s)""",
+            (
+                int(current.timestamp() * 1000),
+                gate_reason,
+                f"{RUNTIME_SOURCE}:{run_id}",
+                run_id,
+                VERSION,
+            ),
+        )
 
 
 def set_run_state(

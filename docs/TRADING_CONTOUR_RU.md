@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.4
+**Версия:** 3.5
 **Дата:** 2026-11-01
 **Статус:** активный канонический контракт торгового контура
 
@@ -1146,19 +1146,22 @@ control request; Dashboard не имеет права самостоятельн
 `StrategyPosition`. Эти entities создаются обычными Universal Entry/Execution
 owners.
 
-Exact v1 contract:
+Exact v2 contract — OWNER DECISION 2026-11-01:
 
 ```text
-trigger              = explicit authenticated owner click only
-source marker        = owner_full_contour_real_diagnostic
+owner trigger         = explicit authenticated owner click only
+Entry trigger         = OWNER_FULL_CONTOUR_TRIGGER
+Exit trigger          = OWNER_FULL_CONTOUR_EXIT_TRIGGER
+source marker         = owner_full_contour_real_diagnostic
 scope                 = one symbol from current exact P90 REAL v3 five-symbol scope
 direction             = LONG or SHORT explicitly confirmed by owner
 stake                 = exactly 10 USDT
 leverage              = exactly 1x
-entry                 = MARKET
+entry                 = MARKET through ordinary Universal Entry / Execution
 position mode         = ONE_WAY / positionIdx=0
-initial stop          = -0.5% from actual executed average Entry
-take profit           = +0.5% from actual executed average Entry
+initial stop          = -0.5% from actual executed average Entry, Exchange-resident
+forced diagnostic Exit= MARKET CLOSE through ordinary Universal Exit / Execution
+fallback TP           = +0.5% from actual executed average Entry
 dynamic trailing/BE   = disabled
 geometry Exit         = disabled
 statistics            = excluded from P90 Strategy/research performance
@@ -1167,29 +1170,61 @@ binding allocation    = SUBORDINATE_DIAGNOSTIC
 parent account        = exact current P90 REAL v3 TradingAccount for the symbol
 ```
 
-Mandatory gates:
-- current global mainnet gate OPEN;
-- exact current release-bound P90 owner scope for the selected symbol is ACTIVE;
-- exact account route/binding, fresh `AccountStateGeneration`, position mode,
-  capital reservation, physical slot and consumer readiness all pass through
-  the ordinary REAL admission path;
+The diagnostic is a deterministic end-to-end production smoke, not a Strategy
+that waits for a natural market Entry or for price eventually to reach an Exit
+threshold. The owner trigger synthesizes only the first causal Entry fact. From
+that point the ordinary production owners MUST create StrategySignal,
+strategy_attempt, EntryDecision, EntryExecutionRequest, Exchange mutation,
+StrategyPosition and initial protection.
+
+After the exact diagnostic StrategyPosition is `OPEN` and its initial
+Exchange-resident protection is confirmed, the diagnostic runtime emits exactly
+one `OWNER_FULL_CONTOUR_EXIT_TRIGGER` as an ExitObservation for that exact
+StrategyPosition. The ordinary Universal Exit Engine MUST evaluate the exact
+ExitPlan and create the CLOSE ExitDecision. The ordinary Universal Exit
+consumer then materializes ExitExecutionRequest and dispatches the real MARKET
+close. Direct control-plane INSERT of ExitDecision, ExitExecutionRequest,
+trade command or position-close mutation is forbidden.
+
+Mandatory gates and control semantics:
+- immediately before a new diagnostic run the global mainnet NEW-Entry gate MUST
+  be CLOSED and there MUST be no unrelated enabled execution permission or
+  active LIVE-arm session;
+- the exact parent P90 StrategyActivation and parent `DEDICATED_STRATEGY`
+  binding for the selected TradingAccount MUST remain ACTIVE, but the parent
+  P90 execution permission and parent generic/account OWNER ARM are NOT required
+  and MUST remain OFF for diagnostic v2;
+- unrelated faults on another TradingAccount do not block the selected
+  diagnostic account. Global faults and faults scoped to the selected account
+  remain fail-closed;
+- exact selected account route/binding, fresh `AccountStateGeneration`,
+  position mode, account safety, capital reservation, physical slot, consumer
+  readiness and release/runtime guards all pass through the ordinary REAL path;
 - selected symbol has no open position, active non-reduce-only order, pending
-  Entry mutation or unresolved diagnostic run;
+  Entry mutation, unresolved ownership/reconciliation state or unresolved
+  diagnostic run;
 - diagnostic Strategy has its own exact StrategyCard / EntryPlan / ExitPlan /
-  activation / `SUBORDINATE_DIAGNOSTIC` binding / permission / LIVE-arm lineage;
-- the diagnostic binding may share only the exact parent P90 REAL v3
-  TradingAccount.  That account MUST simultaneously retain one ACTIVE parent
-  `DEDICATED_STRATEGY` binding for the exact P90 Strategy/version; no second
-  independent dedicated owner, fallback account, cross-Strategy capital pool or
-  internal netting is authorized;
-- the exact parent P90 execution permission, release-bound generic OWNER ARM and
-  account-scoped OWNER ARM for the selected symbol MUST be active at trigger and
-  remain valid through diagnostic Entry dispatch.  Loss/drift of parent scope is
-  fail-closed;
-- diagnostic permission/LIVE-arm is scoped only to the explicit run and is
-  retired after successful Entry dispatch or terminal failure so it cannot act
-  as a standing autonomous Strategy right;
-- any ambiguous Exchange mutation remains reconciliation-required and fail-closed.
+  activation / `SUBORDINATE_DIAGNOSTIC` binding / permission / release-bound
+  generic/account LIVE-arm lineage;
+- the authenticated diagnostic control transaction creates only the selected
+  diagnostic permission/arms and opens the global NEW-Entry gate LAST. Ordinary
+  P90 execution permissions remain OFF during this window;
+- after successful diagnostic Entry dispatch or terminal Entry failure, the
+  diagnostic Entry permission/arms are retired and the global NEW-Entry gate is
+  CLOSED immediately. Existing StrategyPosition/Exit ownership is unaffected;
+  Universal Exit remains authorized to complete lifecycle while the Entry gate
+  is closed;
+- diagnostic success requires durable evidence of the normal Universal Exit
+  path through completed real close and terminal reconciliation. Exchange
+  protection closing the position before the forced Universal Exit completes is
+  a diagnostic failure, not a PASS;
+- any ambiguous Exchange mutation remains reconciliation-required and
+  fail-closed.
+
+The `-0.5%` Exchange-resident initial stop remains the safety containment while
+the forced Exit path is being proven. The `+0.5%` rule remains a fallback
+ExitPlan rule, but the deterministic diagnostic does not wait for either
+threshold before injecting `OWNER_FULL_CONTOUR_EXIT_TRIGGER`.
 
 The run is diagnostic evidence, not P90 performance. P90 hard-stop counters,
 PnL/win-rate, research datasets, SECOND48 and Strategy-specific analytics MUST

@@ -16,17 +16,18 @@ from decimal import Decimal, InvalidOperation
 from .contracts import StrategyCard
 from .dashboard_control import card_from_editable, strategy_authoring_template
 
-VERSION = "1.0-owner-full-contour-20261101"
-SOURCE = "owner-2026-11-01-full-contour-real-diagnostic"
+VERSION = "2.0-owner-full-contour-e2e-20261101"
+SOURCE = "owner-2026-11-01-full-contour-real-diagnostic-v2"
 RUNTIME_SOURCE = "owner_full_contour_real_diagnostic"
 TRIGGER_EVENT_KIND = "OWNER_FULL_CONTOUR_TRIGGER"
+EXIT_TRIGGER_EVENT_KIND = "OWNER_FULL_CONTOUR_EXIT_TRIGGER"
 
 MAIN_ID = "owner_full_contour_diag_main"
 SUB_ID = "owner_full_contour_diag_sub"
-MAIN_ACTIVATION_ID = "activation-owner-full-contour-main-20261101"
-SUB_ACTIVATION_ID = "activation-owner-full-contour-sub-20261101"
-MAIN_BINDING_ID = "binding-owner-full-contour-main-20261101"
-SUB_BINDING_ID = "binding-owner-full-contour-sub-20261101"
+MAIN_ACTIVATION_ID = "activation-owner-full-contour-main-v2-20261101"
+SUB_ACTIVATION_ID = "activation-owner-full-contour-sub-v2-20261101"
+MAIN_BINDING_ID = "binding-owner-full-contour-main-v2-20261101"
+SUB_BINDING_ID = "binding-owner-full-contour-sub-v2-20261101"
 
 MAIN_ACCOUNT_ID = "ta-2122c81ecff14f3b85b102db605212f7"
 SUB_ACCOUNT_ID = "ta-853ac5fcd58185697396d33cd57459fa"
@@ -125,6 +126,24 @@ def _policy(strategy_id: str) -> dict[str, object]:
             "tie_break": "FAIL_CLOSED",
         },
         "rules": [
+            {
+                "rule_id": "OWNER_DIAGNOSTIC_FORCE_CLOSE",
+                "priority": 300,
+                "repeat_policy": "ONCE_PER_POSITION",
+                "required_fact_paths": [],
+                "predicate": {
+                    "op": "COMPARE",
+                    "params": {
+                        "path": "event_kind",
+                        "comparator": "EQ",
+                        "value": EXIT_TRIGGER_EVENT_KIND,
+                    },
+                },
+                "action": {
+                    "kind": "CLOSE",
+                    "mutation": {"quantity": "ALL", "order_type": "MARKET"},
+                },
+            },
             {
                 "rule_id": "OWNER_DIAGNOSTIC_TP_0_5",
                 "priority": 200,
