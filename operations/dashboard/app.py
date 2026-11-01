@@ -5387,6 +5387,46 @@ def _u6_prepare_p90_real_v3_readiness(
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
+            gate = connection.execute(
+                "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+            ).fetchone()
+            permission_count = int(
+                connection.execute(
+                    "SELECT count(*) FROM strategy_entry.execution_permissions "
+                    "WHERE enabled=true"
+                ).fetchone()[0]
+            )
+            live_arm_count = int(
+                connection.execute(
+                    "SELECT count(*) FROM control.live_arm_sessions "
+                    "WHERE state='ACTIVE'"
+                ).fetchone()[0]
+            )
+            account_arm_count = int(
+                connection.execute(
+                    "SELECT count(*) FROM control.account_live_arm_sessions "
+                    "WHERE state='ACTIVE'"
+                ).fetchone()[0]
+            )
+        if (
+            gate != (False,)
+            or permission_count != 0
+            or live_arm_count != 0
+            or account_arm_count != 0
+        ):
+            return _mark_p90_readiness_blocked(
+                request_id=request_id,
+                code="PREPARATION_REQUIRES_DISARMED_NEW_ENTRY",
+                detail=(
+                    f"gate={gate};permissions={permission_count};"
+                    f"live_arms={live_arm_count};account_arms={account_arm_count}"
+                ),
+                retry_eligible=False,
+            )
+
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
             set_real_readiness_state(
                 connection,
                 request_id=request_id,
