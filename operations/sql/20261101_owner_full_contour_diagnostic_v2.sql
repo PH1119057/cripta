@@ -8,6 +8,8 @@ SET LOCAL statement_timeout='20s';
 
 GRANT UPDATE ON strategy_entry.strategy_execution_bindings
   TO cripta_owner_full_contour_binding;
+GRANT SELECT ON control.owner_full_contour_diagnostic_runs
+  TO cripta_owner_full_contour_binding;
 
 CREATE OR REPLACE FUNCTION strategy_entry.register_owner_full_contour_binding(
     p_binding_id text, p_activation_id text, p_account_id text
