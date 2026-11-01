@@ -5341,6 +5341,19 @@ def _u6_prepare_p90_real_v3_readiness(
                     )
                 ) or {}
         raise
+    except psycopg.errors.UniqueViolation:
+        # Concurrent owner requests for the same scope are serialized by the
+        # partial unique index. Project the winner instead of exposing a DB
+        # implementation detail or starting a second broker operation.
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            return _readiness_operation_json(
+                latest_real_readiness_operation(
+                    connection,
+                    scope_key=P90_REAL_READINESS_SCOPE_KEY,
+                )
+            ) or {}
 
     operation_state = str(operation.get("state") or "")
     if operation_state != "REQUESTED" or operation.get("_existing") is True:
