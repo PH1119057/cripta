@@ -5,9 +5,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Protocol
-
-from psycopg.rows import dict_row
+from typing import Protocol
 
 from .contracts import (
     CandidateCooldown,
@@ -45,16 +43,6 @@ class MappingSequenceRow(dict[str, object]):
         if isinstance(key, (int, slice)):
             return tuple(self.values())[key]
         return super().__getitem__(key)
-
-
-def mapping_sequence_row(cursor: Any) -> Any:
-    """psycopg row factory: dict_row semantics plus positional compatibility."""
-    make_dict = dict_row(cursor)
-
-    def make_row(values: Sequence[Any]) -> MappingSequenceRow:
-        return MappingSequenceRow(make_dict(values))
-
-    return make_row
 
 
 class RuntimeCursorLike(Protocol):
