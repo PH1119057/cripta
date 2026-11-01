@@ -1322,6 +1322,34 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "gate_enabled": bool(p90_arm_facts[3]),
                 "gate_reason": str(p90_arm_facts[4] or ""),
             })
+        readiness_operation = latest_real_readiness_operation(
+            connection,
+            scope_key=P90_REAL_READINESS_SCOPE_KEY,
+        )
+        readiness_projection = _readiness_operation_json(readiness_operation)
+        p90_arm_status["readiness_operation"] = readiness_projection
+        if readiness_projection is not None:
+            operation_state = str(readiness_projection.get("state") or "")
+            if operation_state in {
+                "REQUESTED",
+                "CHECKING",
+                "STARTING_SERVICES",
+                "RECONCILING",
+                "VALIDATING",
+            }:
+                p90_arm_status["state"] = "PREPARING"
+                if "REAL_READINESS_OPERATION_ACTIVE" not in p90_arm_status["blockers"]:
+                    p90_arm_status["blockers"].append(
+                        "REAL_READINESS_OPERATION_ACTIVE"
+                    )
+            elif operation_state == "BLOCKED":
+                blocker = (
+                    "REAL_READINESS_BLOCKED:"
+                    + str(readiness_projection.get("blocker_code") or "UNKNOWN")
+                )
+                if blocker not in p90_arm_status["blockers"]:
+                    p90_arm_status["blockers"].append(blocker)
+                p90_arm_status["state"] = "BLOCKED"
         # Read-only P90 operator projection. Geometry is not recomputed here:
         # the Dashboard renders the exact active native causal checkpoint.
         def p90_decimal(value: object) -> Decimal | None:
