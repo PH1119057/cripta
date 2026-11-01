@@ -16,12 +16,12 @@ from bybit_workbench.strategy_execution_binding_policy import (
     real_binding_allocation_allowed,
 )
 from bybit_workbench.strategy_position import StrategyPosition
+from bybit_workbench.universal_entry import runtime_loader
 from bybit_workbench.universal_entry.contracts import (
     FrozenPolicy,
     StrategyActivation,
     TradeDirection,
 )
-from bybit_workbench.universal_entry import runtime_loader
 from bybit_workbench.universal_entry.fingerprint import canonical_json
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
