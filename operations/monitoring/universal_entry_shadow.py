@@ -65,6 +65,9 @@ from bybit_workbench.universal_entry.engine import AccountAdmissionContext
 from bybit_workbench.universal_entry.fingerprint import fingerprint
 from bybit_workbench.universal_entry.market_watch import GenericOiPoint
 from bybit_workbench.universal_entry.materializer import materialize_plans
+from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
+    ENTRY_WINDOW_GATE_REASON as OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON,
+)
 from bybit_workbench.universal_entry.oi30s_source import (
     CurrentOiResponse,
     Oi30sConfig,
@@ -1319,6 +1322,23 @@ def _real_execution_selected_activation_ids(
     )
 
 
+def _p90_source_only_gate_compatible(
+    *,
+    gate_enabled: bool,
+    gate_reason: str,
+    selected: frozenset[str],
+) -> bool:
+    """Keep parent P90 inert during its normal state or exact owner diagnostic."""
+    return (
+        (not gate_enabled and not selected)
+        or (
+            gate_enabled
+            and gate_reason == OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON
+            and not selected
+        )
+    )
+
+
 def _require_p90_source_only_epoch_current(
     connection: Any,
     bundles: tuple[object, ...],
@@ -1335,7 +1355,11 @@ def _require_p90_source_only_epoch_current(
     ).fetchone()
     gate_enabled = bool(gate and gate[0])
     gate_reason = str(gate[1] or "") if gate else ""
-    if not gate_enabled and not selected:
+    if _p90_source_only_gate_compatible(
+        gate_enabled=gate_enabled,
+        gate_reason=gate_reason,
+        selected=selected,
+    ):
         return
     if (
         allow_live_transition
@@ -2169,11 +2193,20 @@ def _run_observer_epoch(
         gate_enabled = bool(gate and gate[0])
         gate_reason = str(gate[1] or "") if gate else ""
         if p90_real_force_source_only:
-            if gate_enabled or selected:
+            if not _p90_source_only_gate_compatible(
+                gate_enabled=gate_enabled,
+                gate_reason=gate_reason,
+                selected=selected,
+            ):
                 raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
             p90_real_source_only = True
-        elif not gate_enabled and not selected:
-            # Normal pre-arm state: source/private topology only, no execution.
+        elif _p90_source_only_gate_compatible(
+            gate_enabled=gate_enabled,
+            gate_reason=gate_reason,
+            selected=selected,
+        ):
+            # Normal pre-arm or exact owner diagnostic Entry window:
+            # parent P90 remains source-only with no execution selection.
             p90_real_source_only = True
         elif (
             not gate_enabled
