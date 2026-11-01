@@ -365,21 +365,32 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                 SUB_ACCOUNT,
             ),
         )
+        account_mode_proof = {
+            "__cripta_signed_account_mode": {
+                "status": "PASS",
+                "observed_at_epoch_ms": int(run_at.timestamp() * 1000),
+                "margin_mode": "ISOLATED_MARGIN",
+                "unified_margin_status": "6",
+            }
+        }
         connection.execute(
             """INSERT INTO runtime.account_state_generations(
                    generation_id,account_ref,reason,state,started_at,completed_at,
                    account_type,total_equity,wallet_balance,available_balance,
                    positions_count,active_orders_count,position_mode_refs,
-                   wallet_payload,error,trading_account_id,identity_status)
+                   wallet_payload,error,trading_account_id,account_connector_id,
+                   identity_status)
                VALUES(%s,'BYBIT:UNIFIED','owner-full-contour-ci','COMPLETE',
-                      %s,%s,'UNIFIED',100,100,100,0,0,%s::jsonb,'{}'::jsonb,
-                      '',%s,'PROVEN')""",
+                      %s,%s,'UNIFIED',100,100,100,0,0,%s::jsonb,%s::jsonb,
+                      '',%s,%s,'PROVEN')""",
             (
                 generation_id,
                 run_at,
                 run_at,
                 json.dumps({"ARBUSDT": position_mode_ref}),
+                json.dumps(account_mode_proof),
                 SUB_ACCOUNT,
+                diagnostic.SUB_CONNECTOR_ID,
             ),
         )
         connection.execute(
@@ -417,7 +428,7 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
         )
 
         # Regression for the production 2026-11-01 authenticated trigger
-        # failure: control.execution_gates.enabled is SMALLINT, while the v2
+        # failure: control.execution_gates.enabled is SMALLINT, while the historical v2
         # SECURITY DEFINER account-arm function had compared it with boolean
         # false. Exercise the exact owner request path as runtime role cripta.
         requested = request_run(
