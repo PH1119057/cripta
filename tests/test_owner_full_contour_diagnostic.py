@@ -42,8 +42,11 @@ OBSERVER = (
 MIGRATION_V1 = (
     ROOT / "operations/sql/20261101_owner_full_contour_diagnostic.sql"
 ).read_text(encoding="utf-8")
-MIGRATION = (
+MIGRATION_V2 = (
     ROOT / "operations/sql/20261101_owner_full_contour_diagnostic_v2.sql"
+).read_text(encoding="utf-8")
+MIGRATION = (
+    ROOT / "operations/sql/20261101_owner_full_contour_diagnostic_v3.sql"
 ).read_text(encoding="utf-8")
 SUBORDINATE_MIGRATION = (
     ROOT / "operations/sql/20261101_subordinate_diagnostic_binding.sql"
@@ -150,22 +153,24 @@ def test_diagnostic_cards_are_exact_materializable_and_execution_ready() -> None
         assert readiness.execution_ready, [reason.code for reason in readiness.reasons]
 
 
-def test_diagnostic_exit_rules_use_exact_half_percent_close() -> None:
+def test_diagnostic_exit_rules_use_exact_two_tenths_percent_close() -> None:
     _card, _activation, _entry, exit_plan = _main_bundle()
     engine = UniversalExitEngine()
-    tp = engine.evaluate(_position(exit_plan), exit_plan, _observation("0.5"))
+    below = engine.evaluate(_position(exit_plan), exit_plan, _observation("0.19"))
+    assert below.status is ExitEvaluationStatus.NO_DECISION
+    tp = engine.evaluate(_position(exit_plan), exit_plan, _observation("0.2"))
     assert tp.status is ExitEvaluationStatus.DECISION_CREATED
     assert tp.decision is not None
-    assert tp.decision.rule_id == "OWNER_DIAGNOSTIC_TP_0_5"
+    assert tp.decision.rule_id == "OWNER_DIAGNOSTIC_TP_0_2"
     assert tp.decision.action_kind is ExitActionKind.CLOSE
     assert tp.decision.requested_mutation.to_dict() == {
         "quantity": "ALL",
         "order_type": "MARKET",
     }
-    sl = engine.evaluate(_position(exit_plan), exit_plan, _observation("-0.5"))
+    sl = engine.evaluate(_position(exit_plan), exit_plan, _observation("-0.2"))
     assert sl.status is ExitEvaluationStatus.DECISION_CREATED
     assert sl.decision is not None
-    assert sl.decision.rule_id == "OWNER_DIAGNOSTIC_SL_0_5"
+    assert sl.decision.rule_id == "OWNER_DIAGNOSTIC_SL_0_2"
     assert sl.decision.action_kind is ExitActionKind.CLOSE
 
 
@@ -283,7 +288,7 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
     assert "/api/owner-full-contour-diagnostic" in INDEX
     assert "owner_full_contour_one_active_run" in MIGRATION_V1
     assert "'REQUESTED','MATERIALIZED','DISPATCHED','POSITION_OPEN'" in MIGRATION_V1
-    assert "OWNER_FULL_CONTOUR_V2_REGISTRATION_REQUIRES_IDLE_DISARMED_STATE" in MIGRATION
+    assert "OWNER_FULL_CONTOUR_V3_REGISTRATION_REQUIRES_IDLE_DISARMED_STATE" in MIGRATION
     assert "OWNER_FULL_CONTOUR_PARENT_P90_RIGHTS_MUST_BE_OFF" in MIGRATION
     account_insert = MIGRATION[MIGRATION.index(
         "INSERT INTO control.account_live_arm_sessions("
@@ -297,14 +302,14 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
 
 
 def test_diagnostic_migration_ends_at_single_transaction_commit() -> None:
-    for migration in (MIGRATION_V1, MIGRATION):
+    for migration in (MIGRATION_V1, MIGRATION_V2, MIGRATION):
         stripped = migration.rstrip()
         assert stripped.endswith("COMMIT;")
         assert stripped.count("\nCOMMIT;") == 1
         assert "COMMIT;\n\n     OR p_symbol NOT IN" not in stripped
 
 
-def test_v2_control_owns_bounded_entry_window_without_parent_p90_arm() -> None:
+def test_v3_control_owns_bounded_entry_window_without_parent_p90_arm() -> None:
     source = Path(
         ROOT / "src/bybit_workbench/universal_entry/owner_full_contour_control.py"
     ).read_text(encoding="utf-8")
@@ -373,22 +378,32 @@ def test_verified_release_registers_and_readbacks_diagnostic_capability() -> Non
     migration = "operations/sql/20261101_owner_full_contour_diagnostic.sql"
     subordinate = "operations/sql/20261101_subordinate_diagnostic_binding.sql"
     migration_v2 = "operations/sql/20261101_owner_full_contour_diagnostic_v2.sql"
+    migration_v3 = "operations/sql/20261101_owner_full_contour_diagnostic_v3.sql"
     installer = (
         "operations/implementation/install_owner_full_contour_diagnostic.py"
     )
     assert migration in RELEASE_INSTALLER
     assert subordinate in RELEASE_INSTALLER
     assert migration_v2 in RELEASE_INSTALLER
+    assert migration_v3 in RELEASE_INSTALLER
     migration_pos = RELEASE_INSTALLER.index(migration)
     subordinate_pos = RELEASE_INSTALLER.index(subordinate)
     migration_v2_pos = RELEASE_INSTALLER.index(migration_v2)
+    migration_v3_pos = RELEASE_INSTALLER.index(migration_v3)
     install_call = RELEASE_INSTALLER.index(
         f"$runtime_release/{installer}\" install"
     )
     check_call = RELEASE_INSTALLER.index(
         f"$runtime_release/{installer}\" check"
     )
-    assert migration_pos < subordinate_pos < migration_v2_pos < install_call < check_call
+    assert (
+        migration_pos
+        < subordinate_pos
+        < migration_v2_pos
+        < migration_v3_pos
+        < install_call
+        < check_call
+    )
     assert "runuser -u cripta" in RELEASE_INSTALLER[
         RELEASE_INSTALLER.rfind("runuser -u cripta", 0, install_call):install_call
     ]
