@@ -26,6 +26,7 @@ INSTALLED_COMMIT = Path("/var/lib/cripta/release/INSTALLED_COMMIT")
 RUNTIME_COMMIT = Path("/srv/cripta/runtime/current/INSTALLED_COMMIT")
 MAX_REQUEST_BYTES = 16384
 MAX_UNITS = 16
+MAX_START_REQUEST_SECONDS = 60.0
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ACCOUNT_UNIT_RE = re.compile(
@@ -159,7 +160,16 @@ def handle_request(payload: dict[str, Any]) -> dict[str, Any]:
         before[unit] = state
 
     results: list[dict[str, object]] = []
+    request_deadline = time.monotonic() + MAX_START_REQUEST_SECONDS
     for unit in normalized:
+        if time.monotonic() > request_deadline:
+            return {
+                "ok": False,
+                "request_id": request_id,
+                "release_commit": release_commit,
+                "error": "SERVICE_START_DEADLINE_EXCEEDED",
+                "units": results,
+            }
         state = before[unit]
         if state == "active":
             results.append(
@@ -267,7 +277,12 @@ def main() -> None:
                     break
                 raise
             with connection:
-                _serve_client(connection, allowed_uid)
+                try:
+                    _serve_client(connection, allowed_uid)
+                except OSError:
+                    # Peer timeout/disconnect is request-local. A local client
+                    # must not terminate the privileged broker process.
+                    continue
     finally:
         try:
             server.close()
