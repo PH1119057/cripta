@@ -21,7 +21,11 @@ from bybit_workbench.universal_entry import owner_full_contour_diagnostic as dia
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
 from bybit_workbench.universal_entry.dashboard_control import card_from_editable
 from bybit_workbench.universal_entry.materializer import materialize_plans
-from bybit_workbench.universal_entry.owner_full_contour_control import request_run
+from bybit_workbench.universal_entry.owner_full_contour_control import (
+    DISPATCH_GATE_CLOSE_REASON,
+    dispatched_entry_command_continuation_allowed,
+    request_run,
+)
 from bybit_workbench.universal_entry.owner_full_contour_runtime import (
     materialize_requested_run,
 )
@@ -31,6 +35,7 @@ from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
+from operations.connectivity import universal_entry_consumer as entry_consumer
 from operations.connectivity.universal_entry_consumer import mapping_sequence_row
 from operations.implementation.install_owner_full_contour_diagnostic import install
 
@@ -106,7 +111,9 @@ def _v1_diagnostic_card(strategy_id: str):
     )
 
 
-def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None:
+def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     assert DSN is not None
     with (
         psycopg.connect(DSN) as connection,
