@@ -19,11 +19,14 @@ def request(*units: str) -> dict[str, object]:
 def test_allowlist_is_narrow():
     assert broker._is_allowed_unit("cripta-universal-entry-consumer.service")
     assert broker._is_allowed_unit(
-        "cripta-lifecycle-account@ta-" + "1" * 32 + ".service"
+        "cripta-lifecycle-account@ta-853ac5fcd58185697396d33cd57459fa.service"
     )
     assert not broker._is_allowed_unit("ssh.service")
     assert not broker._is_allowed_unit("cripta-dashboard@../../evil.service")
     assert not broker._is_allowed_unit("cripta-private-runtime@bad.service")
+    assert not broker._is_allowed_unit(
+        "cripta-lifecycle-account@ta-" + "1" * 32 + ".service"
+    )
 
 
 def test_request_rejects_extra_fields(monkeypatch: pytest.MonkeyPatch):
