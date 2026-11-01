@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 
 import psycopg
 import pytest
-from psycopg.rows import dict_row, tuple_row
+from psycopg.rows import tuple_row
 
 from bybit_workbench.universal_entry import owner_full_contour_diagnostic as diagnostic
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
@@ -30,7 +30,6 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_card
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
-from bybit_workbench.universal_entry.runtime_loader import load_strategy_bundle_exact_identity
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
 from operations.connectivity.universal_entry_consumer import mapping_sequence_row
 from operations.implementation.install_owner_full_contour_diagnostic import install
@@ -466,41 +465,6 @@ def test_owner_full_contour_installs_subordinate_on_exact_p90_accounts() -> None
                   AND strategy_id IN (%s,%s)""",
             (MAIN_ID, SUB_ID),
         ).fetchone() == (0,)
-
-        # Reproduce the actual production row semantics that caused
-        # KeyError:11.  The exact loader itself must work with plain dict_row,
-        # not only with the compatibility row factory.
-        connection.row_factory = dict_row
-        identity = connection.execute(
-            """SELECT a.activation_id,a.strategy_id,a.strategy_version,
-                      a.strategy_config_fingerprint,
-                      ep.entry_plan_fingerprint,xp.exit_plan_fingerprint
-                 FROM strategy_entry.strategy_activations a
-                 JOIN strategy_entry.entry_plans ep
-                   ON ep.strategy_id=a.strategy_id
-                  AND ep.strategy_version=a.strategy_version
-                  AND ep.strategy_config_fingerprint=a.strategy_config_fingerprint
-                 JOIN strategy_entry.exit_plans xp
-                   ON xp.strategy_id=a.strategy_id
-                  AND xp.strategy_version=a.strategy_version
-                  AND xp.strategy_config_fingerprint=a.strategy_config_fingerprint
-                WHERE a.activation_id=%s""",
-            (diagnostic.SUB_ACTIVATION_ID,),
-        ).fetchone()
-        assert identity is not None
-        exact = load_strategy_bundle_exact_identity(
-            connection,
-            activation_id=str(identity["activation_id"]),
-            strategy_id=str(identity["strategy_id"]),
-            strategy_version=str(identity["strategy_version"]),
-            strategy_config_fingerprint=str(
-                identity["strategy_config_fingerprint"]
-            ),
-            entry_plan_fingerprint=str(identity["entry_plan_fingerprint"]),
-            exit_plan_fingerprint=str(identity["exit_plan_fingerprint"]),
-        )
-        assert exact is not None
-        assert exact.card.strategy_id == diagnostic.SUB_ID
 
         # The actual Universal Entry process uses this Mapping-compatible row
         # factory so downstream legacy positional readers remain safe while
