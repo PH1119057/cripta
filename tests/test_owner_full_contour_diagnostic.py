@@ -180,7 +180,7 @@ def test_diagnostic_forced_exit_rule_closes_immediately_through_exit_engine() ->
         observed_at=now,
         received_at=now,
         event_kind=diagnostic.EXIT_TRIGGER_EVENT_KIND,
-        attributes=FrozenPolicy.from_mapping({}),
+        attributes=FrozenPolicy.from_mapping({"directional_pnl_pct": "0"}),
         source_refs=("test:owner-full-contour-forced-exit",),
     )
     evaluation = UniversalExitEngine().evaluate(position, exit_plan, observation)
@@ -450,4 +450,4 @@ def test_retire_entry_rights_handles_dict_row_and_disarms_account_scope() -> Non
     assert "UPDATE control.live_arm_sessions" in sql
     assert "SELECT control.disarm_owner_full_contour_account_scope" in sql
     assert "UPDATE control.execution_gates" in sql
-    assert "owner full-contour diagnostic Entry window closed" in sql
+    assert "INSERT INTO control.execution_gate_events" in sql
