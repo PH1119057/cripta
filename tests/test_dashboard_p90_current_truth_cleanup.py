@@ -36,13 +36,18 @@ def test_backend_p90_closed_projection_excludes_legacy_history():
     assert "recovered_closed_entry_cycles" not in p90_query
 
 
-def test_legacy_generic_gate_controls_are_not_visible():
+def test_legacy_aux_gate_controls_stay_hidden_but_primary_p90_control_can_show():
     hidden_css = (
-        "#tradeGateButton,#tradeOperationStatus,#tradeGateNotice,"
-        "#tradeGateReasons,#gatewayReleaseStatus{display:none!important}"
+        "#tradeOperationStatus,#tradeGateNotice,#tradeGateReasons,"
+        "#gatewayReleaseStatus{display:none!important}"
     )
     assert hidden_css in INDEX
-    assert 'id="tradeGateButton"' in INDEX
+    assert "#tradeGateButton,#tradeOperationStatus" not in INDEX
+    assert (
+        '<button id="tradeGateButton" class="action danger" type="button" hidden>'
+        in INDEX
+    )
+    assert "tradeGateButton.hidden=!primaryP90Control;" in INDEX
     assert "P90 REAL v3 OWNER ARM" in INDEX
     assert "P90 PREARM cohort найден" not in INDEX
 

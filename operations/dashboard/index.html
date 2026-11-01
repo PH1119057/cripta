@@ -139,7 +139,7 @@
     .console-critical{border-color:#873f46;background:#30191e}.console-critical summary{color:#ffc2c2}
     .console-event-note{font-size:10px;padding:4px 2px}
     .console-gate #tradeGateButton{align-self:flex-start;font-size:12px;font-weight:700;padding:8px 13px}
-    #tradeGateButton,#tradeOperationStatus,#tradeGateNotice,#tradeGateReasons,#gatewayReleaseStatus{display:none!important}
+    #tradeOperationStatus,#tradeGateNotice,#tradeGateReasons,#gatewayReleaseStatus{display:none!important}
     #p90RealV3ArmDetail{font-size:10px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
     .console-gate .operation-status{font-size:11px;margin:0;padding:6px 8px;font-weight:600}
     .console-gate .observer-lock{font-size:11px;padding:6px 8px}
@@ -243,7 +243,7 @@
         </section>
         <section class="console-gate" aria-label="Управление шлюзом">
           <div class="console-header"><b>P90 REAL v3</b><small>Exact MAIN/SUB owner control</small></div>
-          <button id="tradeGateButton" class="action danger" type="button">Разрешить новые входы</button>
+          <button id="tradeGateButton" class="action danger" type="button" hidden>Разрешить новые входы</button>
           <div id="tradeOperationStatus" class="operation-status" aria-live="polite">Проверяю operational hard stops…</div>
           <button id="p90RealV3ArmButton" class="action danger" type="button" hidden disabled>P90 REAL v3 OWNER ARM</button>
           <div id="p90RealV3ArmStatus" class="operation-status" aria-live="polite">P90: проверяю exact MAIN/SUB scope…</div>
@@ -949,6 +949,7 @@ function refreshP90RealV3ArmControl(){
   else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='warn';message='Universal Entry observer сейчас не готов · OWNER ARM сначала выполнит автоматическую подготовку'}
   setOperationStatus(status,state,message);
   const primaryP90Control=cohort||armed||preparing||operationState==='BLOCKED';
+  tradeGateButton.hidden=!primaryP90Control;
   button.hidden=true;
   if(primaryP90Control&&!gateChanging){
     tradeGateButton.textContent=armed?'Закрыть P90 REAL v3':preparing?'Подготовка P90 REAL v3…':retryable?'Повторить подготовку P90':'Открыть P90 REAL v3';
