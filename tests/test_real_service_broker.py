@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -174,7 +175,7 @@ def test_request_deadline_prevents_late_second_start(
 def test_broker_main_isolates_peer_io_errors() -> None:
     source = broker.__file__
     assert source is not None
-    text = open(source, encoding="utf-8").read()
+    text = Path(source).read_text(encoding="utf-8")
     assert "except OSError:" in text
     assert "must not terminate the privileged broker process" in text
 
