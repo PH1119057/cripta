@@ -1,6 +1,6 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.5
+**Версия:** 3.6
 **Дата:** 2026-11-01
 **Статус:** верхний канонический архитектурный контракт
 
@@ -470,29 +470,50 @@ The full-contour diagnostic MUST:
   LIVE-arm, EntryExecutionRequest and reconciliation contracts;
 - have owner-fixed bounded risk independent of the production Strategy amount;
 - exclude its identity from P90 performance/research semantics;
-- retire its temporary diagnostic execution permission/LIVE-arm after Entry
-  dispatch or terminal failure;
-- fail closed on occupied symbol, stale account truth, closed gate, wrong
+- deterministically exercise both ordinary Universal Entry and Universal Exit;
+- retire its temporary diagnostic Entry permission/LIVE-arm and close the
+  global NEW-Entry gate after Entry dispatch or terminal Entry failure;
+- fail closed on occupied selected symbol, stale selected-account truth, wrong
   release, missing owner trigger or ambiguous Exchange mutation.
 
 OWNER DECISION 2026-11-01 — the full-contour diagnostic is the single explicit
-exception to ordinary dedicated-account exclusivity.  It is not a second normal
-REAL allocation and does not create a general shared-account mode.  Its exact
+exception to ordinary dedicated-account exclusivity. It is not a second normal
+REAL allocation and does not create a general shared-account mode. Its exact
 StrategyExecutionBinding uses allocation mode `SUBORDINATE_DIAGNOSTIC` and may
 share only the already dedicated TradingAccount of its exact parent P90 REAL v3
-Strategy.  The parent `DEDICATED_STRATEGY` binding must remain ACTIVE, and the
-parent permission plus release-bound generic/account OWNER ARM for the selected
-symbol must be active before the diagnostic trigger and remain valid through
-Entry dispatch.  The diagnostic keeps the same account-scoped capital,
-physical-slot, private-state and reconciliation owners; it receives no separate
-capital pool, netting right or fallback account.  Ordinary Strategies and
-generic shared-account execution remain governed by the dedicated isolation
-rule in TRADING_CONTOUR §7.3.
+Strategy. The parent `DEDICATED_STRATEGY` binding and StrategyActivation must
+remain ACTIVE so account ownership and route identity stay exact.
 
-Dashboard is control UI only: it MUST NOT synthesize StrategySignal,
-EntryDecision, EntryExecutionRequest or StrategyPosition rows.
+For deterministic diagnostic v2, the parent P90 execution permission and parent
+generic/account OWNER ARM are deliberately NOT prerequisites and remain OFF.
+The authenticated diagnostic owner action creates only the exact diagnostic
+permission plus release-bound generic/account arm for the selected symbol, then
+opens the global mainnet NEW-Entry gate LAST. This prevents unrelated autonomous
+P90 Entry while still exercising the real Execution path. Unrelated
+account-scoped faults on another TradingAccount do not block the selected
+diagnostic account; global faults and faults scoped to the selected account
+remain fail-closed.
 
-Current exact limits and v1 risk parameters are owned by TRADING_CONTOUR §4.8.2.
+Once the diagnostic EntryExecutionRequest is dispatched, its temporary Entry
+rights are retired and the global NEW-Entry gate is closed. Existing position
+ownership and Universal Exit are not disarmed by this transition. After the
+exact StrategyPosition is OPEN with confirmed initial protection, the diagnostic
+runtime may synthesize only one exact `OWNER_FULL_CONTOUR_EXIT_TRIGGER`
+ExitObservation. Universal Exit Engine remains the sole owner of the resulting
+ExitDecision; the ordinary Universal Exit consumer remains the sole owner of
+ExitExecutionRequest and real close dispatch. Direct Dashboard/control-plane
+creation of StrategySignal, EntryDecision, EntryExecutionRequest,
+StrategyPosition, ExitDecision, ExitExecutionRequest or trade command is
+forbidden.
+
+The diagnostic keeps the same account-scoped capital, physical-slot,
+private-state and reconciliation owners; it receives no separate capital pool,
+netting right or fallback account. Ordinary Strategies and generic
+shared-account execution remain governed by the dedicated isolation rule in
+TRADING_CONTOUR §7.3.
+
+Current exact limits and v2 trigger/Exit semantics are owned by
+TRADING_CONTOUR §4.8.2.
 
 ## 7.2 PAPER / REAL execution-mode invariant — OWNER DECISION 2026-10-06
 
