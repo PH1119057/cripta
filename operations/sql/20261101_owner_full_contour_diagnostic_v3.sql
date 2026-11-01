@@ -493,32 +493,7 @@ DECLARE
 BEGIN
   IF session_user <> 'cripta'
      OR current_setting('transaction_isolation') <> 'serializable'
-     OR p_release_commit !~ '^[0-9a-f]{40}REVOKE ALL ON FUNCTION
-  control.arm_owner_full_contour_account_scope(
-    text,text,text,text,text,text,text,text,text,text,timestamptz,text
-  ) FROM PUBLIC;
-REVOKE ALL ON FUNCTION
-  control.disarm_owner_full_contour_account_scope(text,timestamptz,text)
-  FROM PUBLIC;
-REVOKE ALL ON FUNCTION
-  control.recover_owner_full_contour_account_safety(text,text,text,timestamptz)
-  FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION
-  strategy_entry.register_owner_full_contour_binding(text,text,text)
-  TO cripta;
-GRANT EXECUTE ON FUNCTION
-  control.arm_owner_full_contour_account_scope(
-    text,text,text,text,text,text,text,text,text,text,timestamptz,text
-  ) TO cripta;
-GRANT EXECUTE ON FUNCTION
-  control.disarm_owner_full_contour_account_scope(text,timestamptz,text)
-  TO cripta;
-GRANT EXECUTE ON FUNCTION
-  control.recover_owner_full_contour_account_safety(text,text,text,timestamptz)
-  TO cripta;
-
-COMMIT;
-
+     OR p_release_commit !~ '^[0-9a-f]{40}$'
      OR p_recovered_at IS NULL
   THEN
     RAISE EXCEPTION 'OWNER_FULL_CONTOUR_ACCOUNT_RECOVERY_SCOPE_INVALID';
@@ -662,6 +637,9 @@ REVOKE ALL ON FUNCTION
 REVOKE ALL ON FUNCTION
   control.disarm_owner_full_contour_account_scope(text,timestamptz,text)
   FROM PUBLIC;
+REVOKE ALL ON FUNCTION
+  control.recover_owner_full_contour_account_safety(text,text,text,timestamptz)
+  FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION
   strategy_entry.register_owner_full_contour_binding(text,text,text)
   TO cripta;
@@ -671,6 +649,9 @@ GRANT EXECUTE ON FUNCTION
   ) TO cripta;
 GRANT EXECUTE ON FUNCTION
   control.disarm_owner_full_contour_account_scope(text,timestamptz,text)
+  TO cripta;
+GRANT EXECUTE ON FUNCTION
+  control.recover_owner_full_contour_account_safety(text,text,text,timestamptz)
   TO cripta;
 
 COMMIT;
