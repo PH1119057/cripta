@@ -19,7 +19,8 @@ from .dashboard_control import card_from_editable, strategy_authoring_template
 VERSION = "2.0-owner-full-contour-e2e-20261101"
 SOURCE = "owner-2026-11-01-full-contour-real-diagnostic-v2"
 RUNTIME_SOURCE = "owner_full_contour_real_diagnostic"
-TRIGGER_EVENT_KIND = "OWNER_FULL_CONTOUR_TRIGGER"\nEXIT_TRIGGER_EVENT_KIND = "OWNER_FULL_CONTOUR_EXIT_TRIGGER"
+TRIGGER_EVENT_KIND = "OWNER_FULL_CONTOUR_TRIGGER"
+EXIT_TRIGGER_EVENT_KIND = "OWNER_FULL_CONTOUR_EXIT_TRIGGER"
 
 MAIN_ID = "owner_full_contour_diag_main"
 SUB_ID = "owner_full_contour_diag_sub"
