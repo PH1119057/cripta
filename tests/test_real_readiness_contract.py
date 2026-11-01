@@ -11,7 +11,6 @@ from bybit_workbench.real_service_readiness import (
     plan_service_starts,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SHA = "a" * 40
 SUB = "ta-" + "1" * 32

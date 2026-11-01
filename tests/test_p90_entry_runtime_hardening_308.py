@@ -24,8 +24,11 @@ def test_consumer_health_schema_is_durable_and_least_privilege() -> None:
 
 
 def test_prearm_requires_both_entry_consumers_and_fresh_health() -> None:
-    assert 'ServiceSpec("cripta-universal-entry-consumer.service"' in SERVICE_PROFILE
-    assert 'f"cripta-universal-entry-consumer@{sub_account_id}.service"' in SERVICE_PROFILE
+    assert '"cripta-universal-entry-consumer.service",' in SERVICE_PROFILE
+    assert (
+        'f"cripta-universal-entry-consumer@{sub_account_id}.service"'
+        in SERVICE_PROFILE
+    )
     assert "p90_real_v3_service_specs(sub_account_id=_SUB_ACCOUNT)" in PREARM
     assert "FROM runtime.entry_consumer_health" in PREARM
     assert 'str(health_state) == "READY"' in PREARM

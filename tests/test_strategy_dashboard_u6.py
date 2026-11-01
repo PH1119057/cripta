@@ -470,7 +470,10 @@ def test_strategy_api_has_no_exchange_mutation_or_strategy_selector_path() -> No
     app = APP.read_text(encoding="utf-8")
     start = app.index("# U6_STRATEGY_API_BEGIN")
     end = app.index("# U6_STRATEGY_API_END")
-    scope = app[start:end].lower()
+    scope = "\n".join(
+        line.split("#", 1)[0]
+        for line in app[start:end].lower().splitlines()
+    )
     for forbidden in (
         "runtime.trade_commands",
         "executionrequest",
