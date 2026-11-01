@@ -632,26 +632,10 @@ def refresh_run_lifecycle(
                         "OWNER_DIAGNOSTIC_POSITION_OPEN_WAITING_PROTECTION:"
                         + position_id
                     )
-                try:
-                    return _force_diagnostic_exit(
-                        connection,
-                        run_id=run_id,
-                        strategy_position_id=position_id,
-                        now=now,
-                    )
-                except (RuntimeError, ValueError, KeyError) as exc:
-                    set_run_state(
-                        connection,
-                        run_id=run_id,
-                        state="RECONCILIATION_REQUIRED",
-                        now=now,
-                        lineage={"strategy_position_id": position_id},
-                        error=(
-                            "OWNER_FULL_CONTOUR_FORCED_EXIT_FAILED:"
-                            + f"{type(exc).__name__}:{exc}"
-                        ),
-                    )
-                    return "OWNER_DIAGNOSTIC_RECONCILIATION_REQUIRED"
+                return (
+                    "OWNER_DIAGNOSTIC_POSITION_OPEN_WAITING_EXIT_THRESHOLD:"
+                    + position_id
+                )
             if position_state == "RECONCILIATION_REQUIRED":
                 set_run_state(
                     connection, run_id=run_id,
