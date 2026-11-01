@@ -53,6 +53,7 @@ def test_broker_systemd_unit_is_root_but_narrowly_sandboxed():
     assert "RestrictAddressFamilies=AF_UNIX" in unit
     assert "ReadWritePaths=/run/cripta-real-readiness" in unit
     assert "ProtectSystem=strict" in unit
+    assert "InaccessiblePaths=/etc/cripta/credentials" in unit
     assert (
         "ExecStart=/usr/bin/python3 "
         "/usr/local/libexec/cripta-real-service-broker/real_service_broker.py"
