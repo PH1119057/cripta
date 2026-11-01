@@ -17,6 +17,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
+from bybit_workbench.real_service_profiles import p90_real_v3_service_specs
+
 from bybit_workbench.live_arm_readiness import (
     evaluate_live_arm,
     scope_for_check,
@@ -52,17 +54,9 @@ _MAIN_ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
 _SUB_ACCOUNT = "ta-853ac5fcd58185697396d33cd57459fa"
 _ACCOUNT_BY_STRATEGY = {MAIN_ID: _MAIN_ACCOUNT, SUB_ID: _SUB_ACCOUNT}
 _EVIDENCE_SOURCE = "p90l90-real-v3:technical-prearm-evidence"
-_SERVICE_UNITS = (
-    "cripta-private-runtime.service",
-    f"cripta-private-runtime@{_SUB_ACCOUNT}.service",
-    "cripta-universal-entry-consumer.service",
-    f"cripta-universal-entry-consumer@{_SUB_ACCOUNT}.service",
-    "cripta-lifecycle-supervisor.service",
-    f"cripta-lifecycle-account@{_SUB_ACCOUNT}.service",
-    "cripta-position-supervisor.service",
-    f"cripta-account-position@{_SUB_ACCOUNT}.service",
-    "cripta-dashboard.service",
-)
+_SERVICE_UNITS = tuple(
+    spec.unit for spec in p90_real_v3_service_specs(sub_account_id=_SUB_ACCOUNT)
+) + ("cripta-dashboard.service",)
 
 
 class P90PrearmEvidenceBlocked(ValueError):
