@@ -370,6 +370,25 @@ def prepare_p90l90_real_v3_prearm_evidence(
         "source-only observer not exact/fresh",
     )
 
+    exit_owner = _read_json(
+        Path("/var/lib/cripta/universal_exit_shadow/status.json"),
+        "Universal Exit owner status",
+    )
+    exit_checked_at = datetime.now(UTC)
+    exit_observed_at = datetime.fromisoformat(
+        str(exit_owner.get("observed_at") or "")
+    )
+    _require(exit_observed_at.tzinfo is not None, "Exit owner timestamp invalid")
+    _require(
+        exit_owner.get("state") == "RUNNING"
+        and exit_owner.get("execution_rights") == "NONE"
+        and int(str(exit_owner.get("blocked_count") or 0)) == 0
+        and 0
+        <= (exit_checked_at - exit_observed_at.astimezone(UTC)).total_seconds()
+        <= 10,
+        "Universal Exit owner not exact/fresh",
+    )
+
     main_lifecycle = _read_json(
         Path("/var/lib/cripta/lifecycle_supervisor/status.json"),
         "MAIN Lifecycle status",
