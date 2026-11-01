@@ -16,22 +16,48 @@ class Rows:
 
 
 class FakeConnection:
-    def __init__(self, strategy_ids, bindings):
+    def __init__(self, strategy_ids, bindings, strategy_identity=None):
         self.strategy_ids = strategy_ids
         self.bindings = bindings
+        self.strategy_identity = strategy_identity or {}
         self.queries = []
 
     def execute(self, sql, params=()):
         self.queries.append((sql, tuple(params)))
         if "FROM strategy_entry.strategy_activations" in sql:
-            return Rows([(s,) for s in self.strategy_ids])
+            return Rows([
+                (
+                    activation,
+                    self.strategy_identity.get(activation, ("ordinary_strategy", "v1"))[0],
+                    self.strategy_identity.get(activation, ("ordinary_strategy", "v1"))[1],
+                )
+                for activation in self.strategy_ids
+            ])
         if "FROM strategy_entry.strategy_execution_bindings" in sql:
             return Rows(self.bindings)
         raise AssertionError(sql)
 
 
-def binding(key, strategy, account, leg="PRIMARY"):
-    return (key, strategy, account, leg, "DEDICATED_STRATEGY", "ACTIVE")
+def binding(
+    key,
+    strategy,
+    account,
+    leg="PRIMARY",
+    *,
+    allocation_mode="DEDICATED_STRATEGY",
+    strategy_id="ordinary_strategy",
+    strategy_version="v1",
+):
+    return (
+        key,
+        strategy,
+        account,
+        leg,
+        allocation_mode,
+        "ACTIVE",
+        strategy_id,
+        strategy_version,
+    )
 
 
 def test_db_snapshot_one_strategy_multiple_accounts():
@@ -65,6 +91,36 @@ def test_db_snapshot_shared_account_is_blocked():
     ), now=NOW)
     assert not result.ready
     assert "TRADING_ACCOUNT_SHARED_BY_STRATEGIES" in result.reasons
+
+
+
+
+
+def test_exact_owner_diagnostic_is_excluded_from_ordinary_binding_readiness():
+    diagnostic_activation = "activation-owner-full-contour-main-20261101"
+    db = FakeConnection(
+        ["activation-1", diagnostic_activation],
+        [
+            binding("b-1", "activation-1", "shared"),
+            binding(
+                "binding-owner-full-contour-main-20261101",
+                diagnostic_activation,
+                "shared",
+                allocation_mode="SUBORDINATE_DIAGNOSTIC",
+                strategy_id="owner_full_contour_diag_main",
+                strategy_version="1.0-owner-full-contour-20261101",
+            ),
+        ],
+        strategy_identity={
+            diagnostic_activation: (
+                "owner_full_contour_diag_main",
+                "1.0-owner-full-contour-20261101",
+            )
+        },
+    )
+    result = read_binding_readiness(db, now=NOW)
+    assert result.ready
+    assert result.strategy_accounts == {"activation-1": ("shared",)}
 
 
 def test_requires_absolute_evaluation_instant():
