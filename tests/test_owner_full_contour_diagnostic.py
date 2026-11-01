@@ -38,8 +38,11 @@ ENTRY_CONSUMER = (
 OBSERVER = (
     ROOT / "operations/monitoring/universal_entry_shadow.py"
 ).read_text(encoding="utf-8")
-MIGRATION = (
+MIGRATION_V1 = (
     ROOT / "operations/sql/20261101_owner_full_contour_diagnostic.sql"
+).read_text(encoding="utf-8")
+MIGRATION = (
+    ROOT / "operations/sql/20261101_owner_full_contour_diagnostic_v2.sql"
 ).read_text(encoding="utf-8")
 SUBORDINATE_MIGRATION = (
     ROOT / "operations/sql/20261101_subordinate_diagnostic_binding.sql"
@@ -104,7 +107,7 @@ def _position(exit_plan, direction: TradeDirection = TradeDirection.LONG):
         actual_avg_fill=Decimal("100"),
         actual_qty=Decimal("0.1"),
         fill_at=datetime(2026, 11, 1, tzinfo=UTC),
-        strategy_execution_binding_id="binding-owner-full-contour-main-20261101",
+        strategy_execution_binding_id=diagnostic.MAIN_BINDING_ID,
         execution_leg="PRIMARY",
         trading_account_id=diagnostic.MAIN_ACCOUNT_ID,
         identity_status="PROVEN",
@@ -165,6 +168,32 @@ def test_diagnostic_exit_rules_use_exact_half_percent_close() -> None:
     assert sl.decision.action_kind is ExitActionKind.CLOSE
 
 
+def test_diagnostic_forced_exit_rule_closes_immediately_through_exit_engine() -> None:
+    _card, _activation, _entry, exit_plan = _main_bundle()
+    position = _position(exit_plan)
+    now = datetime(2026, 11, 1, tzinfo=UTC)
+    observation = ExitObservation(
+        observation_id="diag-forced-exit",
+        strategy_position_id=position.strategy_position_id,
+        symbol=position.symbol,
+        event_at=now,
+        observed_at=now,
+        received_at=now,
+        event_kind=diagnostic.EXIT_TRIGGER_EVENT_KIND,
+        attributes=FrozenPolicy.from_mapping({}),
+        source_refs=("test:owner-full-contour-forced-exit",),
+    )
+    evaluation = UniversalExitEngine().evaluate(position, exit_plan, observation)
+    assert evaluation.status is ExitEvaluationStatus.DECISION_CREATED
+    assert evaluation.decision is not None
+    assert evaluation.decision.rule_id == "OWNER_DIAGNOSTIC_FORCE_CLOSE"
+    assert evaluation.decision.action_kind is ExitActionKind.CLOSE
+    assert evaluation.decision.requested_mutation.to_dict() == {
+        "quantity": "ALL",
+        "order_type": "MARKET",
+    }
+
+
 def test_diagnostic_exchange_validator_is_exact_and_rejects_drift() -> None:
     payload = {
         "source": "universal_entry",
@@ -173,7 +202,7 @@ def test_diagnostic_exchange_validator_is_exact_and_rejects_drift() -> None:
         "trading_account_id": diagnostic.MAIN_ACCOUNT_ID,
         "capital_reservation_id": "reservation-1",
         "exchange_position_slot_claim_id": "slot-1",
-        "strategy_execution_binding_id": "binding-owner-full-contour-main-20261101",
+        "strategy_execution_binding_id": diagnostic.MAIN_BINDING_ID,
         "entry_plan_fingerprint": "e" * 64,
         "exit_plan_fingerprint": "x" * 64,
         "stake_usdt": "10",
@@ -251,10 +280,10 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
     assert "Сквозной LONG" in INDEX
     assert "Сквозной SHORT" in INDEX
     assert "/api/owner-full-contour-diagnostic" in INDEX
-    assert "owner_full_contour_one_active_run" in MIGRATION
-    assert "'REQUESTED','MATERIALIZED','DISPATCHED','POSITION_OPEN'" in MIGRATION
-    assert "OWNER_FULL_CONTOUR_REGISTRATION_REQUIRES_DISARMED_STATE" in MIGRATION
-    assert "OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_NOT_ACTIVE" in MIGRATION
+    assert "owner_full_contour_one_active_run" in MIGRATION_V1
+    assert "'REQUESTED','MATERIALIZED','DISPATCHED','POSITION_OPEN'" in MIGRATION_V1
+    assert "OWNER_FULL_CONTOUR_V2_REGISTRATION_REQUIRES_IDLE_DISARMED_STATE" in MIGRATION
+    assert "OWNER_FULL_CONTOUR_PARENT_P90_RIGHTS_MUST_BE_OFF" in MIGRATION
     account_insert = MIGRATION[MIGRATION.index(
         "INSERT INTO control.account_live_arm_sessions("
     ):]
@@ -267,10 +296,27 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
 
 
 def test_diagnostic_migration_ends_at_single_transaction_commit() -> None:
-    stripped = MIGRATION.rstrip()
-    assert stripped.endswith("COMMIT;")
-    assert stripped.count("\nCOMMIT;") == 1
-    assert "COMMIT;\n\n     OR p_symbol NOT IN" not in stripped
+    for migration in (MIGRATION_V1, MIGRATION):
+        stripped = migration.rstrip()
+        assert stripped.endswith("COMMIT;")
+        assert stripped.count("\nCOMMIT;") == 1
+        assert "COMMIT;\n\n     OR p_symbol NOT IN" not in stripped
+
+
+def test_v2_control_owns_bounded_entry_window_without_parent_p90_arm() -> None:
+    source = Path(
+        ROOT / "src/bybit_workbench/universal_entry/owner_full_contour_control.py"
+    ).read_text(encoding="utf-8")
+    assert "OWNER_FULL_CONTOUR_MAINNET_GATE_MUST_START_CLOSED" in source
+    assert "OWNER_FULL_CONTOUR_PARENT_P90_PERMISSION_MUST_BE_OFF" in source
+    assert "OWNER_FULL_CONTOUR_PARENT_P90_ARM_MUST_BE_OFF" in source
+    assert "OWNER_FULL_CONTOUR_PARENT_P90_ACCOUNT_ARM_MUST_BE_OFF" in source
+    assert "owner full-contour diagnostic Entry window" in source
+    assert "SET enabled=1" in source
+    assert "SET enabled=0" in source
+    assert "global NEW-Entry gate" in (
+        ROOT / "docs/TRADING_CONTOUR_RU.md"
+    ).read_text(encoding="utf-8")
 
 
 def test_subordinate_binding_mode_is_exact_diagnostic_exception() -> None:
@@ -309,33 +355,39 @@ def test_subordinate_schema_preserves_dedicated_exclusivity() -> None:
     assert "'SUBORDINATE_DIAGNOSTIC','ACTIVE'" in MIGRATION
     assert "OWNER_FULL_CONTOUR_PARENT_P90_BINDING_NOT_ACTIVE" in MIGRATION
     assert "b.allocation_mode='SUBORDINATE_DIAGNOSTIC'" in MIGRATION
+    assert "OWNER_FULL_CONTOUR_PARENT_P90_RIGHTS_MUST_BE_OFF" in MIGRATION
 
 
 def test_subordinate_mode_is_rechecked_in_real_admission_and_dispatch() -> None:
     assert "real_binding_allocation_allowed(" in ENTRY_ADMISSION
     assert "real_binding_allocation_allowed(" in ACCOUNT_ARM
     assert "real_binding_allocation_allowed(" in ENTRY_CONSUMER
-    assert "require_parent_p90_owner_scope(" in OWNER_RUNTIME
-    assert "require_parent_p90_owner_scope(" in ENTRY_CONSUMER
+    assert "require_parent_p90_diagnostic_scope(" in OWNER_RUNTIME
+    assert "require_parent_p90_diagnostic_scope(" in ENTRY_CONSUMER
+    assert "PostgresExitShadowStore" in OWNER_RUNTIME
+    assert "OWNER_DIAGNOSTIC_FORCE_CLOSE" in OWNER_RUNTIME
 
 
 def test_verified_release_registers_and_readbacks_diagnostic_capability() -> None:
     migration = "operations/sql/20261101_owner_full_contour_diagnostic.sql"
     subordinate = "operations/sql/20261101_subordinate_diagnostic_binding.sql"
+    migration_v2 = "operations/sql/20261101_owner_full_contour_diagnostic_v2.sql"
     installer = (
         "operations/implementation/install_owner_full_contour_diagnostic.py"
     )
     assert migration in RELEASE_INSTALLER
     assert subordinate in RELEASE_INSTALLER
+    assert migration_v2 in RELEASE_INSTALLER
     migration_pos = RELEASE_INSTALLER.index(migration)
     subordinate_pos = RELEASE_INSTALLER.index(subordinate)
+    migration_v2_pos = RELEASE_INSTALLER.index(migration_v2)
     install_call = RELEASE_INSTALLER.index(
         f"$runtime_release/{installer}\" install"
     )
     check_call = RELEASE_INSTALLER.index(
         f"$runtime_release/{installer}\" check"
     )
-    assert migration_pos < subordinate_pos < install_call < check_call
+    assert migration_pos < subordinate_pos < migration_v2_pos < install_call < check_call
     assert "runuser -u cripta" in RELEASE_INSTALLER[
         RELEASE_INSTALLER.rfind("runuser -u cripta", 0, install_call):install_call
     ]
@@ -380,6 +432,8 @@ class _RetireDictRowConnection:
             return _Cursor({"active_count": 1})
         if "SELECT control.disarm_owner_full_contour_account_scope" in statement:
             return _Cursor((control.account_session_id("owner-fc-test"),))
+        if "SELECT enabled FROM control.execution_gates" in statement:
+            return _Cursor({"enabled": True})
         return _Cursor(None)
 
 
@@ -395,3 +449,5 @@ def test_retire_entry_rights_handles_dict_row_and_disarms_account_scope() -> Non
     assert "UPDATE strategy_entry.execution_permissions" in sql
     assert "UPDATE control.live_arm_sessions" in sql
     assert "SELECT control.disarm_owner_full_contour_account_scope" in sql
+    assert "UPDATE control.execution_gates" in sql
+    assert "owner full-contour diagnostic Entry window closed" in sql
