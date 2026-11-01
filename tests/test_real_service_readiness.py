@@ -87,6 +87,16 @@ def test_active_missing_release_proof_blocks():
     assert result.blockers == (f"SERVICE_RELEASE_UNVERIFIED:{unit}",)
 
 
+def test_inactive_missing_release_proof_blocks_without_start():
+    unit = "cripta-entry.service"
+    result = plan(
+        [ServiceSpec(unit, (), True)],
+        {unit: snap(unit, UnitState.INACTIVE, sha=None)},
+    )
+    assert result.starts == ()
+    assert result.blockers == (f"SERVICE_RELEASE_UNVERIFIED:{unit}",)
+
+
 def test_unknown_or_missing_service_block():
     specs = [ServiceSpec("cripta-entry.service")]
     with pytest.raises(ServiceReadinessError, match="SERVICE_SNAPSHOT_INCOMPLETE"):
