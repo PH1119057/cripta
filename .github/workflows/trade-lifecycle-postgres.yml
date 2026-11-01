@@ -92,6 +92,7 @@ jobs:
             operations/sql/20261029_p90l90_real_source_epochs.sql
             operations/sql/20261101_owner_full_contour_diagnostic.sql
             operations/sql/20261101_subordinate_diagnostic_binding.sql
+            operations/sql/20261101_owner_full_contour_diagnostic_v2.sql
           )
           for migration in "${migrations[@]}"; do
             if [[ "$migration" == "operations/sql/20261026_account_scoped_physical_key_cutover.sql" ]]; then
