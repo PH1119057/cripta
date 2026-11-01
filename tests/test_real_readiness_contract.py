@@ -1,4 +1,8 @@
 from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
 
 from bybit_workbench.real_service_profiles import p90_real_v3_service_specs
 from bybit_workbench.real_service_readiness import (
@@ -102,3 +106,36 @@ def test_dashboard_contains_persistent_friendly_preparation_states():
     assert "запускаем недостающие службы" in ui
     assert "подготовка заблокирована" in ui
     assert "mainnet gate CLOSED" in ui
+
+def test_verified_release_shell_syntax() -> None:
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash is not available on this runner")
+    subprocess.run(
+        [bash, "-n", str(ROOT / "operations/infrastructure/install_verified_release.sh")],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_dashboard_inline_javascript_parses() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available on this runner")
+    html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
+    assert html.count("<script>") == 1
+    assert html.count("</script>") == 1
+    script = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    probe = ROOT / ".pytest-dashboard-inline-syntax.js"
+    try:
+        probe.write_text(script, encoding="utf-8")
+        subprocess.run(
+            [node, "--check", str(probe)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        probe.unlink(missing_ok=True)
+
