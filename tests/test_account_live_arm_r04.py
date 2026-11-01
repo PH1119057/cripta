@@ -33,7 +33,7 @@ class DB:
         self.queries.append((sql, params))
         if "to_regclass" in sql:
             return Cursor([("control.account_live_arm_sessions",)] if self.exists else [(None,)])
-        return Cursor([("owner-armed-session",)] if self.active else [])
+        return Cursor([("owner-armed-session", "DEDICATED_STRATEGY")] if self.active else [])
 
 
 def check(
