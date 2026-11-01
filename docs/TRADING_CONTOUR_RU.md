@@ -1230,6 +1230,67 @@ The run is diagnostic evidence, not P90 performance. P90 hard-stop counters,
 PnL/win-rate, research datasets, SECOND48 and Strategy-specific analytics MUST
 exclude this diagnostic identity. Exchange fees and actual fill/close evidence
 remain durable operational evidence.
+### 4.8.3 Owner full-contour diagnostic v3 — OWNER DECISION 2026-11-01
+
+Владелец утвердил v3 как current contract для **новых** full-contour REAL
+diagnostic runs. V1/v2 остаются immutable historical Strategy versions и не
+переписываются.
+
+V3 сохраняет exact owner trigger, 10 USDT, 1x, MARKET, ONE_WAY/positionIdx=0,
+`SUBORDINATE_DIAGNOSTIC`, exact parent P90 TradingAccount и исключение из P90
+performance/research, но меняет bounded diagnostic protection/Exit contract:
+
+```text
+strategy version       = 3.0-owner-full-contour-e2e-20261101
+initial Exchange stop  = -0.2% from actual executed average Entry
+ordinary diagnostic TP = +0.2% from actual executed average Entry
+ordinary diagnostic SL = -0.2% from actual executed average Entry
+automatic post-OPEN OWNER_FULL_CONTOUR_EXIT_TRIGGER = disabled
+owner forced close     = explicit emergency/operator action only
+```
+
+Цель v3 — не закрывать позицию немедленно после fill, а дать реальной позиции
+пройти обычный production Position/Universal Exit lifecycle. После подтверждения
+initial Exchange-resident protection diagnostic остаётся `POSITION_OPEN` и ждёт
+обычного ExitPlan threshold. `+0.2%` должен закрываться через ordinary Universal
+Exit -> ExitExecutionRequest -> Execution -> MARKET close. При достижении
+Exchange-resident `-0.2%` защита может закрыть позицию раньше Universal Exit;
+такой исход является доказательством protection/reconciliation path, но не
+доказательством ordinary Universal Exit success.
+
+До открытия global NEW-Entry gate v3 ОБЯЗАН иметь свежий signed account-mode
+proof из exact COMPLETE `AccountStateGeneration` того же TradingAccount /
+AccountConnector:
+- signed `/v5/account/info` read status = PASS;
+- proof age <= 15 seconds;
+- `marginMode = ISOLATED_MARGIN`;
+- `unifiedMarginStatus` входит в `{3,4,5,6}`.
+
+Если proof отсутствует/stale/rejected либо account mode не соответствует
+contract, authenticated owner request завершается stable fail-closed reason
+**до** создания diagnostic run/permission/arm и до открытия mainnet gate.
+
+Предыдущий diagnostic pre-mutation failure может оставить account-scoped
+`PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED`. V3 разрешает его снятие только
+внутри exact authenticated owner-control transaction через отдельный
+SECURITY DEFINER contract и только если одновременно доказаны:
+- exact approved diagnostic TradingAccount/AccountConnector;
+- mainnet gate CLOSED, enabled execution permissions = 0, active generic/account
+  arms = 0, active diagnostic runs = 0;
+- latest COMPLETE account generation fresh <= 15 seconds, signed account-mode
+  proof PASS и соответствует `ISOLATED_MARGIN`;
+- account flat: positions_count=0, active_orders_count=0;
+- нет OPEN CRITICAL lifecycle fault для exact account;
+- latest diagnostic failure этого account был
+  `PRE_MUTATION_SAFETY_BLOCK:*`, имел no `StrategyPosition`, а его Entry command
+  terminal FAILED без ambiguous/reconciliation outcome.
+
+Runtime actor `cripta` не получает table-wide DELETE на
+`runtime.account_entry_safety_blocks`; generic или unrelated safety latch
+автоматически не очищается.
+
+Новый v3 run по-прежнему начинается только explicit authenticated owner click.
+Assistant/server maintenance action не подменяет owner trigger.
 
 ## 4.9 PAPER / REAL execution mode — OWNER DECISION 2026-10-06
 
