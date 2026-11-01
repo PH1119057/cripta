@@ -50,10 +50,18 @@ from bybit_workbench.universal_entry.owner_full_contour_runtime import (
     materialize_requested_run,
     refresh_run_lifecycle,
 )
-from bybit_workbench.universal_entry.runtime_loader import MappingSequenceRow
 
 CURRENT_ACCOUNT_REF = "BYBIT:UNIFIED"
 CURRENT_POSITION_IDX = 0
+
+
+class MappingSequenceRow(dict[str, object]):
+    """Mapping row with legacy positional access for the Universal Entry call graph."""
+
+    def __getitem__(self, key: str | int | slice) -> object:
+        if isinstance(key, (int, slice)):
+            return tuple(self.values())[key]
+        return super().__getitem__(key)
 
 
 def mapping_sequence_row(cursor: Any) -> Any:
