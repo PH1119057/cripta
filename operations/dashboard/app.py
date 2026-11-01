@@ -5550,11 +5550,15 @@ def _u6_prepare_p90_real_v3_readiness(
                 )
             ) or {}
     except (ServiceBrokerClientError, OSError) as exc:
+        progress: dict[str, object] = {}
+        if isinstance(exc, ServiceBrokerClientError) and exc.response is not None:
+            progress["broker"] = exc.response
         return _mark_p90_readiness_blocked(
             request_id=request_id,
             code="SERVICE_RECOVERY_FAILED",
             detail=str(exc),
             retry_eligible=True,
+            progress=progress,
         )
     except ServiceReadinessError as exc:
         return _mark_p90_readiness_blocked(
