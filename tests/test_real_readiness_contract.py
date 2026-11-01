@@ -21,8 +21,9 @@ CONNECTOR = "ac-" + "2" * 32
 def test_p90_profile_is_first_consumer_of_generic_service_contract():
     specs = p90_real_v3_service_specs(sub_account_id=SUB)
     names = {item.unit for item in specs}
-    assert len(specs) == 10
+    assert len(specs) == 11
     assert "cripta-universal-exit-consumer.service" in names
+    assert "cripta-universal-exit-shadow.service" in names
     assert f"cripta-lifecycle-account@{SUB}.service" in names
     assert f"cripta-account-position@{SUB}.service" in names
     assert "cripta-dashboard.service" not in names
