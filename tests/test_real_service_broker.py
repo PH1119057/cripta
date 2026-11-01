@@ -64,7 +64,7 @@ def test_request_rejects_unapproved_unit_before_systemctl(
 ):
     called = False
 
-    def show(_unit: str) -> dict[str, str]:
+    def show(_unit: str, **_kwargs: object) -> dict[str, str]:
         nonlocal called
         called = True
         return {"LoadState": "loaded", "ActiveState": "inactive", "FragmentPath": "/x"}
@@ -80,7 +80,7 @@ def test_active_unit_is_never_restarted(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         broker,
         "_systemctl_show",
-        lambda _unit: {
+        lambda _unit, **_kwargs: {
             "LoadState": "loaded",
             "ActiveState": "active",
             "FragmentPath": "/etc/systemd/system/x.service",
@@ -89,7 +89,9 @@ def test_active_unit_is_never_restarted(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         broker,
         "_start_unit",
-        lambda _unit: (_ for _ in ()).throw(AssertionError("must not start")),
+        lambda _unit, **_kwargs: (
+            _ for _ in ()
+        ).throw(AssertionError("must not start")),
     )
     result = broker.handle_request(request("cripta-private-runtime.service"))
     assert result["ok"] is True
@@ -112,7 +114,7 @@ def test_failed_or_activating_state_blocks_all_starts(
         "cripta-universal-entry-consumer.service": "failed",
     }
 
-    def show(unit: str) -> dict[str, str]:
+    def show(unit: str, **_kwargs: object) -> dict[str, str]:
         return {
             "LoadState": "loaded",
             "ActiveState": states[unit],
@@ -123,7 +125,9 @@ def test_failed_or_activating_state_blocks_all_starts(
     monkeypatch.setattr(
         broker,
         "_start_unit",
-        lambda _unit: (_ for _ in ()).throw(AssertionError("preflight must block")),
+        lambda _unit, **_kwargs: (
+            _ for _ in ()
+        ).throw(AssertionError("preflight must block")),
     )
     with pytest.raises(broker.BrokerError, match="SERVICE_NOT_RECOVERABLE"):
         broker.handle_request(
@@ -145,13 +149,16 @@ def test_inactive_unit_uses_exact_systemctl_argv(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         broker,
         "_systemctl_show",
-        lambda _unit: {
+        lambda _unit, **_kwargs: {
             "LoadState": "loaded",
             "ActiveState": "active",
             "FragmentPath": "/etc/systemd/system/x.service",
         },
     )
-    ok, _detail = broker._start_unit("cripta-private-runtime.service")
+    ok, _detail = broker._start_unit(
+        "cripta-private-runtime.service",
+        deadline=broker.time.monotonic() + 10,
+    )
     assert ok
     assert calls == [
         (
@@ -168,7 +175,7 @@ def test_request_deadline_prevents_late_second_start(
     monkeypatch.setattr(
         broker,
         "_systemctl_show",
-        lambda unit: {
+        lambda unit, **_kwargs: {
             "LoadState": "loaded",
             "ActiveState": "inactive",
             "FragmentPath": "/etc/systemd/system/" + unit,
@@ -176,7 +183,7 @@ def test_request_deadline_prevents_late_second_start(
     )
     starts: list[str] = []
 
-    def start(unit: str) -> tuple[bool, str]:
+    def start(unit: str, **_kwargs: object) -> tuple[bool, str]:
         starts.append(unit)
         return True, "active"
 
