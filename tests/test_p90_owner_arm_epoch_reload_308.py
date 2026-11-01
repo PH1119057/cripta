@@ -50,8 +50,9 @@ def test_owner_diagnostic_gate_keeps_parent_p90_source_only_epoch_stable() -> No
 
 
 def test_source_only_guards_use_same_diagnostic_compatibility_predicate() -> None:
-    assert OBSERVER.count("_p90_source_only_gate_compatible(") >= 3
+    assert OBSERVER.count("_p90_source_only_gate_compatible(") >= 2
     assert "OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON" in OBSERVER
+    assert "elif not gate_enabled and not selected:" in OBSERVER
 
 
 def test_exact_owner_arm_stage_is_clean_epoch_reload_not_runtime_fault() -> None:
