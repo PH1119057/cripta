@@ -207,6 +207,7 @@ def _reply(connection: socket.socket, payload: dict[str, Any]) -> None:
 
 
 def _serve_client(connection: socket.socket, allowed_uid: int) -> None:
+    connection.settimeout(5.0)
     if _peer_uid(connection) != allowed_uid:
         _reply(connection, {"ok": False, "error": "PEER_NOT_ALLOWED"})
         return
