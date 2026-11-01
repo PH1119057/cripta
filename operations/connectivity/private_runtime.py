@@ -711,15 +711,17 @@ def entry_runtime_readiness(
     gate = connection.execute(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
     ).fetchone()
-    if not gate or not bool(gate[0]):
-        if not (
+    if (
+        (not gate or not bool(gate[0]))
+        and not (
             command_id
             and _dispatched_owner_diagnostic_allows_closed_gate(
                 connection,
                 command_id=command_id,
             )
-        ):
-            return False, "NEW_ENTRY_GATE_DISARMED"
+        )
+    ):
+        return False, "NEW_ENTRY_GATE_DISARMED"
     private = status.get("private", {})
     if not isinstance(private, dict) or private.get("state") != "connected":
         return False, "PRIVATE_WS_NOT_CONNECTED"
