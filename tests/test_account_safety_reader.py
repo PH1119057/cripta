@@ -69,3 +69,53 @@ def test_wrong_wallet_type_is_not_private_account_proof() -> None:
 def test_incomplete_wallet_rejected() -> None:
     with pytest.raises(RuntimeError, match="WALLET_SCOPE_AMBIGUOUS"):
         validate_wallet({"retCode": 0, "result": {"list": []}})
+
+
+def test_isolated_unified_wallet_uses_exact_usdt_coin_scope() -> None:
+    equity, available, wallet = validate_wallet({
+        "retCode": 0,
+        "result": {"list": [{
+            "accountType": "UNIFIED",
+            "totalEquity": "",
+            "totalAvailableBalance": "",
+            "totalWalletBalance": "",
+            "coin": [{
+                "coin": "USDT",
+                "equity": "20.5",
+                "walletBalance": "20",
+                "totalOrderIM": "1.25",
+                "totalPositionIM": "2.5",
+                "locked": "0.25",
+            }],
+        }]},
+    })
+    assert equity == 20.5
+    assert wallet == 20
+    assert available == 16
+
+
+def test_isolated_wallet_scope_stays_fail_closed_when_ambiguous() -> None:
+    with pytest.raises(RuntimeError, match="WALLET_SCOPE_MIXED"):
+        validate_wallet({
+            "retCode": 0,
+            "result": {"list": [{
+                "accountType": "UNIFIED",
+                "totalEquity": "20",
+                "totalAvailableBalance": "",
+                "totalWalletBalance": "",
+            }]},
+        })
+    with pytest.raises(RuntimeError, match="ISOLATED_USDT_AMBIGUOUS"):
+        validate_wallet({
+            "retCode": 0,
+            "result": {"list": [{
+                "accountType": "UNIFIED",
+                "totalEquity": "",
+                "totalAvailableBalance": "",
+                "totalWalletBalance": "",
+                "coin": [
+                    {"coin": "USDT", "equity": "20", "walletBalance": "20"},
+                    {"coin": "USDT", "equity": "20", "walletBalance": "20"},
+                ],
+            }]},
+        })
