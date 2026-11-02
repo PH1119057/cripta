@@ -1862,6 +1862,121 @@ class LifecycleSupervisor:
             return None
         return reservation_reason
 
+    def _verified_closed_physical_slot_recovery(
+        self,
+        exact_ids: Mapping[str, object],
+        now: datetime,
+    ) -> str | None:
+        """Resolve only a proven-closed, exact physical-slot ownership fault.
+
+        Exchange exposure is the independently authenticated account-local
+        inventory (None means no proof). Historical ownership is never erased.
+        """
+        account_id = self._trading_account_id
+        claim_ids = exact_ids.get("exchange_position_slot_claim_ids")
+        symbol = exact_ids.get("symbol")
+        idx = exact_ids.get("position_idx")
+        if (
+            not account_id
+            or exact_ids.get("fault_scope_kind") != "ACCOUNT"
+            or exact_ids.get("trading_account_id") != account_id
+            or not isinstance(symbol, str)
+            or not symbol
+            or type(idx) is not int
+            or idx not in (0, 1, 2)
+            or not isinstance(claim_ids, list)
+            or len(claim_ids) != 1
+            or not isinstance(claim_ids[0], str)
+            or not claim_ids[0]
+            or self._exchange_exposure is None
+        ):
+            return None
+
+        # Verified exposure includes all current slots of this exact account.
+        # Invalid/cross-account rows cannot certify absence.
+        for item in self._exchange_exposure:
+            if (
+                item.get("account_identity_binding") != "VERIFIED"
+                or item.get("trading_account_id") != account_id
+                or not isinstance(item.get("symbol"), str)
+                or type(item.get("position_idx")) is not int
+            ):
+                return None
+            if item["symbol"] == symbol and item["position_idx"] == idx:
+                return None
+
+        row = self._connection.execute(
+            """SELECT s.claim_state,s.release_reason,s.released_at,
+                      p.state AS position_state,p.closed_at,p.close_link_status,
+                      g.completed_at AS generation_completed_at
+                 FROM runtime.exchange_position_slot_claims s
+                 JOIN runtime.position_ownership p
+                   ON p.exchange_position_slot_claim_id=
+                      s.exchange_position_slot_claim_id
+                  AND p.position_id=s.strategy_position_id
+                  AND p.trading_account_id=s.trading_account_id
+                  AND p.symbol=s.symbol AND p.position_idx=s.position_idx
+                  AND p.identity_status='PROVEN'
+                 JOIN LATERAL (
+                     SELECT completed_at
+                       FROM runtime.account_state_generations
+                      WHERE trading_account_id=s.trading_account_id
+                        AND identity_status='PROVEN'
+                        AND state='COMPLETE'
+                        AND positions_count=0 AND active_orders_count=0
+                        AND completed_at IS NOT NULL
+                      ORDER BY completed_at DESC LIMIT 1
+                 ) g ON true
+                WHERE s.exchange_position_slot_claim_id=%s
+                  AND s.trading_account_id=%s
+                  AND s.identity_status='PROVEN'
+                  AND s.symbol=%s AND s.position_idx=%s
+                  AND NOT EXISTS (
+                      SELECT 1 FROM runtime.exchange_position_slot_claims other
+                       WHERE other.trading_account_id=s.trading_account_id
+                         AND other.symbol=s.symbol
+                         AND other.position_idx=s.position_idx
+                         AND other.claim_state IN
+                             ('CLAIMED','BOUND','RECONCILIATION_REQUIRED')
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM runtime.position_ownership other
+                       WHERE other.trading_account_id=s.trading_account_id
+                         AND other.symbol=s.symbol
+                         AND other.position_idx=s.position_idx
+                         AND other.state='OPEN'
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM runtime.trade_commands c
+                       WHERE c.trading_account_id=s.trading_account_id
+                         AND c.state NOT IN
+                             ('completed','failed','cancelled','rejected')
+                  )""",
+            (claim_ids[0], account_id, symbol, idx),
+        ).fetchone()
+        if row is None:
+            return None
+        completed = row["generation_completed_at"]
+        closed_at = row["closed_at"]
+        released_at = row["released_at"]
+        if (
+            row["claim_state"] != "RELEASED"
+            or row["release_reason"] != "CONFIRMED_POSITION_CLOSE"
+            or row["position_state"] != "CLOSED"
+            or row["close_link_status"] != "EXACT"
+            or not isinstance(completed, datetime)
+            or completed.tzinfo is None
+            or not 0 <= (now - completed).total_seconds() <= 15
+            or not isinstance(closed_at, datetime)
+            or not isinstance(released_at, datetime)
+            or closed_at.tzinfo is None
+            or released_at.tzinfo is None
+            or closed_at > completed
+            or released_at > completed
+        ):
+            return None
+        return "EXCHANGE_AUTHORITY_CONFIRMED_POSITION_CLOSE"
+
     def _resolve_cleared_faults(
         self,
         active: Sequence[FaultCondition],
@@ -1905,19 +2020,27 @@ class LifecycleSupervisor:
             if fault_code == "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN":
                 resolution = self._verified_terminal_entry_ownership_repair(exact_ids)
                 if resolution is None:
-                    # Requires exact verified lineage repair, never a blank snapshot.
+                    resolution = self._verified_closed_physical_slot_recovery(
+                        exact_ids, now
+                    )
+                if resolution is None:
+                    # Unknown current Exchange exposure or lineage fails closed.
                     continue
+                resolved_by = (
+                    "lifecycle_exchange_authoritative_closed_slot"
+                    if resolution == "EXCHANGE_AUTHORITY_CONFIRMED_POSITION_CLOSE"
+                    else "lifecycle_terminal_entry_reconciliation"
+                )
                 updated = self._connection.execute(
                     """UPDATE runtime.lifecycle_faults
                           SET state='RESOLVED',resolved_at=%s,
                               payload=payload || jsonb_build_object(
                                   'last_resolution_reason',%s::text,
-                                  'last_resolved_by',
-                                  'lifecycle_terminal_entry_reconciliation',
+                                  'last_resolved_by',%s::text,
                                   'exchange_mutation',false
                               )
                         WHERE fault_id=%s AND state='OPEN'""",
-                    (now, resolution, fault_id),
+                    (now, resolution, resolved_by, fault_id),
                 )
             else:
                 updated = self._connection.execute(
