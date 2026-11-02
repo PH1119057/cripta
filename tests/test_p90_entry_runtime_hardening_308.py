@@ -145,7 +145,7 @@ def test_pre_mutation_reconciliation_requires_complete_no_exchange_evidence() ->
         "REQUEST_TERMINAL",
         "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN",
         "universal_entry_pre_mutation_reconciliation",
-        "exact_ids->>'execution_request_id'",
+        "exact_ids->>'entry_execution_request_id'",
         "exact_ids->>'trading_account_id'",
     ):
         assert required in block
