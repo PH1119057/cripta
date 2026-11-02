@@ -30,6 +30,7 @@ def test_open_p90_rail_projects_exchange_protection_and_expected_net():
         '"stop_loss_expected_net_usdt"',
         '"trailing_armed"',
         '"trailing_distance_pct"',
+        '"current_move_pct"',
         '"protection_net_basis"',
     ):
         assert token in APP
@@ -76,3 +77,17 @@ def test_p90_left_rail_sorts_and_colors_by_nearest_h9_proximity():
     assert "БЛИЗКО К H9" in INDEX
     assert "песочный — до ближайшей H9 &lt; 0,5%" in INDEX
     assert "Entry всё равно требует overlap с L5-3" in INDEX
+
+
+def test_open_p90_rail_shows_current_move_percent():
+    assert '"current_move_pct": protection_move_pct(executable_value)' in APP
+    assert "const currentMoveText=finite(p.current_move_pct)" in INDEX
+    assert "safe(currentMoveText)" in INDEX
+
+
+def test_degraded_p90_arm_ui_distinguishes_closed_gate_from_disarm():
+    assert "Шлюз закрыт · P90 owner-arm state DEGRADED" in INDEX
+    assert "Снять DEGRADED OWNER ARM" in INDEX
+    assert "armed?(liveGateOpen?'Закрыть P90 REAL v3':'Снять DEGRADED OWNER ARM')" in INDEX
+    assert "Снять DEGRADED OWNER ARM?" in INDEX
+    assert "Шлюз уже закрыт: новые Entry запрещены." in INDEX
