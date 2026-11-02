@@ -189,7 +189,9 @@ def test_command_worker_separates_pre_mutation_and_ambiguous_outcomes() -> None:
     pre_end = source.index("\ndef handle_exchange_mutation_barrier(", pre_start)
     pre = source[pre_start:pre_end]
     assert "mutation_ambiguous=False" in pre
-    assert "disarm_new_entries(connection" in pre
+    assert "_is_sub_private_worker() and isinstance(exc, UnsafeBybitClock)" in pre
+    assert '"clock_safety_blocked"' in pre
+    assert "disarm_new_entries(connection, error[:500])" in pre
     assert '"restart_required": False' in pre
     assert "os._exit" not in pre
 
