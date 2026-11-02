@@ -110,3 +110,45 @@ def test_primary_p90_owner_control_is_visible_and_single() -> None:
     )
     assert "tradeGateButton.hidden=!primaryP90Control;" in DASH
     assert "button.hidden=true;" in DASH
+
+
+def test_owner_diagnostic_plan_ack_is_account_scoped_and_truthful() -> None:
+    start = CONSUMER.index("def _acknowledge_owner_diagnostic_entry_plans(")
+    end = CONSUMER.index("\ndef _write_consumer_health(", start)
+    block = CONSUMER[start:end]
+    assert "b.trading_account_id=%s" in block
+    assert "b.binding_state='ACTIVE'" in block
+    assert "b.allocation_mode='SUBORDINATE_DIAGNOSTIC'" in block
+    assert "is_diagnostic_strategy(strategy_id, strategy_version)" in block
+    assert "record_plan_consumption(" in block
+    assert 'plan_kind="ENTRY"' in block
+    assert 'status="LOADED"' in block
+    assert '("runtime.plan_consumptions", "INSERT")' in CONSUMER
+    assert '("runtime.plan_consumptions", "UPDATE")' in CONSUMER
+    assert '("runtime.lifecycle_faults", "SELECT")' in CONSUMER
+    assert '("runtime.lifecycle_faults", "UPDATE")' in CONSUMER
+
+
+def test_pre_mutation_reconciliation_requires_complete_no_exchange_evidence() -> None:
+    start = CONSUMER.index("def _reconcile_pre_mutation_pending_command_blocks(")
+    end = CONSUMER.index("\ndef run_once(", start)
+    block = CONSUMER[start:end]
+    for required in (
+        "started_at_epoch_ms",
+        "ENTRY_BLOCKED:NEW_ENTRY_GATE_DISARMED",
+        "runtime.executions",
+        "runtime.exchange_order_history",
+        "runtime.hot_orders",
+        "runtime.position_ownership",
+        "runtime.hot_positions",
+        "PRE_MUTATION_PENDING_COMMAND_RECONCILED_NO_EXCHANGE_MUTATION",
+        "REQUEST_TERMINAL",
+        "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN",
+        "universal_entry_pre_mutation_reconciliation",
+        "exact_ids->>'execution_request_id'",
+        "exact_ids->>'trading_account_id'",
+    ):
+        assert required in block
+    assert "api_post(" not in block
+    assert "state='RELEASED'" in block
+    assert "claim_state='RELEASED'" in block

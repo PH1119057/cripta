@@ -244,6 +244,11 @@ def test_real_consumer_commits_every_entry_iteration(monkeypatch) -> None:
             return_value=(True, ()),
         ),
         patch.object(entry_consumer, "_write_consumer_health"),
+        patch.object(
+            entry_consumer,
+            "_acknowledge_owner_diagnostic_entry_plans",
+            return_value=0,
+        ),
         patch.object(entry_consumer.signal, "signal"),
         patch.object(
             entry_consumer.psycopg, "connect", return_value=fake_connection
@@ -300,6 +305,11 @@ def test_consumer_readiness_is_bounded_to_health_cadence(monkeypatch) -> None:
             return_value=(True, ()),
         ) as readiness,
         patch.object(entry_consumer, "_write_consumer_health") as health,
+        patch.object(
+            entry_consumer,
+            "_acknowledge_owner_diagnostic_entry_plans",
+            return_value=0,
+        ),
         patch.object(entry_consumer.signal, "signal"),
         patch.object(
             entry_consumer.psycopg,

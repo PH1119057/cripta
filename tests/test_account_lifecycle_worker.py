@@ -223,3 +223,21 @@ def test_proposed_main_unit_has_exact_read_only_scope_and_no_auto_arm() -> None:
     assert "[Install]" not in text.splitlines()
     assert "WantedBy=" not in text
     assert "CRIPTA_LIFECYCLE_SUPERVISOR=ENABLED" not in text
+
+
+def test_worker_status_exposes_only_allowlisted_safe_error_codes() -> None:
+    assert imported._safe_worker_error_code(
+        ValueError("ACCOUNT_SAFETY_NUMERIC_INVALID:totalEquity")
+    ) == "ACCOUNT_SAFETY_NUMERIC_INVALID:totalEquity"
+    assert imported._safe_worker_error_code(
+        ValueError("ACCOUNT_SAFETY_NUMERIC_INVALID:totalAvailableBalance")
+    ) == "ACCOUNT_SAFETY_NUMERIC_INVALID:totalAvailableBalance"
+    assert imported._safe_worker_error_code(
+        ValueError("ACCOUNT_SAFETY_NUMERIC_INVALID:totalWalletBalance")
+    ) == "ACCOUNT_SAFETY_NUMERIC_INVALID:totalWalletBalance"
+    assert imported._safe_worker_error_code(
+        ValueError("repeated Exchange account audit scope")
+    ) == "ACCOUNT_SNAPSHOT_SCOPE_DUPLICATE"
+    assert imported._safe_worker_error_code(
+        ValueError("provider secret must not escape")
+    ) == "ValueError"

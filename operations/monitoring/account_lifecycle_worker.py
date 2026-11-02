@@ -242,6 +242,19 @@ def _stop(_signum: int, _frame: object) -> None:
     _running = False
 
 
+def _safe_worker_error_code(exc: Exception) -> str:
+    """Expose only allowlisted operational codes; never raw provider data."""
+    if isinstance(exc, ValueError):
+        detail = str(exc)
+        if detail.startswith("ACCOUNT_SAFETY_NUMERIC_INVALID:"):
+            field = detail.partition(":")[2]
+            if field in {"totalEquity", "totalAvailableBalance", "totalWalletBalance"}:
+                return detail
+        if detail == "repeated Exchange account audit scope":
+            return "ACCOUNT_SNAPSHOT_SCOPE_DUPLICATE"
+    return type(exc).__name__
+
+
 def main() -> int:
     if os.environ.get("CRIPTA_LIFECYCLE_ACCOUNT_WORKER") != "ENABLED":
         raise SystemExit("ACCOUNT_LOCAL_WORKER_DISABLED")
@@ -309,7 +322,9 @@ def main() -> int:
                 # Never serialize raw exception text: SDKs may include private data.
                 state = {
                     "observed_at": datetime.now(UTC).isoformat(),
-                    "state": "UNKNOWN", "error_class": type(exc).__name__,
+                    "state": "UNKNOWN",
+                    "error_class": type(exc).__name__,
+                    "error_code": _safe_worker_error_code(exc),
                     "trading_rights": "NONE",
                 }
             _status(status, state)

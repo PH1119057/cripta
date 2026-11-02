@@ -26,6 +26,7 @@ from bybit_workbench.entry_consumer_route import (
     check_consumer_worker_route,
 )
 from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
+from bybit_workbench.lifecycle_ack import record_plan_consumption
 from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
 from bybit_workbench.strategy_position_binding import exchange_position_key
@@ -122,6 +123,11 @@ _REQUIRED_DB_PRIVILEGES = (
     ("runtime.exchange_position_slot_claims", "UPDATE"),
     ("runtime.trade_commands", "SELECT"),
     ("runtime.trade_commands", "INSERT"),
+    ("runtime.plan_consumptions", "SELECT"),
+    ("runtime.plan_consumptions", "INSERT"),
+    ("runtime.plan_consumptions", "UPDATE"),
+    ("runtime.lifecycle_faults", "SELECT"),
+    ("runtime.lifecycle_faults", "UPDATE"),
     ("control.owner_full_contour_diagnostic_runs", "SELECT"),
     ("control.owner_full_contour_diagnostic_runs", "UPDATE"),
     ("control.live_arm_sessions", "SELECT"),
@@ -229,6 +235,77 @@ def _consumer_runtime_readiness(
             + str(exc.sqlstate or type(exc).__name__)
         )
     return not reasons, tuple(dict.fromkeys(reasons))
+
+
+def _acknowledge_owner_diagnostic_entry_plans(
+    connection: psycopg.Connection[Any],
+    *,
+    now: datetime,
+) -> int:
+    """Truthfully acknowledge diagnostic EntryPlans owned by this consumer route.
+
+    The market Observer intentionally excludes OWNER_FULL_CONTOUR_DIAGNOSTIC
+    activations.  The account-scoped Universal Entry consumer is their actual
+    runtime consumer, so it must load the exact immutable plan and leave the
+    ordinary lifecycle consumption evidence instead of asking Lifecycle to
+    waive an active plan.
+    """
+    rows = connection.execute(
+        """SELECT a.activation_id,a.strategy_id,a.strategy_version,
+                  ep.entry_plan_fingerprint,ep.plan_json,
+                  b.allocation_mode,b.binding_state
+             FROM strategy_entry.strategy_activations a
+             JOIN strategy_entry.entry_plans ep
+               ON ep.strategy_id=a.strategy_id
+              AND ep.strategy_version=a.strategy_version
+              AND ep.strategy_config_fingerprint=a.strategy_config_fingerprint
+             JOIN strategy_entry.strategy_execution_bindings b
+               ON b.strategy_activation_id=a.activation_id
+            WHERE a.enabled=true
+              AND b.trading_account_id=%s
+              AND b.binding_state='ACTIVE'
+              AND b.allocation_mode='SUBORDINATE_DIAGNOSTIC'
+            ORDER BY a.activation_id""",
+        (TRADING_ACCOUNT_ID,),
+    ).fetchall()
+    if len(rows) > 1:
+        raise RuntimeError("OWNER_DIAGNOSTIC_MULTIPLE_ACTIVE_PLANS_FOR_ACCOUNT")
+    acknowledged = 0
+    for row in rows:
+        strategy_id = str(row["strategy_id"])
+        strategy_version = str(row["strategy_version"])
+        activation_id = str(row["activation_id"])
+        entry_fingerprint = str(row["entry_plan_fingerprint"])
+        if not is_diagnostic_strategy(strategy_id, strategy_version):
+            raise RuntimeError("OWNER_DIAGNOSTIC_BINDING_IDENTITY_DRIFT")
+        plan = _mapping(row["plan_json"], "owner diagnostic EntryPlan")
+        if (
+            str(plan.get("strategy_id") or "") != strategy_id
+            or str(plan.get("strategy_version") or "") != strategy_version
+            or str(plan.get("entry_plan_fingerprint") or "") != entry_fingerprint
+        ):
+            raise RuntimeError("OWNER_DIAGNOSTIC_ENTRY_PLAN_IDENTITY_DRIFT")
+        record_plan_consumption(
+            connection,
+            plan_kind="ENTRY",
+            plan_fingerprint=entry_fingerprint,
+            strategy_activation_id=activation_id,
+            consumer_instance_id=(
+                "universal-entry-consumer:"
+                + TRADING_ACCOUNT_ID
+                + ":"
+                + LOADED_RELEASE_COMMIT
+            ),
+            seen_at=now,
+            status="LOADED",
+            payload={
+                "source": "owner_full_contour_account_entry_consumer",
+                "release_commit": LOADED_RELEASE_COMMIT,
+                "trading_account_id": TRADING_ACCOUNT_ID,
+            },
+        )
+        acknowledged += 1
+    return acknowledged
 
 
 def _write_consumer_health(
@@ -1258,6 +1335,245 @@ def _refresh_owner_diagnostic_command_failure(
     return "OWNER_DIAGNOSTIC_FAILED:ENTRY_COMMAND"
 
 
+def _reconcile_pre_mutation_pending_command_blocks(
+    connection: psycopg.Connection[Any],
+    *,
+    now: datetime,
+) -> int:
+    """Release only proven pre-mutation admission debt.
+
+    This is intentionally narrower than generic reconciliation.  It handles
+    an Entry request that was parked because another same-symbol command was
+    queued, but that referenced command later failed *before it ever started*
+    because the NEW-Entry gate was closed.  Any Exchange evidence, non-empty
+    result, account/symbol mismatch or ambiguous state leaves the admission
+    fail-closed in RECONCILIATION_REQUIRED.
+    """
+    prefix = (
+        "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN:"
+        "PENDING_ENTRY_COMMAND:"
+    )
+    rows = connection.execute(
+        """SELECT r.execution_request_id,r.symbol,r.trading_account_id,
+                  r.capital_reservation_id,r.exchange_position_slot_claim_id,
+                  d.reason,c.state AS reservation_state,
+                  s.claim_state AS slot_state
+             FROM strategy_entry.execution_requests r
+             JOIN strategy_entry.execution_dispatches d
+               ON d.execution_request_id=r.execution_request_id
+              AND d.state='BLOCKED'
+              AND d.command_id IS NULL
+             JOIN runtime.capital_reservations c
+               ON c.reservation_id=r.capital_reservation_id
+              AND c.state='RECONCILIATION_REQUIRED'
+             JOIN runtime.exchange_position_slot_claims s
+               ON s.exchange_position_slot_claim_id=r.exchange_position_slot_claim_id
+              AND s.capital_reservation_id=c.reservation_id
+              AND s.claim_state='RECONCILIATION_REQUIRED'
+            WHERE r.trading_account_id=%s
+              AND r.identity_status='PROVEN'
+              AND c.trading_account_id=%s
+              AND c.identity_status='PROVEN'
+              AND s.trading_account_id=%s
+              AND s.identity_status='PROVEN'
+              AND d.reason LIKE %s
+              AND (
+                  SELECT e.state
+                    FROM strategy_entry.execution_request_state_events e
+                   WHERE e.execution_request_id=r.execution_request_id
+                   ORDER BY e.occurred_at DESC,e.created_at DESC,
+                            e.request_state_event_id DESC
+                   LIMIT 1
+              )='REQUEST_RECONCILIATION_REQUIRED'
+            ORDER BY r.requested_at,r.execution_request_id""",
+        (
+            TRADING_ACCOUNT_ID,
+            TRADING_ACCOUNT_ID,
+            TRADING_ACCOUNT_ID,
+            prefix + "%",
+        ),
+    ).fetchall()
+    released = 0
+    for row in rows:
+        reason = str(row["reason"] or "")
+        if not reason.startswith(prefix) or not reason.endswith(":queued"):
+            continue
+        command_id = reason[len(prefix):-len(":queued")]
+        if not command_id:
+            continue
+        command = connection.execute(
+            """SELECT command_type,symbol,state,started_at_epoch_ms,
+                      result_json,error,trading_account_id,identity_status,
+                      payload_json
+                 FROM runtime.trade_commands
+                WHERE command_id=%s""",
+            (command_id,),
+        ).fetchone()
+        if command is None:
+            continue
+        try:
+            result = _mapping(command["result_json"], "trade command result")
+            payload = _mapping(command["payload_json"], "trade command payload")
+        except RuntimeError:
+            continue
+        if (
+            str(command["command_type"]) != "entry"
+            or str(command["symbol"]) != str(row["symbol"])
+            or str(command["trading_account_id"] or "") != TRADING_ACCOUNT_ID
+            or str(command["identity_status"] or "") != "PROVEN"
+            or str(command["state"]) != "failed"
+            or command["started_at_epoch_ms"] is not None
+            or result
+            or str(command["error"] or "") != "ENTRY_BLOCKED:NEW_ENTRY_GATE_DISARMED"
+            or str(payload.get("source") or "") != "owner_controlled_live_test"
+        ):
+            continue
+        link_id = command_id[:36]
+        if connection.execute(
+            """SELECT 1 FROM runtime.executions
+                WHERE trading_account_id=%s AND identity_status='PROVEN'
+                  AND (order_link_id=%s OR order_link_id=%s)
+                LIMIT 1""",
+            (TRADING_ACCOUNT_ID, command_id, link_id),
+        ).fetchone():
+            continue
+        if connection.execute(
+            """SELECT 1 FROM runtime.exchange_order_history
+                WHERE trading_account_id=%s AND identity_status='PROVEN'
+                  AND (order_link_id=%s OR order_link_id=%s)
+                LIMIT 1""",
+            (TRADING_ACCOUNT_ID, command_id, link_id),
+        ).fetchone():
+            continue
+        if connection.execute(
+            """SELECT 1 FROM runtime.hot_orders
+                WHERE trading_account_id=%s AND identity_status='PROVEN'
+                  AND (order_link_id=%s OR order_link_id=%s)
+                LIMIT 1""",
+            (TRADING_ACCOUNT_ID, command_id, link_id),
+        ).fetchone():
+            continue
+        if connection.execute(
+            """SELECT 1 FROM runtime.position_ownership
+                WHERE trading_account_id=%s AND identity_status='PROVEN'
+                  AND entry_command_id=%s
+                LIMIT 1""",
+            (TRADING_ACCOUNT_ID, command_id),
+        ).fetchone():
+            continue
+        if connection.execute(
+            """SELECT 1 FROM runtime.hot_positions
+                WHERE trading_account_id=%s AND identity_status='PROVEN'
+                  AND symbol=%s
+                  AND NULLIF(size,'')::numeric > 0
+                LIMIT 1""",
+            (TRADING_ACCOUNT_ID, str(row["symbol"])),
+        ).fetchone():
+            continue
+
+        resolution = (
+            "PRE_MUTATION_PENDING_COMMAND_RECONCILED_NO_EXCHANGE_MUTATION:"
+            + LOADED_RELEASE_COMMIT
+            + ":"
+            + command_id
+        )[:500]
+        reservation = connection.execute(
+            """UPDATE runtime.capital_reservations
+                  SET state='RELEASED',state_reason=%s,updated_at=clock_timestamp()
+                WHERE reservation_id=%s
+                  AND state='RECONCILIATION_REQUIRED'
+                  AND trading_account_id=%s
+                  AND identity_status='PROVEN'""",
+            (
+                resolution,
+                str(row["capital_reservation_id"]),
+                TRADING_ACCOUNT_ID,
+            ),
+        )
+        if reservation.rowcount != 1:
+            raise RuntimeError("PRE_MUTATION_RECONCILIATION_RESERVATION_RACE")
+        slot = connection.execute(
+            """UPDATE runtime.exchange_position_slot_claims
+                  SET claim_state='RELEASED',
+                      released_at=clock_timestamp(),
+                      release_reason=%s,
+                      updated_at=clock_timestamp()
+                WHERE exchange_position_slot_claim_id=%s
+                  AND claim_state='RECONCILIATION_REQUIRED'
+                  AND trading_account_id=%s
+                  AND identity_status='PROVEN'""",
+            (
+                resolution,
+                str(row["exchange_position_slot_claim_id"]),
+                TRADING_ACCOUNT_ID,
+            ),
+        )
+        if slot.rowcount != 1:
+            raise RuntimeError("PRE_MUTATION_RECONCILIATION_SLOT_RACE")
+        request_id = str(row["execution_request_id"])
+        event_id = (
+            "reqstate-"
+            + fingerprint(
+                {
+                    "execution_request_id": request_id,
+                    "state": "REQUEST_TERMINAL",
+                    "reason": resolution,
+                }
+            )[:32]
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.execution_request_state_events(
+                   request_state_event_id,execution_request_id,state,
+                   occurred_at,reason,payload
+               ) VALUES(%s,%s,'REQUEST_TERMINAL',%s,%s,%s::jsonb)
+               ON CONFLICT(request_state_event_id) DO NOTHING""",
+            (
+                event_id,
+                request_id,
+                now,
+                resolution,
+                canonical_json(
+                    {
+                        "referenced_command_id": command_id,
+                        "exchange_mutation": False,
+                        "evidence": (
+                            "failed_before_start_no_result_no_order_"
+                            "no_execution_no_position"
+                        ),
+                    }
+                ),
+            ),
+        )
+        # This fault deliberately never auto-resolves from a blank/flat scan.
+        # The exact no-mutation proof above is the verified lineage repair
+        # required by LifecycleSupervisor._resolve_cleared_faults.
+        connection.execute(
+            """UPDATE runtime.lifecycle_faults
+                  SET state='RESOLVED',
+                      resolved_at=%s,
+                      payload=payload || jsonb_build_object(
+                          'last_resolution_reason',%s::text,
+                          'last_resolved_by',
+                          'universal_entry_pre_mutation_reconciliation',
+                          'referenced_command_id',%s::text,
+                          'exchange_mutation',false
+                      )
+                WHERE fault_code='EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN'
+                  AND state='OPEN'
+                  AND exact_ids->>'execution_request_id'=%s
+                  AND exact_ids->>'trading_account_id'=%s""",
+            (
+                now,
+                resolution,
+                command_id,
+                request_id,
+                TRADING_ACCOUNT_ID,
+            ),
+        )
+        released += 1
+    return released
+
+
 def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None) -> str:
     current = (now or datetime.now(UTC)).astimezone(UTC)
     _release_expired_reserved_requests(connection, now=current)
@@ -1274,6 +1590,13 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY:" + ",".join(route_check.reasons)
 
     if not _execution_gate_enabled(connection):
+        # Reconciliation is an account-scoped mutation and is deliberately
+        # unreachable until the exact process/account connector route above
+        # has been proven.  It is also unnecessary while NEW-Entry is armed.
+        reconciled = _reconcile_pre_mutation_pending_command_blocks(
+            connection,
+            now=current,
+        )
         diagnostic_lifecycle = refresh_run_lifecycle(
             connection,
             trading_account_id=TRADING_ACCOUNT_ID,
@@ -1291,6 +1614,8 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         )
         if command_result:
             return command_result
+        if reconciled:
+            return "PRE_MUTATION_RECONCILED:" + str(reconciled)
         return diagnostic_lifecycle or "EXECUTION_GATE_DISARMED"
     # Registry routing is only a prerequisite. Per-request binding/connector,
     # independently authenticated private credentials and LIVE arm remain
@@ -1614,6 +1939,18 @@ def main() -> int:
             monotonic_now = time.monotonic()
             if monotonic_now >= next_health_at:
                 ready, reasons = _consumer_runtime_readiness(connection)
+                if ready:
+                    try:
+                        _acknowledge_owner_diagnostic_entry_plans(
+                            connection,
+                            now=current,
+                        )
+                    except (RuntimeError, ValueError, psycopg.Error) as exc:
+                        ready = False
+                        reasons = (
+                            "OWNER_DIAGNOSTIC_PLAN_ACK_NOT_READY:"
+                            + type(exc).__name__,
+                        )
                 _write_consumer_health(
                     connection,
                     ready=ready,
