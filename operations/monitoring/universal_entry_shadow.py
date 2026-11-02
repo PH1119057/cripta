@@ -3498,12 +3498,12 @@ def _run_observer_epoch(
                         )
                         next_signature = now_mono + 1.0
                         continue
-                    if p90_real_staged:
-                        if (
-                            gate_row == (True, OWNER_ARM_OPEN_GATE_REASON)
-                            and selected_now == expected
-                            and latest_signature[1:] == current_signature[1:]
-                        ):
+                    if (
+                        p90_real_staged
+                        and gate_row == (True, OWNER_ARM_OPEN_GATE_REASON)
+                        and selected_now == expected
+                        and latest_signature[1:] == current_signature[1:]
+                    ):
                             # Finalization changed only the global gate. Keep the
                             # already-proven native runtime; admission becomes
                             # executable dynamically without another epoch gap.
