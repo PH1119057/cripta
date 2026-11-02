@@ -3455,7 +3455,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         # than wait until a future 5m candle or silently leave trailing idle.
         # The already-attached Bybit SL+TP remain resident. This does NOT
         # resubmit Entry or attempt any emergency arbitrary market close.
-        from operations.connectivity.p90l90_real_postfill_handoff import (
+        from p90l90_real_postfill_handoff import (
             handoff_real_first_protected_fill,
         )
 
