@@ -1786,7 +1786,21 @@ def handle_pre_mutation_safety_block(
             (int(time.time() * 1000), error, command_id),
         )
         connection.commit()
-    disarm_new_entries(connection, error[:500])
+    if _is_sub_private_worker() and isinstance(exc, UnsafeBybitClock):
+        # Owner decision 2026-11-03: a transient exchange-time failure before
+        # any mutation blocks this attempt but must not install an irreversible
+        # account-wide SUB latch. Fresh signed reconciliation / clock evidence
+        # is still required by the next attempt.
+        connection.rollback()
+        connection_event(
+            connection,
+            "command",
+            "clock_safety_blocked",
+            error="UnsafeBybitClock",
+            mutation_sent=False,
+        )
+    else:
+        disarm_new_entries(connection, error[:500])
     atomic_status(
         "command",
         {

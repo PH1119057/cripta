@@ -1359,6 +1359,69 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 if blocker not in p90_arm_status["blockers"]:
                     p90_arm_status["blockers"].append(blocker)
                 p90_arm_status["state"] = "BLOCKED"
+
+        clock_account_ids = [
+            P90_REAL_MAIN_ACCOUNT_ID,
+            P90_REAL_SUB_ACCOUNT_ID,
+        ]
+        clock_safety_rows = connection.execute(
+            """WITH clock_blocks AS (
+                   SELECT trading_account_id,max(blocked_at_epoch_ms) AS blocked_at_epoch_ms
+                     FROM (
+                       SELECT trading_account_id,at_epoch_ms AS blocked_at_epoch_ms
+                         FROM runtime.connection_events
+                        WHERE trading_account_id=ANY(%s)
+                          AND identity_status='PROVEN'
+                          AND (
+                            (channel='private' AND event='reconnecting'
+                             AND details_json::jsonb->>'error'='UnsafeBybitClock')
+                            OR
+                            (channel='command' AND event='clock_safety_blocked'
+                             AND details_json::jsonb->>'error'='UnsafeBybitClock')
+                          )
+                       UNION ALL
+                       SELECT trading_account_id,
+                              coalesce(finished_at_epoch_ms,started_at_epoch_ms,requested_at_epoch_ms)
+                         FROM runtime.trade_commands
+                        WHERE trading_account_id=ANY(%s)
+                          AND identity_status='PROVEN'
+                          AND error LIKE 'PRE_MUTATION_SAFETY_BLOCK:UnsafeBybitClock%%'
+                     ) blocks
+                    GROUP BY trading_account_id
+                 ),
+                 recovered AS (
+                   SELECT trading_account_id,max(finished_at_epoch_ms) AS recovered_at_epoch_ms
+                     FROM runtime.reconciliation_runs
+                    WHERE trading_account_id=ANY(%s)
+                      AND identity_status='PROVEN'
+                      AND ok=true
+                    GROUP BY trading_account_id
+                 )
+                 SELECT b.trading_account_id,b.blocked_at_epoch_ms,r.recovered_at_epoch_ms
+                   FROM clock_blocks b
+                   LEFT JOIN recovered r USING(trading_account_id)
+                  WHERE r.recovered_at_epoch_ms IS NULL
+                     OR r.recovered_at_epoch_ms < b.blocked_at_epoch_ms
+                  ORDER BY b.trading_account_id""",
+            (clock_account_ids, clock_account_ids, clock_account_ids),
+        ).fetchall()
+        clock_safety_alerts = [
+            {
+                "trading_account_id": str(row[0]),
+                "account_role": (
+                    "MAIN"
+                    if str(row[0]) == P90_REAL_MAIN_ACCOUNT_ID
+                    else "SUB"
+                ),
+                "reason": "BYBIT_TIME_PROOF_UNAVAILABLE",
+                "blocked_at_epoch_ms": int(row[1]),
+                "recovered_at_epoch_ms": (
+                    None if row[2] is None else int(row[2])
+                ),
+                "mutation_sent": False,
+            }
+            for row in clock_safety_rows
+        ]
         # Read-only P90 operator projection. Geometry is not recomputed here:
         # the Dashboard renders the exact active native causal checkpoint.
         def p90_decimal(value: object) -> Decimal | None:
@@ -2474,6 +2537,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         "p90_rail": p90_rail,
         "p90_recent_closed": p90_recent_closed,
         "p90_arm_status": p90_arm_status,
+        "clock_safety_alerts": clock_safety_alerts,
         "pending_entry_orders": pending_orders,
         "settings": {
             "stake_usdt": settings[0],
