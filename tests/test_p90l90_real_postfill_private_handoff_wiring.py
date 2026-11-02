@@ -114,3 +114,23 @@ def test_postfill_and_live_exit_have_mapping_rows_on_same_pg_transaction():
     assert "P90RealExitExecutionPort(\n        exit_db," in body
     assert "PostgresExitShadowStore(exit_db)" in body
     assert "signed_position_reader(connection)" in body
+
+
+def test_private_worker_postfill_modules_import_under_exact_service_path() -> None:
+    runtime = Path("operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    handoff = Path(
+        "operations/connectivity/p90l90_real_postfill_handoff.py"
+    ).read_text(encoding="utf-8")
+    unit = Path("operations/systemd/cripta-private-runtime@.service").read_text(
+        encoding="utf-8"
+    )
+    assert "from p90l90_real_postfill_handoff import (" in runtime
+    assert "from operations.connectivity.p90l90_real_postfill_handoff" not in runtime
+    assert "from p90l90_real_postfill_source_client import (" in handoff
+    assert "from operations.connectivity.p90l90_real_postfill_source_client" not in handoff
+    assert (
+        "/srv/cripta/runtime/current/operations/connectivity"
+        in unit
+    )
