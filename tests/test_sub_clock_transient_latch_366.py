@@ -20,7 +20,7 @@ def test_transient_clock_failure_does_not_install_durable_sub_latch() -> None:
     ]
     assert len(guarded) == 1
     branch = guarded[0]
-    assert "connection.rollback()" in ast.unparse(branch.body)
+    assert "connection.rollback()" in "\n".join(ast.unparse(node) for node in branch.body)
     assert "disarm_new_entries" not in ast.unparse(branch.body)
     assert "disarm_new_entries(connection, PRIVATE_RECONNECT_GATE_REASON)" in ast.unparse(
         branch.orelse
