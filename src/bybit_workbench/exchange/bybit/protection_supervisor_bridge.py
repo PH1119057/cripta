@@ -38,7 +38,7 @@ def _command_lineage(
               AND command_type IN
                   ('strategy_exit','break_even','current_stop',
                    'trailing_stop','initial_protection')
-              AND (identity_status='PROVEN' AND (%s IS NULL OR trading_account_id=%s))
+              AND (identity_status='PROVEN' AND (%s::text IS NULL OR trading_account_id=%s))
             ORDER BY requested_at_epoch_ms,command_id LIMIT 1001""",
         (
             symbol,
@@ -96,7 +96,10 @@ def account_protection_verdicts(
             entry_row = connection.execute(
                 """SELECT payload_json FROM runtime.trade_commands
                     WHERE command_id=%s AND command_type='entry'
-                      AND (identity_status='PROVEN' AND (%s IS NULL OR trading_account_id=%s))""",
+                      AND (
+                          identity_status='PROVEN'
+                          AND (%s::text IS NULL OR trading_account_id=%s)
+                      )""",
                 (entry_command_id, trading_account_id, trading_account_id),
             ).fetchone()
             if not entry_row:

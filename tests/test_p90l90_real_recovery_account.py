@@ -58,12 +58,28 @@ def _raw(category: str | None = None, items=None, cursor: str = ""):
     }
 
 
+def _protection_orders(symbol: str = "LTCUSDT") -> list[dict[str, object]]:
+    base = {
+        "symbol": symbol,
+        "positionIdx": 0,
+        "side": "Sell",
+        "qty": "0.1",
+        "orderStatus": "Untriggered",
+        "reduceOnly": True,
+        "closeOnTrigger": True,
+    }
+    return [
+        {**base, "stopOrderType": "StopLoss", "triggerPrice": "90"},
+        {**base, "stopOrderType": "TakeProfit", "triggerPrice": "105"},
+    ]
+
+
 def _reader(monkeypatch):
     db = FakeDb()
     responses = {
         "/v5/user/query-api": _raw(),
         "/v5/position/list": _raw("linear", [_position()]),
-        "/v5/order/realtime": _raw("linear"),
+        "/v5/order/realtime": _raw("linear", _protection_orders()),
     }
     requested: list[tuple[str, dict[str, str]]] = []
 
@@ -117,7 +133,17 @@ def test_restart_reader_fails_closed_on_incomplete_or_conflicting_state(
     if failure == "hidden_position_page":
         responses["/v5/position/list"]["result"]["nextPageCursor"] = "hidden"
     elif failure == "open_order":
-        responses["/v5/order/realtime"]["result"]["list"] = [{"orderId": "active"}]
+        responses["/v5/order/realtime"]["result"]["list"].append({
+            "symbol": "LTCUSDT",
+            "positionIdx": 0,
+            "side": "Buy",
+            "qty": "0.1",
+            "orderStatus": "New",
+            "reduceOnly": False,
+            "closeOnTrigger": False,
+            "stopOrderType": "",
+            "triggerPrice": "0",
+        })
     elif failure == "hidden_order_page":
         responses["/v5/order/realtime"]["result"]["nextPageCursor"] = "hidden"
     elif failure == "generation_count":
@@ -146,5 +172,43 @@ def test_restart_reader_rechecks_private_ws_after_signed_reads(monkeypatch) -> N
     with pytest.raises(
         recovery.P90RealRecoveryAccountUnverified,
         match="PRIVATE_WS_LOST_DURING_READ",
+    ):
+        reader()
+
+
+@pytest.mark.parametrize("field,value", (
+    ("reduceOnly", False),
+    ("closeOnTrigger", False),
+    ("qty", "0.2"),
+    ("triggerPrice", "91"),
+))
+def test_restart_reader_rejects_drifted_protection_order(
+    monkeypatch, field: str, value: object,
+) -> None:
+    reader, _db, responses, _requested = _reader(monkeypatch)
+    responses["/v5/order/realtime"]["result"]["list"][0][field] = value
+    with pytest.raises(
+        recovery.P90RealRecoveryAccountUnverified,
+        match="NON_PROTECTION_OPEN_ORDER",
+    ):
+        reader()
+
+
+def test_restart_reader_rejects_missing_or_duplicate_protection_order(monkeypatch) -> None:
+    reader, _db, responses, _requested = _reader(monkeypatch)
+    responses["/v5/order/realtime"]["result"]["list"] = _protection_orders()[:1]
+    with pytest.raises(
+        recovery.P90RealRecoveryAccountUnverified,
+        match="PROTECTION_ORDER_SET_INCOMPLETE",
+    ):
+        reader()
+
+    reader, _db, responses, _requested = _reader(monkeypatch)
+    responses["/v5/order/realtime"]["result"]["list"].append(
+        dict(_protection_orders()[0])
+    )
+    with pytest.raises(
+        recovery.P90RealRecoveryAccountUnverified,
+        match="NON_PROTECTION_OPEN_ORDER",
     ):
         reader()

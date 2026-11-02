@@ -5,7 +5,7 @@ RUNTIME = (ROOT / "operations/monitoring/lifecycle_supervisor_runtime.py").read_
 
 def test_protection_command_lineage_can_be_exact_account_scoped() -> None:
     assert "trading_account_id: str | None = None" in BRIDGE
-    assert "identity_status='PROVEN' AND (%s IS NULL OR trading_account_id=%s)" in BRIDGE
+    assert "identity_status='PROVEN' AND (%s::text IS NULL OR trading_account_id=%s)" in BRIDGE
     assert "LEGACY_UNKNOWN" not in BRIDGE
 
 def test_production_lifecycle_passes_exact_trading_account() -> None:

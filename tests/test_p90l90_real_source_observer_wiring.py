@@ -143,3 +143,26 @@ def test_real_observer_unit_can_import_runtime_operations_namespace() -> None:
     assert "from operations.monitoring.p90l90_real_account_mutation_safety import" in observer
     assert "from operations.monitoring.p90l90_real_live_source_ports import" in observer
     assert "from operations.monitoring.p90l90_real_postfill_source_broker import" in observer
+
+
+def test_runtime_entry_fail_closed_preserves_exit_only_real_owner() -> None:
+    src = Path("operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(src)
+    epoch = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_run_observer_epoch"
+    )
+    body = ast.get_source_segment(src, epoch)
+    assert body is not None
+    assert "REAL_ENTRY_RUNTIME_NOT_READY_REASON" in body
+    assert "p90_real_degraded = False" in body
+    assert "p90_real_degraded = True" in body
+    assert "gate_reason == REAL_ENTRY_RUNTIME_NOT_READY_REASON" in body
+    assert "selected == expected" in body
+    assert "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT" in body
+    assert "P90_REAL_DEGRADED_EXIT_ONLY" in body
+    degraded = body.index("if p90_real_degraded:")
+    assert "return (), False" in body[degraded:degraded + 500]
