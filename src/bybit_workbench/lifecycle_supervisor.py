@@ -1802,6 +1802,66 @@ class LifecycleSupervisor:
             return 1
         return 0
 
+    def _verified_terminal_entry_ownership_repair(
+        self,
+        exact_ids: Mapping[str, object],
+    ) -> str | None:
+        """Return exact no-Exchange-mutation repair reason or fail closed."""
+        request_id = str(exact_ids.get("entry_execution_request_id") or "")
+        trading_account_id = str(exact_ids.get("trading_account_id") or "")
+        if not request_id or not trading_account_id:
+            return None
+        row = self._connection.execute(
+            """SELECT c.state AS reservation_state,c.state_reason,
+                      s.claim_state AS slot_state,s.release_reason,
+                      latest_request_state.state AS request_state
+                 FROM strategy_entry.execution_requests r
+                 JOIN runtime.capital_reservations c
+                   ON c.reservation_id=r.capital_reservation_id
+                 JOIN runtime.exchange_position_slot_claims s
+                   ON s.exchange_position_slot_claim_id=
+                      r.exchange_position_slot_claim_id
+                  AND s.capital_reservation_id=c.reservation_id
+                 LEFT JOIN LATERAL (
+                     SELECT e.state
+                       FROM strategy_entry.execution_request_state_events e
+                      WHERE e.execution_request_id=r.execution_request_id
+                      ORDER BY e.occurred_at DESC,e.created_at DESC,
+                               e.request_state_event_id DESC
+                      LIMIT 1
+                 ) latest_request_state ON true
+                WHERE r.execution_request_id=%s
+                  AND r.trading_account_id=%s
+                  AND r.identity_status='PROVEN'
+                  AND c.trading_account_id=%s
+                  AND c.identity_status='PROVEN'
+                  AND s.trading_account_id=%s
+                  AND s.identity_status='PROVEN'""",
+            (
+                request_id,
+                trading_account_id,
+                trading_account_id,
+                trading_account_id,
+            ),
+        ).fetchone()
+        if row is None:
+            return None
+        request_state = str(row["request_state"] or "")
+        reservation_state = str(row["reservation_state"] or "")
+        slot_state = str(row["slot_state"] or "")
+        reservation_reason = str(row["state_reason"] or "")
+        slot_reason = str(row["release_reason"] or "")
+        prefix = "PRE_MUTATION_PENDING_COMMAND_RECONCILED_NO_EXCHANGE_MUTATION:"
+        if (
+            request_state not in _TERMINAL_ENTRY_REQUEST_STATES
+            or reservation_state != "RELEASED"
+            or slot_state != "RELEASED"
+            or not reservation_reason.startswith(prefix)
+            or reservation_reason != slot_reason
+        ):
+            return None
+        return reservation_reason
+
     def _resolve_cleared_faults(
         self,
         active: Sequence[FaultCondition],
@@ -1834,22 +1894,37 @@ class LifecycleSupervisor:
                     continue  # Foreign/legacy provenance must remain OPEN.
             elif exact_ids.get("fault_scope_kind") == "ACCOUNT":
                 continue  # Legacy global scans cannot retire proven account faults.
+            fault_id = str(row["fault_id"])
+            if fault_id in active_ids:
+                continue
             if (
                 fault_code == "EXCHANGE_STATE_DIVERGED"
                 and self._fresh_exchange_reconciliation(now) is None
             ):
                 continue
             if fault_code == "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN":
-                # Requires explicit verified lineage repair, not a blank snapshot.
-                continue
-            fault_id = str(row["fault_id"])
-            if fault_id in active_ids:
-                continue
-            updated = self._connection.execute(
-                """UPDATE runtime.lifecycle_faults
-                      SET state='RESOLVED',resolved_at=%s
-                    WHERE fault_id=%s AND state='OPEN'""",
-                (now, fault_id),
-            )
+                resolution = self._verified_terminal_entry_ownership_repair(exact_ids)
+                if resolution is None:
+                    # Requires exact verified lineage repair, never a blank snapshot.
+                    continue
+                updated = self._connection.execute(
+                    """UPDATE runtime.lifecycle_faults
+                          SET state='RESOLVED',resolved_at=%s,
+                              payload=payload || jsonb_build_object(
+                                  'last_resolution_reason',%s::text,
+                                  'last_resolved_by',
+                                  'lifecycle_terminal_entry_reconciliation',
+                                  'exchange_mutation',false
+                              )
+                        WHERE fault_id=%s AND state='OPEN'""",
+                    (now, resolution, fault_id),
+                )
+            else:
+                updated = self._connection.execute(
+                    """UPDATE runtime.lifecycle_faults
+                          SET state='RESOLVED',resolved_at=%s
+                        WHERE fault_id=%s AND state='OPEN'""",
+                    (now, fault_id),
+                )
             resolved += updated.rowcount
         return resolved
