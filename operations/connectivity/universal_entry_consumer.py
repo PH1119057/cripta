@@ -26,8 +26,8 @@ from bybit_workbench.entry_consumer_route import (
     check_consumer_worker_route,
 )
 from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
-from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.lifecycle_ack import record_plan_consumption
+from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.sub_worker_scope import require_exact_sub_instance
@@ -126,6 +126,8 @@ _REQUIRED_DB_PRIVILEGES = (
     ("runtime.plan_consumptions", "SELECT"),
     ("runtime.plan_consumptions", "INSERT"),
     ("runtime.plan_consumptions", "UPDATE"),
+    ("runtime.lifecycle_faults", "SELECT"),
+    ("runtime.lifecycle_faults", "UPDATE"),
     ("control.owner_full_contour_diagnostic_runs", "SELECT"),
     ("control.owner_full_contour_diagnostic_runs", "UPDATE"),
     ("control.live_arm_sessions", "SELECT"),
