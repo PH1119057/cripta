@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import ast
 import importlib.util
-
-import pytest
 import re
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "operations/implementation/recover_p90_account_ws_safety.py"
@@ -25,7 +25,8 @@ def _regex_constants() -> dict[str, re.Pattern[str]]:
         assert isinstance(node.value, ast.Call)
         assert isinstance(node.value.func, ast.Attribute)
         assert node.value.func.attr == "compile"
-        assert len(node.value.args) == 1 and isinstance(node.value.args[0], ast.Constant)
+        assert len(node.value.args) == 1
+        assert isinstance(node.value.args[0], ast.Constant)
         patterns[target.id] = re.compile(node.value.args[0].value)
     assert set(patterns) == {"_SHA", "_REQUEST"}
     return patterns
@@ -35,7 +36,8 @@ def test_release_sha_validator_accepts_exact_40_lowercase_hex_and_denies_others(
     sha = _regex_constants()["_SHA"]
     assert sha.fullmatch("67f2c4a1663659c979ffae4dc7a8d092660a1ad9")
     assert sha.fullmatch("a" * 40)
-    for invalid in ("a" * 39, "a" * 41, "A" * 40, "g" * 40, "a" * 40 + "\\Z", ""):
+    invalid_values = ("a" * 39, "a" * 41, "A" * 40, "g" * 40, "a" * 40 + "\\Z", "")
+    for invalid in invalid_values:
         assert sha.fullmatch(invalid) is None
 
 
@@ -48,7 +50,8 @@ def test_request_id_validator_accepts_dashboard_owner_request_and_denies_injecti
         "a" * 128,
     ):
         assert request.fullmatch(valid)
-    for invalid in ("short", "a" * 129, "p90/owner", "a" * 8 + "\n", "a" * 8 + " ", ""):
+    invalid_values = ("short", "a" * 129, "p90/owner", "a" * 8 + "\n", "a" * 8 + " ", "")
+    for invalid in invalid_values:
         assert request.fullmatch(invalid) is None
 
 
@@ -72,12 +75,18 @@ def test_recovery_fails_closed_with_bounded_sanitized_error_vocabulary():
 
 def test_dashboard_recovery_failure_cannot_advance_to_owner_arm():
     app = DASHBOARD.read_text(encoding="utf-8")
-    recovery = app[app.index("def _recover_p90_real_ws_safety_if_needed("):
-                   app.index("def _u6_prepare_p90_real_v3_readiness(")]
-    prepare = app[app.index("def _u6_prepare_p90_real_v3_readiness("):
-                  app.index("def _u6_p90_real_v3_arm(")]
-    arm = app[app.index("def _u6_p90_real_v3_arm("):
-              app.index("def _u6_financial_account_catalog(")]
+    recovery = app[
+        app.index("def _recover_p90_real_ws_safety_if_needed("):
+        app.index("def _u6_prepare_p90_real_v3_readiness(")
+    ]
+    prepare = app[
+        app.index("def _u6_prepare_p90_real_v3_readiness("):
+        app.index("def _u6_p90_real_v3_arm(")
+    ]
+    arm = app[
+        app.index("def _u6_p90_real_v3_arm("):
+        app.index("def _u6_financial_account_catalog(")
+    ]
     assert 'code = "P90_ACCOUNT_WS_RECOVERY_UNCLASSIFIED"' in recovery
     assert "if candidate in safe_codes:" in recovery
     assert "result.stderr.splitlines()" in recovery
@@ -97,7 +106,9 @@ def test_dashboard_recovery_failure_cannot_advance_to_owner_arm():
 
 
 def _load_cli_module():
-    spec = importlib.util.spec_from_file_location("p90_ws_recovery_cli_under_test", SCRIPT)
+    spec = importlib.util.spec_from_file_location(
+        "p90_ws_recovery_cli_under_test", SCRIPT
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -144,7 +155,10 @@ def test_recovery_cli_maps_known_and_unknown_failures_without_leaking(
     for error, expected in (
         (RuntimeError("P90_ACCOUNT_WS_RECOVERY_RELEASE_IDENTITY_UNVERIFIED"),
          "P90_ACCOUNT_WS_RECOVERY_RELEASE_IDENTITY_UNVERIFIED"),
-        (RuntimeError(private_detail), "P90_ACCOUNT_WS_RECOVERY_PROOF_OR_RUNTIME_ERROR"),
+        (
+            RuntimeError(private_detail),
+            "P90_ACCOUNT_WS_RECOVERY_PROOF_OR_RUNTIME_ERROR",
+        ),
     ):
         def fail(reason=error):
             raise reason
