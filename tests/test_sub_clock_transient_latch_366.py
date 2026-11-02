@@ -46,3 +46,25 @@ def test_recovery_script_direct_execution_resolves_installed_src() -> None:
         and node.func.value.attr == "path"
     ]
     assert configured, "direct recovery script must insert installed src before imports"
+
+
+def test_sub_mutation_clock_failure_does_not_install_durable_latch() -> None:
+    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+    handler = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "handle_pre_mutation_safety_block"
+    )
+    guarded = [
+        node for node in ast.walk(handler)
+        if isinstance(node, ast.If)
+        and "_is_sub_private_worker()" in ast.unparse(node.test)
+        and "isinstance(exc, UnsafeBybitClock)" in ast.unparse(node.test)
+    ]
+    assert len(guarded) == 1
+    clock_branch = "\n".join(ast.unparse(node) for node in guarded[0].body)
+    other_branch = "\n".join(ast.unparse(node) for node in guarded[0].orelse)
+    assert "disarm_new_entries" not in clock_branch
+    assert "clock_safety_blocked" in clock_branch
+    assert "mutation_sent=False" in clock_branch
+    assert "disarm_new_entries(connection, error[:500])" in other_branch
