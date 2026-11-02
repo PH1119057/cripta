@@ -1,15 +1,14 @@
-from pathlib import Path
+SCRIPT_PATH = "operations/infrastructure/repair_dashboard_ui_identity.py"
+INSTALLER_PATH = "operations/infrastructure/install_verified_release.sh"
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = ROOT / "operations/infrastructure/repair_dashboard_ui_identity.py"
-INSTALLER = (
-    ROOT / "operations/infrastructure/install_verified_release.sh"
-).read_text(encoding="utf-8")
+def read_text(path: str) -> str:
+    with open(path, encoding="utf-8") as handle:
+        return handle.read()
 
 
 def test_repair_utility_is_atomic_git_and_filesystem_identity_only() -> None:
-    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    source = read_text(SCRIPT_PATH)
     for token in (
         "SOURCE_REMOTE_MAIN_DRIFT",
         "SOURCE_DIRTY",
@@ -39,7 +38,7 @@ def test_repair_utility_is_atomic_git_and_filesystem_identity_only() -> None:
 
 
 def test_repair_utility_requires_explicit_expected_identities() -> None:
-    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    source = read_text(SCRIPT_PATH)
     assert 'parser.add_argument("--mode", choices=("check", "repair"), required=True)' in source
     assert 'parser.add_argument("--expected-current", required=True)' in source
     assert 'parser.add_argument("--expected-state", required=True)' in source
@@ -49,18 +48,19 @@ def test_repair_utility_requires_explicit_expected_identities() -> None:
 
 
 def test_full_release_persists_dashboard_identity_at_physical_cutover() -> None:
-    cutover = INSTALLER.index(
+    installer = read_text(INSTALLER_PATH)
+    cutover = installer.index(
         'mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"'
     )
-    verified = INSTALLER.index(
+    verified = installer.index(
         'die "Dashboard UI cutover identity mismatch"',
         cutover,
     )
-    state = INSTALLER.index(
+    state = installer.index(
         '> "$STATE_ROOT/DASHBOARD_UI_COMMIT"',
         verified,
     )
-    unit_install = INSTALLER.index('for spec in "${unit_specs[@]}"; do', state)
+    unit_install = installer.index('for spec in "${unit_specs[@]}"; do', state)
     assert cutover < verified < state < unit_install
-    assert 'chown root:cripta "$STATE_ROOT/DASHBOARD_UI_COMMIT"' in INSTALLER
-    assert 'chmod 0640 "$STATE_ROOT/DASHBOARD_UI_COMMIT"' in INSTALLER
+    assert 'chown root:cripta "$STATE_ROOT/DASHBOARD_UI_COMMIT"' in installer
+    assert 'chmod 0640 "$STATE_ROOT/DASHBOARD_UI_COMMIT"' in installer
