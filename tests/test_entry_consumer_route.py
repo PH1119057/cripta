@@ -208,3 +208,15 @@ def test_request_claim_locks_mutable_reservation_not_immutable_request() -> None
     assert '"EXPLAIN (COSTS FALSE) " + _NEXT_REQUEST_SQL' in source
     assert '("strategy_entry.execution_requests", "UPDATE")' not in source
     assert '("runtime.capital_reservations", "UPDATE")' in source
+
+
+def test_legacy_text_json_is_decoded_only_as_mapping() -> None:
+    decoded = consumer._json_mapping(
+        '{"source":"owner_controlled_live_test","stake_usdt":"10"}',
+        "test payload",
+    )
+    assert decoded["source"] == "owner_controlled_live_test"
+    with pytest.raises(RuntimeError, match="valid JSON object text"):
+        consumer._json_mapping("{broken", "test payload")
+    with pytest.raises(RuntimeError, match="must be an object"):
+        consumer._json_mapping("[]", "test payload")
