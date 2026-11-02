@@ -119,3 +119,26 @@ def test_isolated_wallet_scope_stays_fail_closed_when_ambiguous() -> None:
                 ],
             }]},
         })
+
+
+def test_unified_wallet_with_only_available_blank_uses_usdt_available() -> None:
+    equity, available, wallet = validate_wallet({
+        "retCode": 0,
+        "result": {"list": [{
+            "accountType": "UNIFIED",
+            "totalEquity": "21.96683941",
+            "totalAvailableBalance": "",
+            "totalWalletBalance": "21.96683941",
+            "coin": [{
+                "coin": "USDT",
+                "equity": "21.96683941",
+                "walletBalance": "21.96683941",
+                "totalOrderIM": "0",
+                "totalPositionIM": "0",
+                "locked": "0",
+            }],
+        }]},
+    })
+    assert str(equity) == "21.96683941"
+    assert str(wallet) == "21.96683941"
+    assert str(available) == "21.96683941"
