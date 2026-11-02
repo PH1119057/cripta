@@ -125,6 +125,8 @@ def test_owner_diagnostic_plan_ack_is_account_scoped_and_truthful() -> None:
     assert 'status="LOADED"' in block
     assert '("runtime.plan_consumptions", "INSERT")' in CONSUMER
     assert '("runtime.plan_consumptions", "UPDATE")' in CONSUMER
+    assert '("runtime.lifecycle_faults", "SELECT")' in CONSUMER
+    assert '("runtime.lifecycle_faults", "UPDATE")' in CONSUMER
 
 
 def test_pre_mutation_reconciliation_requires_complete_no_exchange_evidence() -> None:
