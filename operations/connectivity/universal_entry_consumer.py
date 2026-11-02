@@ -1542,6 +1542,32 @@ def _reconcile_pre_mutation_pending_command_blocks(
                 ),
             ),
         )
+        # This fault deliberately never auto-resolves from a blank/flat scan.
+        # The exact no-mutation proof above is the verified lineage repair
+        # required by LifecycleSupervisor._resolve_cleared_faults.
+        connection.execute(
+            """UPDATE runtime.lifecycle_faults
+                  SET state='RESOLVED',
+                      resolved_at=%s,
+                      payload=payload || jsonb_build_object(
+                          'last_resolution_reason',%s::text,
+                          'last_resolved_by',
+                          'universal_entry_pre_mutation_reconciliation',
+                          'referenced_command_id',%s::text,
+                          'exchange_mutation',false
+                      )
+                WHERE fault_code='EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN'
+                  AND state='OPEN'
+                  AND exact_ids->>'execution_request_id'=%s
+                  AND exact_ids->>'trading_account_id'=%s""",
+            (
+                now,
+                resolution,
+                command_id,
+                request_id,
+                TRADING_ACCOUNT_ID,
+            ),
+        )
         released += 1
     return released
 
