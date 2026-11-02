@@ -83,3 +83,8 @@ INSERT INTO runtime.account_state_generations VALUES (
     'ac-ec57819f875f1bfd929a382d6dc8a125',
     'BYBIT:UNIFIED','PROVEN','COMPLETE',clock_timestamp(),0,0
 );
+
+-- CI assertions by the unprivileged login, not a mutation grant.
+GRANT USAGE ON SCHEMA runtime,control TO cripta;
+GRANT SELECT ON runtime.account_entry_safety_blocks,
+                control.execution_gates TO cripta;
