@@ -59,10 +59,17 @@ class P90RealOpenRestartUnverified(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class P90RealPostfillRepairEvidence:
+    entry_order_id: str
+    execution_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class P90RealRestartPosition:
     position: StrategyPosition
     exit_plan: ExitPlan
     signed: ScopedPrivatePositionEvidence
+    postfill_repair: P90RealPostfillRepairEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,10 +219,10 @@ def _decimal(raw: object, reason: str) -> Decimal:
     return value
 
 
-def _verify_trailing(
+def _trailing_armed(
     position: StrategyPosition,
     evidence: ScopedPrivatePositionEvidence,
-) -> None:
+) -> bool:
     tick = evidence.tick_size
     expected = (
         (position.actual_avg_fill * Decimal("0.0035") / tick)
@@ -225,11 +232,86 @@ def _verify_trailing(
         evidence.position.get("trailingStop"),
         "SIGNED_TRAILING_VALUE_INVALID",
     )
+    _require(expected > 0 and actual % tick == 0, "SIGNED_TRAIL035_NOT_ARMED")
+    if actual == expected:
+        return True
+    _require(actual == 0, "SIGNED_TRAIL035_NOT_ARMED")
+    return False
+
+
+def _postfill_repair_evidence(
+    connection: Any,
+    *,
+    position: StrategyPosition,
+    signed: ScopedPrivatePositionEvidence,
+) -> P90RealPostfillRepairEvidence:
+    """Prove one protected fill whose account-local postfill handoff never queued."""
+    row = connection.execute(
+        """SELECT initial_protection_evidence,exchange_order_ids,entry_command_id
+             FROM runtime.position_ownership
+            WHERE position_id=%s AND state='OPEN' AND identity_status='PROVEN'
+              AND trading_account_id=%s""",
+        (position.strategy_position_id, position.trading_account_id),
+    ).fetchone()
     _require(
-        expected > 0
-        and actual == expected
-        and actual % tick == 0,
-        "SIGNED_TRAIL035_NOT_ARMED",
+        isinstance(row, (tuple, list)) and len(row) == 3,
+        "POSTFILL_REPAIR_DURABLE_EVIDENCE_MISSING",
+    )
+    evidence, order_ids, command_id = row
+    _require(
+        isinstance(evidence, Mapping)
+        and evidence.get("source") == "SIGNED_BYBIT_MARKET_FILL_AND_POSITION"
+        and evidence.get("trading_account_id") == position.trading_account_id
+        and evidence.get("symbol") == position.symbol
+        and str(evidence.get("position_idx")) == "0"
+        and _decimal(evidence.get("actual_avg_fill"), "REPAIR_FILL_INVALID")
+            == position.actual_avg_fill
+        and _decimal(evidence.get("actual_qty"), "REPAIR_QTY_INVALID")
+            == position.actual_qty
+        and _decimal(evidence.get("stopLoss"), "REPAIR_SL_INVALID")
+            == _decimal(signed.position.get("stopLoss"), "REPAIR_SIGNED_SL_INVALID")
+        and _decimal(evidence.get("takeProfit"), "REPAIR_TP_INVALID")
+            == _decimal(signed.position.get("takeProfit"), "REPAIR_SIGNED_TP_INVALID")
+        and isinstance(evidence.get("entry_order_id"), str)
+        and bool(str(evidence.get("entry_order_id") or "").strip())
+        and isinstance(evidence.get("entry_execution_ids"), list)
+        and bool(evidence["entry_execution_ids"])
+        and all(
+            isinstance(item, str) and bool(item.strip())
+            for item in evidence["entry_execution_ids"]
+        )
+        and len(set(evidence["entry_execution_ids"]))
+            == len(evidence["entry_execution_ids"])
+        and isinstance(order_ids, list)
+        and order_ids == [evidence["entry_order_id"]]
+        and command_id == position.entry_command_id,
+        "POSTFILL_REPAIR_INITIAL_PROTECTION_LINEAGE_INVALID",
+    )
+    command = connection.execute(
+        """SELECT state,command_type,symbol,trading_account_id,identity_status
+             FROM runtime.trade_commands
+            WHERE command_id=%s""",
+        (position.entry_command_id,),
+    ).fetchone()
+    _require(
+        command == (
+            "failed", "entry", position.symbol,
+            position.trading_account_id, "PROVEN",
+        ),
+        "POSTFILL_REPAIR_FAILED_ENTRY_COMMAND_UNPROVEN",
+    )
+    exit_requests = connection.execute(
+        """SELECT count(*) FROM strategy_exit.execution_requests
+            WHERE strategy_position_id=%s""",
+        (position.strategy_position_id,),
+    ).fetchone()
+    _require(
+        exit_requests == (0,),
+        "POSTFILL_REPAIR_EXIT_REQUEST_ALREADY_EXISTS",
+    )
+    return P90RealPostfillRepairEvidence(
+        entry_order_id=str(evidence["entry_order_id"]),
+        execution_ids=tuple(str(item) for item in evidence["entry_execution_ids"]),
     )
 
 
@@ -362,8 +444,16 @@ def prove_p90_real_open_restart_inventory(
             == position.actual_avg_fill,
             "POSITION_FILL_OR_SIDE_DRIFT",
         )
-        _verify_trailing(position, signed)
-        verified.append(P90RealRestartPosition(position, plan, signed))
+        repair = None
+        if not _trailing_armed(position, signed):
+            repair = _postfill_repair_evidence(
+                connection,
+                position=position,
+                signed=signed,
+            )
+        verified.append(P90RealRestartPosition(
+            position, plan, signed, repair,
+        ))
 
     return P90RealOpenRestartInventory(
         source_epoch_id=source_epoch_id,
