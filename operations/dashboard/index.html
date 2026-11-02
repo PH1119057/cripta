@@ -796,7 +796,10 @@ function currentP90Diagnostic(diag){
 }
 function p90RailH9Proximity(item){
   const h9=item?.h9_distances||{};
-  const values=[Number(h9.long_distance_pct),Number(h9.short_distance_pct)].filter(value=>Number.isFinite(value)&&value>=0);
+  const values=[h9.long_distance_pct,h9.short_distance_pct]
+    .filter(value=>value!==null&&value!==undefined&&value!=='')
+    .map(Number)
+    .filter(value=>Number.isFinite(value)&&value>=0);
   return values.length?Math.min(...values):Number.POSITIVE_INFINITY;
 }
 function renderP90RailPositions(items,positions,diagnostic=window.ownerFullContourDiagnosticLatest||null){
@@ -806,6 +809,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
   rows.sort((a,b)=>{
     const aOpen=String(a?.state||'')==='OPEN',bOpen=String(b?.state||'')==='OPEN';
     if(aOpen!==bOpen)return aOpen?-1:1;
+    if(aOpen&&bOpen)return 0;
     const aDistance=p90RailH9Proximity(a),bDistance=p90RailH9Proximity(b);
     if(aDistance!==bDistance)return aDistance-bDistance;
     return String(a?.symbol||'').localeCompare(String(b?.symbol||''));
