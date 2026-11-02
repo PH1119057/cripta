@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,8 +13,8 @@ from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
     P90PrivateProofClient,
 )
 
-_SHA = re.compile(r"[0-9a-f]{40}\\Z")
-_REQUEST = re.compile(r"[A-Za-z0-9_-]{8,128}\\Z")
+_SHA = re.compile(r"[0-9a-f]{40}\Z")
+_REQUEST = re.compile(r"[A-Za-z0-9_-]{8,128}\Z")
 _ALLOWED = {
     (
         "ta-2122c81ecff14f3b85b102db605212f7",
@@ -110,5 +111,31 @@ def main() -> None:
     }, sort_keys=True))
 
 
+# Safe, bounded error vocabulary; never expose raw signed Exchange or DB details.
+_DIAGNOSTIC_CODES = frozenset({
+    "P90_ACCOUNT_WS_RECOVERY_OWNER_REQUIRED",
+    "P90_ACCOUNT_WS_RECOVERY_REQUEST_ID_INVALID",
+    "P90_ACCOUNT_WS_RECOVERY_ACCOUNT_SCOPE_INVALID",
+    "P90_ACCOUNT_WS_RECOVERY_RELEASE_IDENTITY_UNVERIFIED",
+    "P90_ACCOUNT_WS_RECOVERY_PRIVATE_PROOF_INVALID",
+    "P90_ACCOUNT_WS_RECOVERY_RESULT_INVALID",
+})
+
+
+def _main_with_safe_error() -> None:
+    try:
+        main()
+    except Exception as exc:
+        reason = str(exc)
+        if reason in _DIAGNOSTIC_CODES:
+            code = reason
+        elif isinstance(exc, psycopg.Error):
+            code = "P90_ACCOUNT_WS_RECOVERY_DB_REJECTED"
+        else:
+            code = "P90_ACCOUNT_WS_RECOVERY_PROOF_OR_RUNTIME_ERROR"
+        print("P90_ACCOUNT_WS_RECOVERY_ERROR=" + code, file=sys.stderr)
+        raise SystemExit(20) from None
+
+
 if __name__ == "__main__":
-    main()
+    _main_with_safe_error()
