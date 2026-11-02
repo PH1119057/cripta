@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-
 ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
 CLAIM = "slot-6447a49fd4dc55a130a0155ac39d9032"
 NOW = datetime(2026, 11, 2, 19, 20, tzinfo=UTC)
