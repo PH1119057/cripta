@@ -89,9 +89,9 @@ def test_isolated_unified_wallet_uses_exact_usdt_coin_scope() -> None:
             }],
         }]},
     })
-    assert equity == 20.5
-    assert wallet == 20
-    assert available == 16
+    assert str(equity) == "20.5"
+    assert str(wallet) == "20"
+    assert str(available) == "16.00"
 
 
 def test_isolated_wallet_scope_stays_fail_closed_when_ambiguous() -> None:
