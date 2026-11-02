@@ -1,0 +1,66 @@
+name: p90-ws-recovery-postgres
+
+on:
+  pull_request:
+    paths:
+      - "operations/sql/20261102_p90_account_ws_safety_recovery.sql"
+      - "tests/integration/p90_ws_recovery_disposable_setup.sql"
+      - ".github/workflows/p90-ws-recovery-postgres.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-postgres-acl-and-recovery:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: p90_ws_recovery_ci
+          POSTGRES_PASSWORD: disposable_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d p90_ws_recovery_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: p90_ws_recovery_ci
+      PGUSER: postgres
+      PGPASSWORD: disposable_ci_only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare exact disposable baseline and apply migration twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/integration/p90_ws_recovery_disposable_setup.sql
+          psql -X -v ON_ERROR_STOP=1 -f operations/sql/20261102_p90_account_ws_safety_recovery.sql
+          psql -X -v ON_ERROR_STOP=1 -f operations/sql/20261102_p90_account_ws_safety_recovery.sql
+      - name: Prove SECURITY DEFINER owner has SELECT UPDATE DELETE lock privilege
+        shell: bash
+        run: |
+          set -euo pipefail
+          rights="$(psql -X -Atqc "SELECT has_table_privilege('cripta_account_entry_safety_recovery','runtime.account_entry_safety_blocks','SELECT'),has_table_privilege('cripta_account_entry_safety_recovery','runtime.account_entry_safety_blocks','UPDATE'),has_table_privilege('cripta_account_entry_safety_recovery','runtime.account_entry_safety_blocks','DELETE')")"
+          test "$rights" = 't|t|t'
+          echo 'EXACT_DEFINER_FOR_UPDATE_ACL=PASS'
+      - name: Prove missing generation fails closed and exact signed flat succeeds
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PGUSER=cripta PGPASSWORD=ci_p90_recovery_disposable_only
+          sql_bad="BEGIN ISOLATION LEVEL SERIALIZABLE; SELECT control.recover_p90_account_ws_safety('ta-853ac5fcd58185697396d33cd57459fa','ac-ec57819f875f1bfd929a382d6dc8a125',repeat('a',40),'missing-generation','123456789',clock_timestamp()); COMMIT;"
+          if psql -X -v ON_ERROR_STOP=1 -c "$sql_bad" >/tmp/ci-negative.out 2>/tmp/ci-negative.err; then
+            echo 'Missing generation unexpectedly accepted'; exit 1
+          fi
+          grep -q 'P90_ACCOUNT_WS_RECOVERY_GENERATION_NOT_PROVEN' /tmp/ci-negative.err
+          test "$(psql -X -Atqc "SELECT count(*) FROM runtime.account_entry_safety_blocks")" = "1"
+          sql_good="BEGIN ISOLATION LEVEL SERIALIZABLE; SELECT control.recover_p90_account_ws_safety('ta-853ac5fcd58185697396d33cd57459fa','ac-ec57819f875f1bfd929a382d6dc8a125',repeat('a',40),'acctgen-ci-sub','123456789',clock_timestamp()); COMMIT;"
+          psql -X -v ON_ERROR_STOP=1 -c "$sql_good"
+          test "$(psql -X -Atqc "SELECT count(*) FROM runtime.account_entry_safety_blocks")" = "0"
+          test "$(psql -X -Atqc "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'")" = "0"
+          echo 'SIGNED_FLAT_SQL_RECOVERY_EXACT_SUB=PASS;GATE_UNCHANGED=PASS'
