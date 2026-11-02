@@ -13,10 +13,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from bybit_workbench.strategy_position import StrategyPosition
-
-from p90l90_real_postfill_source_client import (
-    read_real_postfill_source_window,
-)
 from bybit_workbench.universal_entry.p90l90_real_account_routes import (
     read_p90_real_account_routes,
 )
@@ -38,6 +34,8 @@ from bybit_workbench.universal_exit.p90l90_real_row_connection import (
     P90RealMappedExitConnection,
 )
 from bybit_workbench.universal_exit.storage import PostgresExitShadowStore
+from p90l90_real_postfill_source_client import read_real_postfill_source_window
+
 SignedPositionFactory = Callable[[Any], Any]
 PositionRuntimeProof = Callable[[StrategyPosition], bool]
 
