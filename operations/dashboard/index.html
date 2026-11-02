@@ -997,6 +997,7 @@ function refreshP90RealV3ArmControl(){
   else if(blockers.includes('REMOTE_SOURCE_INSTALLED_IDENTITY_DRIFT')){state='error';message='OWNER ARM заблокирован · source/runtime release identity не совпадает'}
   else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='warn';message='Universal Entry observer сейчас не готов · OWNER ARM сначала выполнит автоматическую подготовку'}
   setOperationStatus(status,state,message);
+  showAuthoritativeP90ArmState(exactArmed,operation);
   const primaryP90Control=cohort||armed||preparing||operationState==='BLOCKED';
   tradeGateButton.hidden=!primaryP90Control;
   button.hidden=true;
@@ -1019,7 +1020,28 @@ function showP90ArmResult(entry){
   if(!panel||!meta||!text)return;
   meta.textContent=entry.at+' · '+entry.state+' · request '+entry.requestId;
   text.textContent=entry.message;
-  panel.open=entry.state!=='success';
+  panel.open=true;
+}
+function showAuthoritativeP90ArmState(exactArmed,operation){
+  const operationState=String(operation?.state||''),requestId=String(operation?.request_id||'');
+  if(exactArmed){
+    showP90ArmResult({
+      state:'success',
+      message:'P90 REAL v3 ARMED · mainnet gate OPEN · exact MAIN/SUB scope подтверждён',
+      requestId:requestId||'authoritative-runtime-state',
+      at:String(operation?.updated_at||operation?.completed_at||new Date().toISOString())
+    });
+    return;
+  }
+  if(!gateChanging||!requestId)return;
+  const state=operationState==='BLOCKED'?'error':'in_progress';
+  const suffix=operationState==='READY_FOR_OWNER_ARM'?' · выполняется финальный OWNER ARM':' · mainnet gate CLOSED';
+  showP90ArmResult({
+    state,
+    message:p90ReadinessOperationText(operation)+suffix,
+    requestId,
+    at:String(operation?.updated_at||operation?.created_at||new Date().toISOString())
+  });
 }
 try{const saved=sessionStorage.getItem(p90ArmHistoryKey);if(saved)showP90ArmResult(JSON.parse(saved))}catch(_){}
 document.getElementById('p90ArmCopyResult')?.addEventListener('click',async()=>{
@@ -1310,14 +1332,37 @@ function renderReleaseArmCritical(lt){
   const critical=Boolean(state.critical)||incidents.length>0;
   banner.hidden=!critical;
   if(!critical)return;
+  const loaded=safe(String(state.loaded_commit||'UNKNOWN').slice(0,12));
   const names=mismatch.map(x=>safe(x.symbol)+' ('+safe(String(x.session_release_commit||'').slice(0,12))+')').join(', ');
-  details.innerHTML='Допуск REAL Entry не подтверждён для загруженного release <b>'+
-    safe(String(state.loaded_commit||'UNKNOWN').slice(0,12))+'</b>. '+
-    (names?'Несовпадающие LIVE-arm sessions: '+names+'. ':'')+
-    (notReady?'Отказов REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY за 30 минут: '+notReady+'. ':'')+
-    (incidents.length?'Открытый серверный CRITICAL: '+safe(incidents[0].reason)+
-       ', обнаружен '+safe(incidents[0].detected_at)+'. ':'')+
-    'Новые реальные входы требуют проверки и отдельного разрешения владельца.';
+  if(names){
+    details.innerHTML='<b>Несовпадение release identity.</b> Загружен '+loaded+
+      '. Несовпадающие LIVE-arm sessions: '+names+
+      '. Новые реальные входы требуют проверки и отдельного разрешения владельца.';
+    return;
+  }
+  const incident=incidents[0]||null;
+  if(incident&&String(incident.reason||'')==='REAL_ENTRY_RUNTIME_NOT_READY'){
+    const runtimeDetail=String(incident.affected?.entry_runtime_health?.source_detail||'');
+    details.innerHTML='<b>REAL Entry временно не готов.</b> Несовпадение LIVE-arm release не обнаружено; загружен '+loaded+
+      '. Observer/runtime ещё завершает обязательную подготовку'+
+      (runtimeDetail?' · '+safe(runtimeDetail):'')+
+      '. Mainnet gate остаётся закрытым до автоматического восстановления готовности.';
+    return;
+  }
+  if(incident){
+    details.innerHTML='<b>Открытая operational проблема REAL Entry.</b> Загружен release '+loaded+
+      ' · '+safe(String(incident.reason||'UNKNOWN'))+
+      ' · обнаружено '+safe(String(incident.detected_at||'время неизвестно'))+
+      '. Это сообщение само по себе не означает несовпадение release.';
+    return;
+  }
+  if(notReady){
+    details.innerHTML='<b>REAL Entry временно не готов.</b> За последние 30 минут отказов REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY: '+
+      notReady+'. Несовпадение LIVE-arm release не обнаружено.';
+    return;
+  }
+  details.innerHTML='<b>REAL Entry требует проверки.</b> Загружен release '+loaded+
+    '. Причина не классифицирована как release mismatch.';
 }
 function renderMiniLogFeed(lt){
   // This is an operational attention queue, NOT a trade/decision/command log.
