@@ -96,7 +96,10 @@ def account_protection_verdicts(
             entry_row = connection.execute(
                 """SELECT payload_json FROM runtime.trade_commands
                     WHERE command_id=%s AND command_type='entry'
-                      AND (identity_status='PROVEN' AND (%s::text IS NULL OR trading_account_id=%s))""",
+                      AND (
+                          identity_status='PROVEN'
+                          AND (%s::text IS NULL OR trading_account_id=%s)
+                      )""",
                 (entry_command_id, trading_account_id, trading_account_id),
             ).fetchone()
             if not entry_row:
