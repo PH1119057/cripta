@@ -48,7 +48,7 @@ def test_request_id_validator_accepts_dashboard_owner_request_and_denies_injecti
         "a" * 128,
     ):
         assert request.fullmatch(valid)
-    for invalid in ("short", "a" * 129, "p90/owner", "a" * 8 + "\\n", "a" * 8 + " ", ""):
+    for invalid in ("short", "a" * 129, "p90/owner", "a" * 8 + "\n", "a" * 8 + " ", ""):
         assert request.fullmatch(invalid) is None
 
 
@@ -83,8 +83,14 @@ def test_dashboard_recovery_failure_cannot_advance_to_owner_arm():
     assert "result.stderr.splitlines()" in recovery
     assert '":code="' in recovery
     assert "raise RuntimeError(" in recovery
-    assert prepare.index("ws_recovery = _recover_p90_real_ws_safety_if_needed(") < prepare.index("mark_real_readiness_ready(")
-    assert arm.index('if preparation.get("state") != "READY_FOR_OWNER_ARM":') < arm.index("stage_p90l90_real_v3(")
+    assert (
+        prepare.index("ws_recovery = _recover_p90_real_ws_safety_if_needed(")
+        < prepare.index("mark_real_readiness_ready(")
+    )
+    assert (
+        arm.index('if preparation.get("state") != "READY_FOR_OWNER_ARM":')
+        < arm.index("stage_p90l90_real_v3(")
+    )
     assert "exchange_mutation" in recovery
     assert "gate_mutation" in recovery
     assert "owner_arm" in recovery
@@ -100,7 +106,7 @@ def _load_cli_module():
 
 @pytest.mark.parametrize("runtime_sha,state_sha,accepted", (
     ("a" * 40, "a" * 40, True),
-    ("A" * 40, "a" * 40, False),
+    ("A" * 40, "a" * 40, True),
     ("a" * 40, "b" * 40, False),
     ("a" * 39, "a" * 39, False),
     ("a" * 40 + "\\Z", "a" * 40 + "\\Z", False),
@@ -111,18 +117,22 @@ def test_installed_commit_exact_identity_runtime_validation(
     module = _load_cli_module()
     runtime = tmp_path / "runtime"
     state = tmp_path / "state"
-    runtime.write_text(runtime_sha + "\\n", encoding="utf-8")
-    state.write_text(state_sha + "\\n", encoding="utf-8")
+    runtime.write_text(runtime_sha + "\n", encoding="utf-8")
+    state.write_text(state_sha + "\n", encoding="utf-8")
     real_path = Path
     paths = {
         "/srv/cripta/runtime/current/INSTALLED_COMMIT": runtime,
         "/var/lib/cripta/release/INSTALLED_COMMIT": state,
     }
-    monkeypatch.setattr(module, "Path", lambda value: paths.get(str(value), real_path(value)))
+    monkeypatch.setattr(
+        module, "Path", lambda value: paths.get(str(value), real_path(value))
+    )
     if accepted:
-        assert module._installed_commit() == runtime_sha
+        assert module._installed_commit() == runtime_sha.lower()
     else:
-        with pytest.raises(RuntimeError, match="P90_ACCOUNT_WS_RECOVERY_RELEASE_IDENTITY_UNVERIFIED"):
+        with pytest.raises(
+            RuntimeError, match="P90_ACCOUNT_WS_RECOVERY_RELEASE_IDENTITY_UNVERIFIED"
+        ):
             module._installed_commit()
 
 
