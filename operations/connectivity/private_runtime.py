@@ -5439,7 +5439,15 @@ def private_loop(key: str, secret: str) -> None:
                     connection.rollback()
                 reconnect_started_ms = int(time.time() * 1000)
                 recovering = True
-            disarm_new_entries(connection, PRIVATE_RECONNECT_GATE_REASON)
+            # A failed read-only Exchange-time calibration has not sent a
+            # mutation. Preserve any pre-existing safety latch, but do not
+            # create a permanent SUB WS-recovery latch for this transient
+            # pre-mutation condition. Entry still requires a fresh account
+            # reconciliation and its own safe clock proof before send.
+            if _is_sub_private_worker() and isinstance(exc, UnsafeBybitClock):
+                connection.rollback()
+            else:
+                disarm_new_entries(connection, PRIVATE_RECONNECT_GATE_REASON)
             reconnects += 1
             safe_error = _private_worker_safe_error(exc)
             connection_event(
