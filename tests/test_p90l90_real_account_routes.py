@@ -223,9 +223,10 @@ def test_flat_roster_requests_two_credential_local_proofs(monkeypatch) -> None:
     monkeypatch.setattr(ipc, "P90PrivateProofClient", FakeClient)
     main, sub = read_p90_real_signed_flat_accounts(routes)
     assert (main.trading_account_id, sub.trading_account_id) == (MAIN, SUB)
-    assert calls == [
-        (MAIN, "connector-main", 15.0), (SUB, "connector-sub", 15.0),
-    ]
+    assert set(calls) == {
+        (MAIN, "connector-main", 15.0),
+        (SUB, "connector-sub", 15.0),
+    }
     monkeypatch.setattr(
         FakeClient, "read_flat_account",
         lambda self: replace(
@@ -279,3 +280,50 @@ def test_flat_roster_rejects_missing_producer_and_foreign_evidence(
     monkeypatch.setattr(ipc, "P90PrivateProofClient", WrongClient)
     with pytest.raises(P90RealAccountRoutesUnverified, match="SCOPE_MISMATCH"):
         read_p90_real_signed_flat_accounts(routes)
+
+
+def test_flat_roster_private_proofs_are_parallel_and_return_main_sub_order(
+    monkeypatch,
+) -> None:
+    from datetime import timedelta
+    from threading import Barrier
+
+    from bybit_workbench.universal_entry.p90l90_real_source_epoch_start import (
+        P90RealSignedFlatAccount,
+    )
+    from bybit_workbench.universal_exit import p90l90_real_private_ipc as ipc
+
+    at = datetime.now(UTC)
+    routes = read_p90_real_account_routes(_DB(), bundles=BUNDLES, at=at)
+    barrier = Barrier(2)
+
+    class ParallelClient:
+        def __init__(self, *, account, connector, timeout_seconds):
+            assert connector in {"connector-main", "connector-sub"}
+            assert timeout_seconds == 15.0
+            self.account = account
+
+        def read_flat_account(self):
+            barrier.wait(timeout=2)
+            is_main = self.account == MAIN
+            return P90RealSignedFlatAccount(
+                trading_account_id=self.account,
+                signed_uid="101" if is_main else "202",
+                private_generation_id=(
+                    "parallel-generation-main"
+                    if is_main
+                    else "parallel-generation-sub"
+                ),
+                source_ref="bybit:signed-flat-linear-usdt:exact-account",
+                observed_at=at - timedelta(milliseconds=100),
+                open_positions=0,
+                open_orders=0,
+                pending_commands=0,
+            )
+
+    monkeypatch.setattr(ipc, "P90PrivateProofClient", ParallelClient)
+    main, sub = read_p90_real_signed_flat_accounts(routes)
+    assert main.trading_account_id == MAIN
+    assert sub.trading_account_id == SUB
+    assert main.signed_uid == "101"
+    assert sub.signed_uid == "202"

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -225,19 +226,34 @@ def read_p90_real_signed_flat_accounts(
         raise P90RealAccountRoutesUnverified(
             "P90_REAL_FLAT_MAIN_SUB_ROSTER_INVALID"
         )
+    def read_one(
+        route: P90RealAccountRoute,
+    ) -> tuple[P90RealSignedFlatAccount, datetime]:
+        proof = P90PrivateProofClient(
+            account=route.trading_account_id,
+            connector=route.account_connector_id,
+            timeout_seconds=P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
+        ).read_flat_account()
+        # Timestamp immediately after this independent credential-local read,
+        # not after the other account finishes. This keeps validation tied to
+        # each producer while preserving the strict upstream WS proof window.
+        return proof, datetime.now(UTC)
+
+    route_order = (routes.main, routes.sub)
+    try:
+        with ThreadPoolExecutor(
+            max_workers=2,
+            thread_name_prefix="p90-private-proof",
+        ) as pool:
+            futures = tuple(pool.submit(read_one, route) for route in route_order)
+            results = tuple(future.result() for future in futures)
+    except Exception:
+        raise P90RealAccountRoutesUnverified(
+            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
+        ) from None
+
     proofs: list[P90RealSignedFlatAccount] = []
-    for route in (routes.main, routes.sub):
-        try:
-            proof = P90PrivateProofClient(
-                account=route.trading_account_id,
-                connector=route.account_connector_id,
-                timeout_seconds=P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
-            ).read_flat_account()
-        except Exception:
-            raise P90RealAccountRoutesUnverified(
-                "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
-            ) from None
-        checked_at = datetime.now(UTC)
+    for route, (proof, checked_at) in zip(route_order, results, strict=True):
         if (
             not isinstance(proof, P90RealSignedFlatAccount)
             or proof.trading_account_id != route.trading_account_id
