@@ -1670,6 +1670,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                         "executable_close_price": (
                             None if executable_value <= 0 else str(executable_value)
                         ),
+                        "current_move_pct": protection_move_pct(executable_value),
                         "net_pnl_to_close": net,
                         "pnl_basis": (
                             "AFTER_COMMISSIONS_ACTUAL_ENTRY_FEE"

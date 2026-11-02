@@ -19,8 +19,10 @@ def test_private_worker_handoffs_proven_first_fill_before_command_completion():
     assert "p90_real_postfill = (" in body
     assert "handoff_real_first_protected_fill(" in body
     assert 'if p90_real_postfill is not None:' in body
-    assert body.index('reconcile(connection, key, secret, "after_command")') < (
-        body.index("handoff_real_first_protected_fill(")
+    # Strict postfill source proof is bounded to <=5 seconds after confirmed
+    # protection. Generic full-account reconcile may exceed that window.
+    assert body.index("handoff_real_first_protected_fill(") < (
+        body.index('reconcile(connection, key, secret, "after_command")')
     )
     assert body.index("handoff_real_first_protected_fill(") < (
         body.index("record_protection_or_owner_event(")
@@ -134,3 +136,24 @@ def test_private_worker_postfill_modules_import_under_exact_service_path() -> No
         "/srv/cripta/runtime/current/operations/connectivity"
         in unit
     )
+
+
+def test_first_fill_handoff_failure_uses_canonical_entry_gate_reason() -> None:
+    runtime = Path("operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(runtime)
+    handler = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "handle_exchange_mutation_barrier"
+    )
+    body = ast.get_source_segment(runtime, handler)
+    assert body is not None
+    assert 'error = f"EXCHANGE_MUTATION_BARRIER:' in body
+    assert 'str(exc) == "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED"' in body
+    assert "REAL_ENTRY_RUNTIME_NOT_READY_REASON" in body
+    assert "disarm_new_entries(connection, gate_reason)" in body
+    # Detailed failure remains durable diagnostics; only the global new-Entry
+    # gate is normalized so the existing P90 Exit owner remains attached.
+    assert "error[:500]" in body

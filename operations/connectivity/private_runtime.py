@@ -43,6 +43,7 @@ from bybit_workbench.account_entry_safety import (
     account_entry_safety_ready,
     latch_account_entry_safety,
 )
+from bybit_workbench.release_arm_safety import REAL_ENTRY_RUNTIME_NOT_READY_REASON
 from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 from bybit_workbench.private_worker_status import (
     DEFAULT_STATUS_DIR,
@@ -1834,8 +1835,13 @@ def handle_exchange_mutation_barrier(
             f"persist={_private_worker_safe_error(recovery_exc)}"
         )
 
+    gate_reason = (
+        REAL_ENTRY_RUNTIME_NOT_READY_REASON
+        if str(exc) == "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED"
+        else error[:500]
+    )
     try:
-        disarm_new_entries(connection, error[:500])
+        disarm_new_entries(connection, gate_reason)
     except Exception as recovery_exc:
         try:
             connection.rollback()
@@ -3443,18 +3449,11 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             result["actualProtection"] = actual_protection_result
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
-    try:
-        reconcile(connection, key, secret, "after_command")
-    except Exception as exc:
-        raise ExchangeMutationBarrier(
-            f"post-mutation reconciliation failed: {exc}"
-        ) from exc
     if p90_real_postfill is not None:
-        # This is the FIRST protected, authenticated fill. A native Market
-        # stream/Exit failure must block this command terminalization rather
-        # than wait until a future 5m candle or silently leave trailing idle.
-        # The already-attached Bybit SL+TP remain resident. This does NOT
-        # resubmit Entry or attempt any emergency arbitrary market close.
+        # This is the FIRST protected, authenticated fill. Consume the strict
+        # <=5s native postfill proof BEFORE the generic full-account reconcile:
+        # reconcile may legitimately take longer than the source-proof window.
+        # Existing Exchange TP+SL are already resident at this point.
         from p90l90_real_postfill_handoff import (
             handoff_real_first_protected_fill,
         )
@@ -3489,6 +3488,12 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             raise ExchangeMutationBarrier(
                 "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED"
             ) from None
+    try:
+        reconcile(connection, key, secret, "after_command")
+    except Exception as exc:
+        raise ExchangeMutationBarrier(
+            f"post-mutation reconciliation failed: {exc}"
+        ) from exc
     record_protection_or_owner_event(
         connection, command_id, kind, symbol, payload, before_position
     )
