@@ -24,6 +24,7 @@ from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     scope_for_check,
 )
+from bybit_workbench.lifecycle_supervisor import LifecycleSupervisor
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_entry.contracts import TradeDirection
 from bybit_workbench.universal_entry.execution_bridge import PreparedRuntimeEntryCommand
@@ -1417,3 +1418,57 @@ def test_failed_before_start_pending_command_reconciles_without_exchange_mutatio
                 WHERE trading_account_id=%s""",
             (ids["trading_account_id"],),
         ).fetchone()["count"] == 0
+
+        # Reproduce the production sequence where a historical detector
+        # reopened the already-repaired ownership fault. Lifecycle may retire
+        # it only from the exact durable terminal/no-mutation lineage above.
+        connection.execute(
+            """UPDATE runtime.lifecycle_faults
+                  SET state='OPEN',resolved_at=NULL
+                WHERE fault_id=%s""",
+            (fault_id,),
+        )
+        supervisor = LifecycleSupervisor(
+            connection,
+            trading_account_id=ids["trading_account_id"],
+            owns_global_faults=False,
+        )
+        resolved = supervisor._resolve_cleared_faults(
+            (),
+            NOW + timedelta(seconds=1),
+        )
+        assert resolved == 1
+        repaired_fault = connection.execute(
+            """SELECT state,payload FROM runtime.lifecycle_faults
+                WHERE fault_id=%s""",
+            (fault_id,),
+        ).fetchone()
+        assert repaired_fault["state"] == "RESOLVED"
+        assert (
+            repaired_fault["payload"]["last_resolved_by"]
+            == "lifecycle_terminal_entry_reconciliation"
+        )
+        assert repaired_fault["payload"]["exchange_mutation"] is False
+
+        # Removing the verified no-mutation reason makes the same repair
+        # ineligible; a blank/flat snapshot is never enough.
+        connection.execute(
+            """UPDATE runtime.lifecycle_faults
+                  SET state='OPEN',resolved_at=NULL
+                WHERE fault_id=%s""",
+            (fault_id,),
+        )
+        connection.execute(
+            """UPDATE runtime.capital_reservations
+                  SET state_reason='UNVERIFIED_TEST_REASON'
+                WHERE reservation_id=%s""",
+            (ids["reservation_id"],),
+        )
+        assert supervisor._resolve_cleared_faults(
+            (),
+            NOW + timedelta(seconds=2),
+        ) == 0
+        assert connection.execute(
+            "SELECT state FROM runtime.lifecycle_faults WHERE fault_id=%s",
+            (fault_id,),
+        ).fetchone()["state"] == "OPEN"
