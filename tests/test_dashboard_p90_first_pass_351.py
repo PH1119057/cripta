@@ -66,8 +66,10 @@ def test_first_pass_remains_read_only_projection():
 def test_p90_left_rail_sorts_and_colors_by_nearest_h9_proximity():
     assert "function p90RailH9Proximity(item)" in INDEX
     assert "Math.min(...values)" in INDEX
+    assert "value!==null&&value!==undefined&&value!==''" in INDEX
     assert "rows.sort((a,b)=>{" in INDEX
     assert "if(aOpen!==bOpen)return aOpen?-1:1" in INDEX
+    assert "if(aOpen&&bOpen)return 0" in INDEX
     assert "if(aDistance!==bDistance)return aDistance-bDistance" in INDEX
     assert "h9Proximity<0.5" in INDEX
     assert "visualNear?'p90-near':'p90-far'" in INDEX
