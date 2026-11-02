@@ -35,7 +35,7 @@ def test_clock_validation_still_required_before_mutating_post() -> None:
 
 
 def test_recovery_script_direct_execution_resolves_installed_src() -> None:
-    script = SOURCE.parents[1] / "operations/implementation/recover_p90_account_ws_safety.py"
+    script = SOURCE.parents[2] / "operations/implementation/recover_p90_account_ws_safety.py"
     tree = ast.parse(script.read_text(encoding="utf-8"))
     configured = [
         node for node in ast.walk(tree)
