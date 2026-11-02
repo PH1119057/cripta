@@ -1394,7 +1394,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                      FROM runtime.reconciliation_runs
                     WHERE trading_account_id=ANY(%s)
                       AND identity_status='PROVEN'
-                      AND ok=true
+                      AND ok=1
                     GROUP BY trading_account_id
                  )
                  SELECT b.trading_account_id,b.blocked_at_epoch_ms,r.recovered_at_epoch_ms
