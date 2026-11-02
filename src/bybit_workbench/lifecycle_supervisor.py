@@ -2026,17 +2026,21 @@ class LifecycleSupervisor:
                 if resolution is None:
                     # Unknown current Exchange exposure or lineage fails closed.
                     continue
+                resolved_by = (
+                    "lifecycle_exchange_authoritative_closed_slot"
+                    if resolution == "EXCHANGE_AUTHORITY_CONFIRMED_POSITION_CLOSE"
+                    else "lifecycle_terminal_entry_reconciliation"
+                )
                 updated = self._connection.execute(
                     """UPDATE runtime.lifecycle_faults
                           SET state='RESOLVED',resolved_at=%s,
                               payload=payload || jsonb_build_object(
                                   'last_resolution_reason',%s::text,
-                                  'last_resolved_by',
-                                  'lifecycle_terminal_entry_reconciliation',
+                                  'last_resolved_by',%s::text,
                                   'exchange_mutation',false
                               )
                         WHERE fault_id=%s AND state='OPEN'""",
-                    (now, resolution, fault_id),
+                    (now, resolution, resolved_by, fault_id),
                 )
             else:
                 updated = self._connection.execute(
