@@ -823,3 +823,40 @@ def test_wrong_wallet_account_type_rejects_entry_before_mutation() -> None:
             ("entry-wrong-wallet", "entry", "BTCUSDT", json.dumps(payload)),
         )
     mutation.assert_not_called()
+
+
+def test_ws_safety_recovery_control_is_exact_and_least_privilege() -> None:
+    migration = Path(
+        "operations/sql/20261102_p90_account_ws_safety_recovery.sql"
+    ).read_text(encoding="utf-8")
+    assert "SECURITY DEFINER" in migration
+    assert "cripta_account_entry_safety_recovery" in migration
+    assert "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN" in migration
+    assert "P90_ACCOUNT_WS_RECOVERY_NOT_DISARMED" in migration
+    assert "P90_ACCOUNT_WS_RECOVERY_SIGNED_UID_MISMATCH" in migration
+    assert "P90_ACCOUNT_WS_RECOVERY_GENERATION_NOT_PROVEN" in migration
+    assert "P90_ACCOUNT_WS_RECOVERY_PENDING_COMMAND" in migration
+    assert "P90_ACCOUNT_WS_RECOVERY_CRITICAL_FAULT" in migration
+    assert (
+        "GRANT DELETE ON runtime.account_entry_safety_blocks\n"
+        "  TO cripta_account_entry_safety_recovery"
+    ) in migration
+    assert "GRANT DELETE ON runtime.account_entry_safety_blocks TO cripta;" not in migration
+    assert "GRANT EXECUTE ON FUNCTION control.recover_p90_account_ws_safety" in migration
+
+
+def test_ws_safety_recovery_cli_requires_fresh_private_proof_before_control_call() -> None:
+    recovery = Path(
+        "operations/implementation/recover_p90_account_ws_safety.py"
+    ).read_text(encoding="utf-8")
+    proof = recovery.index("P90PrivateProofClient(")
+    db_call = recovery.index("control.recover_p90_account_ws_safety")
+    assert proof < db_call
+    assert "timeout_seconds=15.0" in recovery
+    assert "proof.open_positions != 0" in recovery
+    assert "proof.open_orders != 0" in recovery
+    assert "proof.pending_commands != 0" in recovery
+    assert "P90_ACCOUNT_WS_RECOVERY_OWNER_REQUIRED" in recovery
+    assert '"exchange_mutation": False' in recovery
+    assert '"gate_mutation": False' in recovery
+    assert '"owner_arm": False' in recovery
