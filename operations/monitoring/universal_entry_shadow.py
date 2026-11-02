@@ -3225,11 +3225,11 @@ def _run_observer_epoch(
                             False, REAL_ENTRY_RUNTIME_NOT_READY_REASON
                         )
                     )
+                    if p90_real_degraded and not degraded_gate_closed:
+                        raise RuntimeError(
+                            "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT"
+                        )
                     if p90_real_degraded:
-                        if not degraded_gate_closed:
-                            raise RuntimeError(
-                                "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT"
-                            )
                         return (), False
                     if p90_real_staged:
                         if not (staged_gate_closed or staged_gate_finalized):
