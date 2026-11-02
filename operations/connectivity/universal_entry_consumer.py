@@ -1409,8 +1409,11 @@ def _reconcile_pre_mutation_pending_command_blocks(
         ).fetchone()
         if command is None:
             continue
-        result = _mapping(command["result_json"], "trade command result")
-        payload = _mapping(command["payload_json"], "trade command payload")
+        try:
+            result = _mapping(command["result_json"], "trade command result")
+            payload = _mapping(command["payload_json"], "trade command payload")
+        except RuntimeError:
+            continue
         if (
             str(command["command_type"]) != "entry"
             or str(command["symbol"]) != str(row["symbol"])
