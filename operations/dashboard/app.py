@@ -5499,11 +5499,33 @@ def _recover_p90_real_ws_safety_if_needed(
             env=env,
         )
         if result.returncode != 0:
+            # The recovery CLI exposes only approved static failure codes.
+            # Never relay traceback, signed account proof or raw DB stderr.
+            safe_codes = {
+                "P90_ACCOUNT_WS_RECOVERY_OWNER_REQUIRED",
+                "P90_ACCOUNT_WS_RECOVERY_REQUEST_ID_INVALID",
+                "P90_ACCOUNT_WS_RECOVERY_ACCOUNT_SCOPE_INVALID",
+                "P90_ACCOUNT_WS_RECOVERY_RELEASE_IDENTITY_UNVERIFIED",
+                "P90_ACCOUNT_WS_RECOVERY_PRIVATE_PROOF_INVALID",
+                "P90_ACCOUNT_WS_RECOVERY_RESULT_INVALID",
+                "P90_ACCOUNT_WS_RECOVERY_DB_REJECTED",
+                "P90_ACCOUNT_WS_RECOVERY_PROOF_OR_RUNTIME_ERROR",
+            }
+            code = "P90_ACCOUNT_WS_RECOVERY_UNCLASSIFIED"
+            for line in result.stderr.splitlines():
+                prefix = "P90_ACCOUNT_WS_RECOVERY_ERROR="
+                if line.startswith(prefix):
+                    candidate = line[len(prefix):].strip()
+                    if candidate in safe_codes:
+                        code = candidate
+                    break
             raise RuntimeError(
                 "P90_REAL_ACCOUNT_WS_RECOVERY_FAILED:"
                 + account_id
                 + ":rc="
                 + str(result.returncode)
+                + ":code="
+                + code
             )
         try:
             payload = json.loads(result.stdout)
