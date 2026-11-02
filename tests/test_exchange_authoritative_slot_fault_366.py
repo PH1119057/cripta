@@ -5,6 +5,7 @@ This suite does not connect to production PostgreSQL or Bybit.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+
 from bybit_workbench.lifecycle_supervisor import LifecycleSupervisor
 
 
@@ -33,7 +34,7 @@ class FakeConnection:
         self.row = row
         self.queries: list[tuple[str, tuple[object, ...]]] = []
 
-    def execute(self, sql: str, params: tuple[object, ...] = ()) -> SimpleNamespace:
+    def execute(self, sql: str, params: tuple[object, ...] = ()) -> _Cursor:
         self.queries.append((sql, params))
         return _Cursor(self.row)
 
