@@ -6,9 +6,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from bybit_workbench.lifecycle_supervisor import LifecycleSupervisor
-
-
 ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
 CLAIM = "slot-6447a49fd4dc55a130a0155ac39d9032"
 NOW = datetime(2026, 11, 2, 19, 20, tzinfo=UTC)
@@ -56,6 +53,8 @@ def checked(
     ids: dict[str, object] | None = None,
     exposure: tuple[dict[str, object], ...] | None = (),
 ) -> tuple[str | None, FakeConnection]:
+    from bybit_workbench.lifecycle_supervisor import LifecycleSupervisor
+
     connection = FakeConnection(row)
     supervisor = LifecycleSupervisor(
         connection, trading_account_id=ACCOUNT, exchange_exposure=exposure
