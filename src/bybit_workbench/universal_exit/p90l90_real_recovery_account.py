@@ -169,7 +169,11 @@ class P90RealSignedRecoveryAccountReader:
             )
         return tuple(positions)
 
-    def _require_no_orders(self) -> None:
+    def _require_only_exact_protection_orders(
+        self,
+        positions: tuple[Mapping[str, object], ...],
+    ) -> None:
+        """Allow only Exchange-resident TP/SL owned by the signed position."""
         raw = self._signed(
             "/v5/order/realtime",
             {
@@ -179,14 +183,51 @@ class P90RealSignedRecoveryAccountReader:
         )
         result = raw["result"]
         assert isinstance(result, Mapping)
+        rows = result.get("list")
         if (
             result.get("category") != "linear"
-            or not isinstance(result.get("list"), list)
-            or result["list"]
+            or not isinstance(rows, list)
             or result.get("nextPageCursor") not in ("", None)
         ):
             raise P90RealRecoveryAccountUnverified(
                 "P90_REAL_RECOVERY_OPEN_ORDER_OR_INCOMPLETE_INVENTORY"
+            )
+        expected: dict[tuple[str, str], tuple[str, Decimal, Decimal]] = {}
+        for position in positions:
+            symbol = str(position["symbol"])
+            side = str(position["side"])
+            size = self._number(position["size"], allow_zero=False)
+            stop = self._number(position["stopLoss"], allow_zero=False)
+            take = self._number(position["takeProfit"], allow_zero=False)
+            close_side = "Sell" if side == "Buy" else "Buy"
+            expected[(symbol, "StopLoss")] = (close_side, size, stop)
+            expected[(symbol, "TakeProfit")] = (close_side, size, take)
+        seen: set[tuple[str, str]] = set()
+        for row in rows:
+            if not isinstance(row, Mapping):
+                raise P90RealRecoveryAccountUnverified(
+                    "P90_REAL_RECOVERY_PROTECTION_ORDER_ROW_INVALID"
+                )
+            key = (str(row.get("symbol") or ""), str(row.get("stopOrderType") or ""))
+            proof = expected.get(key)
+            if (
+                proof is None
+                or key in seen
+                or row.get("orderStatus") != "Untriggered"
+                or row.get("reduceOnly") is not True
+                or row.get("closeOnTrigger") is not True
+                or str(row.get("positionIdx")) != "0"
+                or row.get("side") != proof[0]
+                or self._number(row.get("qty"), allow_zero=False) != proof[1]
+                or self._number(row.get("triggerPrice"), allow_zero=False) != proof[2]
+            ):
+                raise P90RealRecoveryAccountUnverified(
+                    "P90_REAL_RECOVERY_NON_PROTECTION_OPEN_ORDER"
+                )
+            seen.add(key)
+        if seen != set(expected):
+            raise P90RealRecoveryAccountUnverified(
+                "P90_REAL_RECOVERY_PROTECTION_ORDER_SET_INCOMPLETE"
             )
 
     def __call__(self) -> P90RealSignedRecoveryAccount:
@@ -274,7 +315,7 @@ class P90RealSignedRecoveryAccountReader:
                 "P90_REAL_RECOVERY_CONNECTOR_UID_MISMATCH"
             )
         positions = self._positions()
-        self._require_no_orders()
+        self._require_only_exact_protection_orders(positions)
         if generation[4] != len(positions):
             raise P90RealRecoveryAccountUnverified(
                 "P90_REAL_RECOVERY_GENERATION_POSITION_COUNT_MISMATCH"
