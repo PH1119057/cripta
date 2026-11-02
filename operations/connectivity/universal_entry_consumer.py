@@ -103,6 +103,20 @@ def _mapping(value: object, label: str) -> Mapping[str, object]:
     return value
 
 
+def _json_mapping(value: object, label: str) -> Mapping[str, object]:
+    """Accept PostgreSQL json/jsonb mappings and legacy text JSON fail-closed."""
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"{label} must be valid JSON object text") from exc
+        if isinstance(decoded, Mapping):
+            return decoded
+    raise RuntimeError(f"{label} must be an object")
+
+
 _REQUIRED_DB_PRIVILEGES = (
     ("strategy_entry.execution_requests", "SELECT"),
     ("strategy_entry.strategy_attempts", "SELECT"),
@@ -1412,8 +1426,8 @@ def _reconcile_pre_mutation_pending_command_blocks(
         if command is None:
             continue
         try:
-            result = _mapping(command["result_json"], "trade command result")
-            payload = _mapping(command["payload_json"], "trade command payload")
+            result = _json_mapping(command["result_json"], "trade command result")
+            payload = _json_mapping(command["payload_json"], "trade command payload")
         except RuntimeError:
             continue
         if (
@@ -1560,7 +1574,7 @@ def _reconcile_pre_mutation_pending_command_blocks(
                       )
                 WHERE fault_code='EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN'
                   AND state='OPEN'
-                  AND exact_ids->>'execution_request_id'=%s
+                  AND exact_ids->>'entry_execution_request_id'=%s
                   AND exact_ids->>'trading_account_id'=%s""",
             (
                 now,
