@@ -43,11 +43,45 @@ def validate_wallet(wallet: Mapping[str, object]) -> tuple[Decimal, Decimal, Dec
     row = entries[0]
     if row.get("accountType") != "UNIFIED":
         raise RuntimeError("ACCOUNT_SAFETY_WALLET_TYPE_MISMATCH")
-    return (
-        _positive_number(row.get("totalEquity"), "totalEquity"),
-        _positive_number(row.get("totalAvailableBalance"), "totalAvailableBalance"),
-        _positive_number(row.get("totalWalletBalance"), "totalWalletBalance"),
+
+    account_wide = (
+        row.get("totalEquity"),
+        row.get("totalAvailableBalance"),
+        row.get("totalWalletBalance"),
     )
+    present = tuple(value not in (None, "") for value in account_wide)
+    if all(present):
+        return (
+            _positive_number(account_wide[0], "totalEquity"),
+            _positive_number(account_wide[1], "totalAvailableBalance"),
+            _positive_number(account_wide[2], "totalWalletBalance"),
+        )
+    if any(present):
+        raise RuntimeError("ACCOUNT_SAFETY_WALLET_SCOPE_MIXED")
+
+    coins = row.get("coin")
+    if not isinstance(coins, list):
+        raise RuntimeError("ACCOUNT_SAFETY_ISOLATED_USDT_MISSING")
+    usdt_rows = [
+        item for item in coins
+        if isinstance(item, Mapping) and item.get("coin") == "USDT"
+    ]
+    if len(usdt_rows) != 1:
+        raise RuntimeError("ACCOUNT_SAFETY_ISOLATED_USDT_AMBIGUOUS")
+    usdt = usdt_rows[0]
+    equity = _positive_number(usdt.get("equity"), "coin.USDT.equity")
+    wallet_balance = _positive_number(
+        usdt.get("walletBalance"), "coin.USDT.walletBalance"
+    )
+    reserved = sum(
+        (
+            _positive_number(usdt.get(name) or "0", "coin.USDT." + name)
+            for name in ("totalOrderIM", "totalPositionIM", "locked")
+        ),
+        Decimal("0"),
+    )
+    available = max(Decimal("0"), wallet_balance - reserved)
+    return equity, available, wallet_balance
 
 
 async def read_account_safety(reader: LifecycleAccountReadTransport) -> AccountSafetyFacts:
