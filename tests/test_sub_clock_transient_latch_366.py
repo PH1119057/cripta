@@ -32,3 +32,17 @@ def test_clock_validation_still_required_before_mutating_post() -> None:
     assert "def assert_mutation_clock_safe()" in source
     assert "return fresh_bybit_time_calibration()" in source
     assert "BYBIT_TIME_PROBE_ATTEMPTS = 3" in source
+
+
+def test_recovery_script_direct_execution_resolves_installed_src() -> None:
+    script = SOURCE.parents[1] / "operations/implementation/recover_p90_account_ws_safety.py"
+    tree = ast.parse(script.read_text(encoding="utf-8"))
+    configured = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "insert"
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "path"
+    ]
+    assert configured, "direct recovery script must insert installed src before imports"
