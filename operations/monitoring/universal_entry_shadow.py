@@ -49,6 +49,7 @@ from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     active_live_arm_session,
 )
+from bybit_workbench.release_arm_safety import REAL_ENTRY_RUNTIME_NOT_READY_REASON
 from bybit_workbench.universal_entry import (
     DataQuality,
     EntryDecisionCode,
@@ -2231,6 +2232,7 @@ def _run_observer_epoch(
     p90_real_source_only = False
     p90_real_live = False
     p90_real_staged = False
+    p90_real_degraded = False
     if observer_split.p90_real:
         if len(observer_split.p90_real) != 2 or len(LOADED_COMMIT) != 40:
             raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
@@ -2274,6 +2276,16 @@ def _run_observer_epoch(
             # runtime while admission remains hard-disabled by the closed gate.
             p90_real_live = True
             p90_real_staged = True
+        elif (
+            not gate_enabled
+            and gate_reason == REAL_ENTRY_RUNTIME_NOT_READY_REASON
+            and selected == expected
+        ):
+            # Runtime safety closed NEW Entry after owner-arm. Existing REAL
+            # exposure must keep exact source/Universal Exit/recovery owners.
+            # Admission remains physically unavailable while this gate is OFF.
+            p90_real_live = True
+            p90_real_degraded = True
         elif (
             gate_enabled
             and gate_reason == OWNER_ARM_OPEN_GATE_REASON
@@ -3207,6 +3219,18 @@ def _run_observer_epoch(
                         p90_real_staged
                         and gate_row == (True, OWNER_ARM_OPEN_GATE_REASON)
                     )
+                    degraded_gate_closed = (
+                        p90_real_degraded
+                        and gate_row == (
+                            False, REAL_ENTRY_RUNTIME_NOT_READY_REASON
+                        )
+                    )
+                    if p90_real_degraded:
+                        if not degraded_gate_closed:
+                            raise RuntimeError(
+                                "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT"
+                            )
+                        return (), False
                     if p90_real_staged:
                         if not (staged_gate_closed or staged_gate_finalized):
                             raise RuntimeError(
@@ -3369,7 +3393,11 @@ def _run_observer_epoch(
                             else (
                                 "p90_real_staged_gate_closed"
                                 if p90_real_staged
-                                else "p90_real_live_original_native_main_sub"
+                                else (
+                                    "p90_real_degraded_exit_only"
+                                    if p90_real_degraded
+                                    else "p90_real_live_original_native_main_sub"
+                                )
                             )
                         ),
                         "source_commit": LOADED_COMMIT,
@@ -3400,7 +3428,11 @@ def _run_observer_epoch(
             reason=(
                 "P90_REAL_OWNER_ARM_STAGE_READY"
                 if p90_real_staged and initial_running
-                else "causal seed complete"
+                else (
+                    "P90_REAL_DEGRADED_EXIT_ONLY"
+                    if p90_real_degraded and initial_running
+                    else "causal seed complete"
+                )
             ),
             sensor_status=sensor_status(datetime.now(UTC)),
             strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
@@ -3430,10 +3462,43 @@ def _run_observer_epoch(
                         current_signature = latest_signature
                         next_signature = now_mono + 1.0
                         continue
-                    if p90_real_staged:
-                        selected_now = _real_execution_selected_activation_ids(
-                            connection, observer_split.p90_real
+                    selected_now = _real_execution_selected_activation_ids(
+                        connection, observer_split.p90_real
+                    )
+                    if (
+                        p90_real_live
+                        and not p90_real_staged
+                        and not p90_real_degraded
+                        and gate_row == (
+                            False, REAL_ENTRY_RUNTIME_NOT_READY_REASON
                         )
+                        and selected_now == expected
+                        and latest_signature[1:] == current_signature[1:]
+                    ):
+                        # New Entry has been fail-closed by runtime safety.
+                        # Keep the exact live source and Exit owners attached
+                        # to existing exposure; admission callback returns false.
+                        p90_real_degraded = True
+                        current_signature = latest_signature
+                        _observer_status(
+                            state="RUNNING",
+                            epoch_id=epoch_id,
+                            active_bundles=bundles,
+                            symbols=symbols,
+                            facts_received=facts_received,
+                            evaluations=evaluations_count,
+                            signals=signals_count,
+                            warmup_until=warmup_until,
+                            reason="P90_REAL_DEGRADED_EXIT_ONLY",
+                            sensor_status=sensor_status(datetime.now(UTC)),
+                            strategy_monitors=strategy_monitor_rows(
+                                datetime.now(UTC)
+                            ),
+                            p90_owner_arm_stage=None,
+                        )
+                        next_signature = now_mono + 1.0
+                        continue
+                    if p90_real_staged:
                         if (
                             gate_row == (True, OWNER_ARM_OPEN_GATE_REASON)
                             and selected_now == expected
@@ -3597,7 +3662,11 @@ def _run_observer_epoch(
                     signals=signals_count,
                     warmup_until=warmup_until,
                     reason=(
-                        "all active StrategyPlans consume one causal fact stream"
+                        (
+                            "P90_REAL_DEGRADED_EXIT_ONLY"
+                            if p90_real_degraded
+                            else "all active StrategyPlans consume one causal fact stream"
+                        )
                         if running
                         else "waiting for plan-owned pre-start influence/sensor completeness"
                     ),
