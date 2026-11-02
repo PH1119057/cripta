@@ -34,7 +34,9 @@ from bybit_workbench.universal_exit.p90l90_real_row_connection import (
     P90RealMappedExitConnection,
 )
 from bybit_workbench.universal_exit.storage import PostgresExitShadowStore
-from p90l90_real_postfill_source_client import read_real_postfill_source_window
+from p90l90_real_postfill_source_client import (
+    read_real_postfill_source_window,
+)
 
 SignedPositionFactory = Callable[[Any], Any]
 PositionRuntimeProof = Callable[[StrategyPosition], bool]
