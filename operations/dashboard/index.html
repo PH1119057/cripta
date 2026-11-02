@@ -212,7 +212,7 @@
   
   <aside id="marketWorkspaceRail" class="workspace-rail" aria-label="Открытые сделки Bybit">
     <h2>Открытые сделки / P90 <span id="openRailCount" class="rail-muted">5</span></h2>
-    <div class="rail-muted">зелёный — открыта сделка · жёлтый — до Entry &lt; 0,5% · красный — дальше / нет valid Entry edge</div>
+    <div class="rail-muted">зелёный — открыта сделка · песочный — до ближайшей H9 &lt; 0,5% · красный — дальше / нет H9 distance; Entry всё равно требует overlap с L5-3</div>
     <div id="openRailPositions" class="rail-scroll" aria-live="polite"><div class="rail-placeholder">Загрузка P90 monitor…</div></div>
   </aside>
 <section id="liveDesk" class="grid panel">
@@ -794,10 +794,22 @@ function currentP90Diagnostic(diag){
   const stamp=Date.parse(diag.updated_at||diag.completed_at||diag.requested_at||'');
   return Number.isFinite(stamp)&&Date.now()-stamp>=0&&Date.now()-stamp<=P90_DIAGNOSTIC_VISIBLE_MS?diag:null;
 }
+function p90RailH9Proximity(item){
+  const h9=item?.h9_distances||{};
+  const values=[Number(h9.long_distance_pct),Number(h9.short_distance_pct)].filter(value=>Number.isFinite(value)&&value>=0);
+  return values.length?Math.min(...values):Number.POSITIVE_INFINITY;
+}
 function renderP90RailPositions(items,positions,diagnostic=window.ownerFullContourDiagnosticLatest||null){
   const rail=document.getElementById('openRailPositions'),count=document.getElementById('openRailCount');
   if(!rail||!count)return;
-  const rows=Array.isArray(items)?items:[];
+  const rows=Array.isArray(items)?[...items]:[];
+  rows.sort((a,b)=>{
+    const aOpen=String(a?.state||'')==='OPEN',bOpen=String(b?.state||'')==='OPEN';
+    if(aOpen!==bOpen)return aOpen?-1:1;
+    const aDistance=p90RailH9Proximity(a),bDistance=p90RailH9Proximity(b);
+    if(aDistance!==bDistance)return aDistance-bDistance;
+    return String(a?.symbol||'').localeCompare(String(b?.symbol||''));
+  });
   count.textContent=String(rows.length||5);
   const openSymbols=new Set(rows.filter(x=>x.state==='OPEN').map(x=>x.symbol));
   for(const symbol of expandedRailPositions)if(!openSymbols.has(symbol))expandedRailPositions.delete(symbol);
@@ -814,9 +826,11 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
   };
   rail.innerHTML=rows.map(item=>{
     const symbol=safe(item.symbol),state=String(item.state||'FAR'),nearest=item.nearest_entry||null;
-    const stateClass=state==='OPEN'?'p90-open':state==='NEAR'?'p90-near':'p90-far';
-    const stateText=state==='OPEN'?'ОТКРЫТА СДЕЛКА':state==='NEAR'?'БЛИЗКО К ENTRY':'ДАЛЕКО ОТ ENTRY';
-    const tone=state==='OPEN'?'open':state==='NEAR'?'near':'far';
+    const h9Proximity=p90RailH9Proximity(item);
+    const visualNear=state==='NEAR'||(state!=='OPEN'&&h9Proximity<0.5);
+    const stateClass=state==='OPEN'?'p90-open':visualNear?'p90-near':'p90-far';
+    const stateText=state==='OPEN'?'ОТКРЫТА СДЕЛКА':visualNear?(state==='NEAR'?'БЛИЗКО К ENTRY':'БЛИЗКО К H9'):'ДАЛЕКО ОТ ENTRY';
+    const tone=state==='OPEN'?'open':visualNear?'near':'far';
     const current=price(item.current_price);
     if(state!=='OPEN'){
       const h9=item.h9_distances||{},h9Long=Number(h9.long_distance_pct),h9Short=Number(h9.short_distance_pct);
