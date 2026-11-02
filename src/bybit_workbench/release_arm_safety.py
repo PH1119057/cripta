@@ -12,6 +12,9 @@ from typing import Any
 from uuid import uuid4
 
 
+REAL_ENTRY_RUNTIME_NOT_READY_REASON = "REAL_ENTRY_RUNTIME_NOT_READY"
+
+
 def check_release_arm_invariant(
     connection: Any,
     *,
@@ -150,7 +153,7 @@ def check_release_arm_invariant(
             "entry_runtime_health": runtime_health,
         }
         reason = (
-            "REAL_ENTRY_RUNTIME_NOT_READY"
+            REAL_ENTRY_RUNTIME_NOT_READY_REASON
             if runtime_invalid else "RELEASE_BOUND_LIVE_ARM_NOT_READY"
         )
         connection.execute(
