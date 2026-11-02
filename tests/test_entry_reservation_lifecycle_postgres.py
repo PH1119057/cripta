@@ -19,12 +19,12 @@ from bybit_workbench.entry_reservation_lifecycle import (
     mark_entry_order_acknowledged,
     resolve_cancelled_entry_reservation_after_reconcile,
 )
+from bybit_workbench.lifecycle_supervisor import LifecycleSupervisor
 from bybit_workbench.live_arm_readiness import (
     REQUIRED_LIVE_ARM_CHECKS,
     LiveArmContext,
     scope_for_check,
 )
-from bybit_workbench.lifecycle_supervisor import LifecycleSupervisor
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_entry.contracts import TradeDirection
 from bybit_workbench.universal_entry.execution_bridge import PreparedRuntimeEntryCommand
@@ -1355,6 +1355,7 @@ def test_failed_before_start_pending_command_reconciles_without_exchange_mutatio
                 fault_id,
                 NOW,
                 json.dumps({
+                    "fault_scope_kind": "ACCOUNT",
                     "entry_execution_request_id": ids["request_id"],
                     "trading_account_id": ids["trading_account_id"],
                 }),
