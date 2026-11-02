@@ -32,6 +32,12 @@ GRANT SELECT ON runtime.account_entry_safety_blocks,
   TO cripta_account_entry_safety_recovery;
 GRANT DELETE ON runtime.account_entry_safety_blocks
   TO cripta_account_entry_safety_recovery;
+-- PostgreSQL SELECT ... FOR UPDATE requires UPDATE privilege on the
+-- locked table even if the function never executes an UPDATE statement.
+-- The owner role is NOLOGIN and the callable SECURITY DEFINER function
+-- remains narrowly scoped to deleting the exact approved safety latch.
+GRANT UPDATE ON runtime.account_entry_safety_blocks
+  TO cripta_account_entry_safety_recovery;
 
 CREATE OR REPLACE FUNCTION control.recover_p90_account_ws_safety(
     p_account_id text,
