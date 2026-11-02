@@ -244,14 +244,20 @@ def _stop(_signum: int, _frame: object) -> None:
 
 def _safe_worker_error_code(exc: Exception) -> str:
     """Expose only allowlisted operational codes; never raw provider data."""
+    detail = str(exc)
     if isinstance(exc, ValueError):
-        detail = str(exc)
         if detail.startswith("ACCOUNT_SAFETY_NUMERIC_INVALID:"):
             field = detail.partition(":")[2]
             if field in {"totalEquity", "totalAvailableBalance", "totalWalletBalance"}:
                 return detail
         if detail == "repeated Exchange account audit scope":
             return "ACCOUNT_SNAPSHOT_SCOPE_DUPLICATE"
+    if (
+        isinstance(exc, RuntimeError)
+        and re.fullmatch(r"[A-Z0-9_]+", detail)
+        and detail.startswith(("ACCOUNT_SAFETY_", "ACCOUNT_LOCAL_"))
+    ):
+        return detail
     return type(exc).__name__
 
 

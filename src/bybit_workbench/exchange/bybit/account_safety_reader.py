@@ -44,19 +44,22 @@ def validate_wallet(wallet: Mapping[str, object]) -> tuple[Decimal, Decimal, Dec
     if row.get("accountType") != "UNIFIED":
         raise RuntimeError("ACCOUNT_SAFETY_WALLET_TYPE_MISMATCH")
 
-    account_wide = (
-        row.get("totalEquity"),
-        row.get("totalAvailableBalance"),
-        row.get("totalWalletBalance"),
+    total_equity_raw = row.get("totalEquity")
+    available_raw = row.get("totalAvailableBalance")
+    total_wallet_raw = row.get("totalWalletBalance")
+    total_pair_present = (
+        total_equity_raw not in (None, ""),
+        total_wallet_raw not in (None, ""),
     )
-    present = tuple(value not in (None, "") for value in account_wide)
-    if all(present):
+    if available_raw not in (None, ""):
+        if total_pair_present != (True, True):
+            raise RuntimeError("ACCOUNT_SAFETY_WALLET_SCOPE_MIXED")
         return (
-            _positive_number(account_wide[0], "totalEquity"),
-            _positive_number(account_wide[1], "totalAvailableBalance"),
-            _positive_number(account_wide[2], "totalWalletBalance"),
+            _positive_number(total_equity_raw, "totalEquity"),
+            _positive_number(available_raw, "totalAvailableBalance"),
+            _positive_number(total_wallet_raw, "totalWalletBalance"),
         )
-    if any(present):
+    if total_pair_present not in {(True, True), (False, False)}:
         raise RuntimeError("ACCOUNT_SAFETY_WALLET_SCOPE_MIXED")
 
     coins = row.get("coin")
@@ -69,8 +72,8 @@ def validate_wallet(wallet: Mapping[str, object]) -> tuple[Decimal, Decimal, Dec
     if len(usdt_rows) != 1:
         raise RuntimeError("ACCOUNT_SAFETY_ISOLATED_USDT_AMBIGUOUS")
     usdt = usdt_rows[0]
-    equity = _positive_number(usdt.get("equity"), "coin.USDT.equity")
-    wallet_balance = _positive_number(
+    coin_equity = _positive_number(usdt.get("equity"), "coin.USDT.equity")
+    coin_wallet = _positive_number(
         usdt.get("walletBalance"), "coin.USDT.walletBalance"
     )
     reserved = sum(
@@ -80,7 +83,17 @@ def validate_wallet(wallet: Mapping[str, object]) -> tuple[Decimal, Decimal, Dec
         ),
         Decimal("0"),
     )
-    available = max(Decimal("0"), wallet_balance - reserved)
+    available = max(Decimal("0"), coin_wallet - reserved)
+    equity = (
+        _positive_number(total_equity_raw, "totalEquity")
+        if total_pair_present[0]
+        else coin_equity
+    )
+    wallet_balance = (
+        _positive_number(total_wallet_raw, "totalWalletBalance")
+        if total_pair_present[1]
+        else coin_wallet
+    )
     return equity, available, wallet_balance
 
 

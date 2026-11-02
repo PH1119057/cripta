@@ -139,3 +139,46 @@ def test_blocked_entry_request_without_terminal_state_remains_fault() -> None:
     matches = [item for item in faults if item.code == "ENTRY_REQUEST_NOT_DISPATCHED"]
     assert len(matches) == 1
     assert matches[0].scope_key == "request-test"
+
+
+class _EntrySafetyBlockConnection:
+    def __init__(self, request_state):
+        self.request_state = request_state
+
+    def execute(self, statement, parameters=()):
+        if (
+            "FROM strategy_entry.execution_dispatches d" in statement
+            and "latest_request_state.state AS request_state" in statement
+        ):
+            return _LifecycleCursor(
+                [{
+                    "dispatch_id": "dispatch-test",
+                    "execution_request_id": "request-test",
+                    "reason": (
+                        "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN:"
+                        "PENDING_ENTRY_COMMAND:web-test:queued"
+                    ),
+                    "request_state": self.request_state,
+                }]
+            )
+        return _LifecycleCursor([])
+
+
+def test_terminal_entry_safety_dispatch_is_historical_not_active_fault() -> None:
+    supervisor = LifecycleSupervisor(_EntrySafetyBlockConnection("REQUEST_TERMINAL"))
+    faults = supervisor._detect_faults(datetime.now(UTC))
+    assert not any(
+        item.code == "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN"
+        for item in faults
+    )
+
+
+def test_nonterminal_entry_safety_dispatch_remains_active_fault() -> None:
+    supervisor = LifecycleSupervisor(_EntrySafetyBlockConnection(None))
+    faults = supervisor._detect_faults(datetime.now(UTC))
+    matches = [
+        item for item in faults
+        if item.code == "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN"
+    ]
+    assert len(matches) == 1
+    assert matches[0].scope_key == "dispatch-test"

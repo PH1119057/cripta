@@ -241,3 +241,15 @@ def test_worker_status_exposes_only_allowlisted_safe_error_codes() -> None:
     assert imported._safe_worker_error_code(
         ValueError("provider secret must not escape")
     ) == "ValueError"
+
+
+def test_worker_status_exposes_only_stable_account_runtime_codes() -> None:
+    assert imported._safe_worker_error_code(
+        RuntimeError("ACCOUNT_SAFETY_WALLET_SCOPE_MIXED")
+    ) == "ACCOUNT_SAFETY_WALLET_SCOPE_MIXED"
+    assert imported._safe_worker_error_code(
+        RuntimeError("ACCOUNT_LOCAL_SUB_IDENTITY_NOT_READY")
+    ) == "ACCOUNT_LOCAL_SUB_IDENTITY_NOT_READY"
+    assert imported._safe_worker_error_code(
+        RuntimeError("Bybit provider payload secret=hidden")
+    ) == "RuntimeError"
