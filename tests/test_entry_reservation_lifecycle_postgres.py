@@ -1255,3 +1255,165 @@ def test_request_claim_needs_no_update_on_immutable_execution_request(
             sql.SQL("DROP ROLE {}").format(role_id)
         )
         connection.commit()
+
+
+def test_failed_before_start_pending_command_reconciles_without_exchange_mutation() -> None:
+    assert DSN is not None
+    prefix = "pre-mutation-repair-" + uuid4().hex[:10]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(
+            connection,
+            prefix,
+            symbol="LTCUSDT",
+            reservation_state="RESERVED",
+            expires_at=NOW + timedelta(minutes=5),
+        )
+        owner_command_id = f"web-test-{prefix}"[:36]
+        reason = (
+            "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN:"
+            f"PENDING_ENTRY_COMMAND:{owner_command_id}:queued"
+        )
+        connection.execute(
+            """UPDATE runtime.capital_reservations
+                  SET state='RECONCILIATION_REQUIRED',state_reason=%s
+                WHERE reservation_id=%s""",
+            (reason, ids["reservation_id"]),
+        )
+        connection.execute(
+            """UPDATE runtime.exchange_position_slot_claims
+                  SET claim_state='RECONCILIATION_REQUIRED',release_reason=%s
+                WHERE exchange_position_slot_claim_id=%s""",
+            (reason, ids["slot_claim_id"]),
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.execution_dispatches(
+                   dispatch_id,execution_request_id,command_id,state,reason,
+                   strategy_attempt_id,entry_decision_id,signal_id,strategy_id,
+                   strategy_version,strategy_config_fingerprint,
+                   entry_plan_fingerprint,exit_plan_fingerprint,payload,
+                   capital_reservation_id,exchange_position_slot_claim_id,
+                   position_mode_state_ref
+               )
+               SELECT %s,r.execution_request_id,NULL,'BLOCKED',%s,
+                      r.strategy_attempt_id,r.entry_decision_id,r.signal_id,
+                      r.strategy_id,r.strategy_version,
+                      r.strategy_config_fingerprint,r.entry_plan_fingerprint,
+                      r.exit_plan_fingerprint,'{}'::jsonb,
+                      r.capital_reservation_id,r.exchange_position_slot_claim_id,
+                      r.position_mode_state_ref
+                 FROM strategy_entry.execution_requests r
+                WHERE r.execution_request_id=%s""",
+            (f"{prefix}-blocked-dispatch", reason, ids["request_id"]),
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.execution_request_state_events(
+                   request_state_event_id,execution_request_id,state,
+                   occurred_at,reason,payload
+               ) VALUES(%s,%s,'REQUEST_RECONCILIATION_REQUIRED',%s,%s,'{}'::jsonb)""",
+            (
+                f"{prefix}-request-state",
+                ids["request_id"],
+                NOW,
+                reason,
+            ),
+        )
+        connection.execute(
+            """INSERT INTO runtime.trade_commands(
+                   command_id,command_type,symbol,payload_json,state,
+                   requested_at_epoch_ms,started_at_epoch_ms,result_json,error,
+                   strategy_execution_binding_id,execution_leg,trading_account_id,
+                   identity_status
+               ) VALUES(
+                   %s,'entry',%s,%s,'failed',%s,NULL,'{}',
+                   'ENTRY_BLOCKED:NEW_ENTRY_GATE_DISARMED',
+                   %s,'PRIMARY',%s,'PROVEN'
+               )""",
+            (
+                owner_command_id,
+                ids["symbol"],
+                json.dumps({
+                    "source": "owner_controlled_live_test",
+                    "stake_usdt": "10",
+                    "leverage": 1,
+                }),
+                int(NOW.timestamp() * 1000),
+                ids["binding_id"],
+                ids["trading_account_id"],
+            ),
+        )
+        fault_id = f"{prefix}-ownership-fault"
+        connection.execute(
+            """INSERT INTO runtime.lifecycle_faults(
+                   fault_id,fault_code,severity,state,strategy_position_id,
+                   detected_at,resolved_at,exact_ids,payload
+               ) VALUES(
+                   %s,'EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN',
+                   'CRITICAL','OPEN',NULL,%s,NULL,%s::jsonb,'{}'::jsonb
+               )""",
+            (
+                fault_id,
+                NOW,
+                json.dumps({
+                    "entry_execution_request_id": ids["request_id"],
+                    "trading_account_id": ids["trading_account_id"],
+                }),
+            ),
+        )
+        _gate(connection, False)
+
+        result = _run_once_for_fixture_account(
+            connection,
+            ids["trading_account_id"],
+        )
+        assert result == "PRE_MUTATION_RECONCILED:1"
+
+        reservation = connection.execute(
+            """SELECT state,state_reason FROM runtime.capital_reservations
+                WHERE reservation_id=%s""",
+            (ids["reservation_id"],),
+        ).fetchone()
+        slot = connection.execute(
+            """SELECT claim_state,release_reason
+                 FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_slot_claim_id=%s""",
+            (ids["slot_claim_id"],),
+        ).fetchone()
+        fault = connection.execute(
+            """SELECT state,resolved_at,payload
+                 FROM runtime.lifecycle_faults
+                WHERE fault_id=%s""",
+            (fault_id,),
+        ).fetchone()
+        terminal = connection.execute(
+            """SELECT state,payload
+                 FROM strategy_entry.execution_request_state_events
+                WHERE execution_request_id=%s
+                ORDER BY occurred_at DESC,created_at DESC
+                LIMIT 1""",
+            (ids["request_id"],),
+        ).fetchone()
+
+        assert reservation["state"] == "RELEASED"
+        assert slot["claim_state"] == "RELEASED"
+        assert reservation["state_reason"] == slot["release_reason"]
+        assert "NO_EXCHANGE_MUTATION" in reservation["state_reason"]
+        assert fault["state"] == "RESOLVED"
+        assert fault["resolved_at"] is not None
+        assert fault["payload"]["exchange_mutation"] is False
+        assert terminal["state"] == "REQUEST_TERMINAL"
+        assert terminal["payload"]["exchange_mutation"] is False
+        assert connection.execute(
+            """SELECT count(*) FROM runtime.executions
+                WHERE trading_account_id=%s AND symbol=%s""",
+            (ids["trading_account_id"], ids["symbol"]),
+        ).fetchone()["count"] == 0
+        assert connection.execute(
+            """SELECT count(*) FROM runtime.exchange_order_history
+                WHERE trading_account_id=%s AND symbol=%s""",
+            (ids["trading_account_id"], ids["symbol"]),
+        ).fetchone()["count"] == 0
+        assert connection.execute(
+            """SELECT count(*) FROM runtime.position_ownership
+                WHERE trading_account_id=%s""",
+            (ids["trading_account_id"],),
+        ).fetchone()["count"] == 0
