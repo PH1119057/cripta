@@ -5,10 +5,6 @@ This suite does not connect to production PostgreSQL or Bybit.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
-
-import pytest
-
 from bybit_workbench.lifecycle_supervisor import LifecycleSupervisor
 
 
@@ -24,6 +20,14 @@ IDS = {
 }
 
 
+class _Cursor:
+    def __init__(self, row: dict[str, object] | None) -> None:
+        self._row = row
+
+    def fetchone(self) -> dict[str, object] | None:
+        return self._row
+
+
 class FakeConnection:
     def __init__(self, row: dict[str, object] | None) -> None:
         self.row = row
@@ -31,7 +35,7 @@ class FakeConnection:
 
     def execute(self, sql: str, params: tuple[object, ...] = ()) -> SimpleNamespace:
         self.queries.append((sql, params))
-        return SimpleNamespace(fetchone=lambda: self.row)
+        return _Cursor(self.row)
 
 
 def clean_row() -> dict[str, object]:
@@ -73,9 +77,8 @@ def test_owner_closed_slot_requires_full_fresh_exchange_confirmation() -> None:
         assert guard in sql
 
 
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
+def test_ambiguous_or_stale_lineage_remains_open() -> None:
+    for field, value in (
         ("claim_state", "BOUND"),
         ("release_reason", "UNKNOWN"),
         ("position_state", "OPEN"),
@@ -84,14 +87,10 @@ def test_owner_closed_slot_requires_full_fresh_exchange_confirmation() -> None:
         ("generation_completed_at", NOW + timedelta(seconds=1)),
         ("closed_at", NOW + timedelta(minutes=1)),
         ("released_at", NOW + timedelta(minutes=1)),
-    ],
-)
-def test_ambiguous_or_stale_lineage_remains_open(
-    field: str, value: object
-) -> None:
-    row = clean_row()
-    row[field] = value
-    assert checked(row)[0] is None
+    ):
+        row = clean_row()
+        row[field] = value
+        assert checked(row)[0] is None
 
 
 def test_missing_exchange_or_account_proof_fails_before_database() -> None:
