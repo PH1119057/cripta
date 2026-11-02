@@ -878,6 +878,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
     const finite=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
     const signedPct=v=>{const n=Number(v);return (n>0?'+':'')+n.toFixed(3)+'%'};
     const signedMoney=v=>{const n=Number(v);return (n>0?'+':'')+n.toFixed(4)+' USDT'};
+    const currentMoveText=finite(p.current_move_pct)?signedPct(p.current_move_pct):'—';
     const tpText=finite(p.take_profit_move_pct)
       ?'TP '+signedPct(p.take_profit_move_pct)+' · '+(finite(p.take_profit_expected_net_usdt)?'≈'+signedMoney(p.take_profit_expected_net_usdt):'money —')
       :'TP —';
@@ -905,7 +906,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
         '<span>'+arrow+'<span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state '+tone+'">'+stateText+' · '+direction+'</small></span>'+
         '<span class="rail-position-pnl '+pnlClass+'">'+pnlText+'<br><small class="rail-position-meta">после комиссий</small></span>'+
         '<span aria-hidden="true">'+(expanded?'▾':'▸')+'</span></button>'+
-      '<div class="rail-position-meta">Вход '+price(p.entry_price)+' · Сейчас '+price(p.executable_close_price||p.mark_price)+' · qty '+(Number.isFinite(qty)?qty.toFixed(4):'—')+'</div>'+
+      '<div class="rail-position-meta">Вход '+price(p.entry_price)+' · Сейчас '+price(p.executable_close_price||p.mark_price)+' · <b class="'+pnlClass+'">'+safe(currentMoveText)+'</b> · qty '+(Number.isFinite(qty)?qty.toFixed(4):'—')+'</div>'+
       '<div class="rail-position-meta"><b>'+safe(tpText)+'</b> · <b>'+safe(slText)+'</b> · <b>'+safe(trailText)+'</b></div>'+
       (openDiag
         ?'<div class="rail-position-meta">Сквозной REAL‑тест: <b>'+safe(diagnosticStateRu(openDiag.state))+'</b>'+(openDiag.error?' · '+safe(openDiag.error):'')+'</div>'
@@ -989,7 +990,7 @@ function refreshP90RealV3ArmControl(){
   else if(operationState==='BLOCKED'){state='error';message=p90ReadinessOperationText(operation)+(retryable?' · безопасный повтор доступен после проверки причины':'')}
   else if(staging){state='warn';message='P90 OWNER ARM: проверяется полный runtime · mainnet gate пока CLOSED'}
   else if(inconsistent){state='error';message='Mainnet открыт вне exact P90 arm-state · требуется диагностика'}
-  else if(armed){state='warn';message='P90 owner-arm state DEGRADED · новые Entry запрещены · DISARM доступен'}
+  else if(armed){state='warn';message='Шлюз закрыт · P90 owner-arm state DEGRADED · новые Entry запрещены · можно снять OWNER ARM'}
   else if(!cohort){state='error';message='P90 exact cohort не найден или не активен'}
   else if(blockers.includes('REMOTE_SOURCE_INSTALLED_IDENTITY_DRIFT')){state='error';message='OWNER ARM заблокирован · source/runtime release identity не совпадает'}
   else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='warn';message='Universal Entry observer сейчас не готов · OWNER ARM сначала выполнит автоматическую подготовку'}
@@ -998,7 +999,7 @@ function refreshP90RealV3ArmControl(){
   tradeGateButton.hidden=!primaryP90Control;
   button.hidden=true;
   if(primaryP90Control&&!gateChanging){
-    tradeGateButton.textContent=armed?'Закрыть P90 REAL v3':preparing?'Подготовка P90 REAL v3…':retryable?'Повторить подготовку P90':'Открыть P90 REAL v3';
+    tradeGateButton.textContent=armed?(liveGateOpen?'Закрыть P90 REAL v3':'Снять DEGRADED OWNER ARM'):preparing?'Подготовка P90 REAL v3…':retryable?'Повторить подготовку P90':'Открыть P90 REAL v3';
     tradeGateButton.classList.toggle('danger',!armed);
     tradeGateButton.disabled=button.disabled;
     setOperationStatus(tradeOperationStatus,state,message);
@@ -1068,7 +1069,10 @@ async function handleP90RealV3GateClick(){
   if(gateChanging)return;
   const armed=p90RealV3OwnerArmPresent();
   if(armed){
-    if(!confirm('Отключить P90 REAL v3?\n\nНовые Entry будут запрещены. Уже открытые позиции продолжат сопровождение Exit.'))return;
+    const prompt=liveGateOpen
+      ?'Отключить P90 REAL v3?\n\nНовые Entry будут запрещены. Уже открытые позиции продолжат сопровождение Exit.'
+      :'Снять DEGRADED OWNER ARM?\n\nШлюз уже закрыт: новые Entry запрещены. Снятие OWNER ARM не должно прекращать сопровождение уже открытой позиции Exit-контуром.';
+    if(!confirm(prompt))return;
     try{await changeP90RealV3Arm(false)}catch(e){/* visible in persistent ARM panel */}
     return;
   }
