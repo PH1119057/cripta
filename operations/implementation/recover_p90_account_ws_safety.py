@@ -7,6 +7,11 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+# Direct execution from operations/implementation must resolve the installed src tree.
+_INSTALLED_SRC = Path(__file__).resolve().parents[2] / "src"
+if _INSTALLED_SRC.is_dir():
+    sys.path.insert(0, str(_INSTALLED_SRC))
+
 import psycopg
 
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
