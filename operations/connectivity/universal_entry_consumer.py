@@ -1576,10 +1576,6 @@ def _reconcile_pre_mutation_pending_command_blocks(
 
 def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None) -> str:
     current = (now or datetime.now(UTC)).astimezone(UTC)
-    reconciled = _reconcile_pre_mutation_pending_command_blocks(
-        connection,
-        now=current,
-    )
     _release_expired_reserved_requests(connection, now=current)
 
     # Process/account route identity is the first runtime ownership gate.
@@ -1594,6 +1590,13 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY:" + ",".join(route_check.reasons)
 
     if not _execution_gate_enabled(connection):
+        # Reconciliation is an account-scoped mutation and is deliberately
+        # unreachable until the exact process/account connector route above
+        # has been proven.  It is also unnecessary while NEW-Entry is armed.
+        reconciled = _reconcile_pre_mutation_pending_command_blocks(
+            connection,
+            now=current,
+        )
         diagnostic_lifecycle = refresh_run_lifecycle(
             connection,
             trading_account_id=TRADING_ACCOUNT_ID,
