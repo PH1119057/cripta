@@ -877,6 +877,16 @@ fresh exchange-time evidence cannot be established, or the probe round-trip is
 too wide for the approved uncertainty budget after bounded read-only retries,
 the mutation is blocked before send and new Entry is disarmed fail-closed.
 
+OWNER DECISION 2026-11-03 — transient SUB Exchange-time recovery: a failed
+read-only Bybit time calibration before any mutation is sent must block that
+attempt and retry read-only calibration/reconciliation, but must **not** create
+an irreversible account-wide `PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN` latch merely
+because of the transient clock uncertainty. Existing durable latches and any
+post-send ambiguity remain in force until independently proven resolution.
+Every future mutating request still requires its own valid fresh exchange-time
+proof; stale or unavailable account snapshots never authorize new Entry. This
+change does not open mainnet/OWNER ARM or grant execution permissions.
+
 A pre-mutation safety block and an ambiguous post-send mutation are physically
 different states:
 
