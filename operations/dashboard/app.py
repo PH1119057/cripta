@@ -1540,6 +1540,41 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 )
                 nearest = candidates[0] if candidates else None
 
+                h9_5m_low = p90_decimal(geometry.get("h9_5m_low_raw"))
+                h9_5m_high = p90_decimal(geometry.get("h9_5m_high_raw"))
+                h9_15m_low = p90_decimal(geometry.get("h9_15m_low_raw"))
+                h9_15m_high = p90_decimal(geometry.get("h9_15m_high_raw"))
+                h9_distances: dict[str, object] | None = None
+                if (
+                    current_price is not None
+                    and h9_5m_low is not None
+                    and h9_5m_low > 0
+                    and h9_15m_low is not None
+                    and h9_15m_low > 0
+                    and h9_5m_high is not None
+                    and h9_5m_high > 0
+                    and h9_15m_high is not None
+                    and h9_15m_high > 0
+                ):
+                    h9_long_edge = min(h9_5m_low, h9_15m_low)
+                    h9_short_edge = max(h9_5m_high, h9_15m_high)
+                    h9_distances = {
+                        "long_edge": str(h9_long_edge),
+                        "short_edge": str(h9_short_edge),
+                        "long_distance_pct": str(
+                            abs(current_price - h9_long_edge)
+                            / h9_long_edge
+                            * Decimal("100")
+                        ),
+                        "short_distance_pct": str(
+                            abs(h9_short_edge - current_price)
+                            / h9_short_edge
+                            * Decimal("100")
+                        ),
+                        "long_exact_alignment": h9_5m_low == h9_15m_low,
+                        "short_exact_alignment": h9_5m_high == h9_15m_high,
+                    }
+
                 exact_positions = p90_positions_by_symbol.get(symbol, [])
                 position_payload: dict[str, object] | None = None
                 if len(exact_positions) == 1:
@@ -1577,6 +1612,33 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                             * REAL_IMMEDIATE_CLOSE_FEE_RATE
                         )
                     )
+                    direction_sign = 1.0 if side == "Buy" else -1.0
+                    take_profit_price = float(raw.get("takeProfit") or 0)
+                    stop_loss_price = float(raw.get("stopLoss") or 0)
+                    trailing_distance = float(raw.get("trailingStop") or 0)
+
+                    def protection_move_pct(target: float) -> float | None:
+                        if entry_price <= 0 or target <= 0:
+                            return None
+                        return direction_sign * (
+                            target / entry_price - 1.0
+                        ) * 100.0
+
+                    def protection_net_usdt(target: float) -> float | None:
+                        if entry_price <= 0 or quantity <= 0 or target <= 0:
+                            return None
+                        gross_at_target = (
+                            (target - entry_price) * quantity
+                            if side == "Buy"
+                            else (entry_price - target) * quantity
+                        )
+                        exit_fee_at_target = (
+                            target
+                            * quantity
+                            * REAL_IMMEDIATE_CLOSE_FEE_RATE
+                        )
+                        return gross_at_target - entry_fee - exit_fee_at_target
+
                     net = None
                     if entry_price > 0 and quantity > 0 and executable_value > 0:
                         gross = (
@@ -1614,6 +1676,36 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                             if actual_entry_fee is not None
                             else "AFTER_COMMISSIONS_ESTIMATED_ENTRY_FEE"
                         ),
+                        "take_profit_price": (
+                            None if take_profit_price <= 0 else str(take_profit_price)
+                        ),
+                        "take_profit_move_pct": protection_move_pct(
+                            take_profit_price
+                        ),
+                        "take_profit_expected_net_usdt": protection_net_usdt(
+                            take_profit_price
+                        ),
+                        "stop_loss_price": (
+                            None if stop_loss_price <= 0 else str(stop_loss_price)
+                        ),
+                        "stop_loss_move_pct": protection_move_pct(stop_loss_price),
+                        "stop_loss_expected_net_usdt": protection_net_usdt(
+                            stop_loss_price
+                        ),
+                        "trailing_armed": trailing_distance > 0,
+                        "trailing_distance": (
+                            None if trailing_distance <= 0 else str(trailing_distance)
+                        ),
+                        "trailing_distance_pct": (
+                            None
+                            if trailing_distance <= 0 or entry_price <= 0
+                            else trailing_distance / entry_price * 100.0
+                        ),
+                        "protection_net_basis": (
+                            "AFTER_COMMISSIONS_ACTUAL_ENTRY_FEE_NO_FUNDING"
+                            if actual_entry_fee is not None
+                            else "AFTER_COMMISSIONS_ESTIMATED_ENTRY_FEE_NO_FUNDING"
+                        ),
                     }
 
                 if position_payload is not None:
@@ -1641,6 +1733,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                         ),
                         "nearest_entry": nearest,
                         "entry_candidates": candidates,
+                        "h9_distances": h9_distances,
                         "geometry": {
                             "effective_at": geometry.get("effective_at"),
                             "working_width_pct": geometry.get("working_width_pct"),
