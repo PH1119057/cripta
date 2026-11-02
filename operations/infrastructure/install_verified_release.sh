@@ -604,6 +604,11 @@ mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"
 install -o cripta -g cripta -m 0644 "$ui_release/app.py" "$runtime_release/operations/dashboard/app.py"
 [[ "$(readlink -f "$DASHBOARD_UI_ROOT/current")" == "$ui_release" ]] ||
   die "Dashboard UI cutover identity mismatch"
+# Persist Dashboard identity at the same physical cutover point. A later
+# installer failure must not leave STATE_ROOT pointing at an older UI bundle.
+printf '%s\n' "$RELEASE_COMMIT" > "$STATE_ROOT/DASHBOARD_UI_COMMIT"
+chown root:cripta "$STATE_ROOT/DASHBOARD_UI_COMMIT"
+chmod 0640 "$STATE_ROOT/DASHBOARD_UI_COMMIT"
 
 
 for spec in "${unit_specs[@]}"; do
