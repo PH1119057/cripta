@@ -11,7 +11,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-
 REAL_ENTRY_RUNTIME_NOT_READY_REASON = "REAL_ENTRY_RUNTIME_NOT_READY"
 
 
