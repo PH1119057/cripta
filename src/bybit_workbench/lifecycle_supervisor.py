@@ -1478,10 +1478,19 @@ class LifecycleSupervisor:
             )
 
         entry_safety_blocks = self._connection.execute(
-            """SELECT d.dispatch_id,d.execution_request_id,d.reason
+            """SELECT d.dispatch_id,d.execution_request_id,d.reason,
+                      latest_request_state.state AS request_state
                  FROM strategy_entry.execution_dispatches d
                  JOIN strategy_entry.execution_requests r
                    ON r.execution_request_id=d.execution_request_id
+                 LEFT JOIN LATERAL (
+                     SELECT e.state
+                       FROM strategy_entry.execution_request_state_events e
+                      WHERE e.execution_request_id=r.execution_request_id
+                      ORDER BY e.occurred_at DESC,e.created_at DESC,
+                               e.request_state_event_id DESC
+                      LIMIT 1
+                 ) latest_request_state ON true
                 WHERE d.state='BLOCKED'
                   AND (
                     d.reason LIKE 'EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN%%'
@@ -1492,6 +1501,8 @@ class LifecycleSupervisor:
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in entry_safety_blocks:
+            if str(row["request_state"] or "") in _TERMINAL_ENTRY_REQUEST_STATES:
+                continue
             reason = str(row["reason"] or "")
             code = (
                 "EXCHANGE_POSITION_MODE_MISMATCH"
