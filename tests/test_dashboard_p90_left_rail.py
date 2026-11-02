@@ -54,7 +54,8 @@ def test_left_rail_frontend_uses_p90_projection_and_requested_colors():
         Path(__file__).resolve().parents[1] / "operations/dashboard/index.html"
     ).read_text(encoding="utf-8")
     assert "Открытые сделки / P90" in index
-    assert "жёлтый — до Entry &lt; 0,5%" in index
+    assert "песочный — до ближайшей H9 &lt; 0,5%" in index
+    assert "Entry всё равно требует overlap с L5-3" in index
     assert "p90-open" in index
     assert "p90-near" in index
     assert "p90-far" in index
