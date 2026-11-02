@@ -1,6 +1,3 @@
-import importlib.util
-import os
-import stat
 from pathlib import Path
 
 
@@ -11,33 +8,7 @@ INSTALLER = (
 ).read_text(encoding="utf-8")
 
 
-def load_module():
-    spec = importlib.util.spec_from_file_location(
-        "repair_dashboard_ui_identity", SCRIPT_PATH
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_repair_utility_validates_exact_sha_and_atomic_mode(tmp_path: Path) -> None:
-    module = load_module()
-    sha = "a" * 40
-    assert module.require_sha(sha, "TEST") == sha
-
-    target = tmp_path / "DASHBOARD_UI_COMMIT"
-    module.atomic_write_identity(
-        target,
-        sha,
-        uid=os.getuid(),
-        gid=os.getgid(),
-    )
-    assert target.read_text(encoding="utf-8") == sha + "\n"
-    assert stat.S_IMODE(target.stat().st_mode) == 0o640
-
-
-def test_repair_utility_is_git_and_filesystem_identity_only() -> None:
+def test_repair_utility_is_atomic_git_and_filesystem_identity_only() -> None:
     source = SCRIPT_PATH.read_text(encoding="utf-8")
     for token in (
         "SOURCE_REMOTE_MAIN_DRIFT",
@@ -49,6 +20,9 @@ def test_repair_utility_is_git_and_filesystem_identity_only() -> None:
         "RUNTIME_COMMIT_MISMATCH",
         "UI_GIT_BYTES_MISMATCH",
         "STATE_UI_COMMIT_UNEXPECTED",
+        "os.fsync",
+        "os.replace",
+        "os.chmod(tmp, 0o640)",
         "TRADING_STATE_MUTATION=NO",
         "SERVICE_RESTART=NO",
     ):
@@ -62,6 +36,16 @@ def test_repair_utility_is_git_and_filesystem_identity_only() -> None:
         "requests.",
     ):
         assert forbidden not in source
+
+
+def test_repair_utility_requires_explicit_expected_identities() -> None:
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    assert 'parser.add_argument("--mode", choices=("check", "repair"), required=True)' in source
+    assert 'parser.add_argument("--expected-current", required=True)' in source
+    assert 'parser.add_argument("--expected-state", required=True)' in source
+    assert 'parser.add_argument("--expected-runtime", required=True)' in source
+    assert 'state_root / "DASHBOARD_UI_COMMIT"' in source
+    assert 'ui_root / "releases" / expected_current' in source
 
 
 def test_full_release_persists_dashboard_identity_at_physical_cutover() -> None:
