@@ -271,7 +271,7 @@ def test_private_proof_missing_gets_one_bounded_retry(monkeypatch):
 
     monkeypatch.setattr(source, "_wait_for_fresh_flat_generations", barrier)
 
-    def proof(_routes):
+    def proof(_routes, **_kwargs):
         calls["proof"] += 1
         if calls["proof"] == 1:
             raise source.P90RealAccountRoutesUnverified(
@@ -321,7 +321,7 @@ def test_identity_scope_failure_is_never_retried(monkeypatch):
     )
     calls = 0
 
-    def proof(_routes):
+    def proof(_routes, **_kwargs):
         nonlocal calls
         calls += 1
         raise source.P90RealAccountRoutesUnverified(
@@ -347,3 +347,50 @@ def test_identity_scope_failure_is_never_retried(monkeypatch):
             epoch_started_at=now - timedelta(seconds=3),
         )
     assert calls == 1
+
+
+def test_private_proof_retry_budget_expires_fail_closed(monkeypatch):
+    import types
+
+    now = datetime.now(UTC)
+    current = [now]
+    calls: list[float] = []
+    monkeypatch.setattr(
+        source,
+        "_wait_for_fresh_flat_generations",
+        lambda *_args, **_kwargs: None,
+    )
+
+    def clock():
+        return current[0]
+
+    def sleeper(seconds: float) -> None:
+        current[0] += timedelta(seconds=seconds)
+
+    def unavailable(_routes, *, timeout_seconds: float):
+        calls.append(timeout_seconds)
+        current[0] += timedelta(seconds=timeout_seconds)
+        raise source.P90RealAccountRoutesUnverified(
+            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
+        )
+
+    with pytest.raises(
+        source.P90RealLiveSourceEpochUnverified,
+        match="PRIVATE_PROOF_RETRY_BUDGET_EXPIRED",
+    ):
+        source._read_signed_accounts_bounded(
+            object(),
+            routes=types.SimpleNamespace(),
+            started_at=now,
+            clock=clock,
+            sleeper=sleeper,
+            reader=unavailable,
+        )
+    assert calls
+    assert all(
+        0 < timeout <= source._PRIVATE_PROOF_ATTEMPT_SECONDS
+        for timeout in calls
+    )
+    assert (
+        current[0] - now
+    ).total_seconds() <= source._PRIVATE_PROOF_RETRY_BUDGET_SECONDS + 0.001
