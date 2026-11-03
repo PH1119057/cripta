@@ -25,7 +25,36 @@ _ALLOWED_EXITS = frozenset({
 
 
 class _Rows(Protocol):
-    def fetchall(self) -> Sequence[Mapping[str, object]]: ...
+    def fetchall(self) -> Sequence[object]: ...
+
+
+_ROW_FIELDS = (
+    "position_id",
+    "state",
+    "closed_at",
+    "close_link_status",
+    "identity_status",
+    "trading_account_id",
+    "account_kind",
+    "attribution_id",
+    "attribution_closed_at",
+    "attribution_link_status",
+    "exit_owner",
+    "exit_mechanism",
+    "exit_order_id",
+)
+
+
+def _row_mapping(row: object) -> Mapping[str, object]:
+    if isinstance(row, Mapping):
+        return row
+    if (
+        isinstance(row, Sequence)
+        and not isinstance(row, (str, bytes, bytearray))
+        and len(row) == len(_ROW_FIELDS)
+    ):
+        return dict(zip(_ROW_FIELDS, row, strict=True))
+    raise P90RealSecond48Unverified("P90_REAL_SECOND48_ROW_NOT_PROVEN")
 
 
 class _Connection(Protocol):
@@ -108,9 +137,8 @@ def read_real_second48(
         raise P90RealSecond48Unverified("P90_REAL_SECOND48_ROWS_NOT_PROVEN")
     events: list[tuple[datetime, str, str]] = []
     seen: set[str] = set()
-    for row in rows:
-        if not isinstance(row, Mapping):
-            raise P90RealSecond48Unverified("P90_REAL_SECOND48_ROW_NOT_PROVEN")
+    for raw_row in rows:
+        row = _row_mapping(raw_row)
         position_id = _exact(row.get("position_id"))
         state = _exact(row.get("state"))
         if not position_id or position_id in seen:
