@@ -27,14 +27,13 @@ def test_account_wide_private_proof_uses_full_fifteen_second_window() -> None:
     assert "P90_ACCOUNT_PROOF_TIMEOUT_SECONDS" in PREARM
     assert "private_proof_timeout_seconds: float | None = None" in PREARM
     assert "else float(private_proof_timeout_seconds)" in PREARM
+    assert "_RECOVERY_ACCOUNT_PROOF_MAX_ATTEMPT_SECONDS = 15.0" in RESTART
     account_restart = RESTART[
-        RESTART.index("for route in (routes.main, routes.sub):"):
-        RESTART.index(
-            "expected_symbols:",
-            RESTART.index("for route in (routes.main, routes.sub):"),
-        )
+        RESTART.index("def _read_recovery_account_bounded("):
+        RESTART.index("def prove_p90_real_open_restart_inventory("),
     ]
-    assert "timeout_seconds=15.0" in account_restart
+    assert "timeout = min(_RECOVERY_ACCOUNT_PROOF_MAX_ATTEMPT_SECONDS, remaining)" in account_restart
+    assert "timeout_seconds=timeout" in account_restart
 
 
 def test_position_specific_restart_proof_keeps_shorter_bound() -> None:
