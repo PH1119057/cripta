@@ -128,7 +128,7 @@ def _read_signed_accounts_bounded(
     started_at: datetime,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     sleeper: Callable[[float], None] = time.sleep,
-    reader: Callable[..., tuple[Any, Any]] = read_p90_real_signed_flat_accounts,
+    reader: Callable[..., tuple[Any, Any]] | None = None,
 ) -> tuple[Any, Any]:
     """Retry only transport/provider-missing proof inside the existing fresh window.
 
@@ -136,6 +136,7 @@ def _read_signed_accounts_bounded(
     fail-closed errors.  A short per-attempt IPC timeout prevents one local
     transport stall from consuming the whole source-attestation budget.
     """
+    proof_reader = reader or read_p90_real_signed_flat_accounts
     deadline = started_at + timedelta(seconds=_PRIVATE_PROOF_RETRY_BUDGET_SECONDS)
     while True:
         _wait_for_fresh_flat_generations(
@@ -157,7 +158,7 @@ def _read_signed_accounts_bounded(
             )
         attempt_timeout = min(_PRIVATE_PROOF_ATTEMPT_SECONDS, remaining)
         try:
-            return reader(routes, timeout_seconds=attempt_timeout)
+            return proof_reader(routes, timeout_seconds=attempt_timeout)
         except P90RealAccountRoutesUnverified as exc:
             if str(exc) != "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING":
                 raise
