@@ -1510,7 +1510,11 @@ function observerFaultFriendlyText(item){
     ['P90_PRIVATE_IPC_INCOMPLETE_FRAME','Локальный канал подтверждения аккаунта вернул неполный ответ'],
     ['P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE','Локальный канал подтверждения аккаунта временно недоступен'],
     ['P90_REAL_LIVE_WS_ATTESTATION_EXPIRED','Не удалось завершить проверку рыночного источника в допустимое окно'],
-    ['P90_REAL_NATIVE_ACCOUNT_ADMISSION_NOT_VERIFIED','Не подтверждён допуск аккаунта для нового Entry']
+    ['P90_REAL_NATIVE_ACCOUNT_ADMISSION_NOT_VERIFIED','Не подтверждён допуск аккаунта для нового Entry'],
+    ['P90_REAL_RESTART_SIGNED_TRAIL035_NOT_ARMED','Для открытой позиции не подтверждён биржевой TRAIL035'],
+    ['ACCOUNT_RECOVERY_BUDGET_EXPIRED','Не удалось вовремя подтвердить состояние аккаунта для восстановления'],
+    ['ACCOUNT_RECOVERY_BLOCKED','Восстановление аккаунта остановлено точной проверкой состояния'],
+    ['ACCOUNT_RECOVERY_IPC_UNVERIFIED','Не подтверждён локальный канал восстановления аккаунта']
   ];
   const match=known.find(([token])=>message.includes(token)||raw.includes(token));
   return match?match[1]:'Ошибка Universal Entry observer · требуется разбор';
