@@ -212,3 +212,47 @@ def test_restart_reader_rejects_missing_or_duplicate_protection_order(monkeypatc
         match="NON_PROTECTION_OPEN_ORDER",
     ):
         reader()
+
+
+def test_restart_reader_accepts_current_short_with_exchange_sl_tp_before_trail(
+    monkeypatch,
+) -> None:
+    reader, _db, responses, _requested = _reader(monkeypatch)
+    responses["/v5/position/list"]["result"]["list"] = [{
+        "symbol": "LTCUSDT",
+        "side": "Sell",
+        "positionIdx": 0,
+        "size": "0.1",
+        "avgPrice": "54.75",
+        "stopLoss": "60.22",
+        "takeProfit": "54.19",
+        "trailingStop": "0",
+        "markPrice": "54.92",
+    }]
+    protection_base = {
+        "symbol": "LTCUSDT",
+        "positionIdx": 0,
+        "side": "Buy",
+        "qty": "0.1",
+        "orderStatus": "Untriggered",
+        "reduceOnly": True,
+        "closeOnTrigger": True,
+    }
+    responses["/v5/order/realtime"]["result"]["list"] = [
+        {
+            **protection_base,
+            "stopOrderType": "StopLoss",
+            "triggerPrice": "60.22",
+        },
+        {
+            **protection_base,
+            "stopOrderType": "TakeProfit",
+            "triggerPrice": "54.19",
+        },
+    ]
+    proof = reader()
+    assert len(proof.positions) == 1
+    assert proof.positions[0]["side"] == "Sell"
+    assert proof.positions[0]["stopLoss"] == "60.22"
+    assert proof.positions[0]["takeProfit"] == "54.19"
+    assert proof.positions[0]["trailingStop"] == "0"
