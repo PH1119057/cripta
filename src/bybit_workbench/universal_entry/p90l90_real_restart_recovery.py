@@ -21,6 +21,10 @@ from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.candle_warmup import (
     cache_approved_bybit_history,
 )
+from bybit_workbench.universal_exit.contracts import (
+    ExitActionKind,
+    ExitEvaluationStatus,
+)
 from bybit_workbench.universal_exit.p90l90_real_mfe import (
     P90RealMfeCheckpoint,
     P90RealMfeUnverified,
@@ -79,6 +83,8 @@ class P90RealOpenSourceRecovery:
     current_sequence_exec_ids: Mapping[str, frozenset[str]]
     closed_watermarks: Mapping[str, tuple[datetime, datetime]]
     replayed_fact_ids: frozenset[str]
+    trail035_recovery_queued: tuple[str, ...] = ()
+    trail035_late_arm_blocked: tuple[str, ...] = ()
 
 
 def _require(condition: bool, reason: str) -> None:
@@ -245,6 +251,7 @@ def recover_p90_real_open_source(
     source_ws_ready_at: datetime,
     fetch_recent_trades: FetchRecentTrades,
     fetch_closed_candles: FetchClosedCandles,
+    bind_restart_bridge: Callable[[str], None],
 ) -> P90RealOpenSourceRecovery:
     """Recover old epoch through current live mirror with zero replay actions."""
     if (
@@ -253,6 +260,7 @@ def recover_p90_real_open_source(
         or not isinstance(mirror, PublicTradeMirrorBuffer)
         or not callable(fetch_recent_trades)
         or not callable(fetch_closed_candles)
+        or not callable(bind_restart_bridge)
         or source_ws_ready_at.tzinfo is None
         or mirror_started_at.tzinfo is None
     ):
@@ -278,6 +286,7 @@ def recover_p90_real_open_source(
             source_commit=source_commit,
             source_epoch_id=source_epoch_id,
             checked_at=started_at,
+            allow_missing_trail035=True,
         )
         consumer.recover_all()
         joins = _load_joins(
@@ -430,9 +439,12 @@ def recover_p90_real_open_source(
                 "REPLAY_DID_NOT_REACH_LIVE_CURSOR",
             )
         position_mfe = {}
+        position_native: dict[
+            str, tuple[MarketFactEnvelope, TradeCursor]
+        ] = {}
         for symbol, item in position_by_symbol.items():
             try:
-                latest, _fact, _refs = exit_ports.mfe_ledger.load_latest(
+                latest, fact_id, source_refs = exit_ports.mfe_ledger.load_latest(
                     position=item.position,
                     source_commit=source_commit,
                 )
@@ -447,8 +459,28 @@ def recover_p90_real_open_source(
                 ) == (live.exec_id, live.seq, live.traded_at),
                 "OPEN_POSITION_MFE_NOT_AT_LIVE_CURSOR",
             )
+            _require(
+                fact_id == "trade-" + live.exec_id
+                and bool(source_refs),
+                "OPEN_POSITION_NATIVE_FACT_IDENTITY_UNVERIFIED",
+            )
             position_mfe[item.position.strategy_position_id] = (
                 item.position, latest,
+            )
+            position_native[item.position.strategy_position_id] = (
+                MarketFactEnvelope(
+                    fact_id=fact_id,
+                    event_kind="PUBLIC_TRADE",
+                    symbol=symbol,
+                    observed_at=live.traded_at,
+                    event_at=live.traded_at,
+                    received_at=datetime.now(UTC),
+                    source_refs=source_refs,
+                    attributes=FrozenPolicy.from_mapping({
+                        "price": str(latest.last_native_price),
+                    }),
+                ),
+                live,
             )
 
         # Protection is signed again after the replay window.  Replay cannot
@@ -460,6 +492,7 @@ def recover_p90_real_open_source(
             source_commit=source_commit,
             source_epoch_id=source_epoch_id,
             checked_at=datetime.now(UTC),
+            allow_missing_trail035=True,
         )
         _require(
             {
@@ -502,6 +535,46 @@ def recover_p90_real_open_source(
                     final_inventory.sub.private_generation_id,
             },
         )
+        # The bridge is already durable inside this source transaction. Bind
+        # it to the current live source owner before evaluating exactly one
+        # current native fact for a position whose first-fill TRAIL035 handoff
+        # was missed. Historical replay above remains observation-only.
+        bind_restart_bridge(bridge.restart_id)
+        trail035_recovery_queued: list[str] = []
+        trail035_late_arm_blocked: list[str] = []
+        for item in final_inventory.positions:
+            if item.trail035_armed:
+                continue
+            native = position_native.get(item.position.strategy_position_id)
+            _require(
+                native is not None,
+                "MISSING_TRAIL035_CURRENT_NATIVE_FACT_UNVERIFIED",
+            )
+            fact, cursor = native
+            try:
+                evaluations = exit_ports.on_native_trade(fact, cursor)
+            except P90RealMfeUnverified as exc:
+                if str(exc) == (
+                    "P90_REAL_EXIT_POLICY_DENIED:"
+                    "P90_REAL_NATIVE_TRAILING_LATE_ARM_UNVERIFIED"
+                ):
+                    trail035_late_arm_blocked.append(
+                        item.position.strategy_position_id
+                    )
+                    continue
+                raise
+            _require(
+                len(evaluations) == 1
+                and evaluations[0].status
+                is ExitEvaluationStatus.DECISION_CREATED
+                and evaluations[0].decision is not None
+                and evaluations[0].decision.action_kind
+                is ExitActionKind.SET_TRAILING,
+                "MISSING_TRAIL035_RECOVERY_DID_NOT_QUEUE_EXACT_TRAILING",
+            )
+            trail035_recovery_queued.append(
+                item.position.strategy_position_id
+            )
         # The primary WS socket was subscribed before recovery and can still
         # contain frames already reconstructed above.  Export the exact
         # committed transport boundary so the caller can seed its ordinary
@@ -527,4 +600,6 @@ def recover_p90_real_open_source(
         current_sequence_exec_ids=current_sequence_exec_ids,
         closed_watermarks=closed_watermarks,
         replayed_fact_ids=frozenset(replayed_fact_ids),
+        trail035_recovery_queued=tuple(sorted(trail035_recovery_queued)),
+        trail035_late_arm_blocked=tuple(sorted(trail035_late_arm_blocked)),
     )
