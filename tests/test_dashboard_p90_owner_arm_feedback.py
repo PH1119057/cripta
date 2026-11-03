@@ -3,7 +3,7 @@ from pathlib import Path
 HTML = Path("operations/dashboard/index.html")
 
 
-def test_owner_arm_latest_authoritative_state_stays_visible_without_forcing_technical_details_open() -> None:
+def test_owner_arm_latest_state_visible_without_forcing_technical_details_open() -> None:
     html = HTML.read_text(encoding="utf-8")
     assert "function showAuthoritativeP90ArmState(exactArmed,operation)" in html
     assert "panel.open=true" not in html
