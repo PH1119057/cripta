@@ -237,6 +237,35 @@ def _closed_replay(
     return events
 
 
+def _recover_missing_trail035_from_current_native(
+    *,
+    item: P90RealRestartPosition,
+    fact: MarketFactEnvelope,
+    cursor: TradeCursor,
+    exit_ports: P90RealExitRuntimePorts,
+) -> str:
+    """Evaluate exactly one current native fact after observation-only replay."""
+    if item.trail035_armed:
+        return "ARMED"
+    try:
+        evaluations = exit_ports.on_native_trade(fact, cursor)
+    except P90RealMfeUnverified as exc:
+        if str(exc) == (
+            "P90_REAL_EXIT_POLICY_DENIED:"
+            "P90_REAL_NATIVE_TRAILING_LATE_ARM_UNVERIFIED"
+        ):
+            return "LATE_ARM_BLOCKED"
+        raise
+    _require(
+        len(evaluations) == 1
+        and evaluations[0].status is ExitEvaluationStatus.DECISION_CREATED
+        and evaluations[0].decision is not None
+        and evaluations[0].decision.action_kind is ExitActionKind.SET_TRAILING,
+        "MISSING_TRAIL035_RECOVERY_DID_NOT_QUEUE_EXACT_TRAILING",
+    )
+    return "QUEUED"
+
+
 def recover_p90_real_open_source(
     connection: Any,
     *,
@@ -551,30 +580,22 @@ def recover_p90_real_open_source(
                 "MISSING_TRAIL035_CURRENT_NATIVE_FACT_UNVERIFIED",
             )
             fact, cursor = native
-            try:
-                evaluations = exit_ports.on_native_trade(fact, cursor)
-            except P90RealMfeUnverified as exc:
-                if str(exc) == (
-                    "P90_REAL_EXIT_POLICY_DENIED:"
-                    "P90_REAL_NATIVE_TRAILING_LATE_ARM_UNVERIFIED"
-                ):
-                    trail035_late_arm_blocked.append(
-                        item.position.strategy_position_id
-                    )
-                    continue
-                raise
-            _require(
-                len(evaluations) == 1
-                and evaluations[0].status
-                is ExitEvaluationStatus.DECISION_CREATED
-                and evaluations[0].decision is not None
-                and evaluations[0].decision.action_kind
-                is ExitActionKind.SET_TRAILING,
-                "MISSING_TRAIL035_RECOVERY_DID_NOT_QUEUE_EXACT_TRAILING",
+            recovery_state = _recover_missing_trail035_from_current_native(
+                item=item, fact=fact, cursor=cursor, exit_ports=exit_ports,
             )
-            trail035_recovery_queued.append(
-                item.position.strategy_position_id
-            )
+            if recovery_state == "QUEUED":
+                trail035_recovery_queued.append(
+                    item.position.strategy_position_id
+                )
+            elif recovery_state == "LATE_ARM_BLOCKED":
+                trail035_late_arm_blocked.append(
+                    item.position.strategy_position_id
+                )
+            else:
+                _require(
+                    recovery_state == "ARMED",
+                    "MISSING_TRAIL035_RECOVERY_STATE_INVALID",
+                )
         # The primary WS socket was subscribed before recovery and can still
         # contain frames already reconstructed above.  Export the exact
         # committed transport boundary so the caller can seed its ordinary
