@@ -31,6 +31,8 @@ def test_private_worker_handoffs_proven_first_fill_before_command_completion():
         body.index("SET state='completed',finished_at_epoch_ms")
     )
     assert "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED" in body
+    assert "P90_REAL_POSTFILL_INTERNAL_ERROR" in body
+    assert "candidate.startswith(\"P90_REAL_\")" in body
     assert "signed_position_reader=(" in body
     assert "current_private_ws=current_p90_real_private_ws_epoch" in body
     assert "no_pending_exit_command=(" in body
@@ -151,7 +153,8 @@ def test_first_fill_handoff_failure_uses_canonical_entry_gate_reason() -> None:
     body = ast.get_source_segment(runtime, handler)
     assert body is not None
     assert 'error = f"EXCHANGE_MUTATION_BARRIER:' in body
-    assert 'str(exc) == "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED"' in body
+    assert 'str(exc).startswith(' in body
+    assert '"P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:"' in body
     assert "REAL_ENTRY_RUNTIME_NOT_READY_REASON" in body
     assert "disarm_new_entries(connection, gate_reason)" in body
     # Detailed failure remains durable diagnostics; only the global new-Entry

@@ -3318,10 +3318,22 @@ def _run_observer_epoch(
                         source_ws_ready_at=_ready_local,
                         fetch_recent_trades=_fetch_recent_trade_snapshot,
                         fetch_closed_candles=_fetch_gap_candles,
+                        bind_restart_bridge=source_ports.bind_restart_bridge,
                     )
-                    source_ports.bind_restart_bridge(
-                        restart_recovery.bridge.restart_id
-                    )
+                    if restart_recovery.trail035_late_arm_blocked:
+                        raise RuntimeError(
+                            "P90_REAL_RESTART_TRAIL035_LATE_ARM_OWNER_REPAIR_REQUIRED:"
+                            + ",".join(
+                                restart_recovery.trail035_late_arm_blocked
+                            )
+                        )
+                    if restart_recovery.trail035_recovery_queued:
+                        raise RuntimeError(
+                            "P90_REAL_RESTART_TRAIL035_RECOVERY_PENDING:"
+                            + ",".join(
+                                restart_recovery.trail035_recovery_queued
+                            )
+                        )
                     # The primary WS was already subscribed before bounded
                     # recovery and may still contain frames reconstructed from
                     # REST+mirror. Seed the ordinary transport state BEFORE

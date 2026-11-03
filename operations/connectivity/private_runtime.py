@@ -1851,7 +1851,9 @@ def handle_exchange_mutation_barrier(
 
     gate_reason = (
         REAL_ENTRY_RUNTIME_NOT_READY_REASON
-        if str(exc) == "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED"
+        if str(exc).startswith(
+            "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:"
+        )
         else error[:500]
     )
     try:
@@ -3497,10 +3499,20 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                         )
                     ),
                 )
-        except Exception:
+        except Exception as exc:
             connection.rollback()
+            postfill_reason = "P90_REAL_POSTFILL_INTERNAL_ERROR"
+            candidate = str(exc).strip()
+            safe_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:")
+            if (
+                candidate.startswith("P90_REAL_")
+                and 0 < len(candidate) <= 180
+                and set(candidate) <= safe_chars
+            ):
+                postfill_reason = candidate
             raise ExchangeMutationBarrier(
-                "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED"
+                "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:"
+                + postfill_reason
             ) from None
     try:
         reconcile(connection, key, secret, "after_command")
