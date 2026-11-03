@@ -1385,6 +1385,29 @@ function renderReleaseArmCritical(lt){
   details.innerHTML='<b>REAL Entry требует проверки.</b> Загружен release '+loaded+
     '. Причина не классифицирована как release mismatch.';
 }
+function operatorGateSummary(reason){
+  const raw=String(reason||'');
+  if(/REAL_ENTRY_RUNTIME_NOT_READY/i.test(raw))return 'Новые реальные входы остановлены: торговый runtime не готов';
+  if(/RELEASE_BOUND_LIVE_ARM_NOT_READY/i.test(raw))return 'Новые реальные входы остановлены: LIVE-arm не подтверждён для текущего release';
+  if(/EXCHANGE_MUTATION_BARRIER/i.test(raw))return 'Новые реальные входы остановлены защитным барьером Exchange';
+  if(/OPERATIONAL_SAFETY|SAFETY_|CRITICAL/i.test(raw))return 'Новые реальные входы остановлены системой безопасности';
+  return 'Новые реальные входы запрещены';
+}
+function operatorCriticalSummary(item){
+  const code=String(item?.fault_code||'');
+  if(code==='POSITION_WITHOUT_EXIT_OWNER')return 'Не подтверждено сопровождение открытой позиции Exit Engine';
+  if(code==='POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION')return 'Не подтверждена начальная защита открытой позиции';
+  if(code==='UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR')return 'Universal Entry observer требует проверки';
+  if(/PROTECTION/i.test(code))return 'Защита открытой позиции требует проверки';
+  if(/POSITION.*OWNER|OWNERSHIP/i.test(code))return 'Владелец открытой позиции требует проверки';
+  return 'Критическая системная ошибка · требуется проверка';
+}
+function operatorReleaseIncidentSummary(item){
+  const reason=String(item?.reason||'');
+  if(/SOURCE|RELEASE|COMMIT|IDENTITY/i.test(reason))return 'Готовность текущего release требует проверки';
+  if(/REAL_ENTRY|ENTRY.*READY|RUNTIME/i.test(reason))return 'Готовность REAL Entry требует проверки';
+  return 'Открытая operational проблема · требуется проверка';
+}
 function renderMiniLogFeed(lt){
   // This is an operational attention queue, NOT a trade/decision/command log.
   // Historical denials, terminal orders and closed positions belong to Log Bybit.
@@ -1392,7 +1415,7 @@ function renderMiniLogFeed(lt){
   if(!host)return;
   const incidents=Array.isArray(lt.release_arm_incidents)?lt.release_arm_incidents:[];
   host.innerHTML=incidents.length?incidents.map(x=>
-    '<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>Открытая проблема релиза · '+safe(x.reason||'проверка LIVE')+'</b></summary><div class="console-event-detail">'+safe(x.detected_at||'')+' · '+safe(x.incident_id||'—')+'</div></details>'
+    '<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>'+safe(operatorReleaseIncidentSummary(x))+'</b></summary><div class="console-event-detail"><b>Технические детали:</b> '+safe(x.reason||'причина не указана')+'<div class="muted">'+safe(x.detected_at||'')+' · ID '+safe(x.incident_id||'—')+'</div></div></details>'
   ).join(''):'<div class="console-event-note muted">Нет открытых событий, требующих вмешательства</div>';
 }
 function renderLiveCriticalEvents(lt){
@@ -1417,9 +1440,11 @@ function renderLiveCriticalEvents(lt){
   const gatewayEmergency=document.getElementById('gatewayEmergencyBanner');
   if(gatewayEmergency){
     gatewayEmergency.hidden=!emergencyClosed;
-    gatewayEmergency.textContent=emergencyClosed?'⛔ АВАРИЙНО ЗАКРЫТ ТОРГОВЫЙ ШЛЮЗ · Новые входы запрещены · '+gateReason:'';
+    gatewayEmergency.innerHTML=emergencyClosed
+      ?'<strong>⛔ '+safe(operatorGateSummary(gateReason))+'</strong><details><summary>Технические детали</summary><div>'+safe(gateReason||'причина не указана')+'</div></details>'
+      :'';
   }
-  area.innerHTML=faults.map(x=>'<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>'+safe(x.fault_code||'CRITICAL')+'</b></summary><div class="console-event-detail">'+safe(x.message||x.reason||'Критическое событие lifecycle')+'<div class="muted">ID: '+safe(x.fault_id||'—')+'</div></div></details>').join('');
+  area.innerHTML=faults.map(x=>'<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>'+safe(operatorCriticalSummary(x))+'</b></summary><div class="console-event-detail"><b>Технические детали:</b> '+safe(x.fault_code||'CRITICAL')+' · '+safe(x.message||x.reason||'описание отсутствует')+'<div class="muted">ID: '+safe(x.fault_id||'—')+'</div></div></details>').join('');
   const release=lt.release_arm_health||{};
   const mismatches=Array.isArray(release.mismatched_sessions)?release.mismatched_sessions:[];
   const note=document.getElementById('gatewayReleaseStatus');
