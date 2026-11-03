@@ -50,7 +50,7 @@ class P90PrivateRecoveryBlocked(P90PrivateIpcUnverified):
 
     def __init__(self, recovery_code: str) -> None:
         if recovery_code not in P90_REAL_RECOVERY_SAFE_FAILURE_CODES:
-            recovery_code = "P90_REAL_RECOVERY_SIGNED_RESPONSE_INVALID"
+            recovery_code = "P90_REAL_RECOVERY_INTERNAL_ERROR"
         self.recovery_code = recovery_code
         super().__init__("P90_PRIVATE_IPC_RECOVERY_BLOCKED:" + recovery_code)
 
@@ -629,7 +629,7 @@ def serve_private_proof(
                         except P90RealRecoveryAccountUnverified as exc:
                             code = str(exc)
                             if code not in P90_REAL_RECOVERY_SAFE_FAILURE_CODES:
-                                code = "P90_REAL_RECOVERY_SIGNED_RESPONSE_INVALID"
+                                code = "P90_REAL_RECOVERY_INTERNAL_ERROR"
                             stream.sendall(_frame({
                                 "version": _VERSION, "nonce": raw["nonce"],
                                 "status": "BLOCKED", "account": account,
