@@ -178,7 +178,7 @@ class _GenerationDB:
         completed = (
             self.current_time - timedelta(seconds=1)
             if self.sleep_count and self.fresh_after_sleep
-            else self.current_time - timedelta(seconds=9)
+            else self.current_time - timedelta(seconds=16)
         )
         return _OneRow(
             (
@@ -226,7 +226,46 @@ def test_stale_generation_waits_for_next_fresh_complete_without_widening_ttl():
     assert db.sleep_count == 1
     assert ("ta-main", "connector-main") in db.calls
     assert ("ta-sub", "connector-sub") in db.calls
-    assert source._ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS < 15
+    assert (
+        source._ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS
+        == source.P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+        == 15.0
+    )
+
+
+def test_canonical_fresh_twelve_second_generation_passes_post_ws_barrier():
+    now = datetime.now(UTC)
+    db = _GenerationDB(current_time=now, fresh_after_sleep=False)
+
+    class TwelveSecondDB(_GenerationDB):
+        def execute(self, _statement, args):
+            account, connector = args
+            self.calls.append((account, connector))
+            return _OneRow(
+                (
+                    "generation-" + account,
+                    "COMPLETE",
+                    self.current_time - timedelta(seconds=12),
+                    0,
+                    0,
+                    "PROVEN",
+                )
+            )
+
+    db = TwelveSecondDB(current_time=now, fresh_after_sleep=False)
+    source._wait_for_fresh_flat_generations(
+        db,
+        routes=_routes(),
+        subscribed_local_at=now,
+        clock=lambda: db.current_time,
+        sleeper=lambda _seconds: pytest.fail(
+            "12-second canonical-fresh generation must not wait"
+        ),
+    )
+    assert db.sleep_count == 0
+    assert source._PRIVATE_PROOF_RETRY_BUDGET_SECONDS == 8.0
+    assert source._PRIVATE_PROOF_ATTEMPT_SECONDS == 2.0
+    assert source._ACCOUNT_GENERATION_BARRIER_WAIT_SECONDS == 5.0
 
 
 def test_generation_wait_times_out_fail_closed_before_source_mutation():
