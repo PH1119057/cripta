@@ -93,12 +93,63 @@ def test_recovery_producer_returns_safe_blocker_instead_of_incomplete_frame() ->
     assert not failures
 
 
+def test_recovery_producer_turns_unexpected_exception_into_structural_blocker() -> None:
+    route = _route()
+    ready = threading.Event()
+    running = threading.Event()
+    running.set()
+    failures: list[str] = []
+
+    def handler(_request):
+        raise AssertionError("position proof should not be requested")
+
+    def recovery_handler():
+        raise RuntimeError("must never cross IPC boundary")
+
+    def producer() -> None:
+        try:
+            serve_private_proof(
+                account=route.trading_account_id,
+                connector=route.account_connector_id,
+                handler=handler,
+                recovery_handler=recovery_handler,
+                running=running.is_set,
+                ready=ready.set,
+            )
+        except Exception as exc:
+            failures.append(type(exc).__name__)
+
+    worker = threading.Thread(target=producer, daemon=True)
+    worker.start()
+    try:
+        assert ready.wait(3.0), failures
+        client = P90PrivateProofClient(
+            account=route.trading_account_id,
+            connector=route.account_connector_id,
+            timeout_seconds=3.0,
+        )
+        with pytest.raises(P90PrivateRecoveryBlocked) as blocked:
+            client.read_recovery_account()
+        assert blocked.value.recovery_code == "P90_REAL_RECOVERY_INTERNAL_ERROR"
+    finally:
+        running.clear()
+        worker.join(timeout=3.0)
+    assert not worker.is_alive()
+    assert not failures
+
+
 def test_recovery_safe_vocabulary_is_finite_and_transient_is_subset() -> None:
     assert P90_REAL_RECOVERY_SAFE_FAILURE_CODES
     assert P90_REAL_RECOVERY_TRANSIENT_FAILURE_CODES
     assert (
         P90_REAL_RECOVERY_TRANSIENT_FAILURE_CODES
         < P90_REAL_RECOVERY_SAFE_FAILURE_CODES
+    )
+    assert "P90_REAL_RECOVERY_INTERNAL_ERROR" in (
+        P90_REAL_RECOVERY_SAFE_FAILURE_CODES
+    )
+    assert "P90_REAL_RECOVERY_INTERNAL_ERROR" not in (
+        P90_REAL_RECOVERY_TRANSIENT_FAILURE_CODES
     )
     assert "P90_REAL_RECOVERY_NON_PROTECTION_OPEN_ORDER" in (
         P90_REAL_RECOVERY_SAFE_FAILURE_CODES
