@@ -115,8 +115,6 @@ def _dashboard_deploy_evidence(
         return False, current_commit if SHA.fullmatch(current_commit) else None
 
     dashboard_commit = current_commit
-    if dashboard_commit == loaded_commit:
-        return True, dashboard_commit
     if not _git_is_ancestor(source, loaded_commit, dashboard_commit):
         return False, dashboard_commit
     if not _git_is_ancestor(source, dashboard_commit, source_head):
@@ -132,6 +130,8 @@ def _dashboard_deploy_evidence(
     )
     if post_dashboard_delta:
         return False, dashboard_commit
+    if dashboard_commit == loaded_commit:
+        return True, dashboard_commit
 
     deploy_path = release_state / "DASHBOARD_UI_DEPLOY.json"
     try:
