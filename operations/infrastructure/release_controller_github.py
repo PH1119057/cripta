@@ -289,7 +289,9 @@ def release_evidence(target: str) -> ReleaseEvidence:
     )
 
 
-def approval_candidates(*, target: str, baseline: str) -> list[ApprovalEvidence]:
+def approval_candidates(
+    *, target: str, baseline: str, purpose: str | None = None
+) -> list[ApprovalEvidence]:
     issue = _get_json(f"/issues/{APPROVAL_ISSUE}")
     if issue.get("state") != "open" or (issue.get("user") or {}).get("login") != OWNER_LOGIN:
         raise GitHubEvidenceError("APPROVAL_LEDGER_INVALID")
@@ -309,6 +311,8 @@ def approval_candidates(*, target: str, baseline: str) -> list[ApprovalEvidence]
         if not isinstance(request, dict):
             raise GitHubEvidenceError("OWNER_APPROVAL_JSON_INVALID")
         if request.get("target_commit") != target or request.get("expected_baseline") != baseline:
+            continue
+        if purpose is not None and request.get("purpose") != purpose:
             continue
         comment_id = row.get("id")
         html_url = row.get("html_url")

@@ -116,3 +116,27 @@ def test_gate_rejects_unexpected_fields():
     params["request"]["command"] = "bash"
     with pytest.raises(gate.ReleaseDenied, match="REQUEST_FIELDS_INVALID"):
         gate.verify_request(**params)
+
+
+def test_gate_accepts_dashboard_presentation_release_against_ui_baseline():
+    params = valid()
+    params["request"]["purpose"] = "DASHBOARD_PRESENTATION_RELEASE"
+    params["installed_runtime"] = "c" * 40
+    params["installed_tooling"] = "c" * 40
+    params["dashboard_ui_commit"] = BASELINE
+    assert gate.verify_request(**params) == (TARGET, BASELINE, NONCE)
+
+
+def test_gate_rejects_dashboard_release_with_wrong_ui_baseline():
+    params = valid()
+    params["request"]["purpose"] = "DASHBOARD_PRESENTATION_RELEASE"
+    params["dashboard_ui_commit"] = "c" * 40
+    with pytest.raises(gate.ReleaseDenied, match="DASHBOARD_BASELINE_MISMATCH"):
+        gate.verify_request(**params)
+
+
+def test_gate_rejects_unknown_release_purpose():
+    params = valid()
+    params["request"]["purpose"] = "ARBITRARY_SHELL_RELEASE"
+    with pytest.raises(gate.ReleaseDenied, match="REQUEST_SCOPE_INVALID"):
+        gate.verify_request(**params)

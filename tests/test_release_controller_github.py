@@ -353,3 +353,43 @@ def test_approval_candidates_mark_edited_owner_comment(monkeypatch):
     approvals = github.approval_candidates(target=TARGET, baseline=BASELINE)
     assert len(approvals) == 1
     assert approvals[0].unedited is False
+
+
+def test_approval_candidates_can_filter_dashboard_purpose(monkeypatch):
+    dashboard_request = {
+        "repository": "PH1119057/cripta",
+        "purpose": "DASHBOARD_PRESENTATION_RELEASE",
+        "target_commit": TARGET,
+        "expected_baseline": BASELINE,
+        "nonce": "nonce_00000000000000000009",
+        "expires_at": 1793405700,
+    }
+    full_request = {**dashboard_request, "purpose": "EXACT_VERIFIED_SOURCE_RELEASE"}
+    full_request["nonce"] = "nonce_00000000000000000008"
+
+    def approval_json(path, params=None):
+        del params
+        if path == "/issues/291":
+            return {"state": "open", "user": {"login": "PH1119057"}}
+        if path == "/issues/291/comments":
+            def row(comment_id, request):
+                return {
+                    "id": comment_id,
+                    "html_url": f"https://github.com/example/{comment_id}",
+                    "user": {"login": "PH1119057"},
+                    "author_association": "OWNER",
+                    "body": github.APPROVAL_PREFIX + json.dumps(request),
+                    "created_at": "2026-10-31T00:00:00Z",
+                    "updated_at": "2026-10-31T00:00:00Z",
+                }
+            return [row(8, full_request), row(9, dashboard_request)]
+        raise AssertionError(path)
+
+    monkeypatch.setattr(github, "_get_json", approval_json)
+    approvals = github.approval_candidates(
+        target=TARGET,
+        baseline=BASELINE,
+        purpose="DASHBOARD_PRESENTATION_RELEASE",
+    )
+    assert [item.comment_id for item in approvals] == [9]
+    assert approvals[0].request["purpose"] == "DASHBOARD_PRESENTATION_RELEASE"

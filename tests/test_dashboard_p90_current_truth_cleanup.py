@@ -54,12 +54,15 @@ def test_legacy_aux_gate_controls_stay_hidden_but_primary_p90_control_can_show()
 
 def test_p90_owner_arm_status_uses_current_runtime_truth():
     assert '"p90_arm_status": p90_arm_status' in APP
-    assert '"REMOTE_SOURCE_INSTALLED_IDENTITY_DRIFT"' in APP
+    assert "inspect_source_live_identity" in APP
     assert '"P90_REAL_OBSERVER_NOT_READY"' in APP
     assert '"loaded_commit": LOADED_RELEASE_COMMIT' in APP
     assert '"source_head": source_head' in APP
+    assert '"remote_head": source_identity.remote_head' in APP
+    assert '"dashboard_ui_commit": source_identity.dashboard_ui_commit' in APP
     assert 'window.p90ArmStatus=lt.p90_arm_status||null' in INDEX
-    assert "source/runtime release identity не совпадает" in INDEX
+    assert "Dashboard source новее независимо развёрнутого UI" in INDEX
+    assert "непроверенный trading/runtime source delta" in INDEX
     assert "Universal Entry observer сейчас не готов" in INDEX
 
 

@@ -8,7 +8,9 @@ from datetime import UTC, datetime
 
 OWNER_LOGIN = "PH1119057"
 REPOSITORY = "PH1119057/cripta"
-PURPOSE = "EXACT_VERIFIED_SOURCE_RELEASE"
+FULL_PURPOSE = "EXACT_VERIFIED_SOURCE_RELEASE"
+DASHBOARD_PURPOSE = "DASHBOARD_PRESENTATION_RELEASE"
+PURPOSES = {FULL_PURPOSE, DASHBOARD_PURPOSE}
 FIELDS = {
     "repository",
     "purpose",
@@ -44,6 +46,7 @@ def verify_request(
     rollback_ready,
     release_lock_available,
     nonce_unused,
+    dashboard_ui_commit=None,
 ):
     """Validate independently collected facts and return exact release identity."""
     if not isinstance(request, dict) or set(request) != FIELDS:
@@ -55,7 +58,8 @@ def verify_request(
     if not isinstance(now, datetime) or now.tzinfo is None:
         raise ReleaseDenied("NOW_INVALID")
 
-    if request["repository"] != REPOSITORY or request["purpose"] != PURPOSE:
+    purpose = request["purpose"]
+    if request["repository"] != REPOSITORY or purpose not in PURPOSES:
         raise ReleaseDenied("REQUEST_SCOPE_INVALID")
     target = request["target_commit"]
     baseline = request["expected_baseline"]
@@ -83,8 +87,11 @@ def verify_request(
         raise ReleaseDenied("SOURCE_HEAD_INVALID")
     if source_fast_forward_ok is not True:
         raise ReleaseDenied("SOURCE_NOT_FAST_FORWARD")
-    if installed_runtime != baseline or installed_tooling != baseline:
-        raise ReleaseDenied("BASELINE_MISMATCH")
+    if purpose == FULL_PURPOSE:
+        if installed_runtime != baseline or installed_tooling != baseline:
+            raise ReleaseDenied("BASELINE_MISMATCH")
+    elif dashboard_ui_commit != baseline:
+        raise ReleaseDenied("DASHBOARD_BASELINE_MISMATCH")
 
     if not isinstance(required_checks, dict):
         raise ReleaseDenied("CI_EVIDENCE_INVALID")
