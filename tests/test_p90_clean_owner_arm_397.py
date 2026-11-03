@@ -104,6 +104,13 @@ def test_post_ws_private_proof_attempts_are_shorter_than_ws_budget():
         ROOT / "operations/monitoring/p90l90_real_source_bootstrap.py"
     ).read_text(encoding="utf-8")
     assert (
+        "_ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS = "
+        "P90_ACCOUNT_PROOF_TIMEOUT_SECONDS"
+        in (
+            ROOT / "operations/monitoring/p90l90_real_source_bootstrap.py"
+        ).read_text(encoding="utf-8")
+    )
+    assert (
         "_PRIVATE_PREFLIGHT_ATTEMPT_SECONDS = P90_ACCOUNT_PROOF_TIMEOUT_SECONDS"
         in (
             ROOT / "operations/monitoring/p90l90_real_source_bootstrap.py"
