@@ -102,7 +102,10 @@ def _wait_for_fresh_flat_generations(
     COMPLETE account generation becoming stale and the next COMPLETE
     generation finishing.
     """
-    if wait_seconds <= 0 or not 0 < max_age_seconds <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS:
+    if (
+        wait_seconds <= 0
+        or not 0 < max_age_seconds <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+    ):
         raise P90RealLiveSourceEpochUnverified(
             "P90_REAL_FLAT_GENERATION_BARRIER_CONFIG_INVALID"
         )
@@ -209,7 +212,7 @@ def preflight_p90_real_private_flat_source(
     bundles: tuple[object, ...],
     started_at: datetime | None = None,
 ) -> None:
-    """Warm exact MAIN/SUB private proof before staged public WS attestation.
+    """Warm exact MAIN/SUB private proof before the public WS attestation clock.
 
     This grants no permission and persists nothing.  The post-subscription
     bootstrap still performs a second fresh credential-local proof.
