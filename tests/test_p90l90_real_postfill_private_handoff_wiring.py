@@ -32,7 +32,7 @@ def test_private_worker_handoffs_proven_first_fill_before_command_completion():
     )
     assert "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED" in body
     assert "P90_REAL_POSTFILL_INTERNAL_ERROR" in body
-    assert "candidate.startswith(\"P90_REAL_POSTFILL_\")" in body
+    assert "candidate.startswith(\"P90_REAL_\")" in body
     assert "signed_position_reader=(" in body
     assert "current_private_ws=current_p90_real_private_ws_epoch" in body
     assert "no_pending_exit_command=(" in body
