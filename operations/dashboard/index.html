@@ -838,17 +838,21 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
     const tone=state==='OPEN'?'open':visualNear?'near':'far';
     const current=price(item.current_price);
     if(state!=='OPEN'){
-      const h9=item.h9_distances||{},h9Long=Number(h9.long_distance_pct),h9Short=Number(h9.short_distance_pct);
-      const h9Ready=Number.isFinite(h9Long)&&Number.isFinite(h9Short);
-      const direction=state==='FAR'?'H9':nearest?.side||'—',entry=price(nearest?.entry_price),distance=nearest?.distance_pct==null?null:Number(nearest.distance_pct);
-      const distanceText=state==='FAR'
-        ?(h9Ready?'H9 LONG '+h9Long.toFixed(3)+'% · SHORT '+h9Short.toFixed(3)+'%':'H9 distance —')
-        :(distance==null?'нет valid Entry edge':distance.toFixed(3)+'% до '+direction+' Entry');
-      const geometryText=state==='FAR'&&h9Ready
-        ?'H9 raw LONG '+price(h9.long_edge)+' · SHORT '+price(h9.short_edge)+' · Entry требует overlap с L5-3'
-        :nearest
-          ?'Entry '+entry+' · сейчас '+current
-          :'текущая H9/PREV7D geometry не даёт LONG/SHORT Entry edge';
+      const h9=item.h9_distances||{},h9Value=value=>value===null||value===undefined||value===''?Number.NaN:Number(value);
+      const h9Long=h9Value(h9.long_distance_pct),h9Short=h9Value(h9.short_distance_pct);
+      const h9LongValid=Number.isFinite(h9Long)&&h9Long>=0,h9ShortValid=Number.isFinite(h9Short)&&h9Short>=0;
+      const h9NearestSide=h9LongValid&&(!h9ShortValid||h9Long<=h9Short)?'LONG':h9ShortValid?'SHORT':null;
+      const h9NearestDistance=p90RailH9Proximity(item);
+      const entry=price(nearest?.entry_price),entryDistance=nearest?.distance_pct==null?null:Number(nearest.distance_pct),entrySide=nearest?.side||'—';
+      const distanceText=h9NearestSide&&Number.isFinite(h9NearestDistance)
+        ?h9NearestDistance.toFixed(3)+'% до '+h9NearestSide+' H9'
+        :'H9 distance —';
+      const h9Text=(h9LongValid?'H9 LONG '+h9Long.toFixed(3)+'%':'H9 LONG —')+
+        ' · '+(h9ShortValid?'SHORT '+h9Short.toFixed(3)+'%':'SHORT —');
+      const entryText=nearest
+        ?'Entry '+entrySide+' '+(entryDistance==null||!Number.isFinite(entryDistance)?'—':entryDistance.toFixed(3)+'%')+' · цена '+entry+' · сейчас '+current
+        :'нет valid Entry edge · сейчас '+current;
+      const geometryText=h9Text+' · '+entryText+' · Entry требует overlap с L5-3';
       const diag=currentP90Diagnostic(diagnostic&&String(diagnostic.symbol||'')===String(item.symbol||'')?diagnostic:null);
       const diagLine=diag
         ?'<div class="rail-position-meta">Сквозной REAL‑тест: <b>'+safe(diagnosticStateRu(diag.state))+'</b>'+(diag.error?' · '+safe(diag.error):'')+'</div>'

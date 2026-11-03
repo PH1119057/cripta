@@ -74,6 +74,11 @@ def test_p90_left_rail_sorts_and_colors_by_nearest_h9_proximity():
     assert "if(aDistance!==bDistance)return aDistance-bDistance" in INDEX
     assert "h9Proximity<0.5" in INDEX
     assert "visualNear?'p90-near':'p90-far'" in INDEX
+    assert "value===null||value===undefined||value===''" in INDEX
+    assert "const h9NearestDistance=p90RailH9Proximity(item)" in INDEX
+    assert "h9NearestDistance.toFixed(3)+'% до '+h9NearestSide+' H9'" in INDEX
+    assert "const entryText=nearest" in INDEX
+    assert "'Entry '+entrySide+' '+" in INDEX
     assert "БЛИЗКО К H9" in INDEX
     assert "песочный — до ближайшей H9 &lt; 0,5%" in INDEX
     assert "Entry всё равно требует overlap с L5-3" in INDEX
