@@ -60,6 +60,10 @@ def _invoke(monkeypatch, *, mirror=None, db=None, source_func=None):
         source, "read_p90_real_signed_flat_accounts",
         lambda *_args, **_kwargs: ("MAIN", "SUB"),
     )
+    monkeypatch.setattr(
+        source, "_wait_for_fresh_flat_generations",
+        lambda *_args, **_kwargs: None,
+    )
 
     def live_start(_conn, **kwargs):
         requests.append(kwargs)
@@ -127,6 +131,10 @@ def test_missing_private_account_proof_uses_no_source_transaction(monkeypatch):
     db = FakeConnection()
     monkeypatch.setattr(source, "read_p90_real_account_routes",
                         lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        source, "_wait_for_fresh_flat_generations",
+        lambda *_args, **_kwargs: None,
+    )
 
     def unavailable(*_args, **_kwargs):
         raise RuntimeError("private SUB missing")
@@ -146,3 +154,196 @@ def test_missing_private_account_proof_uses_no_source_transaction(monkeypatch):
             epoch_started_at=now - timedelta(seconds=3),
         )
     assert db.trace == []
+
+
+
+class _OneRow:
+    def __init__(self, row):
+        self._row = row
+
+    def fetchone(self):
+        return self._row
+
+
+class _GenerationDB:
+    def __init__(self, *, current_time: datetime, fresh_after_sleep: bool):
+        self.current_time = current_time
+        self.fresh_after_sleep = fresh_after_sleep
+        self.sleep_count = 0
+        self.calls: list[tuple[str, str]] = []
+
+    def execute(self, _statement, args):
+        account, connector = args
+        self.calls.append((account, connector))
+        completed = (
+            self.current_time - timedelta(seconds=1)
+            if self.sleep_count and self.fresh_after_sleep
+            else self.current_time - timedelta(seconds=9)
+        )
+        return _OneRow(
+            (
+                "generation-" + account,
+                "COMPLETE",
+                completed,
+                0,
+                0,
+                "PROVEN",
+            )
+        )
+
+
+def _routes():
+    import types
+
+    return types.SimpleNamespace(
+        main=types.SimpleNamespace(
+            trading_account_id="ta-main",
+            account_connector_id="connector-main",
+        ),
+        sub=types.SimpleNamespace(
+            trading_account_id="ta-sub",
+            account_connector_id="connector-sub",
+        ),
+    )
+
+
+def test_stale_generation_waits_for_next_fresh_complete_without_widening_ttl():
+    now = datetime.now(UTC)
+    db = _GenerationDB(current_time=now, fresh_after_sleep=True)
+
+    def sleep(seconds: float) -> None:
+        assert 0 < seconds <= source._ACCOUNT_GENERATION_BARRIER_POLL_SECONDS
+        db.sleep_count += 1
+        db.current_time += timedelta(seconds=seconds)
+
+    source._wait_for_fresh_flat_generations(
+        db,
+        routes=_routes(),
+        subscribed_local_at=now,
+        clock=lambda: db.current_time,
+        sleeper=sleep,
+    )
+    assert db.sleep_count == 1
+    assert ("ta-main", "connector-main") in db.calls
+    assert ("ta-sub", "connector-sub") in db.calls
+    assert source._ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS < 15
+
+
+def test_generation_wait_times_out_fail_closed_before_source_mutation():
+    now = datetime.now(UTC)
+    db = _GenerationDB(current_time=now, fresh_after_sleep=False)
+
+    def sleep(seconds: float) -> None:
+        db.sleep_count += 1
+        db.current_time += timedelta(seconds=seconds)
+
+    with pytest.raises(
+        source.P90RealLiveSourceEpochUnverified,
+        match="GENERATION_WAIT_TIMEOUT",
+    ):
+        source._wait_for_fresh_flat_generations(
+            db,
+            routes=_routes(),
+            subscribed_local_at=now,
+            clock=lambda: db.current_time,
+            sleeper=sleep,
+        )
+    assert db.sleep_count > 0
+
+
+def test_private_proof_missing_gets_one_bounded_retry(monkeypatch):
+    import types
+
+    now = datetime.now(UTC)
+    mirror = FakeMirror()
+    db = FakeConnection()
+    routes = types.SimpleNamespace()
+    calls = {"proof": 0, "barrier": 0}
+
+    monkeypatch.setattr(
+        source,
+        "read_p90_real_account_routes",
+        lambda *_args, **_kwargs: routes,
+    )
+
+    def barrier(*_args, **_kwargs):
+        calls["barrier"] += 1
+
+    monkeypatch.setattr(source, "_wait_for_fresh_flat_generations", barrier)
+
+    def proof(_routes):
+        calls["proof"] += 1
+        if calls["proof"] == 1:
+            raise source.P90RealAccountRoutesUnverified(
+                "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
+            )
+        return ("MAIN", "SUB")
+
+    monkeypatch.setattr(source, "read_p90_real_signed_flat_accounts", proof)
+    monkeypatch.setattr(source.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        source,
+        "start_p90_real_source_epoch",
+        lambda *_args, **_kwargs: "p90-real-epoch-" + "c" * 40,
+    )
+    result = source.start_current_p90_real_observer_epoch(
+        db,
+        bundles=(object(), object()),
+        source_commit="b" * 40,
+        mirror=mirror,
+        subscribed_symbols=frozenset(
+            ("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT")
+        ),
+        subscribed_intervals=frozenset(("5", "15")),
+        subscribed_local_at=now,
+        subscribed_server_at=now,
+        epoch_started_at=now - timedelta(seconds=3),
+    )
+    assert result.startswith("p90-real-epoch-")
+    assert calls == {"proof": 2, "barrier": 2}
+
+
+def test_identity_scope_failure_is_never_retried(monkeypatch):
+    import types
+
+    now = datetime.now(UTC)
+    mirror = FakeMirror()
+    db = FakeConnection()
+    monkeypatch.setattr(
+        source,
+        "read_p90_real_account_routes",
+        lambda *_args, **_kwargs: types.SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        source,
+        "_wait_for_fresh_flat_generations",
+        lambda *_args, **_kwargs: None,
+    )
+    calls = 0
+
+    def proof(_routes):
+        nonlocal calls
+        calls += 1
+        raise source.P90RealAccountRoutesUnverified(
+            "P90_REAL_FLAT_ACCOUNT_SIGNED_SCOPE_MISMATCH"
+        )
+
+    monkeypatch.setattr(source, "read_p90_real_signed_flat_accounts", proof)
+    with pytest.raises(
+        source.P90RealAccountRoutesUnverified,
+        match="SIGNED_SCOPE_MISMATCH",
+    ):
+        source.start_current_p90_real_observer_epoch(
+            db,
+            bundles=(object(), object()),
+            source_commit="b" * 40,
+            mirror=mirror,
+            subscribed_symbols=frozenset(
+                ("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT")
+            ),
+            subscribed_intervals=frozenset(("5", "15")),
+            subscribed_local_at=now,
+            subscribed_server_at=now,
+            epoch_started_at=now - timedelta(seconds=3),
+        )
+    assert calls == 1
