@@ -12,7 +12,9 @@ proof performed after this inventory certificate.
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_FLOOR, Decimal, InvalidOperation
@@ -27,9 +29,12 @@ from bybit_workbench.universal_exit.p90l90_real_position_provider import (
     P90RealPositionProvider,
 )
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+    P90PrivateIpcUnverified,
     P90PrivateProofClient,
+    P90PrivateRecoveryBlocked,
 )
 from bybit_workbench.universal_exit.p90l90_real_recovery_account import (
+    P90_REAL_RECOVERY_TRANSIENT_FAILURE_CODES,
     P90RealSignedRecoveryAccount,
 )
 from bybit_workbench.universal_exit.p90l90_real_row_connection import (
@@ -52,6 +57,13 @@ _RECOVERY_KEYS = frozenset((
     "symbol", "side", "positionIdx", "size", "avgPrice",
     "stopLoss", "takeProfit", "trailingStop", "markPrice",
 ))
+_RECOVERY_ACCOUNT_PROOF_BUDGET_SECONDS = 20.0
+_RECOVERY_ACCOUNT_PROOF_MAX_ATTEMPT_SECONDS = 15.0
+_RECOVERY_ACCOUNT_PROOF_RETRY_SLEEP_SECONDS = 0.25
+_RECOVERY_IPC_TRANSIENT_CODES = frozenset({
+    "P90_PRIVATE_IPC_INCOMPLETE_FRAME",
+    "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE",
+})
 
 
 class P90RealOpenRestartUnverified(RuntimeError):
@@ -241,6 +253,56 @@ def _minimal_position(row: Mapping[str, object]) -> dict[str, object]:
     return {key: row.get(key) for key in _RECOVERY_KEYS}
 
 
+def _read_recovery_account_bounded(
+    route: P90RealAccountRoute,
+    *,
+    monotonic: Any = time.monotonic,
+    sleeper: Any = time.sleep,
+    client_factory: Any = P90PrivateProofClient,
+) -> P90RealSignedRecoveryAccount:
+    """Retry only transient account recovery failures inside one bounded budget."""
+    deadline = float(monotonic()) + _RECOVERY_ACCOUNT_PROOF_BUDGET_SECONDS
+    last_reason = "P90_REAL_RECOVERY_PROOF_NOT_ATTEMPTED"
+    while True:
+        remaining = deadline - float(monotonic())
+        if remaining <= 0:
+            raise P90RealOpenRestartUnverified(
+                "P90_REAL_RESTART_"
+                + route.account_kind
+                + "_ACCOUNT_RECOVERY_BUDGET_EXPIRED:"
+                + last_reason
+            )
+        timeout = min(_RECOVERY_ACCOUNT_PROOF_MAX_ATTEMPT_SECONDS, remaining)
+        try:
+            return client_factory(
+                account=route.trading_account_id,
+                connector=route.account_connector_id,
+                timeout_seconds=timeout,
+            ).read_recovery_account()
+        except P90PrivateRecoveryBlocked as exc:
+            last_reason = exc.recovery_code
+            if exc.recovery_code not in P90_REAL_RECOVERY_TRANSIENT_FAILURE_CODES:
+                raise P90RealOpenRestartUnverified(
+                    "P90_REAL_RESTART_"
+                    + route.account_kind
+                    + "_ACCOUNT_RECOVERY_BLOCKED:"
+                    + exc.recovery_code
+                ) from None
+        except P90PrivateIpcUnverified as exc:
+            last_reason = str(exc)
+            if last_reason not in _RECOVERY_IPC_TRANSIENT_CODES:
+                raise P90RealOpenRestartUnverified(
+                    "P90_REAL_RESTART_"
+                    + route.account_kind
+                    + "_ACCOUNT_RECOVERY_IPC_UNVERIFIED:"
+                    + last_reason
+                ) from None
+        remaining = deadline - float(monotonic())
+        if remaining <= 0:
+            continue
+        sleeper(min(_RECOVERY_ACCOUNT_PROOF_RETRY_SLEEP_SECONDS, remaining))
+
+
 def prove_p90_real_open_restart_inventory(
     connection: Any,
     *,
@@ -274,17 +336,17 @@ def prove_p90_real_open_restart_inventory(
     _require(bool(durable), "NO_DURABLE_OPEN_POSITION")
 
     account_proofs: dict[str, P90RealSignedRecoveryAccount] = {}
-    for route in (routes.main, routes.sub):
-        try:
-            proof = P90PrivateProofClient(
-                account=route.trading_account_id,
-                connector=route.account_connector_id,
-                timeout_seconds=15.0,
-            ).read_recovery_account()
-        except Exception:
-            raise P90RealOpenRestartUnverified(
-                "P90_REAL_RESTART_ACCOUNT_SIGNED_INVENTORY_MISSING"
-            ) from None
+    route_order = (routes.main, routes.sub)
+    with ThreadPoolExecutor(
+        max_workers=2,
+        thread_name_prefix="p90-restart-account",
+    ) as pool:
+        futures = tuple(
+            pool.submit(_read_recovery_account_bounded, route)
+            for route in route_order
+        )
+        proofs = tuple(future.result() for future in futures)
+    for route, proof in zip(route_order, proofs, strict=True):
         _require(
             proof.trading_account_id == route.trading_account_id
             and proof.signed_uid == route.registered_exchange_uid
@@ -293,7 +355,8 @@ def prove_p90_real_open_restart_inventory(
             == "bybit:signed-recovery-linear-usdt:exact-account"
             and proof.open_orders == 0
             and proof.pending_commands == 0,
-            "ACCOUNT_SIGNED_INVENTORY_IDENTITY_OR_FRESHNESS",
+            route.account_kind
+            + "_ACCOUNT_SIGNED_INVENTORY_IDENTITY_OR_FRESHNESS",
         )
         account_proofs[route.trading_account_id] = proof
     _require(
