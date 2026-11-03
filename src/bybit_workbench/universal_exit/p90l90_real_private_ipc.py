@@ -27,7 +27,11 @@ from bybit_workbench.universal_entry.p90l90_real_source_epoch_start import (
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 
 from .p90l90_real_observation import ScopedPrivatePositionEvidence
-from .p90l90_real_recovery_account import P90RealSignedRecoveryAccount
+from .p90l90_real_recovery_account import (
+    P90_REAL_RECOVERY_SAFE_FAILURE_CODES,
+    P90RealRecoveryAccountUnverified,
+    P90RealSignedRecoveryAccount,
+)
 
 _ACCOUNT = re.compile(r"ta-[a-f0-9]{32}\Z")
 _NONCE = re.compile(r"[a-f0-9]{32}\Z")
@@ -39,6 +43,16 @@ P90_ACCOUNT_PROOF_TIMEOUT_SECONDS = 15.0
 
 class P90PrivateIpcUnverified(RuntimeError):
     """Fail closed if producer, credential proof or source lineage is absent."""
+
+
+class P90PrivateRecoveryBlocked(P90PrivateIpcUnverified):
+    """Credential-local recovery producer returned one sanitized fail-closed code."""
+
+    def __init__(self, recovery_code: str) -> None:
+        if recovery_code not in P90_REAL_RECOVERY_SAFE_FAILURE_CODES:
+            recovery_code = "P90_REAL_RECOVERY_SIGNED_RESPONSE_INVALID"
+        self.recovery_code = recovery_code
+        super().__init__("P90_PRIVATE_IPC_RECOVERY_BLOCKED:" + recovery_code)
 
 
 def private_ipc_address(trading_account_id: str) -> str:
@@ -475,12 +489,30 @@ class P90PrivateProofClient:
                 "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE"
             ) from None
         if (
+            raw.get("version") == _VERSION
+            and raw.get("nonce") == nonce
+            and raw.get("account") == self._account
+            and raw.get("connector") == self._connector
+            and raw.get("status") == "BLOCKED"
+            and set(raw) == {
+                "version", "nonce", "status", "account", "connector",
+                "recovery_error",
+            }
+        ):
+            code = raw.get("recovery_error")
+            if not isinstance(code, str):
+                raise P90PrivateIpcUnverified(
+                    "P90_PRIVATE_IPC_RECOVERY_RESPONSE_UNVERIFIED"
+                )
+            raise P90PrivateRecoveryBlocked(code)
+        if (
             raw.get("version") != _VERSION
             or raw.get("nonce") != nonce
             or raw.get("account") != self._account
             or raw.get("connector") != self._connector
             or raw.get("status") != "VERIFIED"
             or "evidence" in raw or "flat" in raw
+            or "recovery_error" in raw
         ):
             raise P90PrivateIpcUnverified(
                 "P90_PRIVATE_IPC_RECOVERY_RESPONSE_UNVERIFIED"
@@ -592,7 +624,19 @@ def serve_private_proof(
                             raise P90PrivateIpcUnverified(
                                 "P90_PRIVATE_IPC_RECOVERY_PRODUCER_MISSING"
                             )
-                        recovery = recovery_handler()
+                        try:
+                            recovery = recovery_handler()
+                        except P90RealRecoveryAccountUnverified as exc:
+                            code = str(exc)
+                            if code not in P90_REAL_RECOVERY_SAFE_FAILURE_CODES:
+                                code = "P90_REAL_RECOVERY_SIGNED_RESPONSE_INVALID"
+                            stream.sendall(_frame({
+                                "version": _VERSION, "nonce": raw["nonce"],
+                                "status": "BLOCKED", "account": account,
+                                "connector": connector,
+                                "recovery_error": code,
+                            }))
+                            continue
                         if recovery.trading_account_id != account:
                             raise P90PrivateIpcUnverified(
                                 "P90_PRIVATE_IPC_RECOVERY_ACCOUNT_MISMATCH"
