@@ -34,6 +34,10 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     REQUESTED_USDT,
     VERSION,
 )
+from bybit_workbench.universal_entry.p90l90_real_second48 import read_real_second48
+from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
+    StrategyHardStopEmbargoPolicy,
+)
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
     P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
@@ -331,6 +335,43 @@ def _exact_policy(bundle: Any) -> dict[str, object]:
     }
 
 
+def _second48_prearm_evidence(
+    connection: Any,
+    *,
+    bundles: dict[str, Any],
+    routes: dict[str, tuple[Any, str, str]],
+    now: datetime,
+) -> dict[str, dict[str, object]]:
+    """Prove exact durable SECOND48 reconstruction while mainnet is closed.
+
+    An active embargo is valid Strategy state and does not make technical PREARM
+    fail. Failure to reconstruct exact persisted position/Exit lineage does.
+    """
+    evidence: dict[str, dict[str, object]] = {}
+    for strategy_id in (MAIN_ID, SUB_ID):
+        bundle = bundles[strategy_id]
+        _binding, account_id, _connector_id = routes[strategy_id]
+        lifecycle = bundle.card.lifecycle_policy.to_dict()
+        policy = StrategyHardStopEmbargoPolicy.parse(
+            lifecycle["second_hardstop_embargo"]
+        )
+        allows_new_entry, snapshot = read_real_second48(
+            connection,
+            strategy_id=bundle.card.strategy_id,
+            strategy_version=bundle.card.strategy_version,
+            strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+            trading_account_id=account_id,
+            policy=policy,
+            evaluated_at=now,
+        )
+        evidence[strategy_id] = {
+            "trading_account_id": account_id,
+            "allows_new_entry": bool(allows_new_entry),
+            "snapshot": snapshot,
+        }
+    return evidence
+
+
 def prepare_p90l90_real_v3_prearm_evidence(
     connection: Any,
     *,
@@ -536,6 +577,12 @@ def prepare_p90l90_real_v3_prearm_evidence(
         and set(observer_exit_plans)
         == {bundle.exit_plan.exit_plan_fingerprint for bundle in bundles.values()},
         "observer loaded Plan fingerprints differ from active v3",
+    )
+    second48_evidence = _second48_prearm_evidence(
+        connection,
+        bundles=bundles,
+        routes=routes,
+        now=current,
     )
 
     _require(
@@ -754,6 +801,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 "accounts": account_evidence,
                 "observer_trading_effect": observer.get("trading_effect"),
                 "entry_consumers": consumer_health,
+                "second48": second48_evidence,
                 "gate": 0,
                 "execution_permissions": 0,
                 "exchange_mutation": False,
