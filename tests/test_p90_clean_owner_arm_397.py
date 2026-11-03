@@ -114,3 +114,7 @@ def test_primary_owner_arm_status_is_plain_language_and_raw_detail_is_collapsed(
     ]
     assert "РАНЕЕ · до текущего запуска" in UI
     assert "Это отдельный durable-журнал, а не статус текущей кнопки OWNER ARM" in UI
+    assert "function observerFaultFriendlyText(item)" in UI
+    assert "Не удалось получить полное подтверждение состояния MAIN/SUB аккаунтов" in UI
+    assert "Не удалось завершить проверку рыночного источника в допустимое окно" in UI
+    assert "<b>Технические детали:</b>" in UI
