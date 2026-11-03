@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -104,6 +105,6 @@ def test_prearm_blocks_before_gate_when_second48_cannot_be_reconstructed(
 def test_prearm_source_persists_second48_inside_live_equivalence() -> None:
     source = prearm.__file__
     assert source is not None
-    text = open(source, encoding="utf-8").read()
+    text = Path(source).read_text(encoding="utf-8")
     assert "second48_evidence = _second48_prearm_evidence(" in text
     assert '"second48": second48_evidence' in text
