@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from bybit_workbench import source_live_identity as identity
 
 
