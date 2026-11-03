@@ -215,6 +215,7 @@ def read_p90_real_signed_flat_accounts(
     )
     from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
         P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
+        P90PrivateIpcUnverified,
         P90PrivateProofClient,
     )
 
@@ -258,9 +259,20 @@ def read_p90_real_signed_flat_accounts(
         ) as pool:
             futures = tuple(pool.submit(read_one, route) for route in route_order)
             results = tuple(future.result() for future in futures)
+    except P90PrivateIpcUnverified as exc:
+        if str(exc) in {
+            "P90_PRIVATE_IPC_INCOMPLETE_FRAME",
+            "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE",
+        }:
+            raise P90RealAccountRoutesUnverified(
+                "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
+            ) from None
+        raise P90RealAccountRoutesUnverified(
+            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_UNVERIFIED:" + str(exc)
+        ) from None
     except Exception:
         raise P90RealAccountRoutesUnverified(
-            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
+            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_INTERNAL_ERROR"
         ) from None
 
     proofs: list[P90RealSignedFlatAccount] = []
