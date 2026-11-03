@@ -865,7 +865,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
       return '<div class="rail-open-position '+stateClass+'">'+
         '<div class="rail-position-summary">'+
           '<span><span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state '+tone+'">'+stateText+'</small></span>'+
-          '<span class="rail-position-pnl"><span class="p90-rail-distance">'+safe(distanceText)+'</span><br><small class="rail-position-meta">'+safe(direction)+'</small></span>'+
+          '<span class="rail-position-pnl"><span class="p90-rail-distance">'+safe(distanceText)+'</span><br><small class="rail-position-meta">'+safe(h9NearestSide||'—')+'</small></span>'+
         '</div>'+
         '<div class="rail-position-meta">'+safe(geometryText)+'</div>'+
         '<div class="rail-position-meta">geometry '+safe(item.geometry?.effective_at||'—')+'</div>'+
