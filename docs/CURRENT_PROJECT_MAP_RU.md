@@ -1724,6 +1724,15 @@ Such deploy:
 - should not restart Dashboard itself when the static asset is read per request;
 - records independent UI commit/hash evidence.
 
+OWNER DECISION 2026-11-03 / Issue #381: Dashboard-only deployment must no longer
+depend on a SentinelX command containing each new commit SHA. The permanent
+no-argument `cripta-release-controller.service` is extended with bounded
+`DASHBOARD_PRESENTATION_RELEASE` requests. For that purpose it validates owner
+approval/current GitHub main/CI/current `DASHBOARD_UI_COMMIT`, then invokes the
+existing canonical Dashboard verifier/deployer. Full runtime purpose remains
+separate. The controller never infers Dashboard approval from source HEAD alone
+and never opens gate/permissions/LIVE-arm.
+
 Current implementation migration from runtime-owned
 `operations/dashboard/index.html` to the separate UI rail is part of the same
 owner-approved change.
