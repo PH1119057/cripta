@@ -35,7 +35,11 @@ def test_readiness_retries_only_transport_transient_private_ipc(monkeypatch):
     def evidence(*_args, **kwargs):
         nonlocal calls
         calls += 1
-        assert 0 < kwargs["private_proof_timeout_seconds"] <= 2.0
+        assert (
+            kwargs["private_proof_timeout_seconds"]
+            == app.P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+            == app.P90_REAL_READINESS_PRIVATE_ATTEMPT_SECONDS
+        )
         if calls == 1:
             raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_INCOMPLETE_FRAME")
         return {"status": "PREARM_TECHNICAL_READY"}
@@ -44,7 +48,7 @@ def test_readiness_retries_only_transport_transient_private_ipc(monkeypatch):
     monkeypatch.setattr(app, "prepare_p90l90_real_v3_prearm_evidence", evidence)
     monkeypatch.setattr(app.time, "sleep", lambda _seconds: None)
 
-    result = app._wait_p90_real_v3_technical_evidence(timeout_seconds=1.0)
+    result = app._wait_p90_real_v3_technical_evidence(timeout_seconds=30.0)
     assert result["status"] == "PREARM_TECHNICAL_READY"
     assert calls == 2
 
@@ -64,6 +68,18 @@ def test_readiness_does_not_retry_identity_or_scope_private_ipc(monkeypatch):
     with pytest.raises(P90PrivateIpcUnverified, match="PEER_NOT_VERIFIED"):
         app._wait_p90_real_v3_technical_evidence(timeout_seconds=1.0)
     assert calls == 1
+
+
+def test_readiness_starts_required_services_before_account_ws_recovery():
+    start = APP.index("def _u6_prepare_p90_real_v3_readiness(")
+    end = APP.index("\ndef _u6_p90_real_v3_arm(", start)
+    readiness = APP[start:end]
+    assert readiness.index("snapshots = collect_systemd_snapshots(") < readiness.index(
+        "ws_recovery = _recover_p90_real_ws_safety_if_needed("
+    )
+    assert readiness.index("if plan.starts:") < readiness.index(
+        "ws_recovery = _recover_p90_real_ws_safety_if_needed("
+    )
 
 
 def test_staged_private_preflight_precedes_public_ws_attestation_clock():
