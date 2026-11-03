@@ -93,6 +93,10 @@ def test_recovery_producer_returns_safe_blocker_instead_of_incomplete_frame() ->
     assert not failures
 
 
+@pytest.mark.skipif(
+    not hasattr(__import__("socket"), "AF_UNIX"),
+    reason="requires local UNIX IPC",
+)
 def test_recovery_producer_turns_unexpected_exception_into_structural_blocker() -> None:
     route = _route()
     ready = threading.Event()
