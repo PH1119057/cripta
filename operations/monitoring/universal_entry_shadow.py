@@ -3016,11 +3016,12 @@ def _run_observer_epoch(
         if trade_mirror.snapshot()["state"] != "ACTIVE":
             raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
         oi_thread.start()
-        if p90_real_staged:
-            # Staged OWNER ARM gets exact credential-local MAIN/SUB readiness
-            # before starting the short-lived public WS attestation clock.
-            # This preflight grants no trading right and is never reused as the
-            # mandatory post-subscription signed proof.
+        if p90_real_staged or p90_real_source_only:
+            # Staged OWNER ARM and normal flat source-only restart both warm
+            # exact credential-local MAIN/SUB readiness before starting the
+            # short-lived public WS attestation clock. This preflight grants
+            # no trading right and is never reused as the mandatory
+            # post-subscription signed proof.
             from operations.monitoring.p90l90_real_source_bootstrap import (
                 preflight_p90_real_private_flat_source,
             )
