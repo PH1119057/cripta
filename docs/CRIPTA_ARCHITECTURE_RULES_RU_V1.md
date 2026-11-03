@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.6
-**Дата:** 2026-11-01
+**Версия:** 3.7
+**Дата:** 2026-11-04
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -1352,3 +1352,85 @@ The REAL Readiness Coordinator:
 - never converts technical readiness into financial authorization. OWNER ARM remains a separate explicit authenticated authorization and fresh atomic final check; DISARM stays available even in degraded state.
 
 Existing exposure is never auto-closed to make preparation pass. New Entry remains fail-closed while preparation is incomplete or BLOCKED; protection, Exit and reconciliation for existing positions continue under their current owners. Implementation/privileged actor/path rules are owned by DEVELOPMENT_RELEASE §51; stable terms by GLOSSARY §40; dated host status by CURRENT_PROJECT_MAP.
+
+## 53. Stable Control Core и защищённая поверхность движка — OWNER DECISION 2026-11-04 (Issue #413)
+
+`Stable Control Core` — внутренний детерминированный control-plane kernel CRIPTA,
+который фиксирует допустимые runtime-состояния, переходы, инварианты
+авторизации/REAL gate и типизированные причины отказа. Он **не является новым
+верхнеуровневым торговым слоем** и не меняет модель §1
+`MAYAK -> DISPATCHER -> STRATEGY -> EXECUTION -> EXCHANGE`.
+
+Core получает только типизированные события/evidence и возвращает решение о
+переходе и набор разрешённых control actions. В самом Core запрещены:
+- HTTP/UI, Bybit/provider API, WebSocket/private IPC и systemd;
+- прямой SQL и знание физической PostgreSQL schema;
+- filesystem/network I/O, sleep/retry/poll loops;
+- Strategy-specific торговые параметры, symbol lists, H3/H9 и иные trading rules;
+- скрытые defaults и provider-specific обходы.
+
+Изменчивые реализации принадлежат адаптерам/owners вокруг Core: Dashboard,
+REAL Readiness Coordinator, Observer, Lifecycle Supervisor, Entry consumer,
+Private Runtime/Exchange adapter, reconciliation/account proof и persistence.
+Они преобразуют внешний факт в типизированное evidence/event либо применяют
+разрешённый Core action, но не создают альтернативную state machine.
+
+### 53.1 Strategy plug-in boundary
+
+Immutable StrategyCard/EntryPlan/ExitPlan подключаются к универсальному
+Entry/Exit/Execution контуру через существующие contracts. Добавление новой
+Strategy, новой StrategyVersion или изменение Strategy-owned алгоритма не даёт
+права менять Stable Control Core, REAL authorization semantics, release/gate
+invariants или lifecycle ownership. Изменение Strategy должно быть локальным
+для Strategy/materialization/plan consumers, если отдельно не доказан дефект
+общего контракта.
+
+### 53.2 Protected core contract
+
+После реализации `Stable Control Core v1` его state model, transition table,
+authorization invariants и typed error semantics считаются protected
+architecture surface. Обычный feature/bugfix не может менять Core "заодно".
+
+Изменение Core допускается только по цепочке:
+
+```text
+FINDING
+-> explicit OWNER DECISION
+-> CANON UPDATE
+-> new CORE_CONTRACT_VERSION
+-> exhaustive transition/invariant tests
+-> cross-contour Git/release
+-> runtime evidence
+```
+
+До отдельного решения владельца изменение адаптера, Dashboard, Strategy,
+provider integration, timeout/poll policy или observability не является
+основанием для изменения Core.
+
+### 53.3 Single transition owner target
+
+Целевой контракт: runtime-control mutation для REAL gate, execution permission,
+generic/account LIVE-arm и связанных transition audit records применяется через
+один сериализуемый transition owner/store. Dashboard/Observer/Supervisor/
+Consumer не должны независимо придумывать несовместимые переходы или напрямую
+соревноваться за итоговое состояние. Конкретная физическая реализация и
+миграция существующих writers требуют отдельной implementation phase и не
+считаются выполненными этой документационной записью.
+
+### 53.4 Working-surface preservation
+
+Работающая поверхность по умолчанию считается неизменяемой для задачи, которая
+ей не принадлежит. Исправление дефекта должно менять только доказанного owner
+дефекта и минимально необходимые contract/test surfaces. Подробный процессный
+контракт — DEVELOPMENT_RELEASE §52.
+
+Статус этого раздела:
+
+```text
+OWNER_DECISION=YES
+CANON=YES
+IMPLEMENTED=NO
+DEPLOYED=NO
+RUNTIME_VERIFIED=NO
+LIVE_CHANGE=NO
+```
