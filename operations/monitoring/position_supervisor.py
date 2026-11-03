@@ -22,9 +22,39 @@ from bybit_workbench.position_supervisor import (
 )
 
 MAYAK_STATUS = Path("/var/lib/cripta/mayak_v2/status.json")
+_STATUS_ROOT = Path("/run/cripta-position-supervisor")
+STATUS_PATH = Path(
+    os.environ.get(
+        "CRIPTA_POSITION_SUPERVISOR_STATUS_PATH",
+        str(_STATUS_ROOT / "status.json"),
+    )
+)
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 running = True
 _public_cache: dict[str, tuple[float, dict[str, object]]] = {}
+
+
+def _write_status(path: Path, *, now: datetime, open_positions: int) -> None:
+    expected = _STATUS_ROOT / "status.json"
+    if path != expected or not path.parent.is_dir():
+        raise RuntimeError("POSITION_SUPERVISOR_STATUS_PATH_NOT_PREPARED")
+    if open_positions < 0:
+        raise ValueError("POSITION_SUPERVISOR_OPEN_POSITIONS_INVALID")
+    payload = {
+        "service": "position_supervisor",
+        "state": "RUNNING",
+        "observed_at": now.astimezone(UTC).isoformat(),
+        "trading_account_id": TRADING_ACCOUNT_ID,
+        "open_positions": open_positions,
+        "trading_rights": "NONE",
+        "authority": "POSITION_SUPERVISOR_INFORMATION_ONLY_V36",
+    }
+    temporary = path.with_name("status.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    temporary.replace(path)
 
 
 def public_get(path: str, params: dict[str, str], ttl: float = 5) -> dict[str, object]:
@@ -492,6 +522,7 @@ def main() -> None:
                         ),
                     )
             connection.commit()
+            _write_status(STATUS_PATH, now=now, open_positions=len(rows))
             time.sleep(2)
 
 
