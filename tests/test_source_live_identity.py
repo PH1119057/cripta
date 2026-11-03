@@ -190,3 +190,48 @@ def test_inspect_blocks_trading_delta_even_with_dashboard_evidence(
     )
     assert result.ok is False
     assert result.blocker == "TRADING_OR_UNKNOWN_SOURCE_DELTA"
+
+
+def test_inspect_blocks_new_dashboard_delta_when_live_ui_still_equals_runtime(
+    monkeypatch, tmp_path: Path
+) -> None:
+    dashboard = tmp_path / "dashboard-ui"
+    current = dashboard / "current"
+    current.mkdir(parents=True)
+    (current / "DASHBOARD_UI_COMMIT").write_text(LOADED + "\n", encoding="utf-8")
+    (current / "index.html").write_text("<html>runtime</html>", encoding="utf-8")
+    (current / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    state = tmp_path / "release"
+    state.mkdir()
+    (state / "DASHBOARD_UI_COMMIT").write_text(LOADED + "\n", encoding="utf-8")
+
+    def fake_git(_source: Path, *args: str) -> str:
+        if args == ("rev-parse", "HEAD"):
+            return SOURCE
+        if args == ("ls-remote", "origin", "refs/heads/main"):
+            return SOURCE + "\trefs/heads/main"
+        if args == ("status", "--porcelain=v1", "--untracked-files=all"):
+            return ""
+        if args == ("diff", "--name-only", f"{LOADED}..{SOURCE}"):
+            return "operations/dashboard/index.html"
+        if args == (
+            "diff",
+            "--name-only",
+            f"{LOADED}..{SOURCE}",
+            "--",
+            "operations/dashboard",
+        ):
+            return "operations/dashboard/index.html"
+        raise AssertionError(args)
+
+    monkeypatch.setattr(identity, "_git", fake_git)
+    monkeypatch.setattr(identity, "_git_is_ancestor", lambda *_args: True)
+
+    result = identity.inspect_source_live_identity(
+        loaded_commit=LOADED,
+        source=tmp_path / "source",
+        dashboard_root=dashboard,
+        release_state=state,
+    )
+    assert result.ok is False
+    assert result.blocker == "DASHBOARD_UI_DELTA_NOT_VERIFIED"
