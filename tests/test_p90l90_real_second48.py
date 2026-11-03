@@ -23,7 +23,7 @@ POLICY = StrategyHardStopEmbargoPolicy(
 
 
 class _DB:
-    def __init__(self, rows: list[dict[str, object]]) -> None:
+    def __init__(self, rows: list[object]) -> None:
         self.rows = rows
         self.params: tuple[object, ...] | None = None
         self.locked_account: str | None = None
@@ -162,4 +162,56 @@ def test_duplicate_attribution_and_wrong_policy_scope_fail_closed() -> None:
             _DB([]), strategy_id=MAIN_ID, strategy_version=VERSION,
             strategy_config_fingerprint="fp", trading_account_id="ta-main",
             policy=bad, evaluated_at=AT,
+        )
+
+
+
+def _tuple_row(row: dict[str, object]) -> tuple[object, ...]:
+    return (
+        row["position_id"],
+        row["state"],
+        row["closed_at"],
+        row["close_link_status"],
+        row["identity_status"],
+        row["trading_account_id"],
+        row["account_kind"],
+        row["attribution_id"],
+        row["attribution_closed_at"],
+        row["attribution_link_status"],
+        row["exit_owner"],
+        row["exit_mechanism"],
+        row["exit_order_id"],
+    )
+
+
+def test_live_default_psycopg_tuple_rows_are_normalized() -> None:
+    one = _row("tuple-1", AT - timedelta(hours=25))
+    two = _row("tuple-2", AT - timedelta(minutes=5))
+    db = _DB([_tuple_row(one), _tuple_row(two)])
+    allowed, snapshot = read_real_second48(
+        db,
+        strategy_id=MAIN_ID,
+        strategy_version=VERSION,
+        strategy_config_fingerprint="fingerprint-p90-exact",
+        trading_account_id="ta-main",
+        policy=POLICY,
+        evaluated_at=AT,
+    )
+    assert allowed is False
+    assert snapshot["pause_until"] == (
+        AT - timedelta(minutes=5) + timedelta(hours=48)
+    ).isoformat()
+
+
+def test_malformed_positional_row_still_fails_closed() -> None:
+    db = _DB([("position-only", "CLOSED")])
+    with pytest.raises(P90RealSecond48Unverified, match="ROW_NOT_PROVEN"):
+        read_real_second48(
+            db,
+            strategy_id=MAIN_ID,
+            strategy_version=VERSION,
+            strategy_config_fingerprint="fingerprint-p90-exact",
+            trading_account_id="ta-main",
+            policy=POLICY,
+            evaluated_at=AT,
         )
