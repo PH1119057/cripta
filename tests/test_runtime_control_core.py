@@ -247,14 +247,15 @@ def test_core_source_has_no_io_or_runtime_dependencies() -> None:
                 assert node.func.id not in forbidden_calls
 
 
-def test_no_existing_production_module_imports_core_yet() -> None:
+def test_only_approved_shadow_adapter_imports_core() -> None:
     protected_roots = (Path("operations"), Path("src/bybit_workbench"))
     allowed_core = Path("src/bybit_workbench/runtime_control_core")
+    approved_importers = {Path("src/bybit_workbench/runtime_control_shadow.py")}
 
     offenders: list[str] = []
     for root in protected_roots:
         for path in root.rglob("*.py"):
-            if path.is_relative_to(allowed_core):
+            if path.is_relative_to(allowed_core) or path in approved_importers:
                 continue
             if "runtime_control_core" in path.read_text(encoding="utf-8"):
                 offenders.append(path.as_posix())
