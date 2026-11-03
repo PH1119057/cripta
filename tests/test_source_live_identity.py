@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
-from bybit_workbench import source_live_identity as identity
+MODULE = (
+    Path(__file__).resolve().parents[1]
+    / "src/bybit_workbench/source_live_identity.py"
+)
+spec = importlib.util.spec_from_file_location("source_live_identity", MODULE)
+identity = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = identity
+spec.loader.exec_module(identity)
 
 
 LOADED = "a" * 40
