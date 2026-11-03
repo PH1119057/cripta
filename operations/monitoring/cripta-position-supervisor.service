@@ -9,12 +9,15 @@ User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
 Environment=CRIPTA_TRADING_ACCOUNT_ID=ta-2122c81ecff14f3b85b102db605212f7
+Environment=CRIPTA_POSITION_SUPERVISOR_STATUS_PATH=/run/cripta-position-supervisor/status.json
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/position_supervisor.py
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
+RuntimeDirectory=cripta-position-supervisor
+RuntimeDirectoryMode=0750
 ProtectSystem=strict
 ProtectHome=true
 ProtectKernelTunables=true
