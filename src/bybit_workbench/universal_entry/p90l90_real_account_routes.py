@@ -201,6 +201,8 @@ def read_p90_real_account_routes(
 
 def read_p90_real_signed_flat_accounts(
     routes: P90RealAccountRoutes,
+    *,
+    timeout_seconds: float | None = None,
 ) -> tuple[P90RealSignedFlatAccount, P90RealSignedFlatAccount]:
     """Use BOTH actual credential-local private workers, not DB roster alone.
 
@@ -216,6 +218,15 @@ def read_p90_real_signed_flat_accounts(
         P90PrivateProofClient,
     )
 
+    timeout = (
+        P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+        if timeout_seconds is None
+        else float(timeout_seconds)
+    )
+    if not 0 < timeout <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS:
+        raise P90RealAccountRoutesUnverified(
+            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_TIMEOUT_INVALID"
+        )
     if (
         not isinstance(routes, P90RealAccountRoutes)
         or routes.main.strategy_id != MAIN_ID
@@ -232,7 +243,7 @@ def read_p90_real_signed_flat_accounts(
         proof = P90PrivateProofClient(
             account=route.trading_account_id,
             connector=route.account_connector_id,
-            timeout_seconds=P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
+            timeout_seconds=timeout,
         ).read_flat_account()
         # Timestamp immediately after this independent credential-local read,
         # not after the other account finishes. This keeps validation tied to
