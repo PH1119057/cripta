@@ -47,6 +47,9 @@ from bybit_workbench.p90l90_real_arm_control import (  # noqa: E402
 from bybit_workbench.p90l90_real_prearm_evidence import (  # noqa: E402
     prepare_p90l90_real_v3_prearm_evidence,
 )
+from bybit_workbench.source_live_identity import (  # noqa: E402
+    inspect_source_live_identity,
+)
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (  # noqa: E402
     VERSION,
 )
@@ -99,13 +102,14 @@ def installed_identity() -> str:
         Path(__file__).resolve() == (release / SCRIPT_REL).resolve(),
         "INSTALLED_SCRIPT_IDENTITY",
     )
-    source = _git("git", "-C", str(SOURCE), "rev-parse", "HEAD")
-    remote = _git(
-        "git", "-C", str(SOURCE), "ls-remote", "origin", "refs/heads/main"
-    ).split()[0]
-    dirty = _git("git", "-C", str(SOURCE), "status", "--porcelain=v1")
-    require(not dirty, "SOURCE_WORKTREE_DIRTY")
-    require(source == remote == commit, "REMOTE_SOURCE_INSTALLED_IDENTITY_DRIFT")
+    identity = inspect_source_live_identity(
+        loaded_commit=commit,
+        source=SOURCE,
+    )
+    require(
+        identity.ok,
+        identity.blocker or "SOURCE_LIVE_IDENTITY_NOT_READY",
+    )
     return commit
 
 
