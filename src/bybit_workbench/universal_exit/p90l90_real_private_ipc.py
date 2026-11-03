@@ -637,6 +637,14 @@ def serve_private_proof(
                                 "recovery_error": code,
                             }))
                             continue
+                        except Exception:
+                            stream.sendall(_frame({
+                                "version": _VERSION, "nonce": raw["nonce"],
+                                "status": "BLOCKED", "account": account,
+                                "connector": connector,
+                                "recovery_error": "P90_REAL_RECOVERY_INTERNAL_ERROR",
+                            }))
+                            continue
                         if recovery.trading_account_id != account:
                             raise P90PrivateIpcUnverified(
                                 "P90_PRIVATE_IPC_RECOVERY_ACCOUNT_MISMATCH"
