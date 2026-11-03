@@ -8,6 +8,9 @@ INSTALLER = Path("operations/infrastructure/install_verified_release.sh").read_t
     encoding="utf-8"
 )
 UI_DEPLOY = Path("operations/infrastructure/deploy_dashboard_ui.sh").read_text(encoding="utf-8")
+CONTROLLER = Path("operations/infrastructure/cripta-release-controller").read_text(
+    encoding="utf-8"
+)
 
 
 def test_canon_separates_presentation_ui_from_trading_runtime() -> None:
@@ -91,3 +94,12 @@ def test_ui_verifier_allows_only_stage7c_parity_prearm_extension() -> None:
     assert 'name == "_u6_prepare_r1_prearm_evidence"' in UI_DEPLOY
     assert '"INSERT INTO control.live_arm_evidence" not in value' in UI_DEPLOY
     assert "parity evidence missing from prearm" in UI_DEPLOY
+
+
+def test_permanent_controller_has_dashboard_purpose_without_per_sha_entrypoint() -> None:
+    assert "DASHBOARD_PRESENTATION_RELEASE" in DEV
+    assert "DASHBOARD_PRESENTATION_RELEASE" in CONTROLLER
+    assert "/usr/local/sbin/cripta-deploy-dashboard-ui" in CONTROLLER
+    assert "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1" in CONTROLLER
+    assert "INSTALLED_COMMIT_UNCHANGED" in CONTROLLER
+    assert "TRADING_RUNTIME_CHANGED=NO" in CONTROLLER
