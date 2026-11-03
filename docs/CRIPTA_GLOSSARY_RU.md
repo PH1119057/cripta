@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.14
-**Дата:** 2026-11-01
+**Версия:** 3.15
+**Дата:** 2026-11-04
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -1031,3 +1031,39 @@ position/pending/reconciliation gates. Старый checkpoint сохраняе�
 **Service Start Broker** — отдельный least-privilege OS control owner, которому разрешён только bounded `START` заранее допущенных CRIPTA systemd units при exact release identity. Не принимает arbitrary shell/unit, не делает restart/stop/permission repair, не имеет DB/Exchange/LIVE rights.
 
 **REAL preparation operation** — idempotent owner-initiated technical operation from `REQUESTED` through checking/start/reconciliation/validation to `READY_FOR_OWNER_ARM` or `BLOCKED`. `READY_FOR_OWNER_ARM` retains the existing GLOSSARY meaning: technical status only, not trading authorization.
+
+## 41. Stable Control Core / Surgical Change terminology — OWNER DECISION 2026-11-04 (Issue #413)
+
+**Stable Control Core** — защищённый детерминированный внутренний control-plane
+kernel, владеющий каноническими runtime-состояниями, допустимыми переходами,
+REAL authorization/gate invariants и typed failure semantics. Не является
+новым торговым слоем, не содержит Strategy-specific policy и не выполняет I/O.
+Authority и границы: ARCH §53.
+
+**Core Event / Control Event** — типизированный факт/намерение, передаваемый
+Stable Control Core адаптером/owner-компонентом. Event сам по себе не является
+разрешением Exchange mutation и не даёт компоненту право обойти transition
+table.
+
+**Core Evidence** — типизированное доказательство текущего состояния внешнего
+owner/adapter (например source/runtime/account readiness), которое Core может
+использовать при переходе. Provider-specific payload не становится частью
+Core contract.
+
+**Control Action / Transition Decision** — детерминированный результат Stable
+Control Core для exact current state + event + evidence + control policy.
+Физическое применение action принадлежит approved transition store/adapter.
+
+**Protected Surface / защищённая поверхность** — код/контракт, который для
+текущей задачи доказан working и не принадлежит defect owner. Его изменение в
+этом changeset запрещено без предварительного scope expansion.
+
+**Surgical Change Rule / правило хирургического изменения** — процессный
+контракт `ONE DEFECT -> ONE PROVEN OWNER -> ONE MINIMAL PATCH SURFACE` с
+запретом opportunistic refactor/rename/move/global format cleanup и с
+обязательным regression + diff audit. Owner процесса: DEVELOPMENT_RELEASE §52.
+
+**CORE_CONTRACT_VERSION** — версия protected state/transition/invariant contract
+Stable Control Core. Её изменение означает изменение Core semantics и требует
+отдельного OWNER DECISION и canonical/release cycle; обычная Strategy/adapter
+версия не меняет CORE_CONTRACT_VERSION.

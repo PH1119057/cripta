@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.3 · 2026-10-31
+**Версия:** 2.4 · 2026-11-04
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2003,3 +2003,104 @@ Preparation, broker starts, daemon startup, reconnect and deploy never create/ex
 ### 51.5 Tests and release
 
 Required before first production use: allowlist/argument-injection tests; dependency/cycle tests; inactive->start->behavior-ready; active/no-restart; failed/wrong-release/unknown/missing -> BLOCKED; permission denial without escalation; duplicate/concurrent IDs; browser refresh/disconnect; coordinator crash/stale operation recovery; multiple TradingAccounts; existing exposure + preserved Exit; degraded DISARM; no automatic arm/gate. Full quality + disposable PostgreSQL + lifecycle CI must pass. Install uses the verified release process; deploy does not arm. Production verification distinguishes service liveness from behavior and records exact release composition.
+
+## 52. Surgical Change Rule и защита Stable Control Core — OWNER DECISION 2026-11-04 (Issue #413)
+
+Работающий код не изменяется без доказанной необходимости. Для любого bugfix/
+feature changeset действует правило:
+
+```text
+ONE DEFECT
+-> ONE PROVEN OWNER
+-> ONE MINIMAL PHYSICAL PATCH SURFACE
+-> TARGETED REGRESSION
+-> IMPACTED CONTRACT TESTS
+-> DIFF AUDIT
+```
+
+### 52.1 Scope lock до первой source mutation
+
+До изменения кода исполнитель обязан письменно зафиксировать:
+- exact дефект/FINDING и воспроизводимое доказательство;
+- canonical owner capability/transition, где находится дефект;
+- минимальный expected changed-file set;
+- working surfaces, которые для этой задачи считаются PROTECTED / MUST NOT CHANGE;
+- targeted regression, который падает до исправления и проходит после;
+- условия, при которых scope действительно обязан расшириться.
+
+Если owner дефекта не установлен либо есть несколько физических трактовок,
+mutation = HARD STOP до owner/architecture resolution.
+
+### 52.2 Запрет попутного рефакторинга
+
+В bugfix запрещены без отдельного scope/decision:
+- opportunistic refactor «раз уж мы здесь»;
+- rename/move/split соседних классов, функций, modules или DB objects;
+- изменение working interfaces ради красоты;
+- замена соседнего алгоритма, который не участвует в defect path;
+- cleanup historical/legacy code, не необходимый для fix;
+- глобальный formatter/auto-fix, создающий unrelated diff.
+
+Второй найденный дефект фиксируется как отдельный FINDING/Issue/patch-set. Он
+не добавляется в текущий changeset, если без него исходный defect contract
+может быть исправлен.
+
+### 52.3 Protected Stable Core
+
+Stable Control Core из ARCH §53 после его реализации является protected
+architecture surface. Adapter/UI/Strategy/provider/readiness bugfix не имеет
+права менять Core. Если доказан defect именно Core contract, это отдельная
+архитектурная задача: OWNER DECISION -> CANON UPDATE -> CORE_CONTRACT_VERSION
+-> exhaustive transition/invariant tests -> cross-contour release.
+
+### 52.4 Formatting, Ruff и toolchain не расширяют функциональный scope
+
+Lint/format/type ошибки, вызванные текущим patch, исправляются минимально в
+затронутой поверхности. Existing unrelated warning/error не разрешает менять
+соседний working code в том же functional changeset. Глобальный auto-fix
+запрещён, если он изменяет файлы/строки вне утверждённого scope.
+
+Toolchain failure (`Ruff`, formatting, import, mypy, test harness) остаётся
+`PREPARATION_BUILD_FAILURE`, а не основанием переписать production logic.
+
+### 52.5 Mandatory diff audit
+
+Перед commit/PR обязательно сравнить фактический diff с scope lock:
+
+```text
+EXPECTED_CHANGED_FILES
+ACTUAL_CHANGED_FILES
+UNEXPECTED_FILES
+UNEXPECTED_RENAMES/MOVES
+UNEXPECTED_FORMAT_ONLY_DIFF
+CORE_TOUCHED
+```
+
+Любой unexpected production file = STOP до объяснения и явного расширения
+scope. Нельзя скрывать широкий diff тем, что CI зелёный.
+
+### 52.6 Regression-first и preservation tests
+
+Для воспроизводимого defect сначала добавляется минимальный regression test
+или executable evidence, который фиксирует broken transition. После fix
+обязательно доказать одновременно:
+
+```text
+DEFECT_PATH = PASS
+UNCHANGED_NEIGHBOR_CONTRACTS = PASS
+PROTECTED_SURFACES_DIFF = 0
+```
+
+Если полноценный pre-fix automated regression технически невозможен, причина
+фиксируется в Issue/PR, а replacement evidence должен быть воспроизводимым.
+
+### 52.7 Один changeset — один проверяемый эффект
+
+Размер changeset определяется не числом строк, а ownership boundary. Большой
+файл не является разрешением переписать его целиком: меняется конкретная
+функция/adapter/contract, владеющая defect. Расширение patch-set на соседние
+owners требует отдельного объяснения dependency до mutation.
+
+Это правило не запрещает planned architecture migration Stable Core: такая
+миграция выполняется фазами, каждая с отдельным bounded scope и preservation
+tests, без big-bang rewrite.

@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.46
-**Дата:** 2026-11-02
+**Версия:** 3.47
+**Дата:** 2026-11-04
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -50,7 +50,7 @@ If owner decision conflicts with canon:
 ```text
 CANON_CONFLICT=YES
 HARD_STOP=YES
-CANON_UPDATE_REQUIRED=YES
+CANON=UPDATED_IN_CHANGESET
 OWNER_DECISION_REQUIRED=YES
 ```
 
@@ -1578,3 +1578,40 @@ Strategy/Entry/Exit/Execution, DB, services, deployment or LIVE.
 Owner requires reusable technical preparation for REAL scopes: authenticated owner intent -> durable readiness operation -> bounded start of recoverably inactive required CRIPTA services -> behavior/account/reconciliation validation -> READY_FOR_OWNER_ARM or visible BLOCKED. Architecture owner/boundary: ARCH §52. Actor/path, broker protocol, state machine, tests and release: DEVELOPMENT_RELEASE §51. Terms: GLOSSARY §40. Dated implementation/runtime status: MAP 2026-11-02 checkpoint. Tracking: Issue #343 / draft PR #344.
 
 This change does not add a Project Source file or change mandatory pre-read/routing paths; current set remains 11. Root README/AGENTS and Project Instructions bootstrap are synchronized because the new server-side privileged control-plane rule is bootstrap-relevant. No documentation statement alone installs the broker, starts a service or authorizes LIVE.
+
+# 62. Stable Control Core и Surgical Change Rule — OWNER DECISION 2026-11-04 (Issue #413)
+
+Владелец закрепил архитектурное правило сохранения работающего движка:
+
+```text
+ONE DEFECT -> ONE PROVEN OWNER -> ONE MINIMAL PATCH SURFACE
+```
+
+и целевой protected `Stable Control Core`, который владеет только
+детерминированными runtime-state/transition/authorization invariants и не
+содержит Strategy-specific policy, UI, Bybit/provider I/O, systemd или прямой
+SQL.
+
+Canonical ownership:
+- `ARCH §53` — Stable Control Core, Strategy plug-in boundary, protected Core
+  contract и single-transition-owner target;
+- `DEVELOPMENT_RELEASE §52` — Surgical Change Rule, scope lock, запрет
+  opportunistic refactor/global unrelated formatting, diff audit и
+  regression/preservation tests;
+- `GLOSSARY §41` — Stable Control Core, Core Event/Evidence, Protected Surface,
+  Surgical Change Rule и `CORE_CONTRACT_VERSION`;
+- `CURRENT_PROJECT_MAP` — implementation status/checkpoint.
+
+Эта запись не меняет active document set, Project Source bundle, mandatory
+pre-read, routing или bootstrap links. Поэтому README/AGENTS/Project
+Instructions не изменяются в этом changeset.
+
+Статус на publication candidate:
+
+```text
+OWNER_DECISION=YES
+CANON_UPDATE_REQUIRED=YES
+IMPLEMENTED=NO
+DEPLOYED=NO
+LIVE_CHANGE=NO
+```
