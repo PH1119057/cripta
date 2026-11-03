@@ -1323,9 +1323,14 @@ Never discard irreplaceable trading, execution, fee, ownership, operator, safety
 
 **OWNER DECISION 2026-10-21 (последующее уточнение): единственный постоянный primary store для компактных InstrumentResearchRecord — Git-versioned JSON в GitHub `PH1119057/cripta:main` по пути `operations/dashboard/instrument_research_catalog.json`.** PostgreSQL и Dashboard не являются вторыми writers/stores этой истории; Dashboard и любые API только читают versioned snapshot, установленный с exact verified release. Records, ещё находящиеся в feature branch, не считаются canonical registered. Любая регистрация/исправление публикуется через проверенный Git commit и сохраняет record_id, hash, lineage; старые записи не перезаписываются молча. Raw market-data archives не являются этим store. Git-hosting и release rollback сами по себе не доказывают независимое восстановление: перед purge raw и объявлением irreversible-retention PASS необходим независимый verified backup/export exact JSON и hashes. Конкретные read API/UI, tests, release/deploy/rollback остаются обязательными implementation gates, а не следствием выбора storage. Research mandatory field/record schema и registration gate — RESEARCH_COMPUTE §23; stable terms — GLOSSARY §35. Additive deployment требует DEVELOPMENT_RELEASE gates; docs-only change не затрагивает production database/runtime/TradingAccount.
 
-## 50. Permanent bounded Release Controller — OWNER DECISION 2026-10-30
+## 50. Permanent bounded Release Controller — OWNER DECISION 2026-10-30 / 2026-11-03
 
-Release Controller — control-plane capability, not Strategy, Entry, Exit or Execution owner. Permanent bounded SentinelX command may invoke only a uniquely authorized exact-release request, never an arbitrary privileged shell. The existing verified installer retains deployment ownership; full approval, actor/path and recovery contract belongs to DEVELOPMENT_RELEASE §50.5. This is target architecture tracked by Issue #288, not an already deployed service.
+Release Controller — control-plane capability, not Strategy, Entry, Exit or Execution owner. Permanent bounded SentinelX command may invoke only a uniquely authorized exact-release request, never an arbitrary privileged shell. One stable no-argument controller supports two explicitly separated release purposes:
+
+- `EXACT_VERIFIED_SOURCE_RELEASE`: existing full application/trading runtime release through the verified full installer;
+- `DASHBOARD_PRESENTATION_RELEASE`: independent presentation/read-model Dashboard release through the canonical Dashboard verifier/deployer.
+
+The Dashboard purpose owns no trading/runtime release identity and cannot change Strategy, Entry, Exit, Execution, gate, permission, LIVE-arm or Exchange state. Its baseline and postcondition are the independent `DASHBOARD_UI_COMMIT` bundle identity. Full runtime and Dashboard release purposes share only the bounded approval/audit/lock control plane; their deploy owners and postconditions remain different. Full approval, actor/path and recovery contract belongs to DEVELOPMENT_RELEASE §50.5. Tracking: Issues #288, #381.
 
 ## 52. Generic REAL readiness recovery control plane — OWNER DECISION 2026-11-02 (Issue #343)
 
