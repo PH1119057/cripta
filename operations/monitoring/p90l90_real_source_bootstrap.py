@@ -24,6 +24,9 @@ from bybit_workbench.universal_entry.p90l90_real_source_epoch_start import (
     start_p90_real_source_epoch,
 )
 from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
+from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+    P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
+)
 from operations.connectivity.p90l90_real_command_epoch_proof import (
     read_p90_real_no_pending_runtime_commands,
 )
@@ -38,6 +41,10 @@ _ACCOUNT_GENERATION_BARRIER_WAIT_SECONDS = 5.0
 _ACCOUNT_GENERATION_BARRIER_POLL_SECONDS = 0.2
 _PRIVATE_PROOF_RETRY_BUDGET_SECONDS = 8.0
 _PRIVATE_PROOF_ATTEMPT_SECONDS = 2.0
+_PRIVATE_PREFLIGHT_RETRY_BUDGET_SECONDS = P90_ACCOUNT_PROOF_TIMEOUT_SECONDS * 2.0
+_PRIVATE_PREFLIGHT_ATTEMPT_SECONDS = P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+_PRIVATE_PREFLIGHT_GENERATION_WAIT_SECONDS = P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+_PRIVATE_PREFLIGHT_GENERATION_MAX_AGE_SECONDS = P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
 
 
 def _flat_generation_ready(
@@ -46,6 +53,7 @@ def _flat_generation_ready(
     account_id: str,
     connector_id: str,
     now: datetime,
+    max_age_seconds: float = _ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS,
 ) -> bool:
     row = connection.execute(
         """SELECT generation_id,state,completed_at,positions_count,active_orders_count,
@@ -74,7 +82,7 @@ def _flat_generation_ready(
     ):
         return False
     age = (now - row[2].astimezone(UTC)).total_seconds()
-    return 0 <= age <= _ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS
+    return 0 <= age <= max_age_seconds
 
 
 def _wait_for_fresh_flat_generations(
@@ -84,6 +92,8 @@ def _wait_for_fresh_flat_generations(
     subscribed_local_at: datetime,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     sleeper: Callable[[float], None] = time.sleep,
+    wait_seconds: float = _ACCOUNT_GENERATION_BARRIER_WAIT_SECONDS,
+    max_age_seconds: float = _ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS,
 ) -> None:
     """Bounded pre-proof barrier inside the existing fresh WS epoch budget.
 
@@ -92,9 +102,11 @@ def _wait_for_fresh_flat_generations(
     COMPLETE account generation becoming stale and the next COMPLETE
     generation finishing.
     """
-    deadline = subscribed_local_at + timedelta(
-        seconds=_ACCOUNT_GENERATION_BARRIER_WAIT_SECONDS
-    )
+    if wait_seconds <= 0 or not 0 < max_age_seconds <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS:
+        raise P90RealLiveSourceEpochUnverified(
+            "P90_REAL_FLAT_GENERATION_BARRIER_CONFIG_INVALID"
+        )
+    deadline = subscribed_local_at + timedelta(seconds=wait_seconds)
     route_order = (routes.main, routes.sub)
     while True:
         now = clock()
@@ -109,6 +121,7 @@ def _wait_for_fresh_flat_generations(
                 account_id=route.trading_account_id,
                 connector_id=route.account_connector_id,
                 now=now,
+                max_age_seconds=max_age_seconds,
             )
             for route in route_order
         ):
@@ -129,6 +142,10 @@ def _read_signed_accounts_bounded(
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     sleeper: Callable[[float], None] = time.sleep,
     reader: Callable[..., tuple[Any, Any]] | None = None,
+    retry_budget_seconds: float = _PRIVATE_PROOF_RETRY_BUDGET_SECONDS,
+    attempt_seconds: float = _PRIVATE_PROOF_ATTEMPT_SECONDS,
+    generation_wait_seconds: float = _ACCOUNT_GENERATION_BARRIER_WAIT_SECONDS,
+    generation_max_age_seconds: float = _ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS,
 ) -> tuple[Any, Any]:
     """Retry only transport/provider-missing proof inside the existing fresh window.
 
@@ -137,7 +154,16 @@ def _read_signed_accounts_bounded(
     transport stall from consuming the whole source-attestation budget.
     """
     proof_reader = reader or read_p90_real_signed_flat_accounts
-    deadline = started_at + timedelta(seconds=_PRIVATE_PROOF_RETRY_BUDGET_SECONDS)
+    if (
+        retry_budget_seconds <= 0
+        or not 0 < attempt_seconds <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+        or generation_wait_seconds <= 0
+        or not 0 < generation_max_age_seconds <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+    ):
+        raise P90RealLiveSourceEpochUnverified(
+            "P90_REAL_FLAT_PRIVATE_PROOF_BUDGET_CONFIG_INVALID"
+        )
+    deadline = started_at + timedelta(seconds=retry_budget_seconds)
     while True:
         _wait_for_fresh_flat_generations(
             connection,
@@ -145,6 +171,8 @@ def _read_signed_accounts_bounded(
             subscribed_local_at=started_at,
             clock=clock,
             sleeper=sleeper,
+            wait_seconds=generation_wait_seconds,
+            max_age_seconds=generation_max_age_seconds,
         )
         now = clock()
         if now.tzinfo is None or now.utcoffset() is None:
@@ -156,7 +184,7 @@ def _read_signed_accounts_bounded(
             raise P90RealLiveSourceEpochUnverified(
                 "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_RETRY_BUDGET_EXPIRED"
             )
-        attempt_timeout = min(_PRIVATE_PROOF_ATTEMPT_SECONDS, remaining)
+        attempt_timeout = min(attempt_seconds, remaining)
         try:
             return proof_reader(routes, timeout_seconds=attempt_timeout)
         except P90RealAccountRoutesUnverified as exc:
@@ -201,6 +229,10 @@ def preflight_p90_real_private_flat_source(
         connection,
         routes=routes,
         started_at=current,
+        retry_budget_seconds=_PRIVATE_PREFLIGHT_RETRY_BUDGET_SECONDS,
+        attempt_seconds=_PRIVATE_PREFLIGHT_ATTEMPT_SECONDS,
+        generation_wait_seconds=_PRIVATE_PREFLIGHT_GENERATION_WAIT_SECONDS,
+        generation_max_age_seconds=_PRIVATE_PREFLIGHT_GENERATION_MAX_AGE_SECONDS,
     )
 
 
