@@ -1,6 +1,6 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.7
+**Версия:** 3.8
 **Дата:** 2026-11-04
 **Статус:** верхний канонический архитектурный контракт
 
@@ -1434,3 +1434,75 @@ DEPLOYED=NO
 RUNTIME_VERIFIED=NO
 LIVE_CHANGE=NO
 ```
+
+## 54. Runtime availability: OWNER authorization отдельно от technical readiness — OWNER DECISION 2026-11-04 (Issue #415)
+
+Stable Control Core §53 обязан разделять финансовое разрешение владельца и
+машинную техническую готовность. Один physical boolean не может одновременно
+быть OWNER authorization, runtime-health latch, diagnostic window, release
+inhibit и private-runtime safety barrier.
+
+Целевой контракт новых REAL Entry:
+
+```text
+EFFECTIVE_NEW_ENTRY =
+  OWNER_AUTHORIZED
+  AND STRATEGY_AUTHORIZED
+  AND TECHNICAL_READY
+  AND EXACT_RELEASE_SCOPE
+  AND NO_HARD_SAFETY_BLOCK
+```
+
+`OWNER_AUTHORIZED` — durable exact release/Strategy/account owner authorization,
+созданная только явным authenticated OWNER ARM. Технический сбой сам по себе
+не создаёт, не продлевает и не уничтожает это разрешение.
+
+`TECHNICAL_READY` — machine-owned состояние готовности runtime. Оно может
+автоматически переходить READY -> BLOCKED/RECOVERING -> READY после
+доказанного восстановления. Такой переход не является новым OWNER ARM.
+
+Автоматическое техническое resume разрешено только если одновременно:
+- exact LOADED_COMMIT не изменился;
+- exact Strategy/version/fingerprint и TradingAccount/Connector scope не изменились;
+- исходный OWNER authorization всё ещё ACTIVE и не был явно снят;
+- required Strategy execution permission остаётся exact/active;
+- нет unresolved ambiguous Exchange mutation, unknown exposure или identity drift;
+- required reconciliation/protection/Exit ownership доказаны;
+- recovery evidence свежее и получено от утверждённых owners/adapters.
+
+Автоматическое resume запрещено после explicit OWNER DISARM, deploy/release
+identity change, Strategy/account scope change, unresolved mutation ambiguity,
+unproven account identity/exposure/protection/Exit ownership либо другого
+canonical hard-safety condition. Эти случаи требуют отдельного recovery и,
+когда authorization scope был инвалидирован, нового OWNER ARM.
+
+### 54.1 Runtime Recovery Supervisor
+
+`Runtime Recovery Supervisor` — отдельный infrastructure/control-plane adapter
+вокруг Stable Control Core. Он наблюдает behavior heartbeat/evidence, а не
+только systemd process state, и инициирует bounded recovery action. Он не
+владеет Strategy policy, Entry/Exit decision и не создаёт OWNER authorization.
+
+Recovery выполняется по explicit recovery class. Stateless/read-model service
+может иметь bounded restart; stateful Exchange-mutation owner требует
+специального reconcile-before-resume contract. Arbitrary unit/shell, infinite
+restart loop и privilege expansion запрещены.
+
+### 54.2 Exit continuity
+
+Technical Entry BLOCKED никогда не отключает ownership уже открытой
+StrategyPosition. Protection, reconciliation и Universal Exit продолжают
+работать независимо. При деградации Exit-critical owner recovery имеет
+приоритет; Exchange-resident protection остаётся последней независимой
+защитой, но не считается заменой восстановления Universal Exit.
+
+### 54.3 Migration target
+
+До миграции существующий `control.execution_gates.mainnet` остаётся legacy
+effective barrier. Целевой Stable Core должен иметь один transition owner и
+явно различать OWNER authorization, technical readiness и derived effective
+Entry permission. Миграция выполняется surgical phases с shadow parity; big-bang
+rewrite запрещён.
+
+Статус: `OWNER_DECISION=YES`; `CANON=YES`; `IMPLEMENTED=NO`; `DEPLOYED=NO`;
+`RUNTIME_VERIFIED=NO`; `LIVE_CHANGE=NO`.
