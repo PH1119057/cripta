@@ -82,14 +82,14 @@ def test_readiness_starts_required_services_before_account_ws_recovery():
     )
 
 
-def test_staged_private_preflight_precedes_public_ws_attestation_clock():
+def test_staged_and_source_only_private_preflight_precede_public_ws_clock():
     epoch = OBSERVER[
         OBSERVER.index("def _run_observer_epoch("):
         OBSERVER.index("\ndef main()", OBSERVER.index("def _run_observer_epoch("))
         if "\ndef main()" in OBSERVER[OBSERVER.index("def _run_observer_epoch("):]
         else len(OBSERVER)
     ]
-    assert "if p90_real_staged:" in epoch
+    assert "if p90_real_staged or p90_real_source_only:" in epoch
     assert "preflight_p90_real_private_flat_source(" in epoch
     assert epoch.index("preflight_p90_real_private_flat_source(") < epoch.index(
         "sock, _ready_local, _ready_server, buffered = _connect_and_subscribe"
@@ -103,6 +103,12 @@ def test_post_ws_private_proof_attempts_are_shorter_than_ws_budget():
     assert "_PRIVATE_PROOF_ATTEMPT_SECONDS = 2.0" in (
         ROOT / "operations/monitoring/p90l90_real_source_bootstrap.py"
     ).read_text(encoding="utf-8")
+    assert (
+        "_PRIVATE_PREFLIGHT_ATTEMPT_SECONDS = P90_ACCOUNT_PROOF_TIMEOUT_SECONDS"
+        in (
+            ROOT / "operations/monitoring/p90l90_real_source_bootstrap.py"
+        ).read_text(encoding="utf-8")
+    )
     assert "private_proof_timeout_seconds: float | None = None" in PREARM
     assert "timeout_seconds: float | None = None" in ROUTES
 
