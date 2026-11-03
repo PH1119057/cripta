@@ -1026,9 +1026,17 @@ release и bytes исполняемого торгового контура**, �
   commits **не** разрешает обойти `PAPER_REAL_DECISION_PARITY`, reconciliation,
   position ownership, risk gates либо owner LIVE-arm.
 - Presentation-only Dashboard changes, затрагивающие auth/control/mutation,
-  не входят в исключение и требуют full release; любые изменения
-  `operations/dashboard/**` остаются blocked до verified release.
-  При сомнении классификации — `HARD_STOP=YES`.
+  не входят в исключение и требуют full release.
+- Delta в `operations/dashboard/**` допускается для `SOURCE_LIVE_IDENTITY=PASS`
+  только когда exact Dashboard path-set уже независимо прошёл DEV §8.1,
+  current production `DASHBOARD_UI_COMMIT` указывает на verified deployed commit,
+  этот commit достижим из current `SOURCE_HEAD/REMOTE_HEAD`, а после него до
+  current source нет нового undeployed Dashboard delta. Само наличие Dashboard
+  commit в GitHub main без deploy evidence не является исключением.
+- Любой undeployed/unknown Dashboard delta, auth/control/mutation Dashboard delta,
+  `src/**`, trading `operations/**`, release dependency, security/config или
+  неизвестный путь остаётся fail-closed. При сомнении классификации —
+  `HARD_STOP=YES`.
 
 Canonical owner классификации пути — этот раздел; Trading Contour §4.7
 использует результат gate и не дублирует allowlist.
