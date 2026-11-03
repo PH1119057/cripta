@@ -75,6 +75,7 @@ class P90RealRestartPosition:
     position: StrategyPosition
     exit_plan: ExitPlan
     signed: ScopedPrivatePositionEvidence
+    trail035_armed: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,7 +228,9 @@ def _decimal(raw: object, reason: str) -> Decimal:
 def _verify_trailing(
     position: StrategyPosition,
     evidence: ScopedPrivatePositionEvidence,
-) -> None:
+    *,
+    allow_missing: bool = False,
+) -> bool:
     tick = evidence.tick_size
     expected = (
         (position.actual_avg_fill * Decimal("0.0035") / tick)
@@ -237,12 +240,12 @@ def _verify_trailing(
         evidence.position.get("trailingStop"),
         "SIGNED_TRAILING_VALUE_INVALID",
     )
-    _require(
-        expected > 0
-        and actual == expected
-        and actual % tick == 0,
-        "SIGNED_TRAIL035_NOT_ARMED",
-    )
+    if expected > 0 and actual == expected and actual % tick == 0:
+        return True
+    if allow_missing and expected > 0 and actual == 0:
+        return False
+    _require(False, "SIGNED_TRAIL035_NOT_ARMED")
+    raise AssertionError("unreachable")
 
 
 def _minimal_position(row: Mapping[str, object]) -> dict[str, object]:
@@ -313,6 +316,7 @@ def prove_p90_real_open_restart_inventory(
     source_commit: str,
     source_epoch_id: str,
     checked_at: datetime,
+    allow_missing_trail035: bool = False,
 ) -> P90RealOpenRestartInventory:
     """Prove exact durable positions == complete signed MAIN/SUB inventory."""
     _require(
@@ -428,8 +432,12 @@ def prove_p90_real_open_restart_inventory(
             == position.actual_avg_fill,
             "POSITION_FILL_OR_SIDE_DRIFT",
         )
-        _verify_trailing(position, signed)
-        verified.append(P90RealRestartPosition(position, plan, signed))
+        trail035_armed = _verify_trailing(
+            position, signed, allow_missing=allow_missing_trail035,
+        )
+        verified.append(P90RealRestartPosition(
+            position, plan, signed, trail035_armed,
+        ))
 
     return P90RealOpenRestartInventory(
         source_epoch_id=source_epoch_id,
