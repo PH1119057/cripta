@@ -60,6 +60,10 @@ def _row(
         "exit_owner": "ALGORITHM",
         "exit_mechanism": mechanism,
         "exit_order_id": f"order-{event_id}",
+        "position_side": "Sell",
+        "actual_avg_entry": "100",
+        "intended_initial_hard_stop": "110",
+        "actual_exit_avg_fill": "110",
     }
 
 
@@ -181,6 +185,10 @@ def _tuple_row(row: dict[str, object]) -> tuple[object, ...]:
         row["exit_owner"],
         row["exit_mechanism"],
         row["exit_order_id"],
+        row["position_side"],
+        row["actual_avg_entry"],
+        row["intended_initial_hard_stop"],
+        row["actual_exit_avg_fill"],
     )
 
 
@@ -215,3 +223,79 @@ def test_malformed_positional_row_still_fails_closed() -> None:
             policy=POLICY,
             evaluated_at=AT,
         )
+
+
+
+def test_unknown_profitable_short_close_is_proven_non_hard_stop() -> None:
+    # Production-shape proof: exact INJ SHORT close was favorable and therefore
+    # cannot be the catastrophic initial hard-stop event SECOND48 counts.
+    favorable = _row(
+        "inj-profit",
+        AT - timedelta(minutes=30),
+        mechanism="UNKNOWN",
+    )
+    favorable.update(
+        exit_owner="UNKNOWN",
+        position_side="Sell",
+        actual_avg_entry="7.288",
+        intended_initial_hard_stop="8.01680",
+        actual_exit_avg_fill="7.171",
+    )
+    one_hard_stop = _row("one-hard-stop", AT - timedelta(hours=2))
+    allowed, snapshot = _read([one_hard_stop, favorable])
+    assert allowed is True
+    assert len(snapshot["hard_stops"]) == 1
+
+
+def test_unknown_profitable_long_close_is_proven_non_hard_stop() -> None:
+    favorable = _row(
+        "long-profit",
+        AT - timedelta(minutes=30),
+        mechanism="UNKNOWN",
+    )
+    favorable.update(
+        exit_owner="UNKNOWN",
+        position_side="Buy",
+        actual_avg_entry="100",
+        intended_initial_hard_stop="90",
+        actual_exit_avg_fill="105",
+    )
+    assert _read([favorable])[0] is True
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {
+            "position_side": "Sell",
+            "actual_avg_entry": "100",
+            "intended_initial_hard_stop": "110",
+            "actual_exit_avg_fill": "105",
+        },
+        {
+            "position_side": "Buy",
+            "actual_avg_entry": "100",
+            "intended_initial_hard_stop": "90",
+            "actual_exit_avg_fill": "95",
+        },
+        {
+            "position_side": "Sell",
+            "actual_avg_entry": None,
+            "intended_initial_hard_stop": "110",
+            "actual_exit_avg_fill": "95",
+        },
+        {
+            "position_side": "Sell",
+            "actual_avg_entry": "100",
+            "intended_initial_hard_stop": "90",
+            "actual_exit_avg_fill": "95",
+        },
+    ],
+)
+def test_unknown_adverse_ambiguous_or_missing_price_stays_fail_closed(
+    updates: dict[str, object],
+) -> None:
+    row = _row("unknown-bad", AT - timedelta(minutes=30), mechanism="UNKNOWN")
+    row.update(exit_owner="UNKNOWN", **updates)
+    with pytest.raises(P90RealSecond48Unverified, match="EXACT_EXIT_UNPROVEN"):
+        _read([row])
