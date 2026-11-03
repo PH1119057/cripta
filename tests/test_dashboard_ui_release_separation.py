@@ -98,7 +98,7 @@ def test_ui_verifier_allows_only_stage7c_parity_prearm_extension() -> None:
 
 def test_permanent_controller_has_dashboard_purpose_without_per_sha_entrypoint() -> None:
     assert "DASHBOARD_PRESENTATION_RELEASE" in DEV
-    assert "DASHBOARD_PRESENTATION_RELEASE" in CONTROLLER
+    assert "DASHBOARD_PURPOSE" in CONTROLLER
     assert "/usr/local/sbin/cripta-deploy-dashboard-ui" in CONTROLLER
     assert "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1" in CONTROLLER
     assert "INSTALLED_COMMIT_UNCHANGED" in CONTROLLER
