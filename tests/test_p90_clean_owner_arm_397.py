@@ -100,9 +100,12 @@ def test_post_ws_private_proof_attempts_are_shorter_than_ws_budget():
     assert "_PRIVATE_PROOF_RETRY_BUDGET_SECONDS = 8.0" in (
         ROOT / "operations/monitoring/p90l90_real_source_bootstrap.py"
     ).read_text(encoding="utf-8")
-    assert "_PRIVATE_PROOF_ATTEMPT_SECONDS = 2.0" in (
-        ROOT / "operations/monitoring/p90l90_real_source_bootstrap.py"
-    ).read_text(encoding="utf-8")
+    assert (
+        "_PRIVATE_PROOF_ATTEMPT_SECONDS = _PRIVATE_PROOF_RETRY_BUDGET_SECONDS"
+        in (
+            ROOT / "operations/monitoring/p90l90_real_source_bootstrap.py"
+        ).read_text(encoding="utf-8")
+    )
     assert (
         "_ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS = "
         "P90_ACCOUNT_PROOF_TIMEOUT_SECONDS"
