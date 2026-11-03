@@ -9,10 +9,13 @@ back. It never activates a Strategy or changes any trading permission.
 """
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Callable
 
 from bybit_workbench.universal_entry.p90l90_real_account_routes import (
+    P90RealAccountRoutes,
+    P90RealAccountRoutesUnverified,
     read_p90_real_account_routes,
     read_p90_real_signed_flat_accounts,
 )
@@ -28,6 +31,92 @@ from operations.connectivity.p90l90_real_command_epoch_proof import (
 
 class P90RealLiveSourceEpochUnverified(RuntimeError):
     """Either the current live market or both signed account owners are absent."""
+
+
+_ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS = 8.0
+_ACCOUNT_GENERATION_BARRIER_WAIT_SECONDS = 5.0
+_ACCOUNT_GENERATION_BARRIER_POLL_SECONDS = 0.2
+
+
+def _flat_generation_ready(
+    connection: Any,
+    *,
+    account_id: str,
+    connector_id: str,
+    now: datetime,
+) -> bool:
+    row = connection.execute(
+        """SELECT generation_id,state,completed_at,positions_count,active_orders_count,
+                  identity_status
+             FROM runtime.account_state_generations
+            WHERE trading_account_id=%s AND account_connector_id=%s
+              AND identity_status='PROVEN'
+              AND state IN ('COMPLETE','FAILED')
+            ORDER BY started_at DESC,generation_id DESC LIMIT 1""",
+        (account_id, connector_id),
+    ).fetchone()
+    if (
+        not isinstance(row, (tuple, list))
+        or len(row) != 6
+        or not isinstance(row[0], str)
+        or not row[0]
+        or row[1] != "COMPLETE"
+        or not isinstance(row[2], datetime)
+        or row[2].tzinfo is None
+        or row[2].utcoffset() is None
+        or type(row[3]) is not int
+        or row[3] != 0
+        or type(row[4]) is not int
+        or row[4] != 0
+        or row[5] != "PROVEN"
+    ):
+        return False
+    age = (now - row[2].astimezone(UTC)).total_seconds()
+    return 0 <= age <= _ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS
+
+
+def _wait_for_fresh_flat_generations(
+    connection: Any,
+    *,
+    routes: P90RealAccountRoutes,
+    subscribed_local_at: datetime,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    sleeper: Callable[[float], None] = time.sleep,
+) -> None:
+    """Bounded pre-proof barrier inside the existing fresh WS epoch budget.
+
+    This never substitutes DB state for signed private proof.  It only avoids
+    calling the credential-local proof during the normal gap between one
+    COMPLETE account generation becoming stale and the next COMPLETE
+    generation finishing.
+    """
+    deadline = subscribed_local_at + timedelta(
+        seconds=_ACCOUNT_GENERATION_BARRIER_WAIT_SECONDS
+    )
+    route_order = (routes.main, routes.sub)
+    while True:
+        now = clock()
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise P90RealLiveSourceEpochUnverified(
+                "P90_REAL_FLAT_GENERATION_CLOCK_INVALID"
+            )
+        now = now.astimezone(UTC)
+        if all(
+            _flat_generation_ready(
+                connection,
+                account_id=route.trading_account_id,
+                connector_id=route.account_connector_id,
+                now=now,
+            )
+            for route in route_order
+        ):
+            return
+        remaining = (deadline - now).total_seconds()
+        if remaining <= 0:
+            raise P90RealLiveSourceEpochUnverified(
+                "P90_REAL_FLAT_ACCOUNT_GENERATION_WAIT_TIMEOUT"
+            )
+        sleeper(min(_ACCOUNT_GENERATION_BARRIER_POLL_SECONDS, remaining))
 
 
 def _checked_mirror_epoch(
@@ -114,7 +203,28 @@ def start_current_p90_real_observer_epoch(
     routes = read_p90_real_account_routes(
         connection, bundles=bundles, at=datetime.now(UTC),
     )
-    signed_accounts = read_p90_real_signed_flat_accounts(routes)
+    _wait_for_fresh_flat_generations(
+        connection,
+        routes=routes,
+        subscribed_local_at=subscribed_local_at,
+    )
+    try:
+        signed_accounts = read_p90_real_signed_flat_accounts(routes)
+    except P90RealAccountRoutesUnverified as exc:
+        # One bounded retry is allowed only for the transport/provider-missing
+        # class. Exact identity/scope mismatches remain immediate hard stops.
+        if (
+            str(exc) != "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
+            or (datetime.now(UTC) - subscribed_local_at).total_seconds() >= 8
+        ):
+            raise
+        time.sleep(_ACCOUNT_GENERATION_BARRIER_POLL_SECONDS)
+        _wait_for_fresh_flat_generations(
+            connection,
+            routes=routes,
+            subscribed_local_at=subscribed_local_at,
+        )
+        signed_accounts = read_p90_real_signed_flat_accounts(routes)
     # Autocommit observer requires an explicit SERIALIZABLE transaction. No
     # caller-supplied boolean grants a fresh market epoch.
     with connection.transaction():
