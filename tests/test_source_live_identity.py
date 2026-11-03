@@ -109,7 +109,7 @@ def test_inspect_accepts_verified_deployed_dashboard_delta(
 
 
 def test_inspect_blocks_dashboard_delta_without_deploy_evidence(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch, tmp_path: Path
 ) -> None:
     dashboard, state = _dashboard_evidence(tmp_path)
     (state / "DASHBOARD_UI_DEPLOY.json").unlink()
@@ -147,7 +147,7 @@ def test_inspect_blocks_dashboard_delta_without_deploy_evidence(
 
 
 def test_inspect_blocks_trading_delta_even_with_dashboard_evidence(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch, tmp_path: Path
 ) -> None:
     dashboard, state = _dashboard_evidence(tmp_path)
 
