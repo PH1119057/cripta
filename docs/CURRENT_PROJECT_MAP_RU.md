@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.36
-**Дата:** 2026-11-01
+**Версия:** 12.37
+**Дата:** 2026-11-04
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -4759,3 +4759,39 @@ CHECKED HERE before implementation: GitHub/main and production source baseline w
 Source WIP branch `cross/generic-real-gate-readiness-343-20261102` first introduced a pure no-I/O generic service planner and tests. Initial GitHub `trade-lifecycle-postgres` succeeded; `quality` correctly rejected three new Ruff diagnostics and the branch fixed them in commit `635c2b94f45dc619975e85e82e497591472b0e44`. This checkpoint does not claim later CI or implementation completion.
 
 Target privileged broker actor/path contract is now canonical in DEV §51 but **not yet installed/proven on production**. No service start/restart, DB migration, Exchange mutation, execution permission, OWNER ARM or mainnet gate change is authorized by this documentation checkpoint. `IMPLEMENTED=PARTIAL SOURCE WIP`; `DEPLOYED=NO`; `RUNTIME BEHAVIOR VERIFIED=NO`.
+
+## 2026-11-04 Stable Control Core / Surgical Change Rule — OWNER DECISION / CANON UPDATE ONLY
+
+Issue #413. Владелец зафиксировал новый обязательный development/architecture
+принцип: работающий код не переписывается без доказанной необходимости; один
+дефект исправляет только доказанный owner минимальной физической поверхностью.
+Стратегии должны подключаться к универсальному движку как отдельные immutable
+StrategyCard/Plan contracts и не менять Stable Control Core.
+
+Canonical target:
+- ARCH §53 — Stable Control Core как protected deterministic control-plane
+  kernel, не новый торговый слой;
+- DEV §52 — Surgical Change Rule, scope lock, запрет opportunistic refactor,
+  mandatory diff audit и regression/preservation tests;
+- GLOSSARY §41 — точные термины Stable Control Core / Protected Surface /
+  CORE_CONTRACT_VERSION.
+
+Эта документационная фаза не утверждает существующую реализацию Stable Core и
+не переносит ownership молча. Следующий этап — read-only inventory всех
+текущих writers/owners runtime-control state и mapping каждого writer к
+canonical transition. Только после этого допускается bounded implementation
+phase отдельными surgical changesets.
+
+Статус:
+
+```text
+OWNER_DECISION=YES
+CANON_UPDATE_IN_BRANCH=YES
+IMPLEMENTED=NO
+DEPLOYED=NO
+RUNTIME_LIVENESS_VERIFIED=NO
+RUNTIME_BEHAVIOR_VERIFIED=NO
+OWNER_ARM_CHANGE=NO
+MAINNET_GATE_CHANGE=NO
+EXCHANGE_MUTATION=NO
+```
