@@ -1534,7 +1534,7 @@ function renderObserverFaults(model){
       :relation==='CURRENT_OR_AFTER_P90_OPERATION'
         ?'ТЕКУЩИЙ ЗАПУСК / ПОСЛЕ НЕГО'
         :'ВНЕ ТЕКУЩЕЙ P90-ОПЕРАЦИИ';
-    return `<div class="durable-fault-item"><details><summary><b>RED · ${safe(relationLabel)}</b> · ${safe(String(error).slice(0,95))}</summary><div class="durable-fault-error">${safe(error)}</div><div class="durable-fault-meta">fault ${safe(x.fault_id)} · повторов ${count} · первый ${safe(first)} · последний ${safe(last)}<br>service ${safe(x.service)} · release ${safe(x.source_commit||'—')} · epoch ${safe(x.last_observer_epoch_id||'—')}</div><button class="action danger" type="button" data-fault-id="${safe(x.fault_id)}" onclick="resolveObserverFault(this.dataset.faultId)">Явно закрыть fault</button></details></div>`;
+    return `<div class="durable-fault-item"><details><summary><b>RED</b> · <span>${safe(relationLabel)}</span> · ${safe(String(error).slice(0,95))}</summary><div class="durable-fault-error">${safe(error)}</div><div class="durable-fault-meta">fault ${safe(x.fault_id)} · повторов ${count} · первый ${safe(first)} · последний ${safe(last)}<br>service ${safe(x.service)} · release ${safe(x.source_commit||'—')} · epoch ${safe(x.last_observer_epoch_id||'—')}</div><button class="action danger" type="button" data-fault-id="${safe(x.fault_id)}" onclick="resolveObserverFault(this.dataset.faultId)">Явно закрыть fault</button></details></div>`;
   }).join('');
   // Receipt is created only after the banner was rendered in a visible tab.
   // Browser retry happens on the next regular refresh if the POST fails.
