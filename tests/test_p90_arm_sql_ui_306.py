@@ -36,7 +36,7 @@ def test_p90_failure_display_is_copyable_persistent_read_only():
     assert 'id="p90ArmCopyResult"' in HTML
     assert "sessionStorage.setItem(p90ArmHistoryKey" in HTML
     assert "const visible=op?.state==='BLOCKED'" in HTML
-    assert "?'OWNER ARM отклонён · обязательная проверка не прошла'" in HTML
+    assert ":'OWNER ARM отклонён · обязательная проверка не прошла'" in HTML
     assert "p90ReadinessOperationTechnicalText(op)" in HTML
     assert "recordP90ArmResult('error',visible+(technical?" in HTML
     assert "navigator.clipboard.writeText(text)" in HTML
