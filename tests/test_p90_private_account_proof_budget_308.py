@@ -21,14 +21,12 @@ def test_account_wide_private_proof_uses_full_fifteen_second_window() -> None:
         "timeout_seconds <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS"
         in IPC
     )
-    assert (
-        "timeout_seconds=P90_ACCOUNT_PROOF_TIMEOUT_SECONDS"
-        in ROUTES
-    )
-    assert (
-        "timeout_seconds=P90_ACCOUNT_PROOF_TIMEOUT_SECONDS"
-        in PREARM
-    )
+    assert "P90_ACCOUNT_PROOF_TIMEOUT_SECONDS" in ROUTES
+    assert "timeout_seconds: float | None = None" in ROUTES
+    assert "else float(timeout_seconds)" in ROUTES
+    assert "P90_ACCOUNT_PROOF_TIMEOUT_SECONDS" in PREARM
+    assert "private_proof_timeout_seconds: float | None = None" in PREARM
+    assert "else float(private_proof_timeout_seconds)" in PREARM
     account_restart = RESTART[
         RESTART.index("for route in (routes.main, routes.sub):"):
         RESTART.index(
