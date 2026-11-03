@@ -4,7 +4,6 @@ import hashlib
 import json
 from pathlib import Path
 
-import pytest
 from bybit_workbench import source_live_identity as identity
 
 
@@ -29,19 +28,16 @@ def test_path_classifier_allows_only_verified_dashboard_delta() -> None:
     ) == (False, "DASHBOARD_UI_DELTA_NOT_VERIFIED")
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
+def test_path_classifier_blocks_trading_release_and_unknown_delta() -> None:
+    for path in (
         "src/bybit_workbench/live_arm.py",
         "operations/implementation/control.py",
         "operations/infrastructure/install_verified_release.sh",
         "pyproject.toml",
-    ],
-)
-def test_path_classifier_blocks_trading_release_and_unknown_delta(path: str) -> None:
-    assert identity.classify_delta_paths(
-        [path], dashboard_delta_verified=True
-    ) == (False, "TRADING_OR_UNKNOWN_SOURCE_DELTA")
+    ):
+        assert identity.classify_delta_paths(
+            [path], dashboard_delta_verified=True
+        ) == (False, "TRADING_OR_UNKNOWN_SOURCE_DELTA")
 
 
 def _hash(path: Path) -> str:
@@ -75,7 +71,7 @@ def _dashboard_evidence(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def test_inspect_accepts_verified_deployed_dashboard_delta(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch, tmp_path: Path
 ) -> None:
     dashboard, state = _dashboard_evidence(tmp_path)
 
