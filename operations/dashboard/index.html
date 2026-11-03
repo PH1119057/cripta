@@ -838,7 +838,8 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
     const tone=state==='OPEN'?'open':visualNear?'near':'far';
     const current=price(item.current_price);
     if(state!=='OPEN'){
-      const h9=item.h9_distances||{},h9Long=Number(h9.long_distance_pct),h9Short=Number(h9.short_distance_pct);
+      const h9=item.h9_distances||{},h9Value=value=>value===null||value===undefined||value===''?Number.NaN:Number(value);
+      const h9Long=h9Value(h9.long_distance_pct),h9Short=h9Value(h9.short_distance_pct);
       const h9LongValid=Number.isFinite(h9Long)&&h9Long>=0,h9ShortValid=Number.isFinite(h9Short)&&h9Short>=0;
       const h9NearestSide=h9LongValid&&(!h9ShortValid||h9Long<=h9Short)?'LONG':h9ShortValid?'SHORT':null;
       const h9NearestDistance=p90RailH9Proximity(item);
