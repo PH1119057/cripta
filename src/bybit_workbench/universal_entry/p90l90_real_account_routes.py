@@ -201,6 +201,8 @@ def read_p90_real_account_routes(
 
 def read_p90_real_signed_flat_accounts(
     routes: P90RealAccountRoutes,
+    *,
+    timeout_seconds: float | None = None,
 ) -> tuple[P90RealSignedFlatAccount, P90RealSignedFlatAccount]:
     """Use BOTH actual credential-local private workers, not DB roster alone.
 
@@ -213,9 +215,19 @@ def read_p90_real_signed_flat_accounts(
     )
     from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
         P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
+        P90PrivateIpcUnverified,
         P90PrivateProofClient,
     )
 
+    timeout = (
+        P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+        if timeout_seconds is None
+        else float(timeout_seconds)
+    )
+    if not 0 < timeout <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS:
+        raise P90RealAccountRoutesUnverified(
+            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_TIMEOUT_INVALID"
+        )
     if (
         not isinstance(routes, P90RealAccountRoutes)
         or routes.main.strategy_id != MAIN_ID
@@ -232,7 +244,7 @@ def read_p90_real_signed_flat_accounts(
         proof = P90PrivateProofClient(
             account=route.trading_account_id,
             connector=route.account_connector_id,
-            timeout_seconds=P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
+            timeout_seconds=timeout,
         ).read_flat_account()
         # Timestamp immediately after this independent credential-local read,
         # not after the other account finishes. This keeps validation tied to
@@ -247,9 +259,20 @@ def read_p90_real_signed_flat_accounts(
         ) as pool:
             futures = tuple(pool.submit(read_one, route) for route in route_order)
             results = tuple(future.result() for future in futures)
+    except P90PrivateIpcUnverified as exc:
+        if str(exc) in {
+            "P90_PRIVATE_IPC_INCOMPLETE_FRAME",
+            "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE",
+        }:
+            raise P90RealAccountRoutesUnverified(
+                "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
+            ) from None
+        raise P90RealAccountRoutesUnverified(
+            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_UNVERIFIED:" + str(exc)
+        ) from None
     except Exception:
         raise P90RealAccountRoutesUnverified(
-            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
+            "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_INTERNAL_ERROR"
         ) from None
 
     proofs: list[P90RealSignedFlatAccount] = []

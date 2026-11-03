@@ -390,6 +390,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
     now: datetime,
     source_root: Path = Path("/srv/cripta/source_checkout"),
     runtime_root: Path = Path("/srv/cripta/runtime/current"),
+    private_proof_timeout_seconds: float | None = None,
 ) -> dict[str, object]:
     """Validate and write technical PASS evidence for all exact five contexts.
 
@@ -399,6 +400,15 @@ def prepare_p90l90_real_v3_prearm_evidence(
     _require(now.tzinfo is not None and now.utcoffset() is not None, "now must be aware")
     current = now.astimezone(UTC)
     valid_until = current + timedelta(seconds=90)
+    private_proof_timeout = (
+        P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
+        if private_proof_timeout_seconds is None
+        else float(private_proof_timeout_seconds)
+    )
+    _require(
+        0 < private_proof_timeout <= P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
+        "private proof timeout invalid",
+    )
 
     identity, parity = _release_and_parity_evidence(
         release_commit=release_commit,
@@ -615,7 +625,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
         proof = P90PrivateProofClient(
             account=account_id,
             connector=connector_id,
-            timeout_seconds=P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
+            timeout_seconds=private_proof_timeout,
         ).read_flat_account()
         proof_checked_at = datetime.now(UTC)
         _require(
