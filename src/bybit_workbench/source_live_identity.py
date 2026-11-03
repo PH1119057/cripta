@@ -8,11 +8,11 @@ SOURCE_LIVE_IDENTITY. Everything else remains fail-closed.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import hashlib
 import json
 import re
 import subprocess
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
