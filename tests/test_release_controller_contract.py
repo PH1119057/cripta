@@ -14,7 +14,7 @@ def test_controller_source_is_valid_python_and_has_no_cli_parser():
     assert "argparse" not in source
     assert "len(sys.argv) != 1" in source
     assert "OWNER_ARM=UNCHANGED" in source
-    assert "DASHBOARD_PRESENTATION_RELEASE" in source
+    assert "DASHBOARD_PURPOSE" in source
     assert "/usr/local/sbin/cripta-deploy-dashboard-ui" in source
     assert "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1" in source
     assert "INSTALLED_COMMIT_UNCHANGED" in source
