@@ -64,7 +64,24 @@ def test_dashboard_controller_mode_uses_existing_ui_deployer_not_full_installer(
     dashboard_block = source.split('if purpose == DASHBOARD_PURPOSE:', 1)[1].split(
         '_deploy(target=target', 1
     )[0]
-    assert "_deploy_dashboard(target=target)" in dashboard_block
+    assert "_deploy_dashboard(target=target, nonce=nonce)" in dashboard_block
     assert "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1" in source
     assert "DASHBOARD_DEPLOY_CHANGED_RUNTIME_IDENTITY" in source
     assert "OWNER_ARM=UNCHANGED" in source
+
+
+def test_dashboard_controller_spawns_bounded_transient_units_for_privilege_boundary():
+    source = CONTROLLER.read_text(encoding="utf-8")
+    start = source.index("def _run_dashboard_unit(")
+    end = source.index("\n\ndef _deploy_dashboard(", start)
+    block = source[start:end]
+    assert '"/usr/bin/systemd-run"' in block
+    assert '"--wait"' in block
+    assert '"--pipe"' in block
+    assert '"--collect"' in block
+    assert "cripta-controller-dashboard-{stage}-{unit_suffix}" in block
+    assert '"--property=Type=oneshot"' in block
+    assert '"--property=TimeoutStartSec=300"' in block
+    assert "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1" in block
+    assert "/usr/local/sbin/cripta-deploy-dashboard-ui" in block
+    assert "runuser" not in block
