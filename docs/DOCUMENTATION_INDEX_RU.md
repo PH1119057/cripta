@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.47
+**Версия:** 3.48
 **Дата:** 2026-11-04
 **Статус:** канонический индекс документации
 
@@ -1615,3 +1615,27 @@ IMPLEMENTED=NO
 DEPLOYED=NO
 LIVE_CHANGE=NO
 ```
+
+# 63. OWNER authorization / technical readiness split and bounded self-recovery — OWNER DECISION 2026-11-04 (Issue #415)
+
+Current writer/recovery inventory exposed one overloaded physical mainnet gate
+used by OWNER authorization, runtime health, diagnostic and safety writers.
+Canonical target:
+
+- ARCH §54 — OWNER_AUTHORIZED vs TECHNICAL_READY vs derived EFFECTIVE_NEW_ENTRY;
+- TRADING_CONTOUR §4.12 — same-scope automatic technical resume semantics and
+  hard negative conditions;
+- DEVELOPMENT_RELEASE §53 — Recovery Supervisor/Broker, RECOVERY_CLASS, bounded
+  restart/reconcile and required tests;
+- GLOSSARY §42 — stable terminology;
+- CURRENT_PROJECT_MAP — implementation status/evidence.
+
+Existing §51 Service Start Broker remains START-only; Recovery Broker is a
+separate future capability and does not silently expand existing privilege.
+Deploy/release change still never auto-arms LIVE. Existing position/Exit
+ownership remains independent from NEW Entry technical readiness.
+
+Active document set, pre-read routing and Project Source bundle are unchanged;
+README/AGENTS/Project Instructions therefore do not change in this changeset.
+
+Status: CANON update only; IMPLEMENTED=NO; DEPLOYED=NO; LIVE_CHANGE=NO.

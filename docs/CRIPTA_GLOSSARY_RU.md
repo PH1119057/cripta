@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.15
+**Версия:** 3.16
 **Дата:** 2026-11-04
 **Статус:** обязательный канонический терминологический контракт
 
@@ -1067,3 +1067,36 @@ Control Core для exact current state + event + evidence + control policy.
 Stable Control Core. Её изменение означает изменение Core semantics и требует
 отдельного OWNER DECISION и canonical/release cycle; обычная Strategy/adapter
 версия не меняет CORE_CONTRACT_VERSION.
+
+## 42. Runtime availability / recovery terminology — OWNER DECISION 2026-11-04 (Issue #415)
+
+**OWNER_AUTHORIZED / Owner Live Authorization** — durable exact-scope
+разрешение владельца на REAL NEW Entry, созданное только explicit authenticated
+OWNER ARM. Привязано к exact release/Strategy/version/fingerprint/
+TradingAccount/Connector scope и не создаётся техническим recovery.
+
+**TECHNICAL_READY / Technical Entry Readiness** — machine-owned readiness
+runtime для NEW Entry. Может автоматически переходить READY/BLOCKED/RECOVERING
+по свежему evidence и не является финансовым разрешением.
+
+**EFFECTIVE_NEW_ENTRY** — derived результат Stable Control Core для нового REAL
+Entry: OWNER_AUTHORIZED + Strategy authorization + TECHNICAL_READY + exact
+release/account scope + отсутствие hard safety block.
+
+**Runtime Recovery Supervisor** — control-plane adapter, наблюдающий
+behavior-heartbeat/evidence и создающий bounded recovery operation. Не владеет
+Strategy/Entry/Exit policy и не выдаёт OWNER authorization.
+
+**Recovery Broker** — отдельный least-privilege OS capability для bounded
+START/RESTART только reviewed exact-release allowlisted units по approved
+RECOVERY_CLASS. Не является Service Start Broker §40 и не принимает arbitrary
+shell/unit.
+
+**RECOVERY_CLASS** — canonical recovery category сервиса: `SAFE_RESTART`,
+`STATEFUL_RECONCILE_RESTART` или `MANUAL_ONLY`. Категория определяет допустимый
+restart/reconciliation contract, но сама не даёт LIVE rights.
+
+**automatic technical resume** — восстановление TECHNICAL_READY/derived
+EFFECTIVE_NEW_ENTRY для того же уже OWNER-authorized exact scope после полного
+recovery evidence. Не является новым OWNER ARM и запрещено при release/scope
+change, explicit DISARM или unresolved hard-safety condition.

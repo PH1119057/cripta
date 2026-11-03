@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.5
-**Дата:** 2026-11-01
+**Версия:** 3.6
+**Дата:** 2026-11-04
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -1739,3 +1739,41 @@ from this value; all §4.7/§7.6.3 gates remain mandatory.
 - Закрытые 5m свечи остаются источником динамической противоположной RAW L5-3 **TP**, не источником обновления Exchange trailing. Действующие начальный TP и аварийный SL нельзя молча отменить/ослабить во время постановки или обновления TP; отдельные Exchange mutation/fill races, partial fill, very-fast TP и restart должны пройти отрицательные и end-to-end проверки. При потере private WS/источника/подтверждения защиты — fail-closed и существующий fault/reconciliation процесс, без придуманного market close.
 
 Настоящее решение не даёт автоматического LIVE-arm, permission, регистрации активной стратегии или права обойти Observer/Execution hardstop. До live-equivalence обязательны реальные MAIN/SUB account-local proof, post-fill handoff, native/candle continuity, Bybit-side TRAIL035 readback, recovery и §4.7 gates.
+
+## 4.12 OWNER authorization и automatic technical recovery — OWNER DECISION 2026-11-04 (Issue #415)
+
+Для REAL новые Entry должны зависеть не от одного перегруженного global boolean,
+а от независимых условий:
+
+```text
+OWNER_AUTHORIZED
++ StrategyActivation/execution permission
++ TECHNICAL_READY
++ exact release/account scope
++ no hard safety block
+= EFFECTIVE_NEW_ENTRY
+```
+
+`OWNER_AUTHORIZED` создаётся только explicit OWNER ARM и привязан к exact
+release/Strategy/version/fingerprint/TradingAccount/Connector scope. Техническая
+деградация не является новым owner decision и сама по себе не должна стирать
+это разрешение.
+
+`TECHNICAL_READY` может автоматически блокировать NEW Entry при service/source/
+account/runtime fault и автоматически восстановиться после свежего доказанного
+recovery того же exact scope. Это **не** automatic OWNER ARM и не перенос
+разрешения на новый release.
+
+Automatic technical resume не разрешён после explicit OWNER DISARM, deploy/
+LOADED_COMMIT change, Strategy/account scope change, unresolved ambiguous
+Exchange mutation, unknown exposure, unproven account identity, unproven
+protection/Exit ownership или active critical lifecycle fault.
+
+Existing StrategyPosition, protective Exchange orders, reconciliation и
+Universal Exit сохраняют своих владельцев независимо от NEW Entry technical
+block. Recovery existing position имеет приоритет над разрешением следующего
+Entry.
+
+Current physical `mainnet gate` остаётся legacy effective barrier до bounded
+Stable Control Core migration. Этот раздел не разрешает прямой bypass текущего
+gate и не считается IMPLEMENTED до отдельного tested cutover.
