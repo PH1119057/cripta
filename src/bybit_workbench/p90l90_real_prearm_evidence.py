@@ -26,6 +26,7 @@ from bybit_workbench.p90l90_real_arm_control import (
     p90l90_real_v3_contexts_and_routes,
 )
 from bybit_workbench.real_service_profiles import p90_real_v3_service_specs
+from bybit_workbench.source_live_identity import inspect_source_live_identity
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
@@ -103,13 +104,57 @@ def _service_active(unit: str) -> None:
     _require(result.returncode == 0, "required service inactive: " + unit)
 
 
-def _git_text(*args: str) -> str:
+def _release_identity_evidence(
+    *,
+    release_commit: str,
+    source_root: Path,
+    runtime_root: Path,
+    release_state_root: Path = Path("/var/lib/cripta/release"),
+) -> dict[str, object]:
+    _require(
+        len(release_commit) == 40
+        and all(ch in "0123456789abcdef" for ch in release_commit),
+        "loaded release commit invalid",
+    )
     try:
-        return subprocess.check_output(args, text=True, stderr=subprocess.DEVNULL).strip()
-    except (OSError, subprocess.CalledProcessError) as exc:
+        runtime_commit = (runtime_root / "INSTALLED_COMMIT").read_text(
+            encoding="utf-8"
+        ).strip()
+        state_commit = (release_state_root / "INSTALLED_COMMIT").read_text(
+            encoding="utf-8"
+        ).strip()
+    except OSError as exc:
         raise P90PrearmEvidenceBlocked(
-            "P90 REAL v3 PREARM: release Git evidence unavailable"
+            f"P90 REAL v3 PREARM: installed release identity unreadable: {exc}"
         ) from exc
+
+    _require(
+        runtime_commit == state_commit == release_commit,
+        "runtime/state release identity mismatch",
+    )
+    source_identity = inspect_source_live_identity(
+        loaded_commit=release_commit,
+        source=source_root,
+        release_state=release_state_root,
+    )
+    _require(
+        source_identity.ok,
+        source_identity.blocker or "SOURCE_LIVE_IDENTITY_NOT_READY",
+    )
+    _require(
+        bool(source_identity.source_head) and bool(source_identity.remote_head),
+        "source/live identity incomplete",
+    )
+    return {
+        "release_commit": release_commit,
+        "remote_main": source_identity.remote_head,
+        "source_commit": source_identity.source_head,
+        "runtime_commit": runtime_commit,
+        "state_commit": state_commit,
+        "source_clean": True,
+        "dashboard_ui_commit": source_identity.dashboard_ui_commit,
+        "source_delta_paths": list(source_identity.changed_paths),
+    }
 
 
 def _release_and_parity_evidence(
@@ -118,31 +163,10 @@ def _release_and_parity_evidence(
     source_root: Path,
     runtime_root: Path,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    _require(
-        len(release_commit) == 40
-        and all(ch in "0123456789abcdef" for ch in release_commit),
-        "loaded release commit invalid",
-    )
-    source_commit = _git_text("git", "-C", str(source_root), "rev-parse", "HEAD")
-    remote = _git_text(
-        "git", "-C", str(source_root), "ls-remote", "origin", "refs/heads/main"
-    ).split()[0]
-    dirty = _git_text("git", "-C", str(source_root), "status", "--porcelain=v1")
-    try:
-        runtime_commit = (runtime_root / "INSTALLED_COMMIT").read_text(
-            encoding="utf-8"
-        ).strip()
-        state_commit = Path("/var/lib/cripta/release/INSTALLED_COMMIT").read_text(
-            encoding="utf-8"
-        ).strip()
-    except OSError as exc:
-        raise P90PrearmEvidenceBlocked(
-            f"P90 REAL v3 PREARM: installed release identity unreadable: {exc}"
-        ) from exc
-    _require(not dirty, "source checkout is dirty")
-    _require(
-        source_commit == remote == runtime_commit == state_commit == release_commit,
-        "remote/source/runtime/state release identity mismatch",
+    identity = _release_identity_evidence(
+        release_commit=release_commit,
+        source_root=source_root,
+        runtime_root=runtime_root,
     )
 
     hashes: dict[str, str] = {}
@@ -190,14 +214,6 @@ def _release_and_parity_evidence(
         and parity.get("database_mutation") is False,
         "independent parity proof incomplete",
     )
-    identity = {
-        "release_commit": release_commit,
-        "remote_main": remote,
-        "source_commit": source_commit,
-        "runtime_commit": runtime_commit,
-        "state_commit": state_commit,
-        "source_clean": True,
-    }
     return identity, {
         "proof": parity,
         "module_sha256": hashes,
