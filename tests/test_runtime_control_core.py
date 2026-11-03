@@ -239,7 +239,8 @@ def test_core_source_has_no_io_or_runtime_dependencies() -> None:
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
-                assert not ({alias.name.split(".")[0] for alias in node.names} & forbidden_import_roots)
+                import_roots = {alias.name.split(".")[0] for alias in node.names}
+                assert not (import_roots & forbidden_import_roots)
             if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 assert node.module.split(".")[0] not in forbidden_import_roots
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
