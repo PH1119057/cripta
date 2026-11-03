@@ -55,6 +55,7 @@ from bybit_workbench.p90l90_real_prearm_evidence import (
     P90PrearmEvidenceBlocked,
     prepare_p90l90_real_v3_prearm_evidence,
 )
+from bybit_workbench.source_live_identity import inspect_source_live_identity
 from bybit_workbench.real_readiness_control import (
     RealReadinessControlError,
     begin_operation as begin_real_readiness_operation,
@@ -1240,24 +1241,11 @@ def strategy_paper_state() -> dict[str, object]:
 def _live_trading_state(*, include_history: bool) -> dict[str, object]:
     tickers = live_tickers()
     liquidity_risks = execution_liquidity_risks()
-    source_head = ""
-    try:
-        result = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(APP_ROOT / "source_checkout"),
-                "rev-parse",
-                "HEAD",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-        source_head = result.stdout.strip().lower()
-    except (OSError, subprocess.SubprocessError):
-        source_head = ""
+    source_identity = inspect_source_live_identity(
+        loaded_commit=LOADED_RELEASE_COMMIT,
+        source=APP_ROOT / "source_checkout",
+    )
+    source_head = source_identity.source_head or ""
 
     observer_current: dict[str, object] = {}
     try:
@@ -1269,12 +1257,10 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         observer_current = {}
 
     p90_arm_blockers: list[str] = []
-    if (
-        not LOADED_RELEASE_COMMIT
-        or not source_head
-        or source_head != LOADED_RELEASE_COMMIT
-    ):
-        p90_arm_blockers.append("REMOTE_SOURCE_INSTALLED_IDENTITY_DRIFT")
+    if not source_identity.ok:
+        p90_arm_blockers.append(
+            source_identity.blocker or "SOURCE_LIVE_IDENTITY_NOT_READY"
+        )
     if (
         str(observer_current.get("state") or "") != "RUNNING"
         or not bool(observer_current.get("observer_ready"))
@@ -1285,6 +1271,10 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         "blockers": p90_arm_blockers,
         "loaded_commit": LOADED_RELEASE_COMMIT,
         "source_head": source_head,
+        "remote_head": source_identity.remote_head,
+        "dashboard_ui_commit": source_identity.dashboard_ui_commit,
+        "source_delta_paths": list(source_identity.changed_paths),
+        "source_identity_blocker": source_identity.blocker,
         "observer_state": observer_current.get("state"),
         "observer_ready": bool(observer_current.get("observer_ready")),
         "observer_updated_at": observer_current.get("updated_at"),
