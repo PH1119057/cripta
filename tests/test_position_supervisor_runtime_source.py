@@ -32,7 +32,9 @@ def test_supervisor_has_independent_flat_safe_behavior_heartbeat() -> None:
         encoding="utf-8"
     )
 
-    assert "/run/cripta-position-supervisor/status.json" in source
+    assert '_STATUS_ROOT = Path("/run/cripta-position-supervisor")' in source
+    assert '"CRIPTA_POSITION_SUPERVISOR_STATUS_PATH"' in source
+    assert 'str(_STATUS_ROOT / "status.json")' in source
     assert '"service": "position_supervisor"' in source
     assert '"state": "RUNNING"' in source
     assert '"trading_rights": "NONE"' in source
