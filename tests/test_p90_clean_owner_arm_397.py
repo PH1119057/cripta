@@ -117,4 +117,8 @@ def test_primary_owner_arm_status_is_plain_language_and_raw_detail_is_collapsed(
     assert "function observerFaultFriendlyText(item)" in UI
     assert "Не удалось получить полное подтверждение состояния MAIN/SUB аккаунтов" in UI
     assert "Не удалось завершить проверку рыночного источника в допустимое окно" in UI
+    assert "Для открытой позиции не подтверждён биржевой TRAIL035" in UI
+    assert "Не удалось вовремя подтвердить состояние аккаунта для восстановления" in UI
+    assert "Восстановление аккаунта остановлено точной проверкой состояния" in UI
+    assert "Не подтверждён локальный канал восстановления аккаунта" in UI
     assert "<b>Технические детали:</b>" in UI
