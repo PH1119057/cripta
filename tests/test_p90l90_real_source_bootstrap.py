@@ -264,7 +264,11 @@ def test_canonical_fresh_twelve_second_generation_passes_post_ws_barrier():
     )
     assert db.sleep_count == 0
     assert source._PRIVATE_PROOF_RETRY_BUDGET_SECONDS == 8.0
-    assert source._PRIVATE_PROOF_ATTEMPT_SECONDS == source._PRIVATE_PROOF_RETRY_BUDGET_SECONDS == 8.0
+    assert (
+        source._PRIVATE_PROOF_ATTEMPT_SECONDS
+        == source._PRIVATE_PROOF_RETRY_BUDGET_SECONDS
+        == 8.0
+    )
     assert source._ACCOUNT_GENERATION_BARRIER_WAIT_SECONDS == 5.0
 
 
@@ -426,7 +430,11 @@ def test_pre_ws_private_preflight_allows_valid_ten_second_proof(monkeypatch):
     assert len(result) == 2
     assert observed_timeouts == [source.P90_ACCOUNT_PROOF_TIMEOUT_SECONDS]
     assert source._PRIVATE_PROOF_RETRY_BUDGET_SECONDS == 8.0
-    assert source._PRIVATE_PROOF_ATTEMPT_SECONDS == source._PRIVATE_PROOF_RETRY_BUDGET_SECONDS == 8.0
+    assert (
+        source._PRIVATE_PROOF_ATTEMPT_SECONDS
+        == source._PRIVATE_PROOF_RETRY_BUDGET_SECONDS
+        == 8.0
+    )
     assert (current[0] - now).total_seconds() == 10.5
 
 
