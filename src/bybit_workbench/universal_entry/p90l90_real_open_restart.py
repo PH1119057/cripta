@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_FLOOR, Decimal, InvalidOperation
-from typing import Any
+from typing import Any, cast
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import ExitPlan, TradeDirection
@@ -274,11 +274,14 @@ def _read_recovery_account_bounded(
             )
         timeout = min(_RECOVERY_ACCOUNT_PROOF_MAX_ATTEMPT_SECONDS, remaining)
         try:
-            return client_factory(
-                account=route.trading_account_id,
-                connector=route.account_connector_id,
-                timeout_seconds=timeout,
-            ).read_recovery_account()
+            return cast(
+                P90RealSignedRecoveryAccount,
+                client_factory(
+                    account=route.trading_account_id,
+                    connector=route.account_connector_id,
+                    timeout_seconds=timeout,
+                ).read_recovery_account(),
+            )
         except P90PrivateRecoveryBlocked as exc:
             last_reason = exc.recovery_code
             if exc.recovery_code not in P90_REAL_RECOVERY_TRANSIENT_FAILURE_CODES:
