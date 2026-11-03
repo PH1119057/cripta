@@ -77,6 +77,9 @@ def test_p90_left_rail_sorts_and_colors_by_nearest_h9_proximity():
     assert "value===null||value===undefined||value===''" in INDEX
     assert "const h9NearestDistance=p90RailH9Proximity(item)" in INDEX
     assert "h9NearestDistance.toFixed(3)+'% до '+h9NearestSide+' H9'" in INDEX
+    assert "safe(h9NearestSide||'—')" in INDEX
+    non_open_block = INDEX.split("if(state!=='OPEN'){", 1)[1].split("const p=item.position||{}", 1)[0]
+    assert "safe(direction)" not in non_open_block
     assert "const entryText=nearest" in INDEX
     assert "'Entry '+entrySide+' '+" in INDEX
     assert "БЛИЗКО К H9" in INDEX
