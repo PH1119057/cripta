@@ -3537,6 +3537,28 @@ def export_trading_table(table: str, period: str) -> dict[str, object]:
 
 
 
+def _p90_fault_operation_relation(
+    last_seen_value: object,
+    operation_started_at: datetime | None,
+) -> str:
+    if operation_started_at is None:
+        return "UNSCOPED"
+    try:
+        last_seen = datetime.fromisoformat(
+            str(last_seen_value).replace("Z", "+00:00")
+        )
+        if last_seen.tzinfo is None:
+            return "UNSCOPED"
+        last_seen = last_seen.astimezone(UTC)
+    except (TypeError, ValueError):
+        return "UNSCOPED"
+    return (
+        "BEFORE_CURRENT_P90_OPERATION"
+        if last_seen < operation_started_at
+        else "CURRENT_OR_AFTER_P90_OPERATION"
+    )
+
+
 def observer_runtime_fault_state() -> dict[str, object]:
     try:
         with psycopg.connect(
@@ -3607,22 +3629,9 @@ def observer_runtime_fault_state() -> dict[str, object]:
                     "last_resolution_reason": details.get("last_resolution_reason"),
                     "last_resolved_by": details.get("last_resolved_by"),
                     "last_resolved_at": details.get("last_resolved_at"),
-                    "p90_operation_relation": (
-                        "BEFORE_CURRENT_P90_OPERATION"
-                        if (
-                            operation_started_at is not None
-                            and datetime.fromisoformat(
-                                str(details.get("last_seen_at") or detected).replace(
-                                    "Z", "+00:00"
-                                )
-                            ).astimezone(UTC)
-                            < operation_started_at
-                        )
-                        else (
-                            "CURRENT_OR_AFTER_P90_OPERATION"
-                            if operation_started_at is not None
-                            else "UNSCOPED"
-                        )
+                    "p90_operation_relation": _p90_fault_operation_relation(
+                        details.get("last_seen_at") or detected,
+                        operation_started_at,
                     ),
                     "p90_operation_request_id": operation_request_id,
                 }
