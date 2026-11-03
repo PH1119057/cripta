@@ -34,7 +34,10 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     REQUESTED_USDT,
     VERSION,
 )
-from bybit_workbench.universal_entry.p90l90_real_second48 import read_real_second48
+from bybit_workbench.universal_entry.p90l90_real_second48 import (
+    P90RealSecond48Unverified,
+    read_real_second48,
+)
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
@@ -355,15 +358,23 @@ def _second48_prearm_evidence(
         policy = StrategyHardStopEmbargoPolicy.parse(
             lifecycle["second_hardstop_embargo"]
         )
-        allows_new_entry, snapshot = read_real_second48(
-            connection,
-            strategy_id=bundle.card.strategy_id,
-            strategy_version=bundle.card.strategy_version,
-            strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
-            trading_account_id=account_id,
-            policy=policy,
-            evaluated_at=now,
-        )
+        try:
+            allows_new_entry, snapshot = read_real_second48(
+                connection,
+                strategy_id=bundle.card.strategy_id,
+                strategy_version=bundle.card.strategy_version,
+                strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+                trading_account_id=account_id,
+                policy=policy,
+                evaluated_at=now,
+            )
+        except P90RealSecond48Unverified as exc:
+            raise P90PrearmEvidenceBlocked(
+                "P90 REAL v3 PREARM: SECOND48 reconstruction failed "
+                + strategy_id
+                + ": "
+                + str(exc)
+            ) from exc
         evidence[strategy_id] = {
             "trading_account_id": account_id,
             "allows_new_entry": bool(allows_new_entry),
