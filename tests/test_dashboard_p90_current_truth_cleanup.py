@@ -66,13 +66,14 @@ def test_p90_owner_arm_status_uses_current_runtime_truth():
     assert "Universal Entry observer сейчас не готов" in INDEX
 
 
-def test_superseded_observer_faults_stay_durable_but_leave_current_console():
+def test_unresolved_observer_faults_stay_visible_until_explicit_resolution():
     assert "historical_open_count = len(items)" in APP
-    assert "superseded_count += 1" in APP
-    assert 'str(observer.get("state") or "") == "RUNNING"' in APP
-    assert 'bool(observer.get("observer_ready"))' in APP
+    assert "superseded_count += 1" not in APP
+    assert '"state": "red" if items else "clear"' in APP
     assert '"historical_open_count": historical_open_count' in APP
-    assert '"superseded_count": superseded_count' in APP
+    assert '"superseded_count": 0' in APP
+    assert '"p90_operation_relation"' in APP
+    assert "BEFORE_CURRENT_P90_OPERATION" in APP
     assert "DELETE FROM runtime.lifecycle_faults" not in APP
 
 
