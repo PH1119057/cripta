@@ -1026,9 +1026,17 @@ release и bytes исполняемого торгового контура**, �
   commits **не** разрешает обойти `PAPER_REAL_DECISION_PARITY`, reconciliation,
   position ownership, risk gates либо owner LIVE-arm.
 - Presentation-only Dashboard changes, затрагивающие auth/control/mutation,
-  не входят в исключение и требуют full release; любые изменения
-  `operations/dashboard/**` остаются blocked до verified release.
-  При сомнении классификации — `HARD_STOP=YES`.
+  не входят в исключение и требуют full release.
+- Delta в `operations/dashboard/**` допускается для `SOURCE_LIVE_IDENTITY=PASS`
+  только когда exact Dashboard path-set уже независимо прошёл DEV §8.1,
+  current production `DASHBOARD_UI_COMMIT` указывает на verified deployed commit,
+  этот commit достижим из current `SOURCE_HEAD/REMOTE_HEAD`, а после него до
+  current source нет нового undeployed Dashboard delta. Само наличие Dashboard
+  commit в GitHub main без deploy evidence не является исключением.
+- Любой undeployed/unknown Dashboard delta, auth/control/mutation Dashboard delta,
+  `src/**`, trading `operations/**`, release dependency, security/config или
+  неизвестный путь остаётся fail-closed. При сомнении классификации —
+  `HARD_STOP=YES`.
 
 Canonical owner классификации пути — этот раздел; Trading Contour §4.7
 использует результат gate и не дублирует allowlist.
@@ -1931,19 +1939,24 @@ Discovery в порядке:
 
 Новый чат начинает ответ по незавершённой задаче с `RESUME_FOUND / NEW_TASK_CONFIRMED / BLOCKED` и exact evidence, а не с молчаливого `git checkout -b`. Это инструкция исполнителю, **не утверждение**, что CI проверяет все server worktrees или что действует автоматическая межчатовая блокировка: такие дополнительные tools/locks потребуют отдельной implementation/release проверки.
 
-## 50.5 Permanent bounded Release Controller — OWNER DECISION 2026-10-30 (Issue #288)
+## 50.5 Permanent bounded Release Controller — OWNER DECISION 2026-10-30 / 2026-11-03 (Issues #288, #381)
 
-Цель: заменить per-release SentinelX allowlist entries с фиксированными SHA постоянной узкой командой. Это целевой канон, а не утверждение о развёрнутом контроллере.
+Цель: заменить per-release SentinelX allowlist entries с фиксированными SHA постоянной узкой командой. Permanent controller является deployed management-plane rail; изменение target SHA не требует нового SentinelX command.
 
-- Единственный стабильный exact entrypoint без произвольных аргументов shell, путей, команд или environment. Права SentinelX меняются один раз при введении контроллера, не на каждый release.
-- Каждая заявка отдельно одобряется аутентифицированным владельцем, имеет одноразовый nonce, exact GitHub repository, target SHA, expected baseline, время и срок действия. Строка `--operator owner` не является подтверждением полномочий.
+- Единственный стабильный exact entrypoint без произвольных аргументов shell, путей, команд или environment. Права SentinelX задаются для entrypoint, а не для каждого release SHA.
+- Каждая заявка отдельно одобряется аутентифицированным владельцем, имеет одноразовый nonce, exact GitHub repository, exact `purpose`, target SHA, purpose-specific expected baseline, время и срок действия. Строка `--operator owner` не является подтверждением полномочий.
+- Допустимы только два purpose:
+  - `EXACT_VERIFIED_SOURCE_RELEASE` — full application/trading runtime release; baseline = exact current installed runtime/tooling release; deploy owner = existing verified `install_verified_release.sh`;
+  - `DASHBOARD_PRESENTATION_RELEASE` — independent DEV §8.1 Dashboard presentation/read-model release; baseline = exact current `DASHBOARD_UI_COMMIT`; deploy owner = existing verified `deploy_dashboard_ui.sh`.
 - Контроллер независимо сверяет trusted GitHub main и обязательные проверки PR, включая `scope`, source tree, clean checkout, permissions и фактический baseline. Неизвестное состояние — fail-closed.
-- До записи выполняются §19.1–19.4 (actual actor/path/ACL/systemd), §50.4 (forensic), release lock, backup/rollback preflight. Source sync — под `cripta`, установка — только существующим verified installer; никаких arbitrary refs или команд.
-- Все стадии и отказы записываются долговечно. Таймаут/потеря связи означает UNKNOWN; повторная mutation только после сверки durable state, не вслепую.
-- После установки независимо проверяются REMOTE_HEAD, SOURCE_HEAD, INSTALLED_COMMIT, LOADED_COMMIT, runtime liveness и runtime behavior.
-- Release Controller не включает mainnet gate, StrategyActivation, execution permissions, OWNER ARM или MICRO_LIVE.
-- Негативные тесты обязательны: отсутствие/истечение approval, replay nonce, неподходящий SHA/baseline/tree, сдвиг main, непрошедший CI, грязный checkout, чужой actor/path, инъекция argv/env, конкурентный release, сбой rollback, попытка LIVE arm.
-- Ввод в эксплуатацию строго: OWNER DECISION → CANON UPDATE → IMPLEMENTATION → TEST → GITHUB → DEPLOY → RUNTIME EVIDENCE. Пока нет проверки deployment нового rail, действует прежний fail-closed контракт.
+- Для full runtime purpose действуют обычные backup/rollback и full installer gates. Для Dashboard purpose запрещено притворяться full release: он обязан выполнить Dashboard verify-only/scope gate, атомарный UI switch и source/live hash postcheck, сохранив `INSTALLED_COMMIT` / `LOADED_COMMIT`, mainnet gate, StrategyActivation, execution permissions и trading service PID/NRestarts неизменными.
+- Dashboard purpose не может принимать target, если current/expected `DASHBOARD_UI_COMMIT` не совпадает, target не current trusted GitHub main, required CI не PASS, source dirty/ambiguous, verifier не подтверждает presentation/read-model scope или release lock занят.
+- До записи выполняются §19.1–19.4 (actual actor/path/ACL/systemd), §50.4 (forensic) и единый release lock. Source sync — под `cripta`; никаких arbitrary refs, произвольных path/env/command.
+- Все стадии и отказы записываются долговечно с exact purpose. Таймаут/потеря связи означает UNKNOWN; повторная mutation только после сверки durable state, не вслепую.
+- После full release независимо проверяются REMOTE_HEAD, SOURCE_HEAD, INSTALLED_COMMIT, LOADED_COMMIT, runtime liveness и runtime behavior. После Dashboard release — REMOTE_HEAD, SOURCE_HEAD, `DASHBOARD_UI_COMMIT`, source/live Dashboard hashes и invariants DEV §8.1; trading `INSTALLED_COMMIT` / `LOADED_COMMIT` не переписываются.
+- Ни один purpose не включает mainnet gate, StrategyActivation, execution permissions, OWNER ARM или MICRO_LIVE.
+- Негативные тесты обязательны для обоих purpose: отсутствие/истечение approval, replay nonce, неподходящий SHA/baseline/tree/purpose, moving main, failing CI, dirty checkout, actor/path denial, lock collision, injection. Dashboard-specific tests дополнительно проверяют undeployed/current baseline mismatch, verifier rejection, попытку trading/control mutation и неизменность runtime identities.
+- Ввод нового/изменённого controller capability: OWNER DECISION → CANON UPDATE → IMPLEMENTATION → TEST → GITHUB → DEPLOY → RUNTIME EVIDENCE.
 
 ## 51. Generic REAL readiness preparation and bounded service-start broker — OWNER DECISION 2026-11-02 (Issue #343)
 

@@ -434,8 +434,12 @@ OPERATIONAL_DELTA_COMMIT(S) [если есть]
 ```
 
 Для operational delta обязательно указываются affected paths и evidence.
-Наличие delta запрещает `SOURCE_LIVE_IDENTITY=PASS` для real-arm, пока
-production state не сведён к одному exact verified release composition.
+Decision/execution-affecting operational delta запрещает `SOURCE_LIVE_IDENTITY=PASS`
+для real-arm, пока production state не сведён к одному exact verified release
+composition. Independently verified/deployed presentation/read-model Dashboard
+bundle с отдельной `DASHBOARD_UI_COMMIT` identity не является trading runtime
+delta; его допустимость и отсутствие последующего undeployed Dashboard drift
+классифицируются только по DEVELOPMENT_RELEASE §8.1 и §26.2.
 
 Сам documentation commit неизбежно меняет `REMOTE_HEAD/SOURCE_HEAD` после
 публикации. Поэтому exact SHA внутри MAP разрешён только как явно подписанный

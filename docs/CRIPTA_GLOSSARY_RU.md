@@ -1016,9 +1016,13 @@ pause/restart/gap: historical bars позволяют восстановить g
 допустимы лишь после фактического нового native cursor и независимых
 position/pending/reconciliation gates. Старый checkpoint сохраняется.
 
-## Release Controller — OWNER DECISION 2026-10-30
+## Release Controller — OWNER DECISION 2026-10-30 / 2026-11-03
 
-`Release Controller` — постоянный узкий management-plane entrypoint для проверенного exact GitHub-main deploy; один разрешённый SentinelX command не означает произвольный sudo, выбор SHA или OWNER ARM. `RELEASE_REQUEST_APPROVED` — отдельно аутентифицированная однократная заявка для exact SHA, baseline и nonce; это не разрешение MICRO_LIVE. `RELEASE_CONTROLLER_VERIFIED` — только после реализации, тестов, deploy и runtime evidence. Owner: DEVELOPMENT_RELEASE §50.5; tracking: Issue #288.
+`Release Controller` — постоянный узкий management-plane entrypoint для проверенного exact GitHub-main deploy; один разрешённый SentinelX command не означает произвольный sudo, выбор SHA или OWNER ARM. Он принимает только отдельно аутентифицированную однократную заявку и различает два fail-closed purpose: `EXACT_VERIFIED_SOURCE_RELEASE` для full application/trading runtime и `DASHBOARD_PRESENTATION_RELEASE` для independent presentation/read-model Dashboard bundle. Второй purpose вызывает только canonical Dashboard UI verifier/deployer и не меняет `INSTALLED_COMMIT` / `LOADED_COMMIT`.
+
+`RELEASE_REQUEST_APPROVED` — отдельно аутентифицированная однократная заявка для exact SHA, exact purpose, соответствующего baseline и nonce; это не разрешение MICRO_LIVE или OWNER ARM. Для `DASHBOARD_PRESENTATION_RELEASE` baseline — current verified `DASHBOARD_UI_COMMIT`. `RELEASE_CONTROLLER_VERIFIED` — только после реализации, тестов, deploy и runtime evidence. Owner: DEVELOPMENT_RELEASE §50.5; tracking: Issues #288, #381.
+
+**Dashboard Release Controller mode** — bounded mode того же permanent no-argument Release Controller, а не второй arbitrary deployment shell. Он может переключать только verified Dashboard presentation/read-model bundle по DEV §8.1 и сохраняет независимую `DASHBOARD_UI_COMMIT` identity.
 
 ## 40. REAL readiness control-plane terminology — OWNER DECISION 2026-11-02
 

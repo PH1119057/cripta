@@ -977,7 +977,7 @@ ROLLBACK_OR_KILL_PATH=PASS
 ```
 
 UNKNOWN/STALE/NOT CHECKED HERE по обязательному пункту означает NOT_READY_FOR_LIVE.
-SOURCE_LIVE_IDENTITY для R1 проверяется по установленному exact торговому релизу и изменению исполняемого торгового контура, а не по документальным commit в GitHub main. Canonical path classification: DEVELOPMENT_RELEASE §26.2. Все остальные LIVE-arm gates неизменны.
+SOURCE_LIVE_IDENTITY для R1 проверяется по установленному exact торговому релизу и изменению исполняемого торгового контура, а не по простому равенству GitHub/source HEAD установленному commit. Canonical path classification: DEVELOPMENT_RELEASE §26.2. Independently verified/deployed presentation-only Dashboard delta с exact current `DASHBOARD_UI_COMMIT` не является изменением trading release identity; undeployed/unknown Dashboard delta и любой trading/control/auth/runtime delta остаются fail-closed. Все остальные LIVE-arm gates неизменны.
 
 
 MICRO_LIVE имеет отдельный лимит риска/капитала/символов и не является
