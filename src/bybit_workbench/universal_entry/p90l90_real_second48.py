@@ -3,12 +3,18 @@
 This reader is READ ONLY. Its caller must keep one database transaction from
 this proof through account Entry admission (including account-scoped lock).
 It is not an owner-arm, Exchange credential proof, or release readiness gate.
-Unlinked, partial or unknown actual Exit evidence never counts as a non-stop.
+Unlinked or partial actual Exit evidence never counts as a non-stop. An
+historical UNKNOWN mechanism may be classified only as
+PROVEN_NON_HARD_STOP_BY_PRICE when exact durable entry/initial-stop/exit facts
+prove the realized close is on the favorable side of Entry and the configured
+initial hard-stop is on the adverse side. The historical mechanism itself is
+never rewritten or guessed.
 """
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Protocol
 
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
@@ -42,6 +48,10 @@ _ROW_FIELDS = (
     "exit_owner",
     "exit_mechanism",
     "exit_order_id",
+    "position_side",
+    "actual_avg_entry",
+    "intended_initial_hard_stop",
+    "actual_exit_avg_fill",
 )
 
 
@@ -75,6 +85,30 @@ def _utc(value: object, label: str) -> datetime:
 
 def _exact(value: object) -> str:
     return value if isinstance(value, str) else ""
+
+
+def _decimal(value: object) -> Decimal | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    return parsed if parsed.is_finite() and parsed > 0 else None
+
+
+def _proven_non_hard_stop_by_price(row: Mapping[str, object]) -> bool:
+    side = _exact(row.get("position_side"))
+    entry = _decimal(row.get("actual_avg_entry"))
+    hard_stop = _decimal(row.get("intended_initial_hard_stop"))
+    exit_fill = _decimal(row.get("actual_exit_avg_fill"))
+    if entry is None or hard_stop is None or exit_fill is None:
+        return False
+    if side == "Buy":
+        return hard_stop < entry and exit_fill > entry
+    if side == "Sell":
+        return hard_stop > entry and exit_fill < entry
+    return False
 
 
 def read_real_second48(
@@ -122,7 +156,9 @@ def read_real_second48(
                   p.identity_status,p.trading_account_id,
                   ta.account_kind,a.attribution_id,a.closed_at AS attribution_closed_at,
                   a.link_status AS attribution_link_status,
-                  a.exit_owner,a.exit_mechanism,a.exit_order_id
+                  a.exit_owner,a.exit_mechanism,a.exit_order_id,
+                  p.side AS position_side,a.actual_avg_entry,
+                  a.intended_initial_hard_stop,a.actual_exit_avg_fill
              FROM runtime.position_ownership p
              LEFT JOIN identity.trading_accounts ta
                ON ta.trading_account_id=p.trading_account_id
@@ -159,22 +195,36 @@ def read_real_second48(
         close_at = _utc(row.get("closed_at"), "CLOSED_AT")
         event_at = _utc(row.get("attribution_closed_at"), "ATTRIBUTION_AT")
         mechanism = _exact(row.get("exit_mechanism"))
-        if (
-            event_at != close_at or event_at > now
-            or row.get("close_link_status") != "EXACT"
-            or row.get("attribution_link_status") != "EXACT"
-            or mechanism not in _ALLOWED_EXITS
-            or not _exact(row.get("attribution_id"))
-            or not _exact(row.get("exit_order_id"))
-            or not _exact(row.get("exit_owner"))
-        ):
+        attribution_id = _exact(row.get("attribution_id"))
+        exit_order_id = _exact(row.get("exit_order_id"))
+        exact_link = (
+            event_at == close_at
+            and event_at <= now
+            and row.get("close_link_status") == "EXACT"
+            and row.get("attribution_link_status") == "EXACT"
+            and bool(attribution_id)
+            and bool(exit_order_id)
+        )
+        if not exact_link:
             raise P90RealSecond48Unverified("P90_REAL_SECOND48_EXACT_EXIT_UNPROVEN")
+
+        if mechanism in _ALLOWED_EXITS:
+            if not _exact(row.get("exit_owner")):
+                raise P90RealSecond48Unverified(
+                    "P90_REAL_SECOND48_EXACT_EXIT_UNPROVEN"
+                )
+            exit_reason = (
+                "HARD_STOP" if mechanism == "INITIAL_HARD_STOP" else mechanism
+            )
+        elif mechanism == "UNKNOWN" and _proven_non_hard_stop_by_price(row):
+            exit_reason = "PROVEN_NON_HARD_STOP_BY_PRICE"
+        else:
+            raise P90RealSecond48Unverified("P90_REAL_SECOND48_EXACT_EXIT_UNPROVEN")
+
         # Only a classified actual initial hard-stop is the Strategy hardstop
-        # counter. Protected stops and ordinary closes are NOT hardstops.
-        events.append((
-            event_at, _exact(row["attribution_id"]),
-            "HARD_STOP" if mechanism == "INITIAL_HARD_STOP" else mechanism,
-        ))
+        # counter. Protected/ordinary closes and durable favorable-price proof
+        # are replayed as non-hard-stop events.
+        events.append((event_at, attribution_id, exit_reason))
     embargo = StrategyHardStopEmbargo(
         strategy_id=strategy_id,
         strategy_version=strategy_version,
