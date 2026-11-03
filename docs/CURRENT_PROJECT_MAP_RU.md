@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.37
+**Версия:** 12.38
 **Дата:** 2026-11-04
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -4794,4 +4794,40 @@ RUNTIME_BEHAVIOR_VERIFIED=NO
 OWNER_ARM_CHANGE=NO
 MAINNET_GATE_CHANGE=NO
 EXCHANGE_MUTATION=NO
+```
+
+## 2026-11-04 Runtime availability split / bounded self-recovery — OWNER DECISION / CANON UPDATE ONLY
+
+Issue #415, продолжение #413.
+
+Read-only Phase 1 inventory установил:
+- current `mainnet gate` имеет несколько независимых writers/semantics;
+- runtime guard при transient health fault может закрыть gate, сохранив P90
+  permissions/generic/account arms ACTIVE;
+- после восстановления health incident может RESOLVE, но P90 gate автоматически
+  не возвращается; PREARM при этом требует zero permissions/arms;
+- current Service Start Broker поддерживает только START inactive unit;
+- current systemd restart policy реагирует на process failure, но нет
+  behavior-level `WatchdogSec`/notify contract для active-but-unhealthy service.
+
+Canonical target теперь определён ARCH §54, TC §4.12, DEV §53, GLOSSARY §42:
+explicit OWNER authorization отделяется от machine-owned TECHNICAL_READY;
+automatic technical resume допускается только для того же exact authorized
+scope после полного recovery evidence; deploy/release change, owner DISARM,
+ambiguous Exchange mutation/unknown exposure и другие hard-safety conditions
+не auto-resume.
+
+Existing StrategyPosition/Exit/reconciliation сохраняют ownership независимо
+от NEW Entry technical block. Runtime Recovery Supervisor/Recovery Broker —
+target capability, не current implementation.
+
+Status:
+```text
+CONTROL_WRITER_INVENTORY=COMPLETE_CURRENT_P90_SCOPE
+CANON=UPDATED_IN_CHANGESET
+IMPLEMENTED=NO
+DEPLOYED=NO
+RUNTIME_LIVENESS_VERIFIED=NO
+RUNTIME_BEHAVIOR_VERIFIED=NO
+LIVE_CHANGE=NO
 ```
