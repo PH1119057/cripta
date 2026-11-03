@@ -131,6 +131,10 @@ def test_missing_private_account_proof_uses_no_source_transaction(monkeypatch):
     db = FakeConnection()
     monkeypatch.setattr(source, "read_p90_real_account_routes",
                         lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        source, "_wait_for_fresh_flat_generations",
+        lambda *_args, **_kwargs: None,
+    )
 
     def unavailable(*_args, **_kwargs):
         raise RuntimeError("private SUB missing")
