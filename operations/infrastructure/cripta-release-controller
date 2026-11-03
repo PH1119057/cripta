@@ -525,7 +525,15 @@ def main() -> int:
         tooling_baseline, tooling_path = _commit_from_current(TOOLING_ROOT)
         if runtime_baseline != tooling_baseline:
             raise ControllerError("BASELINE_SPLIT")
-        dashboard_baseline, dashboard_path = _dashboard_commit_from_current()
+        dashboard_baseline: str | None = None
+        dashboard_path: Path | None = None
+        try:
+            dashboard_baseline, dashboard_path = _dashboard_commit_from_current()
+        except (ControllerError, OSError):
+            # A full runtime release must remain able to repair/bootstrap Dashboard
+            # identity. Only Dashboard-purpose requests require a valid UI baseline.
+            dashboard_baseline = None
+            dashboard_path = None
         source_head, source_clean = _source_state()
 
         remote_main, remote_tree = current_main()
@@ -544,13 +552,16 @@ def main() -> int:
                 target=remote_main,
                 baseline=runtime_baseline,
                 purpose=FULL_PURPOSE,
-            ),
-            *approval_candidates(
-                target=remote_main,
-                baseline=dashboard_baseline,
-                purpose=DASHBOARD_PURPOSE,
-            ),
+            )
         ]
+        if dashboard_baseline is not None:
+            approvals.extend(
+                approval_candidates(
+                    target=remote_main,
+                    baseline=dashboard_baseline,
+                    purpose=DASHBOARD_PURPOSE,
+                )
+            )
         approvals.sort(key=lambda item: item.created_at, reverse=True)
         if not approvals:
             raise ControllerError("OWNER_APPROVAL_MISSING")
@@ -563,7 +574,11 @@ def main() -> int:
             rollback_ready = _rollback_ready(
                 runtime_baseline, runtime_path, tooling_path
             )
-        elif purpose == DASHBOARD_PURPOSE:
+        elif (
+            purpose == DASHBOARD_PURPOSE
+            and dashboard_baseline is not None
+            and dashboard_path is not None
+        ):
             rollback_ready = _dashboard_rollback_ready(
                 dashboard_baseline, dashboard_path
             ) and _dashboard_deployer_ok()
