@@ -138,6 +138,11 @@ def test_recovery_producer_turns_unexpected_exception_into_structural_blocker() 
     assert not failures
 
 
+def test_unknown_recovery_code_maps_to_structural_internal_error() -> None:
+    blocked = P90PrivateRecoveryBlocked("P90_REAL_RECOVERY_NOT_A_REAL_CODE")
+    assert blocked.recovery_code == "P90_REAL_RECOVERY_INTERNAL_ERROR"
+
+
 def test_recovery_safe_vocabulary_is_finite_and_transient_is_subset() -> None:
     assert P90_REAL_RECOVERY_SAFE_FAILURE_CODES
     assert P90_REAL_RECOVERY_TRANSIENT_FAILURE_CODES
