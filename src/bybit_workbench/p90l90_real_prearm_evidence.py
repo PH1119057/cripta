@@ -356,7 +356,7 @@ def _second48_prearm_evidence(
         _binding, account_id, _connector_id = routes[strategy_id]
         lifecycle = bundle.card.lifecycle_policy.to_dict()
         policy = StrategyHardStopEmbargoPolicy.parse(
-            lifecycle["second_hardstop_embargo"]
+            cast(dict[str, object], lifecycle["second_hardstop_embargo"])
         )
         try:
             allows_new_entry, snapshot = read_real_second48(
