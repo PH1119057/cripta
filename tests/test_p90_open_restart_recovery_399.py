@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
 from bybit_workbench.universal_entry.p90l90_real_account_routes import (
     P90RealAccountRoute,
 )
@@ -13,7 +14,6 @@ from bybit_workbench.universal_entry.p90l90_real_open_restart import (
     P90RealOpenRestartUnverified,
     _read_recovery_account_bounded,
 )
-from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
     P90PrivateIpcUnverified,
     P90PrivateProofClient,
