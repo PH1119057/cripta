@@ -349,6 +349,48 @@ def test_identity_scope_failure_is_never_retried(monkeypatch):
     assert calls == 1
 
 
+def test_pre_ws_private_preflight_allows_valid_ten_second_proof(monkeypatch):
+    import types
+
+    now = datetime.now(UTC)
+    current = [now]
+    monkeypatch.setattr(
+        source,
+        "_wait_for_fresh_flat_generations",
+        lambda *_args, **_kwargs: None,
+    )
+    observed_timeouts: list[float] = []
+
+    def clock():
+        return current[0]
+
+    def valid_long_proof(_routes, *, timeout_seconds: float):
+        observed_timeouts.append(timeout_seconds)
+        current[0] += timedelta(seconds=10.5)
+        return object(), object()
+
+    result = source._read_signed_accounts_bounded(
+        object(),
+        routes=types.SimpleNamespace(),
+        started_at=now,
+        clock=clock,
+        sleeper=lambda _seconds: None,
+        reader=valid_long_proof,
+        retry_budget_seconds=source._PRIVATE_PREFLIGHT_RETRY_BUDGET_SECONDS,
+        attempt_seconds=source._PRIVATE_PREFLIGHT_ATTEMPT_SECONDS,
+        generation_wait_seconds=source._PRIVATE_PREFLIGHT_GENERATION_WAIT_SECONDS,
+        generation_max_age_seconds=(
+            source._PRIVATE_PREFLIGHT_GENERATION_MAX_AGE_SECONDS
+        ),
+    )
+
+    assert len(result) == 2
+    assert observed_timeouts == [source.P90_ACCOUNT_PROOF_TIMEOUT_SECONDS]
+    assert source._PRIVATE_PROOF_RETRY_BUDGET_SECONDS == 8.0
+    assert source._PRIVATE_PROOF_ATTEMPT_SECONDS == 2.0
+    assert (current[0] - now).total_seconds() == 10.5
+
+
 def test_private_proof_retry_budget_expires_fail_closed(monkeypatch):
     import types
 
