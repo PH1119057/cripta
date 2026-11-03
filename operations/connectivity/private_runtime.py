@@ -3471,7 +3471,6 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         # reconcile may legitimately take longer than the source-proof window.
         # Existing Exchange TP+SL are already resident at this point.
         from p90l90_real_postfill_handoff import (
-            P90RealImmediatePostfillUnverified,
             handoff_real_first_protected_fill,
         )
 
@@ -3503,15 +3502,14 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         except Exception as exc:
             connection.rollback()
             postfill_reason = "P90_REAL_POSTFILL_INTERNAL_ERROR"
-            if isinstance(exc, P90RealImmediatePostfillUnverified):
-                candidate = str(exc).strip()
-                safe_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:")
-                if (
-                    candidate.startswith("P90_REAL_POSTFILL_")
-                    and 0 < len(candidate) <= 180
-                    and set(candidate) <= safe_chars
-                ):
-                    postfill_reason = candidate
+            candidate = str(exc).strip()
+            safe_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:")
+            if (
+                candidate.startswith("P90_REAL_")
+                and 0 < len(candidate) <= 180
+                and set(candidate) <= safe_chars
+            ):
+                postfill_reason = candidate
             raise ExchangeMutationBarrier(
                 "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:"
                 + postfill_reason
