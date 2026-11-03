@@ -14,6 +14,11 @@ def test_controller_source_is_valid_python_and_has_no_cli_parser():
     assert "argparse" not in source
     assert "len(sys.argv) != 1" in source
     assert "OWNER_ARM=UNCHANGED" in source
+    assert "DASHBOARD_PRESENTATION_RELEASE" in source
+    assert "/usr/local/sbin/cripta-deploy-dashboard-ui" in source
+    assert "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1" in source
+    assert "INSTALLED_COMMIT_UNCHANGED" in source
+    assert "TRADING_RUNTIME_CHANGED=NO" in source
     assert '"/usr/bin/systemd-run"' in source
     assert '"--property=User={user}"' in source
     assert '"--property=Group={user}"' in source
@@ -52,3 +57,14 @@ def test_installer_installs_controller_but_does_not_manage_or_start_it():
     assert "systemctl disable cripta-release-controller.service" in installer
     assert "/usr/local/libexec/cripta-release-controller" in installer
     assert "-o root -g root -m 0755" in installer
+
+
+def test_dashboard_controller_mode_uses_existing_ui_deployer_not_full_installer():
+    source = CONTROLLER.read_text(encoding="utf-8")
+    dashboard_block = source.split('if purpose == DASHBOARD_PURPOSE:', 1)[1].split(
+        '_deploy(target=target', 1
+    )[0]
+    assert "_deploy_dashboard(target=target)" in dashboard_block
+    assert "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1" in source
+    assert "DASHBOARD_DEPLOY_CHANGED_RUNTIME_IDENTITY" in source
+    assert "OWNER_ARM=UNCHANGED" in source
