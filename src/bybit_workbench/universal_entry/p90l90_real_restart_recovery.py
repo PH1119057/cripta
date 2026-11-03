@@ -575,10 +575,11 @@ def recover_p90_real_open_source(
             if item.trail035_armed:
                 continue
             native = position_native.get(item.position.strategy_position_id)
-            _require(
-                native is not None,
-                "MISSING_TRAIL035_CURRENT_NATIVE_FACT_UNVERIFIED",
-            )
+            if native is None:
+                raise P90RealOpenSourceRecoveryUnverified(
+                    "P90_REAL_RESTART_SOURCE_"
+                    "MISSING_TRAIL035_CURRENT_NATIVE_FACT_UNVERIFIED"
+                )
             fact, cursor = native
             recovery_state = _recover_missing_trail035_from_current_native(
                 item=item, fact=fact, cursor=cursor, exit_ports=exit_ports,
