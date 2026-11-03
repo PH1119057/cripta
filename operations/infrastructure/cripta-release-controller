@@ -453,24 +453,36 @@ def _deploy(*, target: str, baseline: str, nonce: str) -> None:
             staged.unlink()
 
 
-def _deploy_dashboard(*, target: str) -> None:
-    if not _dashboard_deployer_ok():
-        raise ControllerError("DASHBOARD_DEPLOYER_IDENTITY_INVALID")
-    base = [
+def _run_dashboard_unit(
+    *, target: str, nonce: str, verify_only: bool
+) -> None:
+    unit_suffix = hashlib.sha256(nonce.encode("ascii")).hexdigest()[:12]
+    stage = "verify" if verify_only else "deploy"
+    argv = [
+        "/usr/bin/systemd-run",
+        "--wait",
+        "--pipe",
+        "--collect",
+        f"--unit=cripta-controller-dashboard-{stage}-{unit_suffix}",
+        "--property=Type=oneshot",
+        "--property=TimeoutStartSec=300",
         "/usr/bin/env",
         f"CRIPTA_DASHBOARD_UI_COMMIT={target}",
     ]
-    _run(
-        [
-            *base,
-            "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1",
-            "/usr/local/sbin/cripta-deploy-dashboard-ui",
-        ]
-    )
+    if verify_only:
+        argv.append("CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1")
+    argv.append("/usr/local/sbin/cripta-deploy-dashboard-ui")
+    _run(argv)
+
+
+def _deploy_dashboard(*, target: str, nonce: str) -> None:
+    if not _dashboard_deployer_ok():
+        raise ControllerError("DASHBOARD_DEPLOYER_IDENTITY_INVALID")
+    _run_dashboard_unit(target=target, nonce=nonce, verify_only=True)
     latest_main, _latest_tree = current_main()
     if latest_main != target or _git_remote_main() != target:
         raise ControllerError("REMOTE_MAIN_MOVED_AFTER_DASHBOARD_VERIFY")
-    _run([*base, "/usr/local/sbin/cripta-deploy-dashboard-ui"])
+    _run_dashboard_unit(target=target, nonce=nonce, verify_only=False)
 
 
 def _postcheck_dashboard(
@@ -632,7 +644,7 @@ def main() -> int:
             raise ControllerError("REMOTE_MAIN_MOVED_BEFORE_DEPLOY")
 
         if purpose == DASHBOARD_PURPOSE:
-            _deploy_dashboard(target=target)
+            _deploy_dashboard(target=target, nonce=nonce)
             post_remote, post_source, post_dashboard = _postcheck_dashboard(
                 target=target,
                 runtime_baseline=runtime_baseline,
