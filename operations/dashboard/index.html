@@ -1502,6 +1502,19 @@ async function resolveObserverFault(faultId){
   if(!r.ok){alert(out.error||'Fault не удалось закрыть');return}
   await refresh();
 }
+function observerFaultFriendlyText(item){
+  const raw=[item?.error_type,item?.error_message].filter(Boolean).join(': ');
+  const message=String(item?.error_message||'');
+  const known=[
+    ['P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING','Не удалось получить полное подтверждение состояния MAIN/SUB аккаунтов'],
+    ['P90_PRIVATE_IPC_INCOMPLETE_FRAME','Локальный канал подтверждения аккаунта вернул неполный ответ'],
+    ['P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE','Локальный канал подтверждения аккаунта временно недоступен'],
+    ['P90_REAL_LIVE_WS_ATTESTATION_EXPIRED','Не удалось завершить проверку рыночного источника в допустимое окно'],
+    ['P90_REAL_NATIVE_ACCOUNT_ADMISSION_NOT_VERIFIED','Не подтверждён допуск аккаунта для нового Entry']
+  ];
+  const match=known.find(([token])=>message.includes(token)||raw.includes(token));
+  return match?match[1]:'Ошибка Universal Entry observer · требуется разбор';
+}
 function renderObserverFaults(model){
   const banner=document.getElementById('observerFaultBanner');
   const summary=document.getElementById('observerFaultSummary');
@@ -1528,13 +1541,14 @@ function renderObserverFaults(model){
     const last=x.last_seen_at?new Date(x.last_seen_at).toLocaleString('ru-RU'):'—';
     const count=Number(x.occurrence_count||1);
     const error=[x.error_type,x.error_message].filter(Boolean).join(': ')||x.fault_code||'observer runtime fault';
+    const friendly=observerFaultFriendlyText(x);
     const relation=String(x.p90_operation_relation||'UNSCOPED');
     const relationLabel=relation==='BEFORE_CURRENT_P90_OPERATION'
       ?'РАНЕЕ · до текущего запуска'
       :relation==='CURRENT_OR_AFTER_P90_OPERATION'
         ?'ТЕКУЩИЙ ЗАПУСК / ПОСЛЕ НЕГО'
         :'ВНЕ ТЕКУЩЕЙ P90-ОПЕРАЦИИ';
-    return `<div class="durable-fault-item"><details><summary><b>RED</b> · <span>${safe(relationLabel)}</span> · ${safe(String(error).slice(0,95))}</summary><div class="durable-fault-error">${safe(error)}</div><div class="durable-fault-meta">fault ${safe(x.fault_id)} · повторов ${count} · первый ${safe(first)} · последний ${safe(last)}<br>service ${safe(x.service)} · release ${safe(x.source_commit||'—')} · epoch ${safe(x.last_observer_epoch_id||'—')}</div><button class="action danger" type="button" data-fault-id="${safe(x.fault_id)}" onclick="resolveObserverFault(this.dataset.faultId)">Явно закрыть fault</button></details></div>`;
+    return `<div class="durable-fault-item"><details><summary><b>RED</b> · <span>${safe(relationLabel)}</span> · ${safe(friendly)}</summary><div class="durable-fault-error"><b>Технические детали:</b> ${safe(error)}</div><div class="durable-fault-meta">fault ${safe(x.fault_id)} · повторов ${count} · первый ${safe(first)} · последний ${safe(last)}<br>service ${safe(x.service)} · release ${safe(x.source_commit||'—')} · epoch ${safe(x.last_observer_epoch_id||'—')}</div><button class="action danger" type="button" data-fault-id="${safe(x.fault_id)}" onclick="resolveObserverFault(this.dataset.faultId)">Явно закрыть fault</button></details></div>`;
   }).join('');
   // Receipt is created only after the banner was rendered in a visible tab.
   // Browser retry happens on the next regular refresh if the POST fails.
