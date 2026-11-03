@@ -30,7 +30,7 @@ def test_account_wide_private_proof_uses_full_fifteen_second_window() -> None:
     assert "_RECOVERY_ACCOUNT_PROOF_MAX_ATTEMPT_SECONDS = 15.0" in RESTART
     account_restart = RESTART[
         RESTART.index("def _read_recovery_account_bounded("):
-        RESTART.index("def prove_p90_real_open_restart_inventory("),
+        RESTART.index("def prove_p90_real_open_restart_inventory(")
     ]
     assert "timeout = min(_RECOVERY_ACCOUNT_PROOF_MAX_ATTEMPT_SECONDS, remaining)" in account_restart
     assert "timeout_seconds=timeout" in account_restart
