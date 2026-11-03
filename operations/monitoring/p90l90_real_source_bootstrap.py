@@ -36,6 +36,8 @@ class P90RealLiveSourceEpochUnverified(RuntimeError):
 _ACCOUNT_GENERATION_BARRIER_MAX_AGE_SECONDS = 8.0
 _ACCOUNT_GENERATION_BARRIER_WAIT_SECONDS = 5.0
 _ACCOUNT_GENERATION_BARRIER_POLL_SECONDS = 0.2
+_PRIVATE_PROOF_RETRY_BUDGET_SECONDS = 8.0
+_PRIVATE_PROOF_ATTEMPT_SECONDS = 2.0
 
 
 def _flat_generation_ready(
@@ -117,6 +119,89 @@ def _wait_for_fresh_flat_generations(
                 "P90_REAL_FLAT_ACCOUNT_GENERATION_WAIT_TIMEOUT"
             )
         sleeper(min(_ACCOUNT_GENERATION_BARRIER_POLL_SECONDS, remaining))
+
+
+def _read_signed_accounts_bounded(
+    connection: Any,
+    *,
+    routes: P90RealAccountRoutes,
+    started_at: datetime,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    sleeper: Callable[[float], None] = time.sleep,
+    reader: Callable[..., tuple[Any, Any]] | None = None,
+) -> tuple[Any, Any]:
+    """Retry only transport/provider-missing proof inside the existing fresh window.
+
+    Identity, account, connector and signed-scope mismatches remain immediate
+    fail-closed errors.  A short per-attempt IPC timeout prevents one local
+    transport stall from consuming the whole source-attestation budget.
+    """
+    proof_reader = reader or read_p90_real_signed_flat_accounts
+    deadline = started_at + timedelta(seconds=_PRIVATE_PROOF_RETRY_BUDGET_SECONDS)
+    while True:
+        _wait_for_fresh_flat_generations(
+            connection,
+            routes=routes,
+            subscribed_local_at=started_at,
+            clock=clock,
+            sleeper=sleeper,
+        )
+        now = clock()
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise P90RealLiveSourceEpochUnverified(
+                "P90_REAL_FLAT_PRIVATE_PROOF_CLOCK_INVALID"
+            )
+        remaining = (deadline - now.astimezone(UTC)).total_seconds()
+        if remaining <= 0:
+            raise P90RealLiveSourceEpochUnverified(
+                "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_RETRY_BUDGET_EXPIRED"
+            )
+        attempt_timeout = min(_PRIVATE_PROOF_ATTEMPT_SECONDS, remaining)
+        try:
+            return proof_reader(routes, timeout_seconds=attempt_timeout)
+        except P90RealAccountRoutesUnverified as exc:
+            if str(exc) != "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING":
+                raise
+            after = clock()
+            if after.tzinfo is None or after.utcoffset() is None:
+                raise P90RealLiveSourceEpochUnverified(
+                    "P90_REAL_FLAT_PRIVATE_PROOF_CLOCK_INVALID"
+                ) from None
+            remaining = (deadline - after.astimezone(UTC)).total_seconds()
+            if remaining <= _ACCOUNT_GENERATION_BARRIER_POLL_SECONDS:
+                raise P90RealLiveSourceEpochUnverified(
+                    "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_RETRY_BUDGET_EXPIRED"
+                ) from None
+            sleeper(min(_ACCOUNT_GENERATION_BARRIER_POLL_SECONDS, remaining))
+
+
+def preflight_p90_real_private_flat_source(
+    connection: Any,
+    *,
+    bundles: tuple[object, ...],
+    started_at: datetime | None = None,
+) -> None:
+    """Warm exact MAIN/SUB private proof before staged public WS attestation.
+
+    This grants no permission and persists nothing.  The post-subscription
+    bootstrap still performs a second fresh credential-local proof.
+    """
+    current = started_at or datetime.now(UTC)
+    if current.tzinfo is None or current.utcoffset() is None:
+        raise P90RealLiveSourceEpochUnverified(
+            "P90_REAL_PRIVATE_PREFLIGHT_TIME_INVALID"
+        )
+    current = current.astimezone(UTC)
+    routes = read_p90_real_account_routes(
+        connection,
+        bundles=bundles,
+        at=current,
+    )
+    _read_signed_accounts_bounded(
+        connection,
+        routes=routes,
+        started_at=current,
+    )
 
 
 def _checked_mirror_epoch(
@@ -203,28 +288,11 @@ def start_current_p90_real_observer_epoch(
     routes = read_p90_real_account_routes(
         connection, bundles=bundles, at=datetime.now(UTC),
     )
-    _wait_for_fresh_flat_generations(
+    signed_accounts = _read_signed_accounts_bounded(
         connection,
         routes=routes,
-        subscribed_local_at=subscribed_local_at,
+        started_at=subscribed_local_at,
     )
-    try:
-        signed_accounts = read_p90_real_signed_flat_accounts(routes)
-    except P90RealAccountRoutesUnverified as exc:
-        # One bounded retry is allowed only for the transport/provider-missing
-        # class. Exact identity/scope mismatches remain immediate hard stops.
-        if (
-            str(exc) != "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
-            or (datetime.now(UTC) - subscribed_local_at).total_seconds() >= 8
-        ):
-            raise
-        time.sleep(_ACCOUNT_GENERATION_BARRIER_POLL_SECONDS)
-        _wait_for_fresh_flat_generations(
-            connection,
-            routes=routes,
-            subscribed_local_at=subscribed_local_at,
-        )
-        signed_accounts = read_p90_real_signed_flat_accounts(routes)
     # Autocommit observer requires an explicit SERIALIZABLE transaction. No
     # caller-supplied boolean grants a fresh market epoch.
     with connection.transaction():

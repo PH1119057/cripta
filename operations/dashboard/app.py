@@ -98,6 +98,9 @@ from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActi
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.r1_strategy import build_r1_cards
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
+from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+    P90PrivateIpcUnverified,
+)
 from bybit_workbench.universal_entry.owner_full_contour_control import (
     request_run as request_owner_full_contour_run,
 )
@@ -3534,6 +3537,28 @@ def export_trading_table(table: str, period: str) -> dict[str, object]:
 
 
 
+def _p90_fault_operation_relation(
+    last_seen_value: object,
+    operation_started_at: datetime | None,
+) -> str:
+    if operation_started_at is None:
+        return "UNSCOPED"
+    try:
+        last_seen = datetime.fromisoformat(
+            str(last_seen_value).replace("Z", "+00:00")
+        )
+        if last_seen.tzinfo is None:
+            return "UNSCOPED"
+        last_seen = last_seen.astimezone(UTC)
+    except (TypeError, ValueError):
+        return "UNSCOPED"
+    return (
+        "BEFORE_CURRENT_P90_OPERATION"
+        if last_seen < operation_started_at
+        else "CURRENT_OR_AFTER_P90_OPERATION"
+    )
+
+
 def observer_runtime_fault_state() -> dict[str, object]:
     try:
         with psycopg.connect(
@@ -3546,6 +3571,30 @@ def observer_runtime_fault_state() -> dict[str, object]:
                     ORDER BY detected_at DESC""",
                 (OBSERVER_RUNTIME_FAULT_CODE,),
             ).fetchall()
+            p90_operation = connection.execute(
+                """SELECT request_id,created_at,state
+                     FROM control.real_readiness_operations
+                    WHERE scope_key=%s
+                    ORDER BY created_at DESC,request_id DESC
+                    LIMIT 1""",
+                (P90_REAL_READINESS_SCOPE_KEY,),
+            ).fetchone()
+
+        operation_request_id = (
+            str(p90_operation[0]) if p90_operation is not None else None
+        )
+        operation_started_at = (
+            p90_operation[1].astimezone(UTC)
+            if (
+                p90_operation is not None
+                and isinstance(p90_operation[1], datetime)
+                and p90_operation[1].tzinfo is not None
+            )
+            else None
+        )
+        operation_state = (
+            str(p90_operation[2]) if p90_operation is not None else None
+        )
 
         items: list[dict[str, object]] = []
         for fault_id, severity, detected_at, exact_ids, payload in rows:
@@ -3580,6 +3629,11 @@ def observer_runtime_fault_state() -> dict[str, object]:
                     "last_resolution_reason": details.get("last_resolution_reason"),
                     "last_resolved_by": details.get("last_resolved_by"),
                     "last_resolved_at": details.get("last_resolved_at"),
+                    "p90_operation_relation": _p90_fault_operation_relation(
+                        details.get("last_seen_at") or detected,
+                        operation_started_at,
+                    ),
+                    "p90_operation_request_id": operation_request_id,
                 }
             )
     except (psycopg.Error, TypeError, ValueError) as exc:
@@ -3593,48 +3647,18 @@ def observer_runtime_fault_state() -> dict[str, object]:
         }
 
     historical_open_count = len(items)
-    superseded_count = 0
-    try:
-        observer = (
-            json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
-            if UNIVERSAL_ENTRY_OBSERVER_STATE.exists()
-            else {}
-        )
-        observer_healthy = (
-            str(observer.get("state") or "") == "RUNNING"
-            and bool(observer.get("observer_ready"))
-        )
-        observer_updated_raw = str(observer.get("updated_at") or "")
-        observer_updated = (
-            datetime.fromisoformat(observer_updated_raw.replace("Z", "+00:00"))
-            if observer_updated_raw
-            else None
-        )
-        if observer_healthy and observer_updated is not None:
-            active_items: list[dict[str, object]] = []
-            for item in items:
-                last_seen_raw = str(item.get("last_seen_at") or "")
-                try:
-                    last_seen = datetime.fromisoformat(
-                        last_seen_raw.replace("Z", "+00:00")
-                    )
-                except ValueError:
-                    active_items.append(item)
-                    continue
-                if last_seen < observer_updated:
-                    superseded_count += 1
-                else:
-                    active_items.append(item)
-            items = active_items
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        pass
-
     return {
         "state": "red" if items else "clear",
         "count": len(items),
         "items": items,
         "historical_open_count": historical_open_count,
-        "superseded_count": superseded_count,
+        "superseded_count": 0,
+        "p90_operation_request_id": operation_request_id,
+        "p90_operation_started_at": (
+            operation_started_at.isoformat()
+            if operation_started_at is not None else None
+        ),
+        "p90_operation_state": operation_state,
         "error": None,
     }
 
@@ -5415,6 +5439,12 @@ def _u6_p90_real_v3_prearm_evidence(
 
 
 P90_REAL_READINESS_SCOPE_KEY = "P90_REAL_V3"
+P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC = frozenset({
+    "P90_PRIVATE_IPC_INCOMPLETE_FRAME",
+    "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE",
+})
+P90_REAL_READINESS_PRIVATE_ATTEMPT_SECONDS = 2.0
+P90_REAL_READINESS_RETRY_SLEEP_SECONDS = 0.25
 P90_REAL_MAIN_ACCOUNT_ID = "ta-2122c81ecff14f3b85b102db605212f7"
 P90_REAL_MAIN_CONNECTOR_ID = "ac-ed73de20410548d6841aeafa5f196f70"
 P90_REAL_SUB_ACCOUNT_ID = "ta-853ac5fcd58185697396d33cd57459fa"
@@ -5474,6 +5504,9 @@ def _wait_p90_real_v3_technical_evidence(
 ) -> dict[str, object]:
     deadline = time.monotonic() + timeout_seconds
     while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise P90PrearmEvidenceBlocked("P90_REAL_TECHNICAL_EVIDENCE_TIMEOUT")
         try:
             with psycopg.connect(
                 "dbname=cripta user=cripta host=/var/run/postgresql"
@@ -5482,11 +5515,27 @@ def _wait_p90_real_v3_technical_evidence(
                     evidence_connection,
                     release_commit=LOADED_RELEASE_COMMIT,
                     now=datetime.now(UTC),
+                    private_proof_timeout_seconds=min(
+                        P90_REAL_READINESS_PRIVATE_ATTEMPT_SECONDS,
+                        max(0.25, remaining),
+                    ),
                 )
+        except P90PrivateIpcUnverified as exc:
+            if (
+                str(exc) not in P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC
+                or time.monotonic() >= deadline
+            ):
+                raise
+            time.sleep(
+                min(
+                    P90_REAL_READINESS_RETRY_SLEEP_SECONDS,
+                    max(0.0, deadline - time.monotonic()),
+                )
+            )
         except P90PrearmEvidenceBlocked:
             if time.monotonic() >= deadline:
                 raise
-            time.sleep(1.0)
+            time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
 
 
 def _recover_p90_real_ws_safety_if_needed(

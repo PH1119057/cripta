@@ -248,7 +248,7 @@
           <button id="p90RealV3ArmButton" class="action danger" type="button" hidden disabled>P90 REAL v3 OWNER ARM</button>
           <div id="p90RealV3ArmStatus" class="operation-status" aria-live="polite">P90: проверяю exact MAIN/SUB scope…</div>
           <details id="p90ArmResultPanel" class="operation-status" aria-label="Последний результат P90 OWNER ARM" style="margin-top:6px;overflow-wrap:anywhere">
-            <summary>Последняя операция OWNER ARM · подробности</summary>
+            <summary>Технические детали последней операции OWNER ARM</summary>
             <div id="p90ArmResultMeta" class="muted">В этой вкладке операций пока не было.</div>
             <button id="p90ArmCopyResult" type="button" class="action" style="margin:6px 0">Копировать текст</button>
             <pre id="p90ArmResultText" style="white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto;user-select:text">Операций пока не было.</pre>
@@ -976,10 +976,22 @@ function p90RealV3OwnerArmPresent(){
 }
 function p90ReadinessOperationText(operation){
   if(!operation)return '';
-  const state=String(operation.state||''),phase=String(operation.phase||''),code=String(operation.blocker_code||''),detail=String(operation.blocker_detail||'');
-  const phaseMap={REQUESTED:'запрос принят',CHECKING:'проверяем обязательные службы',STARTING_SERVICES:'запускаем недостающие службы',RECONCILING:'сверяем runtime и аккаунты',VALIDATING:'проверяем полный technical evidence',READY_FOR_OWNER_ARM:'техническая подготовка завершена',BLOCKED:'подготовка заблокирована'};
-  if(state==='BLOCKED')return (phaseMap[state]||state)+(code?' · '+code:'')+(detail?' · '+detail:'');
+  const state=String(operation.state||''),phase=String(operation.phase||''),code=String(operation.blocker_code||'');
+  const phaseMap={REQUESTED:'запрос принят',CHECKING:'проверяем обязательные службы',STARTING_SERVICES:'запускаем недостающие службы',RECONCILING:'сверяем runtime и аккаунты',VALIDATING:'проверяем полную техническую готовность',READY_FOR_OWNER_ARM:'техническая подготовка завершена',BLOCKED:'подготовка остановлена'};
+  const blockerMap={
+    PREPARATION_REQUIRES_DISARMED_NEW_ENTRY:'нужен закрытый шлюз без активного OWNER ARM',
+    SERVICE_PREFLIGHT_BLOCKED:'одна из обязательных служб не готова',
+    SERVICE_START_TIMEOUT:'обязательная служба не успела перейти в готовое состояние',
+    SERVICE_RECOVERY_FAILED:'не удалось восстановить обязательную службу',
+    TECHNICAL_EVIDENCE_BLOCKED:'не удалось подтвердить полную техническую готовность'
+  };
+  if(state==='BLOCKED')return (phaseMap[state]||state)+' · '+(blockerMap[code]||'обязательная проверка не прошла');
   return (phaseMap[state]||state)+(phase&&phase!==state.toLowerCase()?' · '+phase:'');
+}
+function p90ReadinessOperationTechnicalText(operation){
+  if(!operation)return '';
+  const code=String(operation.blocker_code||''),detail=String(operation.blocker_detail||'');
+  return [code&&('code: '+code),detail&&('detail: '+detail)].filter(Boolean).join('\n');
 }
 function refreshP90RealV3ArmControl(){
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus'),detail=document.getElementById('p90RealV3ArmDetail');
@@ -1026,7 +1038,6 @@ function showP90ArmResult(entry){
   if(!panel||!meta||!text)return;
   meta.textContent=entry.at+' · '+entry.state+' · request '+entry.requestId;
   text.textContent=entry.message;
-  panel.open=true;
 }
 function showAuthoritativeP90ArmState(exactArmed,operation){
   const operationState=String(operation?.state||''),requestId=String(operation?.request_id||'');
@@ -1042,9 +1053,10 @@ function showAuthoritativeP90ArmState(exactArmed,operation){
   if(!gateChanging||!requestId)return;
   const state=operationState==='BLOCKED'?'error':'in_progress';
   const suffix=operationState==='READY_FOR_OWNER_ARM'?' · выполняется финальный OWNER ARM':' · mainnet gate CLOSED';
+  const technical=p90ReadinessOperationTechnicalText(operation);
   showP90ArmResult({
     state,
-    message:p90ReadinessOperationText(operation)+suffix,
+    message:p90ReadinessOperationText(operation)+suffix+(technical?'\n\nТехнические детали:\n'+technical:''),
     requestId,
     at:String(operation?.updated_at||operation?.created_at||new Date().toISOString())
   });
@@ -1080,9 +1092,12 @@ async function changeP90RealV3Arm(enabled){
   }catch(e){
     await readLiveStateOnce().catch(()=>{});
     const op=window.p90ArmStatus?.readiness_operation;
-    const visible=op?.state==='BLOCKED'?p90ReadinessOperationText(op):e.message;
-    finish('error',visible||'OWNER ARM отклонён');
-    recordP90ArmResult('error',visible||e.message,requestId);
+    const visible=op?.state==='BLOCKED'
+      ?p90ReadinessOperationText(op)
+      :'OWNER ARM отклонён · обязательная проверка не прошла';
+    const technical=p90ReadinessOperationTechnicalText(op)||String(e?.message||'');
+    finish('error',visible);
+    recordP90ArmResult('error',visible+(technical?'\n\nТехнические детали:\n'+technical:''),requestId);
     throw e;
   }finally{
     progress.done=true;
@@ -1487,6 +1502,19 @@ async function resolveObserverFault(faultId){
   if(!r.ok){alert(out.error||'Fault не удалось закрыть');return}
   await refresh();
 }
+function observerFaultFriendlyText(item){
+  const raw=[item?.error_type,item?.error_message].filter(Boolean).join(': ');
+  const message=String(item?.error_message||'');
+  const known=[
+    ['P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING','Не удалось получить полное подтверждение состояния MAIN/SUB аккаунтов'],
+    ['P90_PRIVATE_IPC_INCOMPLETE_FRAME','Локальный канал подтверждения аккаунта вернул неполный ответ'],
+    ['P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE','Локальный канал подтверждения аккаунта временно недоступен'],
+    ['P90_REAL_LIVE_WS_ATTESTATION_EXPIRED','Не удалось завершить проверку рыночного источника в допустимое окно'],
+    ['P90_REAL_NATIVE_ACCOUNT_ADMISSION_NOT_VERIFIED','Не подтверждён допуск аккаунта для нового Entry']
+  ];
+  const match=known.find(([token])=>message.includes(token)||raw.includes(token));
+  return match?match[1]:'Ошибка Universal Entry observer · требуется разбор';
+}
 function renderObserverFaults(model){
   const banner=document.getElementById('observerFaultBanner');
   const summary=document.getElementById('observerFaultSummary');
@@ -1507,13 +1535,20 @@ function renderObserverFaults(model){
   }
   banner.hidden=false;
   const totalOccurrences=items.reduce((n,x)=>n+Math.max(1,Number(x.occurrence_count)||1),0);
-  summary.textContent=`Открытых проблем: ${items.length} · зарегистрировано срабатываний: ${totalOccurrences}. Подтверждать каждое сообщение не нужно; после разбора причины закройте соответствующие ошибки явно.`;
+  summary.textContent=`Открытых проблем: ${items.length} · зарегистрировано срабатываний: ${totalOccurrences}. Это отдельный durable-журнал, а не статус текущей кнопки OWNER ARM; старые записи остаются видимыми до явного закрытия.`;
   body.innerHTML=items.map(x=>{
     const first=x.first_seen_at?new Date(x.first_seen_at).toLocaleString('ru-RU'):'—';
     const last=x.last_seen_at?new Date(x.last_seen_at).toLocaleString('ru-RU'):'—';
     const count=Number(x.occurrence_count||1);
     const error=[x.error_type,x.error_message].filter(Boolean).join(': ')||x.fault_code||'observer runtime fault';
-    return `<div class="durable-fault-item"><details><summary><b>RED</b> · ${safe(String(error).slice(0,95))}</summary><div class="durable-fault-error">${safe(error)}</div><div class="durable-fault-meta">fault ${safe(x.fault_id)} · повторов ${count} · первый ${safe(first)} · последний ${safe(last)}<br>service ${safe(x.service)} · release ${safe(x.source_commit||'—')} · epoch ${safe(x.last_observer_epoch_id||'—')}</div><button class="action danger" type="button" data-fault-id="${safe(x.fault_id)}" onclick="resolveObserverFault(this.dataset.faultId)">Явно закрыть fault</button></details></div>`;
+    const friendly=observerFaultFriendlyText(x);
+    const relation=String(x.p90_operation_relation||'UNSCOPED');
+    const relationLabel=relation==='BEFORE_CURRENT_P90_OPERATION'
+      ?'РАНЕЕ · до текущего запуска'
+      :relation==='CURRENT_OR_AFTER_P90_OPERATION'
+        ?'ТЕКУЩИЙ ЗАПУСК / ПОСЛЕ НЕГО'
+        :'ВНЕ ТЕКУЩЕЙ P90-ОПЕРАЦИИ';
+    return `<div class="durable-fault-item"><details><summary><b>RED</b> · <span>${safe(relationLabel)}</span> · ${safe(friendly)}</summary><div class="durable-fault-error"><b>Технические детали:</b> ${safe(error)}</div><div class="durable-fault-meta">fault ${safe(x.fault_id)} · повторов ${count} · первый ${safe(first)} · последний ${safe(last)}<br>service ${safe(x.service)} · release ${safe(x.source_commit||'—')} · epoch ${safe(x.last_observer_epoch_id||'—')}</div><button class="action danger" type="button" data-fault-id="${safe(x.fault_id)}" onclick="resolveObserverFault(this.dataset.faultId)">Явно закрыть fault</button></details></div>`;
   }).join('');
   // Receipt is created only after the banner was rendered in a visible tab.
   // Browser retry happens on the next regular refresh if the POST fails.

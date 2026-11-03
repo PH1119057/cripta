@@ -123,7 +123,7 @@ def test_dashboard_contains_persistent_friendly_preparation_states():
     assert "Повторить подготовку" in ui
     assert "проверяем обязательные службы" in ui
     assert "запускаем недостающие службы" in ui
-    assert "подготовка заблокирована" in ui
+    assert "подготовка остановлена" in ui
     assert 'id="p90RealV3ArmButton" class="action danger" type="button" hidden disabled' in ui
     assert "handleP90RealV3GateClick" in ui
     assert "Открыть P90 REAL v3" in ui
