@@ -256,10 +256,25 @@ def test_flat_roster_rejects_missing_producer_and_foreign_evidence(
             pass
 
         def read_flat_account(self):
-            raise RuntimeError("producer unreachable")
+            raise ipc.P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE"
+            )
 
     monkeypatch.setattr(ipc, "P90PrivateProofClient", BrokenClient)
     with pytest.raises(P90RealAccountRoutesUnverified, match="PROOF_MISSING"):
+        read_p90_real_signed_flat_accounts(routes)
+
+    class WrongPeerClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def read_flat_account(self):
+            raise ipc.P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_PEER_NOT_VERIFIED"
+            )
+
+    monkeypatch.setattr(ipc, "P90PrivateProofClient", WrongPeerClient)
+    with pytest.raises(P90RealAccountRoutesUnverified, match="PROOF_UNVERIFIED"):
         read_p90_real_signed_flat_accounts(routes)
 
     class WrongClient:
