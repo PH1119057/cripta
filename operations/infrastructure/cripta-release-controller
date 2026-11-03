@@ -20,7 +20,12 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
-from release_controller_gate import ReleaseDenied, verify_request
+from release_controller_gate import (
+    DASHBOARD_PURPOSE,
+    FULL_PURPOSE,
+    ReleaseDenied,
+    verify_request,
+)
 from release_controller_github import (
     GitHubEvidenceError,
     approval_candidates,
@@ -31,6 +36,7 @@ from release_controller_github import (
 
 SOURCE = Path("/srv/cripta/source_checkout")
 RUNTIME_ROOT = Path("/srv/cripta/runtime")
+DASHBOARD_ROOT = Path("/srv/cripta/dashboard-ui")
 TOOLING_ROOT = Path("/data/cripta/research/tooling")
 BACKUP_ROOT = Path("/data/cripta/script_archive/release_backups")
 RELEASE_STATE = Path("/var/lib/cripta/release")
@@ -126,6 +132,53 @@ def _commit_from_current(root: Path) -> tuple[str, Path]:
     if not SHA.fullmatch(commit) or current.name != commit:
         raise ControllerError(f"INSTALLED_COMMIT_INVALID:{root}")
     return commit, current
+
+
+def _dashboard_commit_from_current() -> tuple[str, Path]:
+    current = (DASHBOARD_ROOT / "current").resolve(strict=True)
+    expected_parent = (DASHBOARD_ROOT / "releases").resolve(strict=True)
+    if current.parent != expected_parent:
+        raise ControllerError("DASHBOARD_CURRENT_RELEASE_PATH_INVALID")
+    commit = (current / "DASHBOARD_UI_COMMIT").read_text(encoding="utf-8").strip()
+    state_commit = (RELEASE_STATE / "DASHBOARD_UI_COMMIT").read_text(
+        encoding="utf-8"
+    ).strip()
+    if (
+        not SHA.fullmatch(commit)
+        or current.name != commit
+        or state_commit != commit
+        or not (current / "index.html").is_file()
+        or not (current / "app.py").is_file()
+    ):
+        raise ControllerError("DASHBOARD_UI_BASELINE_INVALID")
+    return commit, current
+
+
+def _dashboard_rollback_ready(baseline: str, current: Path) -> bool:
+    if current.name != baseline:
+        return False
+    release = DASHBOARD_ROOT / "releases" / baseline
+    return (
+        release.resolve(strict=True) == current
+        and (release / "index.html").is_file()
+        and (release / "app.py").is_file()
+        and (release / "DASHBOARD_UI_COMMIT").read_text(encoding="utf-8").strip()
+        == baseline
+    )
+
+
+def _dashboard_deployer_ok() -> bool:
+    deployed = Path("/usr/local/sbin/cripta-deploy-dashboard-ui")
+    source = RUNTIME_ROOT / "current" / "operations" / "infrastructure" / "deploy_dashboard_ui.sh"
+    try:
+        return (
+            deployed.is_file()
+            and source.is_file()
+            and os.access(deployed, os.X_OK)
+            and deployed.read_bytes() == source.read_bytes()
+        )
+    except OSError:
+        return False
 
 
 def _source_state() -> tuple[str, bool]:
@@ -299,7 +352,9 @@ def _used_path(nonce: str) -> Path:
     return USED_ROOT / hashlib.sha256(nonce.encode("ascii")).hexdigest()
 
 
-def _claim_nonce(*, nonce: str, comment_id: int, target: str, baseline: str) -> None:
+def _claim_nonce(
+    *, nonce: str, comment_id: int, target: str, baseline: str, purpose: str
+) -> None:
     path = _used_path(nonce)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     try:
@@ -311,6 +366,7 @@ def _claim_nonce(*, nonce: str, comment_id: int, target: str, baseline: str) -> 
         "comment_id": comment_id,
         "target_commit": target,
         "expected_baseline": baseline,
+        "purpose": purpose,
         "claimed_at": datetime.now(UTC).isoformat(),
     }
     try:
@@ -397,6 +453,50 @@ def _deploy(*, target: str, baseline: str, nonce: str) -> None:
             staged.unlink()
 
 
+def _deploy_dashboard(*, target: str) -> None:
+    if not _dashboard_deployer_ok():
+        raise ControllerError("DASHBOARD_DEPLOYER_IDENTITY_INVALID")
+    base = [
+        "/usr/bin/env",
+        f"CRIPTA_DASHBOARD_UI_COMMIT={target}",
+    ]
+    _run(
+        [
+            *base,
+            "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1",
+            "/usr/local/sbin/cripta-deploy-dashboard-ui",
+        ]
+    )
+    latest_main, _latest_tree = current_main()
+    if latest_main != target or _git_remote_main() != target:
+        raise ControllerError("REMOTE_MAIN_MOVED_AFTER_DASHBOARD_VERIFY")
+    _run([*base, "/usr/local/sbin/cripta-deploy-dashboard-ui"])
+
+
+def _postcheck_dashboard(
+    *, target: str, runtime_baseline: str, tooling_baseline: str
+) -> tuple[str, str, str]:
+    runtime, _runtime_path = _commit_from_current(RUNTIME_ROOT)
+    tooling, _tooling_path = _commit_from_current(TOOLING_ROOT)
+    source, clean = _source_state()
+    dashboard, _dashboard_path = _dashboard_commit_from_current()
+    if not clean or source != target or dashboard != target:
+        raise ControllerError("DASHBOARD_POST_DEPLOY_IDENTITY_MISMATCH")
+    if runtime != runtime_baseline or tooling != tooling_baseline:
+        raise ControllerError("DASHBOARD_DEPLOY_CHANGED_RUNTIME_IDENTITY")
+    deploy = json.loads(
+        (RELEASE_STATE / "DASHBOARD_UI_DEPLOY.json").read_text(encoding="utf-8")
+    )
+    if (
+        deploy.get("dashboard_ui_commit") != target
+        or deploy.get("html_source_sha256") != deploy.get("html_live_sha256")
+        or deploy.get("app_source_sha256") != deploy.get("app_live_sha256")
+    ):
+        raise ControllerError("DASHBOARD_DEPLOY_EVIDENCE_INVALID")
+    remote, _tree = current_main()
+    return remote, source, dashboard
+
+
 def _postcheck(target: str) -> tuple[str, str, str, str]:
     runtime, _runtime_path = _commit_from_current(RUNTIME_ROOT)
     tooling, _tooling_path = _commit_from_current(TOOLING_ROOT)
@@ -419,12 +519,13 @@ def main() -> int:
         print("RELEASE_CONTROLLER=BLOCKED reason=STATE_ROOT_INVALID", file=sys.stderr)
         return 20
 
+    purpose = "UNKNOWN"
     try:
         runtime_baseline, runtime_path = _commit_from_current(RUNTIME_ROOT)
         tooling_baseline, tooling_path = _commit_from_current(TOOLING_ROOT)
         if runtime_baseline != tooling_baseline:
             raise ControllerError("BASELINE_SPLIT")
-        baseline = runtime_baseline
+        dashboard_baseline, dashboard_path = _dashboard_commit_from_current()
         source_head, source_clean = _source_state()
 
         remote_main, remote_tree = current_main()
@@ -436,15 +537,38 @@ def main() -> int:
         source_fast_forward_ok = source_can_fast_forward(source_head, remote_main)
 
         actor_paths_ok = _actor_paths_ok()
-        rollback_ready = _rollback_ready(baseline, runtime_path, tooling_path)
         release_lock_available = _installer_lock_free()
 
-        approvals = approval_candidates(target=remote_main, baseline=baseline)
+        approvals = [
+            *approval_candidates(
+                target=remote_main,
+                baseline=runtime_baseline,
+                purpose=FULL_PURPOSE,
+            ),
+            *approval_candidates(
+                target=remote_main,
+                baseline=dashboard_baseline,
+                purpose=DASHBOARD_PURPOSE,
+            ),
+        ]
+        approvals.sort(key=lambda item: item.created_at, reverse=True)
         if not approvals:
             raise ControllerError("OWNER_APPROVAL_MISSING")
         approval = approvals[0]
+        purpose = str(approval.request.get("purpose") or "")
         nonce = approval.request.get("nonce")
         nonce_unused = isinstance(nonce, str) and not _used_path(nonce).exists()
+
+        if purpose == FULL_PURPOSE:
+            rollback_ready = _rollback_ready(
+                runtime_baseline, runtime_path, tooling_path
+            )
+        elif purpose == DASHBOARD_PURPOSE:
+            rollback_ready = _dashboard_rollback_ready(
+                dashboard_baseline, dashboard_path
+            ) and _dashboard_deployer_ok()
+        else:
+            rollback_ready = False
 
         target, expected_baseline, nonce = verify_request(
             request=approval.request,
@@ -457,6 +581,7 @@ def main() -> int:
             source_fast_forward_ok=source_fast_forward_ok,
             installed_runtime=runtime_baseline,
             installed_tooling=tooling_baseline,
+            dashboard_ui_commit=dashboard_baseline,
             required_checks=evidence.required_checks,
             source_clean=source_clean,
             actor_paths_ok=actor_paths_ok,
@@ -470,9 +595,11 @@ def main() -> int:
             comment_id=approval.comment_id,
             target=target,
             baseline=expected_baseline,
+            purpose=purpose,
         )
         _audit(
             "CLAIMED",
+            purpose=purpose,
             target=target,
             baseline=expected_baseline,
             approval_comment_id=approval.comment_id,
@@ -489,11 +616,43 @@ def main() -> int:
         if latest_main != target or _git_remote_main() != target:
             raise ControllerError("REMOTE_MAIN_MOVED_BEFORE_DEPLOY")
 
+        if purpose == DASHBOARD_PURPOSE:
+            _deploy_dashboard(target=target)
+            post_remote, post_source, post_dashboard = _postcheck_dashboard(
+                target=target,
+                runtime_baseline=runtime_baseline,
+                tooling_baseline=tooling_baseline,
+            )
+            final_status = (
+                "DASHBOARD_DEPLOYED"
+                if post_remote == target
+                else "DASHBOARD_DEPLOYED_REMOTE_MOVED"
+            )
+            _audit(
+                final_status,
+                purpose=purpose,
+                target=target,
+                source_head=post_source,
+                dashboard_ui_commit=post_dashboard,
+                installed_commit=runtime_baseline,
+                remote_head=post_remote,
+                approval_comment_id=approval.comment_id,
+            )
+            print(f"RELEASE_CONTROLLER={final_status}")
+            print(f"REMOTE_HEAD={post_remote}")
+            print(f"SOURCE_HEAD={post_source}")
+            print(f"DASHBOARD_UI_COMMIT={post_dashboard}")
+            print(f"INSTALLED_COMMIT_UNCHANGED={runtime_baseline}")
+            print("TRADING_RUNTIME_CHANGED=NO")
+            print("OWNER_ARM=UNCHANGED")
+            return 0
+
         _deploy(target=target, baseline=expected_baseline, nonce=nonce)
         post_remote, post_source, post_runtime, post_state = _postcheck(target)
         final_status = "DEPLOYED" if post_remote == target else "DEPLOYED_REMOTE_MOVED"
         _audit(
             final_status,
+            purpose=purpose,
             target=target,
             source_head=post_source,
             installed_commit=post_runtime,
@@ -510,8 +669,8 @@ def main() -> int:
         print("RUNTIME_BEHAVIOR_VERIFIED=NO")
         print("OWNER_ARM=UNCHANGED")
         return 0
-    except (ControllerError, ReleaseDenied, GitHubEvidenceError, OSError, ValueError) as exc:
-        _audit("BLOCKED_OR_FAILED", reason=str(exc)[:1000])
+    except (ControllerError, ReleaseDenied, GitHubEvidenceError, OSError, ValueError, json.JSONDecodeError) as exc:
+        _audit("BLOCKED_OR_FAILED", purpose=purpose, reason=str(exc)[:1000])
         print(f"RELEASE_CONTROLLER=BLOCKED reason={str(exc)[:1000]}", file=sys.stderr)
         return 20
 
