@@ -99,6 +99,7 @@ from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.r1_strategy import build_r1_cards
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+    P90_ACCOUNT_PROOF_TIMEOUT_SECONDS,
     P90PrivateIpcUnverified,
 )
 from bybit_workbench.universal_entry.owner_full_contour_control import (
@@ -5443,7 +5444,7 @@ P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC = frozenset({
     "P90_PRIVATE_IPC_INCOMPLETE_FRAME",
     "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE",
 })
-P90_REAL_READINESS_PRIVATE_ATTEMPT_SECONDS = 2.0
+P90_REAL_READINESS_PRIVATE_ATTEMPT_SECONDS = P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
 P90_REAL_READINESS_RETRY_SLEEP_SECONDS = 0.25
 P90_REAL_MAIN_ACCOUNT_ID = "ta-2122c81ecff14f3b85b102db605212f7"
 P90_REAL_MAIN_CONNECTOR_ID = "ac-ed73de20410548d6841aeafa5f196f70"
@@ -5751,10 +5752,6 @@ def _u6_prepare_p90_real_v3_readiness(
                 retry_eligible=True,
             )
 
-        ws_recovery = _recover_p90_real_ws_safety_if_needed(
-            request_id=request_id,
-        )
-
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
@@ -5766,10 +5763,6 @@ def _u6_prepare_p90_real_v3_readiness(
                 now=datetime.now(UTC),
                 progress={
                     "required_services": len(specs),
-                    "ws_safety_recovered": [
-                        item.get("trading_account_id")
-                        for item in ws_recovery
-                    ],
                 },
             )
 
@@ -5829,6 +5822,13 @@ def _u6_prepare_p90_real_v3_readiness(
                     },
                 )
 
+        # Account-local recovery requires its private-runtime IPC owner to be
+        # active first. Never fail on a missing transport before the bounded
+        # Service Start Broker has had a chance to restore an inactive owner.
+        ws_recovery = _recover_p90_real_ws_safety_if_needed(
+            request_id=request_id,
+        )
+
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
@@ -5842,6 +5842,10 @@ def _u6_prepare_p90_real_v3_readiness(
                     "services_active": len(specs),
                     "requested_starts": list(plan.starts),
                     "broker_result": broker_result,
+                    "ws_safety_recovered": [
+                        item.get("trading_account_id")
+                        for item in ws_recovery
+                    ],
                 },
             )
         # The existing technical evidence owner performs fresh account,
@@ -5860,6 +5864,10 @@ def _u6_prepare_p90_real_v3_readiness(
                     "services_active": len(specs),
                     "requested_starts": list(plan.starts),
                     "broker_result": broker_result,
+                    "ws_safety_recovered": [
+                        item.get("trading_account_id")
+                        for item in ws_recovery
+                    ],
                 },
             )
         evidence = _wait_p90_real_v3_technical_evidence()
