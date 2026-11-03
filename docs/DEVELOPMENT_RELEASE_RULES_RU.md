@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.4 · 2026-11-04
+**Версия:** 2.5 · 2026-11-04
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2002,7 +2002,7 @@ Preparation, broker starts, daemon startup, reconnect and deploy never create/ex
 
 ### 51.5 Tests and release
 
-Required before first production use: allowlist/argument-injection tests; dependency/cycle tests; inactive->start->behavior-ready; active/no-restart; failed/wrong-release/unknown/missing -> BLOCKED; permission denial without escalation; duplicate/concurrent IDs; browser refresh/disconnect; coordinator crash/stale operation recovery; multiple TradingAccounts; existing exposure + preserved Exit; degraded DISARM; no automatic arm/gate. Full quality + disposable PostgreSQL + lifecycle CI must pass. Install uses the verified release process; deploy does not arm. Production verification distinguishes service liveness from behavior and records exact release composition.
+Required before first production use: allowlist/argument-injection tests; dependency/cycle tests; inactive->start->behavior-ready; active/no-restart; failed/wrong-release/unknown/missing -> BLOCKED; permission denial without escalation; duplicate/concurrent IDs; browser refresh/disconnect; coordinator crash/stale operation recovery; multiple TradingAccounts; existing exposure + preserved Exit; degraded DISARM; no automatic OWNER authorization or fresh OWNER ARM. Technical resume of an already owner-authorized exact scope is a separate §53 contract and is not implemented by this Service Start Broker. Full quality + disposable PostgreSQL + lifecycle CI must pass. Install uses the verified release process; deploy does not arm. Production verification distinguishes service liveness from behavior and records exact release composition.
 
 ## 52. Surgical Change Rule и защита Stable Control Core — OWNER DECISION 2026-11-04 (Issue #413)
 
@@ -2104,3 +2104,85 @@ owners требует отдельного объяснения dependency до 
 Это правило не запрещает planned architecture migration Stable Core: такая
 миграция выполняется фазами, каждая с отдельным bounded scope и preservation
 tests, без big-bang rewrite.
+
+## 53. Bounded runtime self-recovery — OWNER DECISION 2026-11-04 (Issue #415)
+
+ARCH §54 разделяет OWNER authorization и technical readiness. Runtime recovery
+не является deploy, fresh OWNER ARM или Strategy activation.
+
+### 53.1 Recovery classes
+
+Каждый автоматически восстанавливаемый service/unit обязан иметь reviewed
+`RECOVERY_CLASS` и exact release-bound allowlist. Минимальные классы:
+
+```text
+SAFE_RESTART
+STATEFUL_RECONCILE_RESTART
+MANUAL_ONLY
+```
+
+`SAFE_RESTART` допускает bounded restart только когда service не владеет
+неопределённой Exchange mutation и его state восстанавливается из durable
+sources. `STATEFUL_RECONCILE_RESTART` требует перед resume новых Entry
+обязательный post-restart reconciliation/identity/protection proof.
+`MANUAL_ONLY` не перезапускается автоматически.
+
+### 53.2 Runtime Recovery Supervisor и Recovery Broker
+
+Behavior-health owner обнаруживает stale/blocked behavior отдельно от
+`ActiveState=active`. При recoverable fault он создаёт durable recovery
+operation. Отдельный least-privilege `Recovery Broker` может только выполнять
+reviewed START/RESTART для exact allowlisted unit и exact loaded release.
+
+Существующий §51 `Service Start Broker` остаётся START-only и не расширяется
+молча. Recovery Broker — отдельная capability с отдельным allowlist/audit/
+actor-path contract.
+
+Запрещены arbitrary shell/unit, daemon-reload, permission repair, recursive
+ownership changes, infinite restart loops и restart всего workflow от root.
+
+### 53.3 Bounded attempts и escalation
+
+Recovery policy обязана задавать finite attempts, backoff/cooldown, heartbeat
+deadline и terminal `BLOCKED` reason. После исчерпания budget сервис не
+перезапускается бесконечно; состояние сохраняется, OWNER получает точную
+причину и evidence.
+
+Process-alive не равен behavior-ready. Для hung-but-running service recovery
+может быть инициирован только по exact behavior-health contract.
+
+### 53.4 Automatic technical resume
+
+После успешного восстановления Stable Control Core может восстановить только
+`TECHNICAL_READY`/derived effective NEW Entry permit для того же exact
+OWNER-authorized release/Strategy/account scope. Это не создаёт и не продлевает
+execution permission или LIVE-arm.
+
+Resume запрещён при OWNER DISARM, release/scope drift, unresolved ambiguous
+mutation, unknown exposure, unproven identity/protection/Exit ownership или
+critical lifecycle fault. После deploy/release change по-прежнему требуется
+fresh explicit OWNER ARM.
+
+### 53.5 Exit-first availability
+
+Existing StrategyPosition, Exchange protection, reconciliation и Universal
+Exit не выключаются техническим Entry block. Recovery план при открытой
+позиции обязан отдельно доказать, что Exit owner/position supervision/private
+mutation owner восстановлены; новая Entry остаётся BLOCKED до этого.
+
+### 53.6 Required implementation evidence
+
+До production cutover обязательны:
+- writer inventory и removal/redirect всех competing gate writers;
+- pure Stable Core transition/invariant tests;
+- scheduler permutation/race tests;
+- crash + hung behavior fault injection;
+- bounded restart tests по каждому RECOVERY_CLASS;
+- exact same-release automatic technical resume test;
+- explicit negative tests: owner DISARM/release change/ambiguous mutation never auto-resume;
+- open-position Exit continuity/restart-recovery test;
+- shadow parity before mutation cutover;
+- full quality + lifecycle/PostgreSQL CI;
+- controlled deploy without automatic OWNER ARM.
+
+Статус этой записи: CANON only; implementation remains pending.
