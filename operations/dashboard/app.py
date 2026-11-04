@@ -840,6 +840,7 @@ def strategy_monitor_state() -> dict[str, object]:
         "evaluations": int(state.get("evaluations") or 0),
         "signals": int(state.get("signals") or 0),
         "sensor_status": state.get("sensor_status") or {},
+        "preparation": state.get("preparation") or {},
         "strategies": list(strategies.values()),
         "items": items,
     }
