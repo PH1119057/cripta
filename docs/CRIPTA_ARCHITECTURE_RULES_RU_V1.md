@@ -1562,3 +1562,16 @@ SECOND48 exact StrategyVersion. Другие причины закрытия, UN
 | SECOND48 | Reader проверяет все закрытия | Тот же reader -> prearm/Entry; только actual HARD_STOP | Exact StrategyVersion, реальные stop IDs/time, правило 2/48/48 и durable restart |
 | Historical repair | Неполное закрытие/pending delivery блокирует admission | Те же ledger/notification owners -> видимый repair backlog | История, severity, delivery/ACK не стираются; финансовых прав не создают |
 | Current safety | Reconciliation/admission/Exit | Те же owners/consumers | Fresh inventory, command certainty, capacity/slot/protection сохраняются |
+
+## 56. Readiness/ARM UX — capability matrix 2026-11-04
+| Capability | BEFORE | AFTER owner/consumer | Сохранение |
+|---|---|---|---|
+| Technical preparation | ARM click -> existing coordinator | Separate authenticated prepare action -> same coordinator/broker/evidence owners -> readonly status and ARM | finite service start/recovery, exact scope, no financial permission |
+| OWNER ARM | combined prepare+ARM on unready click | explicit ARM only after fresh preparation and current Observer readiness | fresh final evidence, staged gate-closed transition, exact financial auth |
+| DISARM | same ARM endpoint enabled=false | same owner; always available independent of NOT READY | no automatic rearm |
+| Public REST audit | 2 network attempts then runtime ERROR | same bounded fetch -> typed network-unavailable -> existing bounded reconnect policy | no accepted missing continuity, new epoch/proof before Entry; repeated failures ERROR |
+| UI progress | 1s timer + 750ms poll + live refresh | single operation renderer consumes exact request | actual phase/detail, persistent final outcome, no false READY |
+No new Exchange writer or permission issuer. Actual continuity gaps, malformed payload,
+clock/anchor/execId violations remain real fail-closed errors. Network exception alone
+is bounded RECONNECTING/ready=false, not proven continuity loss. Three transport
+failures within 60 seconds require durable runtime fault; no infinite silent retry.

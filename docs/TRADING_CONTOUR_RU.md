@@ -1938,3 +1938,15 @@ capital consumption; DISARM/release drift никогда не auto-arm; late sig
 DEPLOYED=NO; RUNTIME_VERIFIED=NO. Текущий runtime не считается исправленным
 этой документацией. До verified implementation старые физические gates не
 обходятся вручную и OWNER ARM этим решением не выполняется.
+
+## 4.14 OWNER ARM только из подтверждённой готовности — OWNER DECISION 2026-11-04
+Кнопка открытия шлюза недоступна, пока Observer NOT READY, его heartbeat/release
+не доказаны либо отсутствует свежая успешная техническая подготовка exact release.
+Отдельное действие «Проверить готовность» выполняет существующий bounded readiness
+coordinator без ARM. Оно сохраняет capability запуска/восстановления обязательных
+служб через прежний allowlisted broker. Успех подготовки не открывает шлюз:
+после него требуется отдельный явный OWNER ARM. DISARM остаётся доступным при
+неисправности. Изменение фактов между проверкой и кликом отклоняется сервером.
+Проверка/ARM имеют один UI display owner; таймер не заменяет phase и не гоняется
+с poll. Отображается exact current request, фаза и реальный blocker_detail;
+старый request не выдаётся за текущую проверку. Ожидание отделено от неисправности.

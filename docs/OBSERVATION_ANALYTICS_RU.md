@@ -907,3 +907,11 @@ SECOND48 exact StrategyVersion. Другие причины закрытия, UN
 атрибуция/история/доставка не являются admission blockers. Для них не требуется
 отдельный proof отсутствия влияния. Текущие exposure/команды/ресурсы проверяются
 независимо; исторические ошибки остаются видимыми без подделки фактов.
+
+## 7.7 Временная недоступность PUBLIC_TRADE audit — 2026-11-04
+SSL/network timeout после двух bounded REST попыток не доказывает потерю native
+событий. Он переводит Observer в RECONNECTING/ready=false через ту же bounded
+transport recovery policy, что WebSocket disconnect. Новая epoch допускает Entry
+только после штатного причинного восстановления. Три transport failures за 60s
+создают durable ERROR; malformed/negative/unknown continuity proofs не считаются
+сетевым ожиданием. Исторический fault не стирается последующим RUNNING.
