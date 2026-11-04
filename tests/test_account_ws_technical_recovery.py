@@ -57,7 +57,7 @@ def proven() -> WsTechnicalRecoveryEvidence:
     )
 
 
-def test_verified_reconnect_and_signed_reconciliation_only_request_technical_clear() -> None:
+def test_verified_reconnect_requests_independent_technical_clear_only() -> None:
     result = plan_ws_technical_recovery(proven(), now=NOW)
     assert result.action is WsTechnicalRecoveryAction.REQUEST_INDEPENDENT_CLEAR
     assert result.reason == "INDEPENDENT_TECHNICAL_CLEAR_PROVEN"
@@ -148,7 +148,8 @@ def test_owner_disarm_and_strategy_rights_are_never_written_or_inferred() -> Non
     forbidden_imports = {"psycopg", "subprocess", "socket", "requests", "urllib"}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            assert not {name.name.split(".")[0] for name in node.names} & forbidden_imports
+            imported = {name.name.split(".")[0] for name in node.names}
+            assert not imported & forbidden_imports
         if isinstance(node, ast.ImportFrom) and node.module:
             assert node.module.split(".")[0] not in forbidden_imports
     assert "execution_gates" not in src
