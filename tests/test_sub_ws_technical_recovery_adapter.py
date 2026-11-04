@@ -201,8 +201,9 @@ def test_connection_status_file_alone_is_not_signed_exchange_evidence() -> None:
     assert "SET TRANSACTION READ ONLY" in source
     assert "ISOLATION LEVEL SERIALIZABLE" in source
     assert "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN" in source
-    assert "active_fault_codes" in source
-    assert "unknown_open_count" in source
+    assert "_sub_hard_faults_clear()" in source
+    assert "unknown_open_count" not in source
+    assert "protection_states" in source
     assert "_save(" in source
     assert "phase=\"PENDING\"" in source
     assert "os.system" not in source
