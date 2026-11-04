@@ -66,7 +66,7 @@ def test_dashboard_disarm_is_available_even_when_readiness_is_blocked() -> None:
     assert (
         "button.disabled=gateChanging||preparing||"
         "(!armed&&(!cohort||inconsistent||knownBlocked||!readiness.technical_preparation_ready"
-        "||!readiness.observer_ready));"
+        "||!readiness.observer_ready||!lastLiveSuccessAt||Date.now()-lastLiveSuccessAt>10000));"
         in DASH
     )
     assert "!armed&&" in DASH

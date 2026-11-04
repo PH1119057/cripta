@@ -61,7 +61,7 @@ function element(){return {hidden:false,disabled:false,textContent:'',classList:
 global.document={getElementById:id=>nodes[id]||(nodes[id]=element())};
 global.window={};
 let armed=false,liveGateOpen=false,gateChanging=false,p90PendingOperation=null;
-let tradeGateButton=element(),tradeOperationStatus=element();
+let tradeGateButton=element(),tradeOperationStatus=element(),lastLiveSuccessAt=Date.now();
 function exactP90RealV3Cohort(){return true}
 function p90RealV3OwnerArmPresent(){return armed}
 function p90RealV3Armed(){return armed&&liveGateOpen}
@@ -77,6 +77,9 @@ window.p90ArmStatus.blockers=['P90_REAL_OBSERVER_NOT_READY'];
 refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,true);
 ready();window.p90ArmStatus.technical_preparation_ready=false;
 refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,true);
+ready();lastLiveSuccessAt=Date.now()-11000;
+refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,true);
+lastLiveSuccessAt=Date.now();
 // DISARM is available even when Observer/evidence are not ready.
 armed=true;refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,false);
 armed=false;ready();gateChanging=true;
