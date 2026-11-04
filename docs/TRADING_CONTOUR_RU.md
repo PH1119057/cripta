@@ -1830,6 +1830,10 @@ flag. Недостающие обязательные market facts не заме
 которые он действительно использует. Необязательный отчёт, research, Analyst,
 Dashboard history/P&L projection либо старый delivery backlog не становится
 обязательным trading dependency по факту существования процесса/таблицы.
+Недостаточный капитал, занятый разрешённый slot, истёкшая validity и ожидаемая
+подготовка — штатные admission outcomes. Непройденная проверка сама по себе
+не означает runtime ERROR/CRITICAL: причина и нормальное состояние показываются
+явно. Реальное нарушение целостности/identity и mutation ambiguity не скрываются.
 Отдельно утверждённая обязательная capability не удаляется молча: её перенос
 требует capability matrix и доказанного нового owner/consumer path.
 
