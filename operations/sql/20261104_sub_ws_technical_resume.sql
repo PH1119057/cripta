@@ -20,6 +20,11 @@ BEGIN
     RAISE EXCEPTION 'ACCOUNT_ENTRY_SAFETY_LATCH_INVALID';
   END IF;
 
+  -- Serialize same-account concurrent initial INSERT and recovery DELETE.
+  -- Without this lock two first INSERTs can race before either row exists.
+  PERFORM pg_advisory_xact_lock(
+    hashtext(NEW.trading_account_id),hashtext(NEW.account_connector_id)
+  );
   UPDATE runtime.account_entry_safety_blocks AS stored_block
      SET blocked_at = clock_timestamp(),
          reason = CASE
@@ -89,6 +94,7 @@ DECLARE
   v_generation_completed_at timestamptz;
   v_positions integer;
   v_orders integer;
+  v_owner_positions integer;
   v_event_at_ms bigint;
 BEGIN
   -- This is a technical account-scope control, not a new OWNER authorization.
@@ -105,6 +111,10 @@ BEGIN
   THEN
     RAISE EXCEPTION 'SUB_WS_TECHNICAL_RESUME_SCOPE_UNVERIFIED';
   END IF;
+
+  -- Same advisory lock as the INSERT-only worker trigger; an initial insert
+  -- or a relatch cannot be silently lost in a concurrent delete.
+  PERFORM pg_advisory_xact_lock(hashtext(p_account_id),hashtext(p_connector_id));
 
   -- Lock the exact block before reviewing proof; the BEFORE INSERT trigger
   -- also UPDATE-locks this row on every subsequent disconnect.
@@ -186,7 +196,8 @@ BEGIN
   IF NOT FOUND OR v_generation_completed_at < v_blocked_at
      OR v_generation_completed_at < clock_timestamp() - interval '15 seconds'
      OR v_generation_completed_at > p_proof_observed_at + interval '1 second'
-     OR v_positions IS DISTINCT FROM 0 OR v_orders IS DISTINCT FROM 0
+     OR v_positions IS NULL OR v_positions < 0
+     OR v_orders IS DISTINCT FROM 0
   THEN
     RAISE EXCEPTION 'SUB_WS_TECHNICAL_RESUME_FLAT_GENERATION_UNPROVEN';
   END IF;
@@ -222,22 +233,53 @@ BEGIN
     RAISE EXCEPTION 'SUB_WS_TECHNICAL_RESUME_SESSION_NOT_CURRENT';
   END IF;
 
-  IF EXISTS (
-    SELECT 1 FROM runtime.trade_commands
-     WHERE trading_account_id=p_account_id
-       AND state NOT IN ('completed','failed','cancelled','rejected')
-  ) OR EXISTS (
-    SELECT 1 FROM runtime.position_ownership
-     WHERE trading_account_id=p_account_id
-       AND (state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK')
-  ) THEN
+  -- Existing protected StrategyPositions are NORMAL, never an intrinsic
+  -- reason to reject technical recovery. Reject only unmatched/ambiguous
+  -- physical owners, absent Exit claim or incomplete protection.
+  SELECT count(*) INTO v_owner_positions
+    FROM runtime.position_ownership p
+    JOIN runtime.exchange_position_slot_claims s
+      ON s.exchange_position_slot_claim_id=p.exchange_position_slot_claim_id
+     AND s.trading_account_id=p.trading_account_id
+     AND s.identity_status='PROVEN'
+     AND s.strategy_position_id=p.position_id
+     AND s.claim_state='BOUND'
+     AND s.exchange_position_key=p.exchange_position_key
+    JOIN runtime.position_exit_claims x
+      ON x.strategy_position_id=p.position_id
+     AND x.status='CLAIMED'
+     AND x.exit_plan_fingerprint=p.exit_plan_fingerprint
+     AND x.last_seen_at >= clock_timestamp() - interval '15 seconds'
+   WHERE p.trading_account_id=p_account_id
+     AND p.identity_status='PROVEN' AND p.state='OPEN'
+     AND p.initial_protection_confirmed_at IS NOT NULL
+     AND p.close_link_status='OPEN';
+
+  IF v_owner_positions IS DISTINCT FROM v_positions
+    OR EXISTS (
+      SELECT 1 FROM runtime.position_ownership
+       WHERE trading_account_id=p_account_id
+         AND (state='RECONCILIATION_REQUIRED'
+              OR close_link_status='UNRESOLVED_EXACT_LINK')
+    )
+    OR EXISTS (
+      SELECT 1 FROM runtime.trade_commands
+       WHERE trading_account_id=p_account_id
+         AND state NOT IN ('completed','failed','cancelled','rejected')
+    )
+  THEN
     RAISE EXCEPTION 'SUB_WS_TECHNICAL_RESUME_PENDING_EXPOSURE';
   END IF;
 
-  -- Global critical/unknown exposure is a hard gate, even for a flat SUB.
+  -- Only GLOBAL/unknown-scope or THIS ACCOUNT critical blocks SUB.
+  -- A separately scoped MAIN LTC fault must never become a SUB veto.
   IF EXISTS (
     SELECT 1 FROM runtime.lifecycle_faults
      WHERE state='OPEN' AND severity='CRITICAL'
+       AND (
+         coalesce(nullif(exact_ids->>'fault_scope_kind',''),'GLOBAL') <> 'ACCOUNT'
+         OR exact_ids->>'trading_account_id'=p_account_id
+       )
   ) THEN
     RAISE EXCEPTION 'SUB_WS_TECHNICAL_RESUME_CRITICAL_LIFECYCLE_FAULT';
   END IF;
