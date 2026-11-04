@@ -6,12 +6,18 @@ No production DB, network, Bybit or Exchange mutation in this suite.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-from operations.connectivity import private_runtime
+# Match the production script directory for its sibling imports.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "operations/connectivity"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research/server/connectivity"))
+
+from operations.connectivity import private_runtime  # noqa: E402
 
 ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
 POSITION = "POS-test-entry-ltc"

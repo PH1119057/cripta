@@ -19,7 +19,6 @@ from bybit_workbench.strategy_position_binding import (
     persist_universal_strategy_position,
     release_position_capital_reservation,
 )
-from operations.connectivity import private_runtime
 from operations.connectivity.universal_entry_consumer import run_once
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -695,8 +694,15 @@ def test_confirmed_close_releases_bound_reservation() -> None:
 
 
 
-def test_first_fill_survives_unlinked_flat_inventory_in_postgres() -> None:
+def test_first_fill_survives_unlinked_flat_inventory_in_postgres(monkeypatch) -> None:
     """Exercise real persisted ownership/resources; never contact Exchange."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.syspath_prepend(str(root / "operations/connectivity"))
+    monkeypatch.syspath_prepend(str(root / "research/server/connectivity"))
+    from operations.connectivity import private_runtime
+
     assert DSN is not None
     prefix = "first-fill-" + uuid4().hex
     with psycopg.connect(DSN) as connection:

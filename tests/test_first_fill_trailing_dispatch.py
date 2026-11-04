@@ -1,12 +1,18 @@
 """No-order regressions for first-fill trailing dispatch before slow reconciliation."""
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-from operations.connectivity import private_runtime as runtime
+# Match the production script directory for its sibling imports.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "operations/connectivity"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research/server/connectivity"))
+
+from operations.connectivity import private_runtime as runtime  # noqa: E402
 
 
 class DB:
