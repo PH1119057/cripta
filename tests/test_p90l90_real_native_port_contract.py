@@ -228,3 +228,18 @@ def test_real_restart_with_open_position_or_unowned_command_cannot_fast_forward(
         consumer.catch_up_closed_histories(
             dict(consumer._verified_closed_watermarks)
         )
+
+
+def test_false_admission_is_forwarded_as_local_denial_not_observer_error():
+    calls = []
+    account = SimpleNamespace(binding=SimpleNamespace(trading_account_id="ta-main"))
+    consumer = _consumer(calls, admissions=(account,), proven=False)
+    fact, cursor = _fact()
+    with patch(
+        "bybit_workbench.universal_entry.p90l90_observer_real_consumer.read_real_second48",
+        return_value=(True, {}),
+    ):
+        consumer._on_candidate(fact, cursor)
+    assert len(calls) == 1
+    assert calls[0]["arm_and_source_verified"] is False
+    assert calls[0]["account_admissions"] == (account,)

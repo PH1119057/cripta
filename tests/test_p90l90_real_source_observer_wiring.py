@@ -165,4 +165,4 @@ def test_runtime_entry_fail_closed_preserves_exit_only_real_owner() -> None:
     assert "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT" in body
     assert "P90_REAL_DEGRADED_EXIT_ONLY" in body
     degraded = body.index("if p90_real_degraded:")
-    assert "return (), False" in body[degraded:degraded + 500]
+    assert "return blocked.get(activation, ()), False" in body[degraded:degraded + 500]

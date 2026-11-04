@@ -521,7 +521,6 @@ class UniversalEntryEngine:
                 or real_admission_required_for
                 != frozenset({plan.strategy_activation_id})
                 or real_admission_ready_for is None
-                or plan.strategy_activation_id not in real_admission_ready_for
                 or entry_admission_port is not None
                 or account_admissions is None
                 or set(account_admissions) != {plan.strategy_activation_id}

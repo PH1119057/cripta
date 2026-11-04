@@ -1,4 +1,3 @@
-import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -9,22 +8,26 @@ import pytest
 from operations.dashboard import app
 
 
-def test_unready_arm_rejects_before_preparation_or_any_database_call(monkeypatch, tmp_path):
-    status = tmp_path / "observer.json"
-    status.write_text(json.dumps({"state": "PREPARING", "observer_ready": False}))
-    monkeypatch.setattr(app, "UNIVERSAL_ENTRY_OBSERVER_STATE", status)
+def test_unready_one_click_attempt_prepares_but_cannot_stage_when_checks_fail(monkeypatch):
     monkeypatch.setattr(app, "_u6_financial_account_same_origin", lambda _h: True)
+    prepared = []
+
+    def prepare(**kwargs):
+        prepared.append(kwargs)
+        return {"state": "BLOCKED", "blocker_code": "OBSERVER_NOT_READY"}
 
     def forbidden(*_a, **_kw):
-        pytest.fail("unready ARM must not prepare, stage or mutate")
+        pytest.fail("failed preparation must not stage or mutate trading state")
 
+    monkeypatch.setattr(app, "_u6_prepare_p90_real_v3_readiness", prepare)
     monkeypatch.setattr(app.psycopg, "connect", forbidden)
-    monkeypatch.setattr(app, "_u6_prepare_p90_real_v3_readiness", forbidden)
-    with pytest.raises(ValueError, match="P90_REAL_OBSERVER_NOT_READY"):
+    monkeypatch.setattr(app, "stage_p90l90_real_v3", forbidden)
+    with pytest.raises(ValueError, match="PREPARATION_BLOCKED"):
         app._u6_p90_real_v3_arm(
             SimpleNamespace(session_user=lambda: "owner"),
             {"enabled": True, "confirmed": True},
         )
+    assert len(prepared) == 1
 
 
 def test_prepare_action_cannot_arm_even_when_preparation_succeeds(monkeypatch):
@@ -67,6 +70,7 @@ function p90RealV3OwnerArmPresent(){return armed}
 function p90RealV3Armed(){return armed&&liveGateOpen}
 function p90ReadinessOperationText(){return 'server phase'}
 function showAuthoritativeP90ArmState(){}
+function renderP90ArmModal(){}
 function setOperationStatus(node,state,text){node.textContent=text}
 function ready(){
  window.p90ArmStatus={observer_ready:true,technical_preparation_ready:true,blockers:[]}
@@ -74,9 +78,9 @@ function ready(){
 ready();refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,false);
 window.p90ArmStatus.observer_ready=false;
 window.p90ArmStatus.blockers=['P90_REAL_OBSERVER_NOT_READY'];
-refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,true);
+refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,false);
 ready();window.p90ArmStatus.technical_preparation_ready=false;
-refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,true);
+refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,false);
 ready();lastLiveSuccessAt=Date.now()-11000;
 refreshP90RealV3ArmControl();assert.equal(tradeGateButton.disabled,true);
 lastLiveSuccessAt=Date.now();

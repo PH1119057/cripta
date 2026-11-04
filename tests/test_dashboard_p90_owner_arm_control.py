@@ -35,4 +35,4 @@ def test_owner_confirmation_text_exposes_exact_scope_and_risk():
     assert "MAIN: LTCUSDT, INJUSDT · cap 20 USDT" in INDEX
     assert "SUB: DOTUSDT, ARBUSDT, APTUSDT · cap 30 USDT" in INDEX
     assert "10 USDT на Entry · isolated 1x" in INDEX
-    assert "mainnet gate ПОСЛЕДНИМ шагом" in INDEX
+    assert "Финальная проверка и открытие шлюза" in INDEX

@@ -152,6 +152,12 @@
 .mini-log-detail-row{padding:5px 0;border-bottom:1px solid var(--line);font-size:10px;overflow-wrap:anywhere}.mini-log-detail-row:last-child{border-bottom:0}
 .console-routine{opacity:.72}.console-routine summary{font-size:10px}.console-event-list .console-critical{opacity:1}
 .console-owner-danger{margin:4px 7px 7px;padding:9px 10px;background:#451c23;border:2px solid #ff6677;border-radius:8px;color:#ffe8e9;font-size:11px;line-height:1.4}.console-owner-danger strong{display:block;font-size:12px;color:#ff8893;margin-bottom:4px}.console-owner-danger summary{cursor:pointer;color:#ffc7ce}.console-owner-danger[hidden]{display:none}#gatewayEmergencyBanner{font-weight:750;font-size:12px;border-width:3px}
+
+.p90-arm-modal{width:min(600px,calc(100vw - 32px));box-sizing:border-box;border:1px solid #34566a;border-radius:16px;background:#0b1923;color:#e7f3fa;padding:26px;box-shadow:0 24px 90px #0009}
+.p90-arm-modal::backdrop{background:#020a12b8;backdrop-filter:blur(4px)}
+.p90-arm-modal h2{margin:0 0 10px;font-size:24px}.p90-arm-modal p{color:#9eb8ca;line-height:1.5}
+.p90-arm-checks{padding:0;margin:20px 0;list-style:none;display:grid;gap:9px}.p90-arm-checks li{display:flex;gap:10px;padding:10px 12px;border-radius:9px;background:#102531;color:#90a8b8}.p90-arm-checks li::before{content:'○';width:18px}.p90-arm-checks li[data-state=busy]{color:#ffd166;background:#352d16}.p90-arm-checks li[data-state=busy]::before{content:'◉'}.p90-arm-checks li[data-state=done]{color:#59df9d;background:#102c23}.p90-arm-checks li[data-state=done]::before{content:'✓'}
+.p90-arm-modal-result{min-height:44px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}.p90-arm-modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}.p90-arm-modal-actions button{padding:11px 17px}.p90-arm-modal .success{color:#59df9d}.p90-arm-modal .error{color:#ff9292}
 </style>
 </head>
 <body><main>
@@ -245,7 +251,6 @@
           <div class="console-header"><b>P90 REAL v3</b><small>Exact MAIN/SUB owner control</small></div>
           <button id="tradeGateButton" class="action danger" type="button" hidden>Разрешить новые входы</button>
           <div id="tradeOperationStatus" class="operation-status" aria-live="polite">Проверяю operational hard stops…</div>
-          <button id="p90RealV3PrepareButton" class="action" type="button" hidden>Проверить готовность P90</button>
           <button id="p90RealV3ArmButton" class="action danger" type="button" hidden disabled>P90 REAL v3 OWNER ARM</button>
           <div id="p90RealV3ArmStatus" class="operation-status" aria-live="polite">P90: проверяю exact MAIN/SUB scope…</div>
           <details id="p90ArmResultPanel" class="operation-status" aria-label="Последний результат P90 OWNER ARM" style="margin-top:6px;overflow-wrap:anywhere">
@@ -645,7 +650,23 @@
       <li class="todo">После восстановления и проверки удалить временный NOPASSWD sudo</li>
     </ul></article>
   </section>
-</main><script>
+</main>
+<dialog id="p90ArmDialog" class="p90-arm-modal" aria-labelledby="p90ArmDialogTitle" aria-describedby="p90ArmDialogResult">
+  <h2 id="p90ArmDialogTitle">Открыть торговый шлюз?</h2>
+  <p>MAIN: LTCUSDT, INJUSDT · cap 20 USDT<br>SUB: DOTUSDT, ARBUSDT, APTUSDT · cap 30 USDT<br>10 USDT на Entry · isolated 1x</p>
+  <ol id="p90ArmChecks" class="p90-arm-checks">
+    <li data-check="versions">Версия системы и соответствие исходному коду</li>
+    <li data-check="services">Торговые службы и Execution обоих аккаунтов</li>
+    <li data-check="market">Рыночный поток и готовность данных</li>
+    <li data-check="strategies">Стратегии, планы и правило 48 часов</li>
+    <li data-check="accounts">Bybit: аккаунты, заявки, позиции и ресурсы</li>
+    <li data-check="entry_exit">Допуск Entry, планы защиты и сопровождение Exit</li>
+    <li data-check="arm">Финальная проверка и открытие шлюза</li>
+  </ol>
+  <div id="p90ArmDialogResult" class="p90-arm-modal-result" role="status" aria-live="polite">После OK проверим систему. Шлюз откроется только при успешном прохождении всех проверок.</div>
+  <div class="p90-arm-modal-actions"><button id="p90ArmDialogClose" type="button" class="action">Отмена</button><button id="p90ArmDialogConfirm" type="button" class="action danger">OK · проверить и открыть</button></div>
+</dialog>
+<script>
 const size=n=>{if(!n)return'0 Б';const u=['Б','КБ','МБ','ГБ','ТБ'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return n.toFixed(i>2?1:2)+' '+u[i]};
 const panelPaths={liveDesk:'/',infra:'/infra',current:'/current',entry:'/entry',strategies:'/strategies',testLibrary:'/test-library',bots:'/bots',serverControl:'/server-control',history:'/history',rules:'/rules',checklist:'/checklist'};
 const pathPanels=Object.fromEntries(Object.entries(panelPaths).map(([panel,path])=>[path,panel]));
@@ -987,6 +1008,8 @@ function p90ReadinessOperationText(operation){
     SERVICE_RECOVERY_FAILED:'не удалось восстановить обязательную службу',
     TECHNICAL_EVIDENCE_BLOCKED:'не удалось подтвердить полную техническую готовность'
   };
+  const checks={versions:'Проверяем версию системы',services:'Проверяем торговые службы',market:'Проверяем рыночные данные',strategies:'Проверяем стратегии и планы',accounts:'Проверяем аккаунты Bybit и ресурсы',entry_exit:'Проверяем допуск Entry и сопровождение Exit',arming_closed_gate:'Проверяем рабочий контур при закрытом шлюзе',finalizing:'Завершаем открытие шлюза',opened:'Подтверждаем открытие шлюза'};
+  if(state!=='BLOCKED'&&checks[phase])return checks[phase];
   if(state==='BLOCKED')return (phaseMap[state]||state)+' · '+(String(operation.blocker_detail||'')||blockerMap[code]||'обязательная проверка не прошла');
   return (phaseMap[state]||state)+(phase&&phase!==state.toLowerCase()?' · '+phase:'');
 }
@@ -999,12 +1022,12 @@ function refreshP90RealV3ArmControl(){
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus'),detail=document.getElementById('p90RealV3ArmDetail');
   if(!button||!status)return;
   const cohort=exactP90RealV3Cohort(),armed=p90RealV3OwnerArmPresent(),exactArmed=p90RealV3Armed(),inconsistent=liveGateOpen&&!exactArmed,readiness=window.p90ArmStatus||{},blockers=Array.isArray(readiness.blockers)?readiness.blockers:[],operation=readiness.readiness_operation||null;
-  const operationState=String(operation?.state||''),preparing=['REQUESTED','CHECKING','STARTING_SERVICES','RECONCILING','VALIDATING'].includes(operationState),retryable=operationState==='BLOCKED'&&operation?.retry_eligible===true,nonOperationBlockers=blockers.filter(x=>x!=='REAL_READINESS_OPERATION_ACTIVE'&&!String(x).startsWith('REAL_READINESS_BLOCKED:')),knownBlocked=nonOperationBlockers.length>0||(operationState==='BLOCKED'&&!retryable);
+  const operationState=String(operation?.state||''),preparing=['REQUESTED','CHECKING','STARTING_SERVICES','RECONCILING','VALIDATING'].includes(operationState),retryable=operationState==='BLOCKED'&&operation?.retry_eligible===true,nonOperationBlockers=blockers.filter(x=>x!=='REAL_READINESS_OPERATION_ACTIVE'&&x!=='P90_REAL_OBSERVER_NOT_READY'&&!String(x).startsWith('REAL_READINESS_BLOCKED:')),knownBlocked=nonOperationBlockers.length>0||(operationState==='BLOCKED'&&!retryable);
   const loaded=String(readiness.loaded_commit||''),source=String(readiness.source_head||''),observerState=String(readiness.observer_state||'UNKNOWN'),observerReady=Boolean(readiness.observer_ready),gateReason=String(readiness.gate_reason||''),staging=!liveGateOpen&&gateReason==='P90L90 REAL v3 owner arm staging'&&Number(readiness.execution_permissions||0)===2&&Number(readiness.live_arm_sessions||0)===5&&Number(readiness.account_live_arm_sessions||0)===5;
   button.textContent=armed?'Отключить P90 REAL v3':preparing?'Подготовка P90 REAL v3…':retryable?'Повторить подготовку':'P90 REAL v3 OWNER ARM';
   button.classList.toggle('danger',!armed);
-  button.disabled=gateChanging||preparing||(!armed&&(!cohort||inconsistent||knownBlocked||!readiness.technical_preparation_ready||!readiness.observer_ready||!lastLiveSuccessAt||Date.now()-lastLiveSuccessAt>10000));
-  let state='warn',message=readiness.technical_preparation_ready?'Техническая готовность подтверждена · можно открыть шлюз':'Шлюз закрыт · сначала проверьте готовность';
+  button.disabled=gateChanging||preparing||(!armed&&(!cohort||inconsistent||knownBlocked||!lastLiveSuccessAt||Date.now()-lastLiveSuccessAt>10000));
+  let state='warn',message='Шлюз закрыт · открытие начнётся с полной проверки системы';
   if(exactArmed){state='success';message='P90 REAL v3 ARMED · новые Entry разрешены только exact MAIN/SUB scope'}
   else if(preparing){state='warn';message=p90ReadinessOperationText(operation)+' · mainnet gate CLOSED'}
   else if(operationState==='BLOCKED'){state='error';message=p90ReadinessOperationText(operation)+(retryable?' · безопасный повтор доступен после проверки причины':'')}
@@ -1015,20 +1038,16 @@ function refreshP90RealV3ArmControl(){
   else if(blockers.includes('DASHBOARD_UI_DELTA_NOT_VERIFIED')){state='error';message='OWNER ARM заблокирован · Dashboard source новее независимо развёрнутого UI'}
   else if(blockers.includes('TRADING_OR_UNKNOWN_SOURCE_DELTA')||blockers.includes('INSTALLED_NOT_ANCESTOR_OF_SOURCE')){state='error';message='OWNER ARM заблокирован · найден непроверенный trading/runtime source delta'}
   else if(blockers.includes('REMOTE_SOURCE_IDENTITY_DRIFT')||blockers.includes('SOURCE_WORKTREE_DIRTY')||blockers.includes('GIT_IDENTITY_UNAVAILABLE')||blockers.includes('GIT_IDENTITY_INVALID')){state='error';message='OWNER ARM заблокирован · source identity сейчас нельзя доказать'}
-  else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='warn';message='Observer не готов · открытие недоступно · ожидайте восстановления данных'}
+  else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='warn';message='Данные подготавливаются · при открытии дождёмся полной готовности'}
   if(!armed&&!gateChanging&&(!lastLiveSuccessAt||Date.now()-lastLiveSuccessAt>10000)){
     state='warn';message='Ожидаю свежий статус системы · открытие недоступно';
   }
   if(gateChanging&&p90PendingOperation){
     state=p90PendingOperation.state;message=p90PendingOperation.message;
   }
-  const prepareButton=document.getElementById('p90RealV3PrepareButton');
-  if(prepareButton){
-    prepareButton.hidden=!cohort||armed;
-    prepareButton.disabled=gateChanging||preparing||!cohort||inconsistent;
-  }
   setOperationStatus(status,state,message);
   showAuthoritativeP90ArmState(exactArmed,operation);
+  renderP90ArmModal(operation);
   const primaryP90Control=cohort||armed||preparing||operationState==='BLOCKED';
   tradeGateButton.hidden=!primaryP90Control;
   button.hidden=true;
@@ -1040,7 +1059,37 @@ function refreshP90RealV3ArmControl(){
   }
   if(detail)detail.textContent='loaded '+(loaded?loaded.slice(0,12):'—')+' · source '+(source?source.slice(0,12):'—')+' · observer '+observerState+(observerReady?' / ready':' / not ready')+' · readiness '+(operationState||'—')+' · mainnet '+(liveGateOpen?'OPEN':'CLOSED');
 }
-let p90PendingOperation=null;
+let p90PendingOperation=null,p90ModalState='confirm',p90ModalOperation=null;
+function renderP90ArmModal(operation=null){
+  const dialog=document.getElementById('p90ArmDialog');if(!dialog?.open)return;
+  if(operation&&p90PendingOperation?.requestId===operation.request_id)p90ModalOperation=operation;
+  const op=p90ModalOperation,completed=new Set(op?.progress_json?.completed_checks||[]);
+  const technicalReady=op?.state==='READY_FOR_OWNER_ARM';
+  document.getElementById('p90ArmChecks').querySelectorAll('[data-check]').forEach(row=>{
+    const key=row.dataset.check,done=p90ModalState==='success'||completed.has(key)||(technicalReady&&key!=='arm');
+    const current=key===op?.phase||(key==='arm'&&technicalReady&&p90ModalState==='busy');
+    row.dataset.state=done?'done':current?'busy':'pending';
+  });
+  const busy=p90ModalState==='busy',confirming=p90ModalState==='confirm';
+  document.getElementById('p90ArmDialogConfirm').hidden=!confirming;
+  document.getElementById('p90ArmDialogClose').disabled=busy;
+  document.getElementById('p90ArmDialogClose').textContent=confirming?'Отмена':'Закрыть';
+  document.getElementById('p90ArmDialogTitle').textContent=confirming?'Открыть торговый шлюз?':p90ModalState==='success'?'Шлюз открыт':p90ModalState==='error'?'Шлюз закрыт':p90ModalState==='unknown'?'Состояние шлюза уточняется':'Проверяем систему';
+  const result=document.getElementById('p90ArmDialogResult');
+  result.className='p90-arm-modal-result '+(p90ModalState==='success'?'success':p90ModalState==='error'?'error':'');
+  result.textContent=confirming?'После OK проверим систему. Шлюз откроется только при успешном прохождении всех проверок.':p90PendingOperation?.message||'Проверяем готовность · шлюз закрыт';
+}
+function showP90ArmModal(){
+  p90ModalState='confirm';p90ModalOperation=null;
+  const dialog=document.getElementById('p90ArmDialog');dialog.showModal();renderP90ArmModal();
+}
+document.getElementById('p90ArmDialogClose')?.addEventListener('click',()=>document.getElementById('p90ArmDialog').close());
+document.getElementById('p90ArmDialog')?.addEventListener('cancel',event=>{if(p90ModalState==='busy')event.preventDefault()});
+document.getElementById('p90ArmDialogConfirm')?.addEventListener('click',async()=>{
+  if(p90ModalState!=='confirm'||gateChanging)return;
+  p90ModalState='busy';renderP90ArmModal();
+  try{await changeP90RealV3Arm(true)}catch(_){}
+});
 const p90ArmHistoryKey='cripta:p90-owner-arm:last-result:v1';
 function recordP90ArmResult(state,message,requestId){
   const entry={state,message:String(message),requestId:String(requestId),at:new Date().toISOString()};
@@ -1080,22 +1129,25 @@ document.getElementById('p90ArmCopyResult')?.addEventListener('click',async()=>{
   const text=document.getElementById('p90ArmResultText')?.textContent||'';
   try{await navigator.clipboard.writeText(text)}catch(_){const field=document.getElementById('p90ArmResultText');if(field){const range=document.createRange();range.selectNodeContents(field);window.getSelection()?.removeAllRanges();window.getSelection()?.addRange(range)}}
 });
-async function changeP90RealV3Arm(enabled,prepareOnly=false){
+async function changeP90RealV3Arm(enabled){
   if(gateChanging)return;
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus');
   const requestId='p90-owner-arm-'+Date.now()+'-'+Math.random().toString(16).slice(2);
-  p90PendingOperation={requestId,state:'warn',message:prepareOnly?'Проверяю техническую готовность · шлюз закрыт':enabled?'Выполняю OWNER ARM · шлюз пока закрыт':'Отключаю P90 REAL v3'};
-  const finish=(state,message)=>{p90PendingOperation={requestId,state,message};refreshP90RealV3ArmControl()};
+  p90PendingOperation={requestId,state:'warn',message:enabled?'Выполняю OWNER ARM · шлюз пока закрыт':'Отключаю P90 REAL v3'};
+  const finish=(state,message)=>{p90PendingOperation={requestId,state,message};p90ModalState=state==='success'?'success':state==='error'?'error':state==='unknown'?'unknown':'busy';refreshP90RealV3ArmControl()};
   const progress={done:false};
   const poll=enabled?(async()=>{
     while(!progress.done){
       await new Promise(resolve=>setTimeout(resolve,750));
+      if(progress.done)break;
       try{
         const response=await fetchWithTimeout('/api/p90l90/real-v3/readiness-status',{cache:'no-store'},4000);
         if(!response.ok)throw new Error('readiness progress HTTP '+response.status);
         const op=(await response.json()).readiness_operation;
+        if(progress.done)break;
         if(op&&op.request_id===requestId){
-          p90PendingOperation={requestId,state:op.state==='BLOCKED'?'error':'warn',message:p90ReadinessOperationText(op)+(prepareOnly?' · шлюз закрыт':op.state==='READY_FOR_OWNER_ARM'?' · выполняю финальный OWNER ARM':' · шлюз закрыт')};
+          p90ModalOperation=op;
+          p90PendingOperation={requestId,state:op.state==='BLOCKED'?'error':'warn',message:p90ReadinessOperationText(op)+(op.state==='READY_FOR_OWNER_ARM'?' · выполняю финальную проверку':' · шлюз закрыт')};
           refreshP90RealV3ArmControl();
         }
       }catch(_){}
@@ -1103,38 +1155,45 @@ async function changeP90RealV3Arm(enabled,prepareOnly=false){
   })():Promise.resolve();
   gateChanging=true;tradeGateButton.disabled=true;if(button)button.disabled=true;
   try{
-    const result=await livePostTimed(prepareOnly?'/api/p90l90/real-v3/prepare':'/api/p90l90/real-v3/arm',{enabled,confirmed:enabled,request_id:requestId},300000);
-    if(prepareOnly){
-      if(result.state!=='READY_FOR_OWNER_ARM')throw new Error(p90ReadinessOperationText(result));
-      finish('success','Готовность подтверждена · шлюз закрыт · теперь доступно открытие');
-      recordP90ArmResult('success','Техническая подготовка завершена. Шлюз закрыт, OWNER ARM не выполнялся.',requestId);
-      return;
-    }
+    await livePostTimed('/api/p90l90/real-v3/arm',{enabled,confirmed:enabled,request_id:requestId},300000);
     await loadStrategies(true);
     await confirmGateState(enabled);
-    finish('success',enabled?'ГОТОВО · P90 REAL v3 MICRO_LIVE ARMED':'ГОТОВО · P90 REAL v3 DISARMED');
+    progress.done=true;
+    finish('success',enabled?'Все проверки пройдены. Шлюз открыт.':'Шлюз закрыт. Новые входы запрещены.');
     recordP90ArmResult('success',enabled?'P90 REAL v3 MICRO_LIVE ARMED':'P90 REAL v3 DISARMED',requestId);
   }catch(e){
-    await readLiveStateOnce().catch(()=>{});
+    let readback=false;
+    await readLiveStateOnce().then(()=>{readback=true}).catch(()=>{});
+    progress.done=true;
+    if(readback&&enabled&&p90RealV3Armed()){
+      finish('success','Шлюз открыт · подтверждено фактическим состоянием сервера');
+      recordP90ArmResult('success','Шлюз открыт · сервер подтвердил результат после потери ответа',requestId);
+      return;
+    }
+    if(!readback){
+      finish('unknown','Нет свежего ответа сервера. Результат открытия не подтверждён; повторная команда не отправлена.');
+      recordP90ArmResult('unknown','Результат требует чтения фактического шлюза · '+String(e?.message||''),requestId);
+      throw e;
+    }
     const latest=window.p90ArmStatus?.readiness_operation;
     const op=latest?.request_id===requestId?latest:null;
     const visible=op?.state==='BLOCKED'
       ?p90ReadinessOperationText(op)
       :'OWNER ARM отклонён · обязательная проверка не прошла';
     const technical=p90ReadinessOperationTechnicalText(op)||String(e?.message||'');
-    finish('error',visible);
+    progress.done=true;
+    finish('error',visible+(technical?' · '+technical:''));
     recordP90ArmResult('error',visible+(technical?'\n\nТехнические детали:\n'+technical:''),requestId);
     throw e;
   }finally{
     progress.done=true;
     await poll.catch(()=>{});
-    gateChanging=false;p90PendingOperation=null;
+    gateChanging=false;
     await readLiveStateOnce().catch(()=>{});
     await loadStrategies(true).catch(()=>{});
     refreshP90RealV3ArmControl();
   }
 }
-document.getElementById('p90RealV3PrepareButton')?.addEventListener('click',async()=>{try{await changeP90RealV3Arm(true,true)}catch(_){}});
 async function changeTradeGate(enabled){if(gateChanging)return;const requestId=`gate-${Date.now()}-${Math.random().toString(16).slice(2)}`,finish=beginTimedStatus(tradeOperationStatus,enabled?'Разрешаю новые реальные входы':'Запрещаю новые реальные входы'),r1=exactR1MicroLiveCohort(),unified=exactUnifiedR1MicroLiveCohort(),endpoint=unified?'/api/r1/unified/micro-live':r1?'/api/r1/micro-live':'/api/live/gate';gateChanging=true;tradeGateButton.disabled=true;try{await livePostTimed(endpoint,{enabled,confirmed:enabled,request_id:requestId});await confirmGateState(enabled);finish('success',enabled?(unified?'ГОТОВО · R1 единая MICRO_LIVE включена':r1?'ГОТОВО · R1 MICRO_LIVE включён':'ГОТОВО · глобальный допуск новых входов включён'):'ГОТОВО · новые реальные входы запрещены')}catch(e){finish('error',`ОШИБКА · ${e.message}`);throw e}finally{gateChanging=false;await readLiveStateOnce().catch(()=>{});tradeGateButton.disabled=!liveGateOpen&&!rearmReady}}
 tradeGateButton.addEventListener('click',async()=>{if(gateChanging)return;if(exactP90RealV3Cohort()||p90RealV3OwnerArmPresent()){await handleP90RealV3GateClick();return}if(liveGateOpen){if(!confirm('Запретить новые реальные входы? Уже открытые позиции останутся доступны для сопровождения и закрытия.'))return;try{await changeTradeGate(false)}catch(e){alert(e.message)}return}if(!liveStateLoaded||!rearmReady){setOperationStatus(tradeOperationStatus,'warn','Новые входы пока нельзя разрешить: устраните причины operational hard stop ниже.');return}if(!confirm('Разрешить новые реальные входы глобально?\n\nРеально исполняться смогут только ACTIVE Strategy с отдельным Execution ON.'))return;try{await changeTradeGate(true)}catch(e){alert(e.message)}});
 async function handleP90RealV3GateClick(){
@@ -1152,15 +1211,9 @@ async function handleP90RealV3GateClick(){
     setOperationStatus(document.getElementById('p90RealV3ArmStatus'),'error','P90 exact cohort не найден или не активен.');
     return;
   }
-  if(!window.p90ArmStatus?.observer_ready||!window.p90ArmStatus?.technical_preparation_ready){
-    refreshP90RealV3ArmControl();return;
-  }
-  const readinessOp=window.p90ArmStatus?.readiness_operation;
-  if(readinessOp?.state==='BLOCKED'&&readinessOp?.retry_eligible===true){
-    if(!confirm('ПОВТОРИТЬ ТЕХНИЧЕСКУЮ ПОДГОТОВКУ?\n\n'+p90ReadinessOperationText(readinessOp)+'\n\nБудет выполнена новая полная проверка. OWNER ARM и mainnet gate изменятся только если все проверки пройдут.'))return;
-  }else if(!confirm('P90 REAL v3 OWNER ARM\n\nMAIN: LTCUSDT, INJUSDT · cap 20 USDT\nSUB: DOTUSDT, ARBUSDT, APTUSDT · cap 30 USDT\n10 USDT на Entry · isolated 1x\n\nГотовность проверена. ARM повторно проверит exact runtime при CLOSED gate и откроет mainnet gate ПОСЛЕДНИМ шагом. Если проверка не пройдёт — gate не откроется. Продолжить?'))return;
-  try{await changeP90RealV3Arm(true)}catch(e){/* visible in persistent ARM panel */}
+  showP90ArmModal();
 }
+
 document.getElementById('p90RealV3ArmButton')?.addEventListener('click',handleP90RealV3GateClick);
 async function fetchLiveStateData(){if(liveStateInFlight)return liveStateInFlight;const view=activePanelName()==='liveDesk'?activeTradePage():'open',path=`/api/live/state?view=${encodeURIComponent(view)}`;liveStateInFlight=(async()=>{const r=await fetchWithTimeout(path,{cache:'no-store'},8000);if(!r.ok)throw new Error(`live-state HTTP ${r.status}`);const out=await r.json();lastLiveSuccessAt=Date.now();return out})();try{return await liveStateInFlight}finally{liveStateInFlight=null}}
 async function readLiveStateOnce(){const d=await fetchLiveStateData();renderLiveState(d);return d.live_trading||{}}
@@ -1424,6 +1477,8 @@ function renderMiniLogFeed(lt){
   host.innerHTML=incidents.length?incidents.map(x=>
     '<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>Открытая проблема релиза · '+safe(x.reason||'проверка LIVE')+'</b></summary><div class="console-event-detail">'+safe(x.detected_at||'')+' · '+safe(x.incident_id||'—')+'</div></details>'
   ).join(''):'<div class="console-event-note muted">Нет открытых событий, требующих вмешательства</div>';
+  const history=lt.historical_critical_faults||[];
+  if(history.length)host.innerHTML+='<details class="console-event"><summary>История закрытых сделок · '+history.length+' инцидентов на разборе</summary><div class="console-event-detail">'+history.map(x=>safe(x.fault_code)+' · '+safe(x.fault_id)).join('<br>')+'</div></details>';
 }
 function renderLiveCriticalEvents(lt){
   const area=document.getElementById('liveCriticalEventList');
@@ -1460,7 +1515,7 @@ function renderLiveState(d){
   renderClockSafetyAlert(d.live_trading||{});
   for(const p of d.live_trading?.positions||[]){p.exchange_mark_price=p.mark_price;p.exchange_unrealised_pnl=p.unrealised_pnl;p.mark_price=p.executable_close_price||p.mark_price}
   if(d.trade_strategy_monitor)tradeStrategyMonitorData=d.trade_strategy_monitor;const lt=d.live_trading||{wallet:null,positions:[]},wallet=lt.wallet,positions=lt.positions||[],num=v=>v==null||v===''?'—':Number(v).toFixed(2)+' USDT';window.currentPositions=positions;renderTradeStrategyControl();
-  const currentGateOpen=!!lt.gate?.enabled,previousGate=localStorage.getItem('cripta-last-mainnet-gate'),criticalFaults=lt.critical_faults||[];let operationalAlarms=[];if(previousGate==='1'&&!currentGateOpen)operationalAlarms.push('торговый шлюз закрыт'+(lt.gate?.reason?' · '+String(lt.gate.reason):''));localStorage.setItem('cripta-last-mainnet-gate',currentGateOpen?'1':'0');let seenFaultIds=[];try{seenFaultIds=JSON.parse(localStorage.getItem('cripta-seen-critical-faults')||'[]')}catch(_e){seenFaultIds=[]}const seenFaultSet=new Set(seenFaultIds),newCritical=criticalFaults.filter(x=>!seenFaultSet.has(x.fault_id));if(newCritical.length)operationalAlarms.push('CRITICAL '+newCritical.map(x=>x.fault_code).join(', '));localStorage.setItem('cripta-seen-critical-faults',JSON.stringify(criticalFaults.map(x=>x.fault_id)));if(operationalAlarms.length){queuedSound('alarm')}
+  const currentGateOpen=!!lt.gate?.enabled,previousGate=localStorage.getItem('cripta-last-mainnet-gate'),criticalFaults=lt.critical_faults||[];let operationalAlarms=[];if(previousGate==='1'&&!currentGateOpen)operationalAlarms.push('торговый шлюз закрыт'+(lt.gate?.reason?' · '+String(lt.gate.reason):''));localStorage.setItem('cripta-last-mainnet-gate',currentGateOpen?'1':'0');let seenFaultIds=[];try{seenFaultIds=JSON.parse(localStorage.getItem('cripta-seen-critical-faults')||'[]')}catch(_e){seenFaultIds=[]}const seenFaultSet=new Set(seenFaultIds),newCritical=criticalFaults.filter(x=>!seenFaultSet.has(x.fault_id));if(newCritical.length)operationalAlarms.push('CRITICAL '+newCritical.map(x=>x.fault_code).join(', '));localStorage.setItem('cripta-seen-critical-faults',JSON.stringify(criticalFaults.map(x=>x.fault_id)));if(operationalAlarms.length){document.getElementById('gateEventMessage').textContent=operationalAlarms.join(' · ')}
   liveGateOpen=currentGateOpen;rearmReady=!!lt.rearm_ready;liveStateLoaded=true;lastWalletRefreshMs=wallet?Number(wallet.refreshed_at_epoch_ms||0):0;window.p90ArmStatus=lt.p90_arm_status||null;refreshP90RealV3ArmControl();
   if(!gateChanging&&!exactP90RealV3Cohort()&&!p90RealV3OwnerArmPresent()){tradeGateButton.textContent=liveGateOpen?'Запретить новые входы':'Разрешить новые входы';tradeGateButton.classList.toggle('danger',!liveGateOpen);tradeGateButton.disabled=!liveGateOpen&&!rearmReady;setOperationStatus(tradeOperationStatus,liveGateOpen?'success':rearmReady?'warn':'error',liveGateOpen?'Глобальный допуск новых реальных входов открыт':rearmReady?'Новые реальные входы запрещены · hard stop отсутствует':'Новые реальные входы запрещены · действует operational hard stop')}
   document.getElementById('gateEventMessage').textContent=liveGateOpen?'Mainnet gate OPEN · разрешения определяет exact P90 arm-state':'Mainnet gate CLOSED · реальные Entry сейчас запрещены';renderLiveCriticalEvents(lt);renderMiniLogFeed(lt);tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
@@ -1504,8 +1559,8 @@ function renderStrategyMonitor(sm){
   const selected=filter?.value||'all',threshold=Number(nearSelect?.value||1),greenThreshold=Number(greenSelect?.value||0.5),allItems=sm.items||[],items=allItems.filter(x=>selected==='all'||x.strategy_key===selected).sort((a,b)=>{const ad=a.distance_pct==null?Infinity:Math.abs(Number(a.distance_pct)),bd=b.distance_pct==null?Infinity:Math.abs(Number(b.distance_pct));return ad-bd||String(a.strategy_name).localeCompare(String(b.strategy_name))||String(a.symbol).localeCompare(String(b.symbol))});
   const visible=threshold===999?items:items.filter(x=>x.distance_pct==null||Math.abs(Number(x.distance_pct))<=threshold||['COOLDOWN','EMBARGO','SWING_BLOCK','AT_OR_BEYOND_ENTRY'].includes(x.state));
   const stateNames={WAITING:'ждёт формирования Entry',WATCH:'наблюдается',APPROACH:'подходит к Entry',AT_OR_BEYOND_ENTRY:'Entry достигнут/пройден',COOLDOWN:'candidate cooldown',EMBARGO:'embargo после неудачи',SWING_BLOCK:'блок сильного движения'};
-  const ss=sm.sensor_status||{},flowRequired=(ss.flow_required_symbols||[]).length,flowMissing=(ss.flow_missing_symbols||[]).length,oiRequired=(ss.oi_required_symbols||[]).length,oiMissing=(ss.oi_missing_symbols||[]).length,flowReady=Math.max(0,flowRequired-flowMissing),oiReady=Math.max(0,oiRequired-oiMissing),stateExplain=['PREPARING','BLOCKED'].includes(sm.state)?safe(observerPreparationText(sm)):sm.state==='RUNNING'?'Мониторинг работает: Entry может создавать StrategySignal и псевдосделки.':sm.state==='WARMUP'?`Сервис работает, но новые сигналы временно заблокированы до причинного прогрева · Flow ${flowReady}/${flowRequired} · OI ${oiReady}/${oiRequired} · время ${ss.time_ready?'готово':'ожидание'}`:sm.state==='IDLE'?'Observer работает, но нет ACTIVE Strategy.':sm.state==='ERROR'?`Observer остановил расчёт из-за ошибки: ${safe(sm.reason||'—')}`:`Состояние observer: ${safe(sm.state)}`;
-  const stateClass=sm.state==='RUNNING'?'green':sm.state==='ERROR'?'red':'yellow';const activePlanCount=new Set(allItems.map(x=>x.entry_plan_fingerprint).filter(Boolean)).size;entryShadowSummary.innerHTML=`<span class="light ${stateClass}"></span>${safe(sm.state)} · Strategy ${strategies.length} · EntryPlan ${activePlanCount} · направленных строк ${allItems.length} · facts ${sm.facts_received||0}`;entryShadowDetail.innerHTML=`<b>${stateExplain}</b><br><small>${safe(sm.reason||'—')} · epoch ${safe(sm.observer_epoch_id||'—')} · обновлено ${sm.updated_at?new Date(sm.updated_at).toLocaleString('ru-RU'):'—'}</small>`;
+  const ss=sm.sensor_status||{},flowRequired=(ss.flow_required_symbols||[]).length,flowMissing=(ss.flow_missing_symbols||[]).length,oiRequired=(ss.oi_required_symbols||[]).length,oiMissing=(ss.oi_missing_symbols||[]).length,flowReady=Math.max(0,flowRequired-flowMissing),oiReady=Math.max(0,oiRequired-oiMissing),stateExplain=['PREPARING','BLOCKED'].includes(sm.state)?safe(observerPreparationText(sm)):sm.state==='RUNNING'?(String(sm.reason||'').includes('DEGRADED_EXIT_ONLY')?'Рыночный поток работает. Новые REAL входы запрещены; сопровождение Exit продолжает работу.':exactP90RealV3Cohort()?'Рыночный поток работает. Допуск REAL входа определяется шлюзом и проверкой конкретного кандидата.':'Мониторинг работает: Entry может создавать StrategySignal и псевдосделки.'):sm.state==='WARMUP'?`Сервис работает, но новые сигналы временно заблокированы до причинного прогрева · Flow ${flowReady}/${flowRequired} · OI ${oiReady}/${oiRequired} · время ${ss.time_ready?'готово':'ожидание'}`:sm.state==='IDLE'?'Observer работает, но нет ACTIVE Strategy.':sm.state==='ERROR'?`Observer остановил расчёт из-за ошибки: ${safe(sm.reason||'—')}`:`Состояние observer: ${safe(sm.state)}`;
+  const stateClass=sm.state==='RUNNING'?(String(sm.reason||'').includes('DEGRADED_EXIT_ONLY')?'yellow':'green'):sm.state==='ERROR'?'red':'yellow';const activePlanCount=new Set(allItems.map(x=>x.entry_plan_fingerprint).filter(Boolean)).size;entryShadowSummary.innerHTML=`<span class="light ${stateClass}"></span>${safe(sm.state)} · Strategy ${strategies.length} · EntryPlan ${activePlanCount} · направленных строк ${allItems.length} · facts ${sm.facts_received||0}`;entryShadowDetail.innerHTML=`<b>${stateExplain}</b><br><small>${safe(sm.reason||'—')} · epoch ${safe(sm.observer_epoch_id||'—')} · обновлено ${sm.updated_at?new Date(sm.updated_at).toLocaleString('ru-RU'):'—'}</small>`;
   const fmt=v=>v==null?'—':Number(v).toFixed(6),date=v=>v?new Date(v).toLocaleString('ru-RU'):'—',r1Progress=x=>{const d=x.r1_stability;if(!d)return '';const reason={HISTORY_WARMUP:'прогрев истории',COLLECTING:'накапливается серия',LOW_CHANGED:'сброс: изменилась нижняя граница',HIGH_CHANGED:'сброс: изменилась верхняя граница',BOTH_CHANGED:'сброс: изменились обе границы',WIDTH_TOO_NARROW:'STAY готов, но диапазон уже 1%'}[d.reset_reason]||d.reset_reason||'серия стабильна',strict=Number(d.strict_stable_states||0),need=Number(d.required_states||6),low=Number(d.low_stable_states||0),high=Number(d.high_stable_states||0),width=d.working_width_pct==null?'—':Number(d.working_width_pct).toFixed(3)+'%',min=d.working_width_min_pct==null?'1.000%':Number(d.working_width_min_pct).toFixed(3)+'%',cls=strict>=need&&d.width_ready?'ok':strict>=need?'warn':'muted';return `<br><small class="${cls}"><b>STAY ${strict}/${need}</b> · LOW ${low}/${need} · HIGH ${high}/${need}<br>width ${width} / ≥${min} · ${safe(reason)}</small>`},zoneText=x=>{const g=x.geometry||{},z5=g['5'],z15=g['15'];const one=(name,z)=>z?`${name}: S ${Number(z.support_bottom).toFixed(4)}–${Number(z.support_top).toFixed(4)} · R ${Number(z.resistance_bottom).toFixed(4)}–${Number(z.resistance_top).toFixed(4)}`:`${name}: —`;return `${one('5m',z5)}<br><small>${one('15m',z15)}</small>`},sensor=x=>`Flow: ${x.flow_condition_met===true?'OK':x.flow_condition_met===false?'NO':'—'}<br>OI: ${x.oi_condition_met===true?'OK':x.oi_condition_met===false?'NO':'—'}${x.hourly_swing_percent==null?'':`<br><small>swing ${Number(x.hourly_swing_percent).toFixed(2)}%</small>`}`,locks=x=>`${x.candidate_cooldown_until?`cooldown до ${date(x.candidate_cooldown_until)}`:'cooldown —'}<br>${x.entry_embargo_until?`embargo до ${date(x.entry_embargo_until)}`:'embargo —'}${x.last_resolution?`<br><small>${safe(x.last_resolution)} · ${date(x.last_resolution_at)}</small>`:''}`;
   const readiness=x=>{const d=x.r1_stability||{},distance=x.distance_pct==null?null:Math.abs(Number(x.distance_pct)),strict=Number(d.strict_stable_states||0),need=Number(d.required_states||6),width=d.working_width_pct==null?null:Number(d.working_width_pct),min=d.working_width_min_pct==null?1:Number(d.working_width_min_pct),readyState=['WATCH','APPROACH','AT_OR_BEYOND_ENTRY'].includes(x.state);if(!readyState){let detail=stateNames[x.state]||safe(x.state||'не готово');if(x.state==='WAITING'){if(d.history_ready===false)detail=`история: ${strict}/${need}`;else if(d.width_ready===false&&width!=null)detail=`width ${width.toFixed(3)}% < ${min.toFixed(3)}%`;else if(strict<need)detail=`${safe(d.reset_reason||'стабилизация')} · STAY ${strict}/${need}`;else detail='Entry ещё не сформирован'}return{level:'red',label:'НЕ ГОТОВО',detail}}if(distance==null)return{level:'red',label:'НЕИЗВЕСТНО',detail:'нет causal distance до Entry'};if(x.state==='AT_OR_BEYOND_ENTRY'||distance<=greenThreshold)return{level:'green',label:'ГОТОВО',detail:`до Entry ${distance.toFixed(3)}% · зелёный ≤${greenThreshold.toFixed(2)}%`};return{level:'yellow',label:'ГОТОВО',detail:`цена далеко: ${distance.toFixed(3)}% · зелёный ≤${greenThreshold.toFixed(2)}%`}};
   entryShadowRows.innerHTML=visible.length?visible.map(x=>{const r=readiness(x);return `<tr class="strategy-monitor-row-${r.level}"><td><span class="light ${r.level}"></span><b>${safe(x.strategy_name)}</b><br><small class="muted">EntryPlan ${safe(String(x.entry_plan_fingerprint||"—").slice(0,12))} · ${safe(x.strategy_version)}</small></td><td><a href="https://www.bybit.kz/trade/usdt/${safe(x.symbol)}" target="_blank" rel="noopener"><b>${safe(x.symbol)}</b></a></td><td>${safe(x.direction)}</td><td><span class="strategy-readiness ${r.level}"><span class="light ${r.level}"></span>${r.label}</span><span class="strategy-readiness-detail ${r.level}">${safe(r.detail)}</span></td><td><span class="pill">${stateNames[x.state]||safe(x.state)}</span>${r1Progress(x)}${x.last_touch_at?`<br><small>touch ${date(x.last_touch_at)}</small>`:''}</td><td>${fmt(x.current_price)}</td><td>${fmt(x.entry_price)}</td><td>${x.distance_pct==null?'—':`${Number(x.distance_pct).toFixed(3)}%`}</td><td>${x.candidate_id?`<small>${safe(x.candidate_id)}</small><br>`:''}${zoneText(x)}</td><td>${sensor(x)}</td><td>${locks(x)}</td><td>${date(x.updated_at)}</td></tr>`}).join(''):'<tr><td colspan="12" class="muted">Для выбранной Strategy сейчас нет строк в заданном диапазоне.</td></tr>';

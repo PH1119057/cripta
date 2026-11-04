@@ -12,11 +12,13 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
+from bybit_workbench.account_entry_readiness import real_entry_account_state
 from bybit_workbench.live_arm_readiness import (
     evaluate_live_arm,
     scope_for_check,
@@ -391,6 +393,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
     source_root: Path = Path("/srv/cripta/source_checkout"),
     runtime_root: Path = Path("/srv/cripta/runtime/current"),
     private_proof_timeout_seconds: float | None = None,
+    progress_report: Callable[[str, tuple[str, ...]], None] | None = None,
 ) -> dict[str, object]:
     """Validate and write technical PASS evidence for all exact five contexts.
 
@@ -410,11 +413,21 @@ def prepare_p90l90_real_v3_prearm_evidence(
         "private proof timeout invalid",
     )
 
+    completed_checks: list[str] = []
+
+    def report(phase: str, completed: str | None = None) -> None:
+        if completed is not None:
+            completed_checks.append(completed)
+        if progress_report is not None:
+            progress_report(phase, tuple(completed_checks))
+
+    report("versions")
     identity, parity = _release_and_parity_evidence(
         release_commit=release_commit,
         source_root=source_root,
         runtime_root=runtime_root,
     )
+    report("services", "versions")
     for unit in _SERVICE_UNITS:
         _service_active(unit)
 
@@ -422,6 +435,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
     # External release/service proofs above perform no PostgreSQL reads.
     connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
 
+    report("market", "services")
     observer = _read_json(
         Path("/var/lib/cripta/universal_entry_observer/status.json"),
         "Universal Entry observer status",
@@ -514,6 +528,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
         "account LIVE-arm session already active",
     )
 
+    report("strategies", "market")
     contexts, routes = p90l90_real_v3_contexts_and_routes(
         connection, release_commit=release_commit, now=current
     )
@@ -617,6 +632,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
         "capital reservation table missing",
     )
 
+    report("accounts", "strategies")
     account_evidence: dict[str, dict[str, object]] = {}
     position_modes: dict[tuple[str, str], tuple[object, ...]] = {}
     for strategy_id, (_binding, account_id, connector_id) in routes.items():
@@ -719,6 +735,17 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 strategy_id + "/" + symbol + " position mode invalid/stale",
             )
             position_modes[(strategy_id, symbol)] = tuple(row)
+        # Same predicate as the first real candidate, without financial ARM.
+        # Prearm must not PASS while candidate admission has a hidden veto.
+        for symbol in sorted(ALLOWED_SYMBOLS[strategy_id]):
+            candidate_readiness, _capacity = real_entry_account_state(
+                connection, symbol=symbol, observed_at=datetime.now(UTC),
+                trading_account_id=account_id,
+            )
+            _require(
+                candidate_readiness.ready,
+                strategy_id + "/" + symbol + " Entry admission: " + candidate_readiness.reason,
+            )
         account_evidence[strategy_id] = {
             "trading_account_id": account_id,
             "connector_id": connector_id,
@@ -735,6 +762,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
             "strategy_cap_usdt": str(cap),
         }
 
+    report("entry_exit", "accounts")
     try:
         rollback_ref = Path("/var/lib/cripta/release/LAST_BACKUP").read_text(
             encoding="utf-8"
@@ -985,6 +1013,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 + ": "
                 + ",".join(decision.failed_codes)
             )
+    report("technical_ready", "entry_exit")
     return {
         "status": "PREARM_TECHNICAL_READY",
         "strategies": 2,

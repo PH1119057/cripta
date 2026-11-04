@@ -92,6 +92,8 @@ def test_real_entry_account_state_uses_generation_not_wall_clock_age() -> None:
         ROOT / "operations/monitoring/universal_entry_shadow.py"
     ).read_text(encoding="utf-8")
     assert "CRIPTA_REAL_ENTRY_ACCOUNT_STATE_MAX_AGE_SECONDS" not in unit
-    assert "runtime.account_state_generations:" in observer
+    assert "runtime.account_state_generations:" in (
+        ROOT / "src/bybit_workbench/account_entry_readiness.py"
+    ).read_text(encoding="utf-8")
     assert "_real_entry_account_state(" in observer
     assert "fresh account wallet state is required" not in observer

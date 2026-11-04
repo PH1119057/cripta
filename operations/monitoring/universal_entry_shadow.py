@@ -34,10 +34,7 @@ from operations.monitoring.observer_preparation import (
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
-from bybit_workbench.account_state_generation import (
-    AccountStateGenerationUnavailable,
-    current_complete_account_state_generation,
-)
+from bybit_workbench.account_entry_readiness import real_entry_account_state
 from bybit_workbench.counterfactual import (
     AnalystCounterfactualStore,
     build_insufficient_funds_candidate,
@@ -1516,6 +1513,7 @@ def _blocked_multi_account_admissions(
     *,
     symbol: str,
     observed_at: datetime,
+    reason: str = "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN",
 ) -> dict[str, tuple[AccountAdmissionContext, ...]]:
     """Explicit blocked results for every effective multi-account binding.
 
@@ -1528,7 +1526,7 @@ def _blocked_multi_account_admissions(
                 binding=binding,
                 capacity=None,
                 technical_readiness=TechnicalReadiness(
-                    False, observed_at, "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN"
+                    False, observed_at, reason
                 ),
                 account_ref="BYBIT:UNIFIED",
                 exchange_position_key=exchange_position_key(
@@ -1788,69 +1786,13 @@ def _real_execution_activation_ids(
 
 
 def _real_entry_account_state(
-    connection: Any,
-    *,
-    symbol: str,
-    observed_at: datetime,
+    connection: Any, *, symbol: str, observed_at: datetime,
     trading_account_id: str | None = None,
 ) -> tuple[TechnicalReadiness, TradingCapacitySnapshot | None]:
-    exact_account = TRADING_ACCOUNT_ID if trading_account_id is None else trading_account_id
-    if not exact_account:
-        return TechnicalReadiness(False, observed_at, "TradingAccount identity missing"), None
-    try:
-        generation = current_complete_account_state_generation(
-            connection,
-            account_ref="BYBIT:UNIFIED",
-            trading_account_id=exact_account,
-            acquire_account_lock=True,
-        )
-    except AccountStateGenerationUnavailable as exc:
-        return TechnicalReadiness(False, observed_at, str(exc)), None
-
-    state_ref = generation.position_mode_refs.get(symbol)
-    if not state_ref:
-        return (
-            TechnicalReadiness(
-                False,
-                observed_at,
-                f"current account state generation has no position-mode proof for {symbol}",
-            ),
-            None,
-        )
-
-    critical_fault = connection.execute(
-        """SELECT fault_code
-             FROM runtime.lifecycle_faults
-            WHERE state='OPEN' AND severity='CRITICAL'
-              AND (NULLIF(exact_ids->>'trading_account_id','') IS NULL
-                   OR exact_ids->>'trading_account_id'=%s)
-            ORDER BY detected_at,fault_id LIMIT 1""",
-        (exact_account,),
-    ).fetchone()
-    if critical_fault is not None:
-        return (
-            TechnicalReadiness(
-                False,
-                observed_at,
-                f"open critical lifecycle fault: {critical_fault[0]}",
-            ),
-            None,
-        )
-
-    capacity = TradingCapacitySnapshot(
-        capacity_snapshot_id=generation.generation_id,
-        observed_at=generation.completed_at,
-        available_for_new_trading=generation.available_balance,
-        quality=DataQuality.HIGH,
-        source_ref=f"runtime.account_state_generations:{generation.generation_id}",
-    )
-    return (
-        TechnicalReadiness(
-            True,
-            observed_at,
-            f"complete account state generation {generation.generation_id}",
-        ),
-        capacity,
+    return real_entry_account_state(
+        connection, symbol=symbol, observed_at=observed_at,
+        trading_account_id=(TRADING_ACCOUNT_ID if trading_account_id is None
+                            else trading_account_id),
     )
 
 
@@ -3308,7 +3250,11 @@ def _run_observer_epoch(
                             "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT"
                         )
                     if p90_real_degraded:
-                        return (), False
+                        blocked = _blocked_multi_account_admissions(
+                            real_candidates, symbol=symbol, observed_at=at,
+                            reason="P90_REAL_NEW_ENTRY_GATE_CLOSED",
+                        )
+                        return blocked.get(activation, ()), False
                     if p90_real_staged:
                         if not (staged_gate_closed or staged_gate_finalized):
                             raise RuntimeError(
@@ -3318,30 +3264,21 @@ def _run_observer_epoch(
                         raise RuntimeError(
                             "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
                         )
+                    if staged_gate_closed:
+                        # A causal crossing during staging is an ordinary denied
+                        # Entry. Gate CLOSED must never be treated as a broken
+                        # account/source or terminate the Exit/source epoch.
+                        blocked = _blocked_multi_account_admissions(
+                            real_candidates, symbol=symbol, observed_at=at,
+                            reason="P90_REAL_OWNER_ARM_STAGE_GATE_CLOSED",
+                        )
+                        return blocked.get(activation, ()), False
                     scoped, ready = _multi_account_admissions(
-                        connection,
-                        observer_split.p90_real,
-                        real_candidates,
-                        symbol=symbol,
-                        observed_at=at,
-                        real_selected_for=selected,
+                        connection, observer_split.p90_real, real_candidates,
+                        symbol=symbol, observed_at=at, real_selected_for=selected,
                     )
                     accounts = scoped.get(activation, ())
-                    account_ready = (
-                        len(accounts) == 1 and activation in ready
-                    )
-                    if p90_real_staged:
-                        if not account_ready:
-                            raise RuntimeError(
-                                "P90_REAL_OWNER_ARM_STAGE_ACCOUNT_NOT_READY"
-                            )
-                        if staged_gate_closed:
-                            # Full topology is proven, but the global gate is
-                            # still closed: never expose executable admission.
-                            return (), False
-                        # Final gate transaction already passed every staged
-                        # check. A fact may arrive before the next signature
-                        # tick; exact OPEN is therefore executable immediately.
+                    account_ready = len(accounts) == 1 and activation in ready
                     return accounts, account_ready
 
                 runtime = assemble_p90_real_observer_runtime(

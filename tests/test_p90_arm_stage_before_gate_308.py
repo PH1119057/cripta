@@ -66,11 +66,11 @@ def test_observer_stage_builds_full_runtime_but_exposes_no_admission() -> None:
     assert "p90_real_staged = True" in OBSERVER
     assert '"p90_real_staged_gate_closed"' in OBSERVER
     assert "staged_gate_closed" in OBSERVER
-    assert "return (), False" in OBSERVER
+    assert "return blocked.get(activation, ()), False" in OBSERVER
     assert "OWNER_ARM_OPEN_GATE_REASON" in OBSERVER
 
 
 def test_ui_explains_gate_closed_stage_and_allows_bounded_wait() -> None:
     assert "проверяется полный runtime · mainnet gate пока CLOSED" in UI
     assert "300000" in UI
-    assert "Если проверка не пройдёт — gate не откроется." in UI
+    assert "Шлюз откроется только при успешном прохождении всех проверок." in UI
