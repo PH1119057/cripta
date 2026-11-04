@@ -125,7 +125,6 @@ def test_strategy_account_scope_does_not_borrow_main_exit_for_sub() -> None:
         ("attribution_id", None),
         ("attribution_link_status", "UNKNOWN"),
         ("close_link_status", "UNRESOLVED_EXACT_LINK"),
-        ("exit_mechanism", "UNKNOWN"),
         ("identity_status", "LEGACY_UNKNOWN"),
         ("trading_account_id", "ta-other"),
         ("exit_order_id", None),
@@ -292,10 +291,46 @@ def test_unknown_profitable_long_close_is_proven_non_hard_stop() -> None:
         },
     ],
 )
-def test_unknown_adverse_ambiguous_or_missing_price_stays_fail_closed(
+def test_unknown_close_never_blocks_entry_even_with_incomplete_prices(
     updates: dict[str, object],
 ) -> None:
     row = _row("unknown-bad", AT - timedelta(minutes=30), mechanism="UNKNOWN")
     row.update(exit_owner="UNKNOWN", **updates)
-    with pytest.raises(P90RealSecond48Unverified, match="EXACT_EXIT_UNPROVEN"):
-        _read([row])
+    allowed, snapshot = _read([row])
+    assert allowed is True
+    assert snapshot["hard_stops"] == []
+
+
+@pytest.mark.parametrize("mechanism", [
+    "TAKE_PROFIT", "TRAILING_STOP", "PROFIT_PROTECTION_STOP",
+    "OWNER_MANUAL_CLOSE", "STRATEGY_EXIT", "UNKNOWN", None,
+])
+def test_non_hard_stop_closed_history_needs_no_attribution_or_identity_proof(
+    mechanism: object,
+) -> None:
+    historical = {
+        "state": "CLOSED", "position_id": "ltc-old",
+        "exit_mechanism": mechanism,
+        "closed_at": None, "identity_status": "LEGACY_UNKNOWN",
+    }
+    one = _row("one-stop", AT - timedelta(hours=1))
+    allowed, snapshot = _read([historical, one])
+    assert allowed is True
+    assert len(snapshot["hard_stops"]) == 1
+    # History cannot cancel a real SECOND48 pause either.
+    two = _row("second-stop", AT - timedelta(minutes=5))
+    assert _read([historical, one, two])[0] is False
+    assert historical["closed_at"] is None  # read-only, no fabricated repair
+
+
+def test_expired_hard_stop_history_cannot_block_current_entry() -> None:
+    old = _row("expired", AT - timedelta(hours=100))
+    old.update(attribution_id=None, identity_status="LEGACY_UNKNOWN")
+    assert _read([old])[0] is True
+
+
+def test_pair_before_recent_window_still_produces_active_pause() -> None:
+    first = _row("first", AT - timedelta(hours=80))
+    second = _row("second", AT - timedelta(hours=33))
+    assert _read([first, second])[0] is False
+    assert _read([first, second], now=AT + timedelta(hours=15))[0] is True

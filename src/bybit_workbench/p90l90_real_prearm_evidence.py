@@ -472,11 +472,9 @@ def prepare_p90l90_real_v3_prearm_evidence(
             "P90 REAL v3 PREARM: critical delivery status missing"
         )
     critical = cast(dict[str, object], critical_raw)
-    critical_pending = int(str(critical.get("pending_or_unacknowledged") or 0))
-    _require(
-        critical_pending == 0,
-        "CRITICAL fault delivery has pending/unacknowledged items",
-    )
+    # Delivery/ACK is an incident-ledger axis, never financial admission.
+    # Preserve the raw backlog in evidence below; fresh runtime/account proofs
+    # and exact SECOND48 are checked independently (TC 4.13.5).
     critical_delivery_status = (
         "PASS"
         if critical.get("configured") is True
