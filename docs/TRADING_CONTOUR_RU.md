@@ -1874,6 +1874,12 @@ signed Exchange inventory и независимый command/reconciliation/prote
 path доказывают текущий account/slot/capacity без относящейся к нему ambiguity.
 Строка закрытой сделки в Dashboard сама по себе такого доказательства не даёт.
 
+Если конкретный исторический факт нужен **текущему правилу стратегии**
+(например, фактический HARD_STOP для её SECOND48), это отдельный доказуемый
+Entry dependency именно этой StrategyVersion. Нельзя ни игнорировать это
+правило, ни подменять его blanket проверкой всего журнала; независимые
+Strategy/account scopes не наследуют этот запрет.
+
 При этом нельзя придумывать historical closed_at, execution IDs, Exit reason,
 terminal reservation/slot transitions, вручную «освобождать» старый капитал
 или игнорировать реально конкурирующий claim ради PASS. Влияние оставшихся
