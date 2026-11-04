@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import importlib.util
 from dataclasses import replace
 from pathlib import Path
 
-import pytest
 
 from bybit_workbench.runtime_recovery_policy import (
     RecoveryAction,
@@ -160,6 +158,6 @@ def test_supervisor_probes_only_and_keeps_engine_unmodified() -> None:
     forbidden = (
         "execution_gates", "live_arm_sessions", "account_live_arm_sessions",
         "UPDATE ", "DELETE FROM", "INSERT INTO", "/v5/order/",
-        "systemctl\", \"restart", "request_recovery(",
+        '"restart"', "request_recovery(",
     )
     assert not any(token in source for token in forbidden)
