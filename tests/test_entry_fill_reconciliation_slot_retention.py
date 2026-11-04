@@ -6,10 +6,18 @@ No production DB, network, Bybit or Exchange mutation in this suite.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from operations.connectivity import private_runtime
+import pytest
+
+# Match the production script directory for its sibling imports.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "operations/connectivity"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research/server/connectivity"))
+
+from operations.connectivity import private_runtime  # noqa: E402
 
 ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
 POSITION = "POS-test-entry-ltc"
@@ -70,6 +78,9 @@ def test_stale_empty_snapshot_never_releases_recent_confirmed_entry_slot() -> No
         if "UPDATE runtime.position_ownership" in statement
     ]
     assert len(updates) == 1
+    # The last proven OPEN owner must remain visible to Exit/restart readers.
+    # Keeping the slot alone is insufficient if the owner becomes CLOSED.
+    assert "state='CLOSED'" not in updates[0]
     assert "close_link_status='UNRESOLVED_EXACT_LINK'" in updates[0]
     release.assert_not_called()
     assert not any("UPDATE runtime.exchange_position_slot_claims" in sql
@@ -85,3 +96,24 @@ def test_regression_does_not_weaken_exact_close_release() -> None:
     assert text.count("release_position_capital_reservation(") == 1
     exact = text.split("close_link_status='EXACT'", 1)[1]
     assert "release_position_capital_reservation(" in exact
+
+
+@pytest.mark.parametrize("account", ("ta-main", "ta-sub"))
+@pytest.mark.parametrize("new_fill", (False, True))
+def test_rest_generation_cannot_overwrite_a_later_confirmed_fill(account, new_fill):
+    class InventoryDB:
+        def execute(self, statement, params):
+            assert "created_at >= to_timestamp" in statement
+            assert params == (account, 1793790909059)
+            return Rows([(POSITION,)] if new_fill else [])
+
+    with patch.object(private_runtime, "TRADING_ACCOUNT_ID", account):
+        if new_fill:
+            with pytest.raises(private_runtime.ExchangeReadUnavailable, match="OVERTAKEN"):
+                private_runtime._require_inventory_not_overtaken_by_fill(
+                    InventoryDB(), started_ms=1793790909059,
+                )
+        else:
+            private_runtime._require_inventory_not_overtaken_by_fill(
+                InventoryDB(), started_ms=1793790909059,
+            )

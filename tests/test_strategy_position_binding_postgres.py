@@ -691,3 +691,68 @@ def test_confirmed_close_releases_bound_reservation() -> None:
             (ids["reservation_id"],),
         ).fetchone()
         assert state == ("RELEASED",)
+
+
+
+def test_first_fill_survives_unlinked_flat_inventory_in_postgres(monkeypatch) -> None:
+    """Exercise real persisted ownership/resources; never contact Exchange."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.syspath_prepend(str(root / "operations/connectivity"))
+    monkeypatch.syspath_prepend(str(root / "research/server/connectivity"))
+    from operations.connectivity import private_runtime
+
+    assert DSN is not None
+    prefix = "first-fill-" + uuid4().hex
+    with psycopg.connect(DSN) as connection:
+        assert connection.execute("SELECT current_database()").fetchone()[0] == "cripta_integration"
+        ids = _seed_request(
+            connection, prefix, reservation_state="DISPATCHED", dispatched=True,
+        )
+        lineage = load_universal_entry_lineage(
+            connection, command_id=ids["command_id"], command_payload=_payload(ids),
+        )
+        assert lineage is not None
+        position = persist_universal_strategy_position(
+            connection, lineage=lineage, position_id=f"{prefix}-position",
+            trade_id=f"{prefix}-trade", entry_command_id=ids["command_id"],
+            symbol="UNIUSDT", side="Buy", actual_avg_fill=Decimal("8.50"),
+            actual_qty=Decimal("2"), fill_at=NOW,
+            exchange_order_ids=(f"{prefix}-order",),
+            client_order_ids=(ids["command_id"],), execution_ids=(f"{prefix}-exec",),
+            position_idx=0,
+        )
+        with patch.object(private_runtime, "TRADING_ACCOUNT_ID", ids["trading_account_id"]):
+            with pytest.raises(private_runtime.ExchangeReadUnavailable, match="OVERTAKEN"):
+                private_runtime._require_inventory_not_overtaken_by_fill(
+                    connection, started_ms=int(NOW.timestamp()*1000),
+                )
+            private_runtime.reconcile_position_ownership(
+                connection, position_list=[], now=int(datetime.now(UTC).timestamp()*1000),
+            )
+        assert connection.execute(
+            """SELECT state,close_link_status FROM runtime.position_ownership
+                 WHERE position_id=%s""", (position.strategy_position_id,),
+        ).fetchone() == ("OPEN", "UNRESOLVED_EXACT_LINK")
+        assert connection.execute(
+            "SELECT state FROM runtime.capital_reservations WHERE reservation_id=%s",
+            (ids["reservation_id"],),
+        ).fetchone() == ("CONSUMED",)
+        assert connection.execute(
+            """SELECT claim_state FROM runtime.exchange_position_slot_claims
+                 WHERE exchange_position_slot_claim_id=%s""",
+            (ids["slot_claim_id"],),
+        ).fetchone() == ("BOUND",)
+        # Compile and exercise the real account-scoped child claim too:
+        # a nonexistent decision must roll back without reaching Execution.
+        with (
+            patch.object(private_runtime, "TRADING_ACCOUNT_ID", ids["trading_account_id"]),
+            patch.object(private_runtime, "execute_command") as executor,
+            pytest.raises(private_runtime.ExchangeMutationBarrier, match="NOT_QUEUED"),
+        ):
+            private_runtime._execute_first_fill_trailing(
+                connection, "fake", "fake", entry_command_id=ids["command_id"],
+                exit_decision_id=f"{prefix}-missing-decision", entry_result={},
+            )
+        executor.assert_not_called()
