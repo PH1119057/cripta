@@ -1978,10 +1978,12 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 LIMIT 501"""
         ).fetchall()
         critical_fault_rows = connection.execute(
-            """SELECT fault_id,fault_code,severity,detected_at,payload
-               FROM runtime.lifecycle_faults
-               WHERE state='OPEN' AND severity='CRITICAL'
-               ORDER BY detected_at DESC
+            """SELECT f.fault_id,f.fault_code,f.severity,f.detected_at,f.payload,p.state
+               FROM runtime.lifecycle_faults f
+               LEFT JOIN runtime.position_ownership p
+                 ON p.position_id=NULLIF(f.exact_ids->>'strategy_position_id','')
+               WHERE f.state='OPEN' AND f.severity='CRITICAL'
+               ORDER BY f.detected_at DESC
                LIMIT 20"""
         ).fetchall()
         bybit_entry_log_rows = connection.execute(
@@ -2672,7 +2674,12 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "detected_at": r[3].isoformat(),
                 "payload": r[4],
             }
-            for r in critical_fault_rows
+            for r in critical_fault_rows if r[5] != "CLOSED"
+        ],
+        "historical_critical_faults": [
+            {"fault_id": r[0], "fault_code": r[1], "severity": r[2],
+             "detected_at": r[3].isoformat(), "payload": r[4]}
+            for r in critical_fault_rows if r[5] == "CLOSED"
         ],
         "bybit_entry_log": [
             {
@@ -5489,6 +5496,12 @@ def _mark_p90_readiness_blocked(
     with psycopg.connect(
         "dbname=cripta user=cripta host=/var/run/postgresql"
     ) as connection:
+        if progress is None:
+            current = latest_real_readiness_operation(
+                connection, scope_key=P90_REAL_READINESS_SCOPE_KEY,
+            )
+            if current is not None and current.get("request_id") == request_id:
+                progress = dict(current.get("progress_json") or {})
         mark_real_readiness_blocked(
             connection,
             request_id=request_id,
@@ -5509,6 +5522,7 @@ def _mark_p90_readiness_blocked(
 def _wait_p90_real_v3_technical_evidence(
     *,
     timeout_seconds: float = 30.0,
+    progress_report=None,
 ) -> dict[str, object]:
     deadline = time.monotonic() + timeout_seconds
     last_blocker: Exception | None = None
@@ -5526,6 +5540,7 @@ def _wait_p90_real_v3_technical_evidence(
                     evidence_connection,
                     release_commit=LOADED_RELEASE_COMMIT,
                     now=datetime.now(UTC),
+                    progress_report=progress_report,
                     private_proof_timeout_seconds=min(
                         P90_REAL_READINESS_PRIVATE_ATTEMPT_SECONDS,
                         max(0.25, remaining),
@@ -5882,7 +5897,19 @@ def _u6_prepare_p90_real_v3_readiness(
                     ],
                 },
             )
-        evidence = _wait_p90_real_v3_technical_evidence(timeout_seconds=180.0)
+        def report_checks(phase, completed):
+            with psycopg.connect(
+                "dbname=cripta user=cripta host=/var/run/postgresql"
+            ) as progress_connection:
+                set_real_readiness_state(
+                    progress_connection, request_id=request_id, state="VALIDATING",
+                    phase=phase, now=datetime.now(UTC),
+                    progress={"completed_checks": list(completed), "current_check": phase},
+                )
+
+        evidence = _wait_p90_real_v3_technical_evidence(
+            timeout_seconds=180.0, progress_report=report_checks,
+        )
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
@@ -5895,6 +5922,8 @@ def _u6_prepare_p90_real_v3_readiness(
                     "requested_starts": list(plan.starts),
                     "broker_result": broker_result,
                     "technical_evidence_status": evidence.get("status"),
+                    "completed_checks": ["versions", "services", "market", "strategies",
+                                         "accounts", "entry_exit"],
                 },
             )
             return _readiness_operation_json(
@@ -5941,6 +5970,17 @@ def _u6_p90_real_v3_prepare(handler: object, request: dict[str, object]) -> None
     _u6_json(handler, 200, result)
 
 
+def _p90_arm_phase(connection, request_id, phase):
+    result = connection.execute(
+        """UPDATE control.real_readiness_operations
+              SET phase=%s,updated_at=%s
+            WHERE request_id=%s AND release_commit=%s AND state='READY_FOR_OWNER_ARM'""",
+        (phase, datetime.now(UTC), request_id, LOADED_RELEASE_COMMIT),
+    )
+    if result.rowcount != 1:
+        raise ValueError("P90_REAL_ARM_PROGRESS_IDENTITY_INVALID")
+
+
 def _u6_p90_real_v3_arm(
     handler: object, request: dict[str, object]
 ) -> None:
@@ -5954,21 +5994,6 @@ def _u6_p90_real_v3_arm(
     operator = handler.session_user() or "UNKNOWN"
     request_id = str(request.get("request_id") or secrets.token_hex(12))
     if enabled:
-        try:
-            observer = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            observer = {}
-        if not observer_arm_ready(observer, LOADED_RELEASE_COMMIT, datetime.now(UTC)):
-            raise ValueError("P90_REAL_OBSERVER_NOT_READY: дождитесь готовности Observer")
-        with psycopg.connect(
-            "dbname=cripta user=cripta host=/var/run/postgresql "
-            "options=-cdefault_transaction_read_only=on"
-        ) as connection:
-            previous = latest_real_readiness_operation(
-                connection, scope_key=P90_REAL_READINESS_SCOPE_KEY,
-            )
-        if not technical_preparation_fresh(previous, LOADED_RELEASE_COMMIT, datetime.now(UTC)):
-            raise ValueError("P90_REAL_PREPARATION_REQUIRED: сначала проверьте готовность")
         preparation = _u6_prepare_p90_real_v3_readiness(
             operator=operator,
             request_id=request_id,
@@ -6001,6 +6026,7 @@ def _u6_p90_real_v3_arm(
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
+            _p90_arm_phase(connection, request_id, "arming_closed_gate")
             stage_p90l90_real_v3(
                 connection,
                 release_commit=LOADED_RELEASE_COMMIT,
@@ -6032,6 +6058,7 @@ def _u6_p90_real_v3_arm(
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
+            _p90_arm_phase(connection, request_id, "finalizing")
             result = finalize_p90l90_real_v3(
                 connection,
                 release_commit=LOADED_RELEASE_COMMIT,
@@ -6040,6 +6067,7 @@ def _u6_p90_real_v3_arm(
                 request_id=request_id,
                 observer_stage_ready=True,
             )
+            _p90_arm_phase(connection, request_id, "opened")
         staged = False
     except Exception:
         if staged:

@@ -79,8 +79,7 @@ class P90L90RealNativeCandidateOwner:
         if admitted_at.tzinfo is None:
             raise RuntimeError("P90_REAL_NATIVE_ADMISSION_TIME_INVALID")
         if (
-            not arm_and_source_verified
-            or len(account_admissions) != 1
+            len(account_admissions) != 1
             or fact.symbol not in ALLOWED_SYMBOLS[self._strategy_id]
             or cursor.symbol != fact.symbol
             or fact.event_kind != "P90L90_RAW_H9_PREV7D_CROSSING"
@@ -93,16 +92,15 @@ class P90L90RealNativeCandidateOwner:
             or binding.execution_leg != "PRIMARY"
             or not binding.trading_account_id
             or not binding.strategy_execution_binding_id
-            or scope.entry_admission_port is None
-            or not scope.technical_readiness.ready
-            or scope.capacity is None
         ):
             raise RuntimeError("P90_REAL_NATIVE_OWNER_EXACT_ACCOUNT_NOT_READY")
         evaluations = self._engine.process(
             fact,
             proven_p90_native_cursor=cursor,
             real_admission_required_for=frozenset({self._activation_id}),
-            real_admission_ready_for=frozenset({self._activation_id}),
+            real_admission_ready_for=(
+                frozenset({self._activation_id}) if arm_and_source_verified else frozenset()
+            ),
             account_admissions={self._activation_id: (scope,)},
             account_ref=scope.account_ref,
             admission_time=admitted_at.astimezone(UTC),

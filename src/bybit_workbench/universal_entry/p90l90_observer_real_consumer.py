@@ -282,7 +282,7 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         # The source checkpoint's transaction also reads all actual CLOSED
         # exchange-attributed exits: callers cannot override a durable
         # SECOND48 prohibition via an independently supplied boolean.
-        if len(admissions) != 1 or not proven:
+        if len(admissions) != 1:
             raise RuntimeError("P90_REAL_NATIVE_ACCOUNT_ADMISSION_NOT_VERIFIED")
         bundle = self._by_symbol[fact.symbol]
         lifecycle = bundle.card.lifecycle_policy.to_dict()

@@ -326,8 +326,6 @@ def test_real_native_atomic_callback_keeps_exact_one_account_and_no_paper(
         entry_admission_port=port,  # type: ignore[arg-type]
     )
     for forbidden in (
-        {"account_admissions": (scoped,), "arm_and_source_verified": False},
-        {"account_admissions": (raw,), "arm_and_source_verified": True},
         {"account_admissions": (), "arm_and_source_verified": True},
     ):
         with pytest.raises(RuntimeError, match="P90_REAL_NATIVE_OWNER_"):
@@ -353,3 +351,41 @@ def test_real_native_atomic_callback_keeps_exact_one_account_and_no_paper(
     assert len(port.requests) == 1
     assert results[0].decision is None
     assert results[0].execution_request is None
+
+
+@pytest.mark.parametrize("arm_ready,technical_ready", [(False, True), (True, False)])
+def test_blocked_native_candidate_is_persisted_without_order_or_epoch_failure(
+    arm_ready, technical_ready,
+):
+    engine, activation, entry_fp = _engine(real=True)
+    plan = engine._registry.plans_for("LTCUSDT")[0]
+    fact, cursor = _native_fact(entry_fp)
+    recorder = _EvaluationRecorder()
+    owner = P90L90RealNativeCandidateOwner(
+        strategy_id=MAIN_ID, strategy_activation_id=activation,
+        strategy_config_fingerprint=plan.strategy_config_fingerprint,
+        entry_plan_fingerprint=entry_fp, engine=engine, store=recorder,
+        provenance=FrozenPolicy.from_mapping({
+            "source_commit": "a" * 40, "data_lineage_id": "p90-test-lineage",
+        }),
+    )
+    port = _MemoryAdmissionPort()
+    raw = _admissions(activation)[activation][0]
+    scope = replace(
+        raw, technical_readiness=TechnicalReadiness(technical_ready, AT, "LOCAL_ACCOUNT_WAIT"),
+        entry_admission_port=port,
+    )
+    evaluations = owner.accept(
+        fact, cursor, account_admissions=(scope,), arm_and_source_verified=arm_ready,
+        admitted_at=AT+timedelta(seconds=2), allow_new_signals=True,
+    )
+    assert len(evaluations) == 1
+    outcome = evaluations[0].account_outcomes[0]
+    assert outcome.decision.code is EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+    assert outcome.execution_request is None
+    assert evaluations[0].decision is None  # no PAPER fallback
+    assert evaluations[0].execution_request is None
+    assert recorder.recorded == list(evaluations)
+    assert port.requests == []
+    if not technical_ready:
+        assert outcome.decision.reason == "LOCAL_ACCOUNT_WAIT"
