@@ -211,3 +211,85 @@ def test_connection_status_file_alone_is_not_signed_exchange_evidence() -> None:
     assert "UPDATE control.execution_gates" not in source
     assert "INSERT INTO control.live_arm_sessions" not in source
     assert len(list(ast.walk(tree))) > 10
+
+
+def test_signed_open_position_is_not_itself_a_recovery_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(UTC)
+    position_id = "POS-verified"
+    row = (
+        position_id, "LTCUSDT", 0, "Sell", "0.2", "OPEN", "OPEN",
+        now - timedelta(minutes=1), "BOUND", position_id,
+        "CLAIMED", "exit-fp", now - timedelta(seconds=2), "exit-fp",
+    )
+
+    class Cursor:
+        def fetchall(self) -> list[tuple[object, ...]]:
+            return [row]
+
+    class ReadOnlyDB:
+        def __enter__(self) -> ReadOnlyDB:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def execute(self, sql: str, params: object = ()) -> Cursor:
+            assert "SET TRANSACTION READ ONLY" in sql or (
+                "runtime.position_exit_claims" in sql
+                and params == (adapter.ACCOUNT,)
+            )
+            return Cursor()
+
+    monkeypatch.setattr(adapter.psycopg, "connect", lambda *_a, **_k: ReadOnlyDB())
+    positions = ({"symbol": "LTCUSDT", "positionIdx": 0,
+                  "side": "Sell", "size": "0.1"},)
+    assert adapter._signed_inventory_matches(positions, now=now)
+    assert not adapter._signed_inventory_matches(
+        ({"symbol": "LTCUSDT", "positionIdx": 0, "side": "Buy", "size": "0.1"},),
+        now=now,
+    )
+    assert not adapter._signed_inventory_matches(
+        ({"symbol": "LTCUSDT", "positionIdx": 0, "side": "Sell", "size": "0.3"},),
+        now=now,
+    )
+
+
+def test_sub_critical_scope_isolated_from_unrelated_main(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[str] = []
+
+    class Cursor:
+        def __init__(self, count: int) -> None:
+            self.count = count
+
+        def fetchone(self) -> tuple[int]:
+            return (self.count,)
+
+    class ReadOnlyDB:
+        def __init__(self, count: int) -> None:
+            self.count = count
+
+        def __enter__(self) -> ReadOnlyDB:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def execute(self, sql: str, params: object = ()) -> Cursor:
+            seen.append(sql)
+            if "SET TRANSACTION READ ONLY" not in sql:
+                assert params == (adapter.ACCOUNT,)
+                assert "exact_ids->>'trading_account_id'=%s" in sql
+                assert "fault_scope_kind" in sql
+            return Cursor(self.count)
+
+    monkeypatch.setattr(adapter.psycopg, "connect",
+                        lambda *_a, **_k: ReadOnlyDB(0))
+    assert adapter._sub_hard_faults_clear()
+    monkeypatch.setattr(adapter.psycopg, "connect",
+                        lambda *_a, **_k: ReadOnlyDB(1))
+    assert not adapter._sub_hard_faults_clear()
+    assert seen
