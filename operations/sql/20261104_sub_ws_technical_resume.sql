@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS runtime.account_ws_technical_resume_events (
 
 GRANT SELECT ON runtime.connection_events,
                 runtime.entry_consumer_health,
-                runtime.position_ownership
+                runtime.position_ownership,
+                runtime.position_exit_claims
 TO cripta_account_entry_safety_recovery;
 GRANT INSERT ON runtime.account_ws_technical_resume_events
 TO cripta_account_entry_safety_recovery;
