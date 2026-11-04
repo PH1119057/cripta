@@ -1504,5 +1504,61 @@ effective barrier. Целевой Stable Core должен иметь один t
 Entry permission. Миграция выполняется surgical phases с shadow parity; big-bang
 rewrite запрещён.
 
-Статус: `OWNER_DECISION=YES`; `CANON=YES`; `IMPLEMENTED=NO`; `DEPLOYED=NO`;
+Статус §54: `OWNER_DECISION=YES`; `CANON=YES`; `IMPLEMENTED=NO`; `DEPLOYED=NO`;
 `RUNTIME_VERIFIED=NO`; `LIVE_CHANGE=NO`.
+
+## 55. Scoped Entry admission и независимая история дефектов — OWNER DECISION 2026-11-04
+
+Точный trading contract: TRADING_CONTOUR §4.13. Нельзя выводить финансовый
+допуск из общей severity, OPEN fault count, доставки/прочтения уведомлений
+или полноты historical отчёта. Требуется доказанная связь с текущей обязательной
+зависимостью конкретного Entry и минимальный affected scope.
+
+### 55.1 BEFORE / AFTER capability matrix до implementation
+
+| Capability | BEFORE physical path | AFTER owner / consumer path | Что обязано сохраниться |
+|---|---|---|---|
+| Соответствие стратегии | Strategy/EntryPlan/Universal Entry | Те же owners; admission не переписывает Strategy decision | Exact policy, signal identity, causality/validity, embargo, sizing |
+| Current safety/admission | Private runtime, account admission, readiness и blanket fault/delivery checks | Те же proof producers -> один scope-aware classifier -> ARM/readiness и account Entry/Execution consumers | Identity, signed inventory, no ambiguous replay, slot/capital, protection/Exit, свежесть доказательств |
+| Financial authorization | Explicit OWNER ARM, permissions, release-bound scopes | Те же owners, Stable Core target §53–54 | Нет автоматического ARM/deploy rearm; DISARM всегда доступен |
+| Historical fault visibility | Immutable fault identity + lifecycle ledger + Dashboard | Те же ledger/notification owners; отдельная non-blocking projection | Не удалять, не auto-resolve/ACK, не подделывать historical close |
+| Delivery/ack/escalation | Durable notification owners, в т.ч. OWNER_WEBHOOK/DASHBOARD_INBOX | Те же owners/consumer paths; raw backlog отделён от Entry gate | Реальное подтверждение доставки/прочтения, retries/escalation и аудит сохраняются |
+| Current resource projection | Account reconciliation/capacity/physical-slot owners | Те же owners с доказанной актуальной проекцией | Historical расхождения не игнорируются произвольно; current resources и отсутствие конфликта доказываются атомарно |
+| Existing position Exit | Exact StrategyPosition/ExitPlan + account Execution | Те же owners, независимо от новых Entry | Initial protection, TP/trailing, recovery, ownership до доказанного закрытия |
+
+Classification — не новый owner Strategy, не writer биржевых команд и не
+самостоятельный issuer permissions. Один logical transition owner применяет
+factored readiness; Dashboard и остальные consumers показывают одно решение.
+Нельзя заменить global boolean несколькими противоречащими gate writers.
+
+### 55.2 Граница блокировки
+
+Технический defect, который не влияет на текущий вход, остаётся видимой задачей
+ремонта. Текущий недоказанный обязательный proof блокирует минимальный scope,
+который зависит от него. GLOBAL допустим только по TC §4.13.4. Неизвестное
+текущее account состояние не объявляется безопасным из-за старости fault;
+неизвестная historical attribution не объявляется текущей exposure без причины.
+
+Наличие отдельного уведомления/неработающего отложенного внешнего канала
+не является самостоятельной финансовой блокировкой в текущем P90 portal scope;
+условия существующего exact notification waiver уточнены TC §4.7/4.13.
+Обязательная capability для фактической защиты/аварийного сопровождения новой
+позиции по-прежнему должна быть доказана. Stake/leverage/caps и financial
+authorization scope этим решением не расширяются.
+
+Статус: canonical target; IMPLEMENTED=NO; DEPLOYED=NO; LIVE_CHANGE=NO.
+Ни один physical safety/admission check не считается заменённым до surgical
+implementation, shadow parity, полного CI и runtime verification по DEV §54.
+
+Уточнение OWNER DECISION 2026-11-04 (TC §4.13.5): закрытые сделки влияют
+на новые Entry исключительно через фактические HARD_STOP события применимого
+SECOND48 exact StrategyVersion. Другие причины закрытия, UNKNOWN и неполная
+атрибуция/история/доставка не являются admission blockers. Для них не требуется
+отдельный proof отсутствия влияния. Текущие exposure/команды/ресурсы проверяются
+независимо; исторические ошибки остаются видимыми без подделки фактов.
+
+| Capability | BEFORE | AFTER owner / consumer | Сохранение |
+|---|---|---|---|
+| SECOND48 | Reader проверяет все закрытия | Тот же reader -> prearm/Entry; только actual HARD_STOP | Exact StrategyVersion, реальные stop IDs/time, правило 2/48/48 и durable restart |
+| Historical repair | Неполное закрытие/pending delivery блокирует admission | Те же ledger/notification owners -> видимый repair backlog | История, severity, delivery/ACK не стираются; финансовых прав не создают |
+| Current safety | Reconciliation/admission/Exit | Те же owners/consumers | Fresh inventory, command certainty, capacity/slot/protection сохраняются |

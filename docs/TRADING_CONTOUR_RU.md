@@ -1014,16 +1014,17 @@ real trading contour заработает. Для **только этого exac
 `critical_delivery.configured=false` не блокирует arm, если одновременно:
 
 - `cripta-dashboard.service` active;
-- у MAIN Lifecycle Supervisor нет active fault codes;
-- `critical_delivery.pending_or_unacknowledged=0`;
+- отсутствует текущий `ENTRY_BLOCKER` для допускаемого scope по §4.13;
+- historical fault/delivery backlog классифицирован отдельно от текущей
+  безопасности исполнения; raw `pending_or_unacknowledged` не является gate;
 - все остальные gates §4.7 проходят без waiver.
 
 В таком случае `CRITICAL_FAULT_DELIVERY` фиксируется отдельным durable status
 `OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE`, **не** как `PASS`.
 Durable fault/delivery/retry/ack/escalation records не отключаются и не
 переписываются; открытые CRITICAL lifecycle faults остаются видимыми в Dashboard.
-Исключение немедленно недействительно при inactive Dashboard, active/pending
-critical fault, другой Strategy/version/symbol cohort, увеличении stake/leverage/
+Исключение немедленно недействительно при inactive Dashboard, текущем
+`ENTRY_BLOCKER` по §4.13, другой Strategy/version/symbol cohort, увеличении stake/leverage/
 caps или любом расширении за пределы exact scope выше. Тогда снова требуется
 обычный `CRITICAL_FAULT_DELIVERY=PASS` либо новое explicit OWNER DECISION.
 
@@ -1767,7 +1768,8 @@ recovery того же exact scope. Это **не** automatic OWNER ARM и не 
 Automatic technical resume не разрешён после explicit OWNER DISARM, deploy/
 LOADED_COMMIT change, Strategy/account scope change, unresolved ambiguous
 Exchange mutation, unknown exposure, unproven account identity, unproven
-protection/Exit ownership или active critical lifecycle fault.
+protection/Exit ownership или текущем Entry-blocking lifecycle fault для
+затронутого scope по §4.13. Сам historical OPEN/CRITICAL label не достаточен.
 
 Existing StrategyPosition, protective Exchange orders, reconciliation и
 Universal Exit сохраняют своих владельцев независимо от NEW Entry technical
@@ -1777,3 +1779,162 @@ Entry.
 Current physical `mainnet gate` остаётся legacy effective barrier до bounded
 Stable Control Core migration. Этот раздел не разрешает прямой bypass текущего
 gate и не считается IMPLEMENTED до отдельного tested cutover.
+
+## 4.13 Допуск текущего Entry и независимый журнал проблем — OWNER DECISION 2026-11-04
+
+### 4.13.1 Цель и приоритет
+
+Стратегия определяет торговый смысл входа. Технический допуск проверяет,
+можно ли **сейчас** корректно исполнить конкретный разрешённый вход и передать
+позицию штатному Exit. Наличие старого дефекта, ERROR/CRITICAL в журнале,
+непрочитанного уведомления либо незавершённого ремонта истории само по себе
+не является основанием остановить новые Entry.
+
+Это действующее уточнение fault-related gates §4.7, §4.12 и условий P90
+notification waiver. Оно заменяет blanket требования «нет любых OPEN faults»
+и «общий pending/unacknowledged count=0» для допуска стратегических Entry.
+Журнал, severity, доставка, acknowledgement, escalation и задачи ремонта
+сохраняются; финансовый допуск больше не выводится из их сырых счётчиков.
+Owner diagnostic и специальные permission/recovery contracts §4.8 остаются
+отдельными: это решение не снимает mutation-safety block произвольным ACK.
+
+### 4.13.2 Три независимых результата
+
+1. Strategy/Entry decision: соответствие фактических причинных данных exact
+   StrategyVersion/EntryPlan; технический инцидент не переписывает policy.
+2. Execution admission: текущий разрешённый scope и доказанная возможность
+   безопасно выполнить/сопроводить вход — READY, ожидаемая подготовка либо BLOCKED.
+3. Incident/repair ledger: что произошло, что не доставлено/не подтверждено,
+   какие historical данные ещё неполны. Это самостоятельная видимая история.
+
+Каждый фактически полученный StrategySignal/EntryAttempt должен получать
+причинный сохраняемый результат, а не молча исчезать из-за unrelated health
+flag. Недостающие обязательные market facts не заменяются выдуманным сигналом.
+«Обрабатывать все» не означает открывать сделки против policy или исполнять
+просроченный сигнал после восстановления: validity/TTL и exact event identity
+проверяются при dispatch; неопределённая Exchange mutation не повторяется.
+Расстояние текущей цены до Entry не является основанием менять эти правила.
+
+### 4.13.3 Достаточные группы обязательных проверок
+
+| Группа | Что доказывается для текущего входа | Когда допуска нет |
+|---|---|---|
+| Authorization/policy | Явный OWNER authorization, exact installed/loaded release, StrategyActivation/version/fingerprint, Execution permission и binding | DISARM, неподходящий release/scope, отсутствующее разрешение; это не выдаётся автоматически |
+| Market facts | Approved MarketSource/Instrument, нужные закрытые свечи до exact границы, непрерывность/свежесть native events и иные факты exact EntryPlan | Обязательных фактов пока нет — PREPARING/NOT READY; недоказанная целостность — блок затронутого source/scope |
+| Strategy | Exact EntryPlan, актуальная геометрия/сигнал/направление, policy limits и Strategy-scoped embargo | Условие стратегии не выполнено; это нормальный отрицательный результат, не поломка системы |
+| Current account/execution | Exact TradingAccount/Connector identity; fresh signed inventory; известный исход существенных предыдущих команд; рабочий account Execution | Текущая exposure/identity не доказана, есть unresolved ambiguous mutation либо требуемый executor не готов |
+| Capacity/physical slot | Актуальные обязательства, лимиты, маржа/режим, доступный капитал и единственный разрешённый physical slot | Нельзя доказать отсутствие конкурирующей позиции/заявки/резерва или достаточность ресурсов |
+| Protection/Exit | Штатная возможность установки/подтверждения утверждённой initial protection и передачи exact ownership/ExitPlan; здоровый требуемый Exit path | Защита/ownership/сопровождение текущего риска не доказаны; соответствующий новый вход не допускается |
+
+Проверяются **только зависимости данного Entry**, включая общие зависимости,
+которые он действительно использует. Необязательный отчёт, research, Analyst,
+Dashboard history/P&L projection либо старый delivery backlog не становится
+обязательным trading dependency по факту существования процесса/таблицы.
+Недостаточный капитал, занятый разрешённый slot, истёкшая validity и ожидаемая
+подготовка — штатные admission outcomes. Непройденная проверка сама по себе
+не означает runtime ERROR/CRITICAL: причина и нормальное состояние показываются
+явно. Реальное нарушение целостности/identity и mutation ambiguity не скрываются.
+Отдельно утверждённая обязательная capability не удаляется молча: её перенос
+требует capability matrix и доказанного нового owner/consumer path.
+
+### 4.13.4 Классификация и минимальная область блокировки
+
+`ENTRY_BLOCKER` содержит конкретное недоказанное/нарушенное текущее условие
+из §4.13.3 и минимальную доказанную область: signal/attempt, symbol/physical
+slot, StrategyVersion, TradingAccount/Connector либо shared dependency.
+MAIN fault не блокирует SUB только из-за общего списка инцидентов; дефект
+одного symbol не становится account/global block без влияния на общие ресурсы.
+
+GLOBAL block допустим для действительно общей обязательной зависимости,
+explicit global DISARM или текущего финансового риска, который доказанно
+нельзя безопасно локализовать. Отсутствие scope **исторической** записи само
+по себе не является доказательством текущей общей опасности.
+
+`ENTRY_PREPARATION_WAIT` — ожидаемое получение нужных фактов/синхронизация,
+с видимым progress и finite deadline; сейчас NOT READY, без ложного runtime
+ERROR. По исчерпании budget — видимый BLOCKED с точной причиной. Integrity,
+identity и mutation ambiguity не прячутся в бесконечном «подождите».
+
+`NON_BLOCKING_INCIDENT` — остающаяся видимой проблема, для которой доказано
+отсутствие препятствия текущему Entry данного scope. Примеры: незавершённая
+атрибуция старого закрытия/комиссий, отчёт/P&L, старый подтверждённый в прошлом
+runtime exception, недоставленное historical уведомление. ERROR/CRITICAL severity
+и OPEN/RESOLVED остаются отдельной осью и не заменяют эту классификацию.
+
+Возраст записи сам по себе не доказывает NON_BLOCKING: классификация опирается
+на текущий dependency/resource proof с временем/TTL. Для пакетного OWNER ARM
+панель показывает verdict каждого account/Strategy/symbol scope; готовность
+одного scope не переносит authorization или технический PASS на другой.
+
+### 4.13.5 Историческое закрытие и текущая exposure — разные доказательства
+
+Неизвестные дата/причина/attribution старого закрытия не тождественны неизвестной
+**текущей** позиции. Historical repair может оставаться открытым, если fresh
+signed Exchange inventory и независимый command/reconciliation/protection
+path доказывают текущий account/slot/capacity без относящейся к нему ambiguity.
+Строка закрытой сделки в Dashboard сама по себе такого доказательства не даёт.
+
+**OWNER DECISION 2026-11-04 — единственное влияние закрытой сделки на Entry.**
+Закрытая сделка имеет право влиять на последующие входы **только через SECOND48**:
+учитываются фактические catastrophic HARD_STOP exact StrategyVersion по её
+утверждённому правилу двух hard-stop за 48 часов с паузой новых входов на 48 часов.
+Ни TP, ни trailing/protected stop, ни ручное/обычное закрытие, ни UNKNOWN reason,
+ни отсутствие attribution/closed_at, ни старый fault/delivery backlog закрытой
+сделки не создают запрет Entry и не требуют отдельного «доказательства отсутствия
+влияния». UNKNOWN не считается HARD_STOP; история остаётся UNKNOWN до ремонта.
+Вне применимого SECOND48 закрытая сделка не участвует в admission verdict.
+MAIN/SUB и разные StrategyVersion не заимствуют друг у друга hard-stop события.
+
+Свежая текущая Exchange exposure, действующая заявка/неопределённая команда,
+фактически занятый slot и доступный капитал проверяются как **текущее состояние**,
+а не как разрешение закрытой сделке блокировать входы. Старый status/claim сам
+по себе не доказывает текущую позицию: расхождения исправляет reconciliation
+owner без фабрикации history, ручного ACK или фиктивного освобождения капитала.
+
+Для LTC 2026-11-04: если закрытие не является фактическим HARD_STOP, участвующим
+в SECOND48, оно **не блокирует новые входы**. Недостающая атрибуция и уведомление
+остаются отдельной задачей ремонта и не являются admission dependency.
+
+### 4.13.6 Прозрачность решения
+
+Каждый blocker/wait/non-blocking incident в read-model имеет reason code,
+человеческое объяснение, owner, affected scope, проверяемую связь с текущим
+Entry condition, evidence/source и время/TTL, критерий восстановления и статус
+ремонта. Для отсутствующего required proof связь формулируется как конкретный
+proof obligation, а не как неподтверждённая уверенность «риска нет».
+
+На кнопке/панели видны separately: Strategy readiness, execution admission и
+historical incidents. При отказе показывается точный blocker и область,
+а не только «полная готовность не подтверждена».
+
+Полный checklist собирает результаты всех независимо проверяемых условий,
+а не обрывается на первом старом уведомлении. Для зависимого условия без
+нужного parent proof показываются NOT CHECKED/NOT READY и точная зависимость,
+не PASS. Итог учитывает свежесть всего evidence и повторяется атомарно перед
+dispatch; сбор checklist не выполняет пробную финансовую мутацию.
+
+Timer/progress имеют одного display owner, без взаимного перезаписывания
+и прыгающего текста.
+Delivery/read acknowledgement не создаёт financial authorization, не доказывает
+устранение риска и не заменяет реальную readiness-проверку.
+
+### 4.13.7 Ввод в runtime
+
+Один canonical classifier/readiness adapter публикует это решение для Dashboard,
+OWNER ARM и account Entry/Execution consumers; собственные несогласованные
+списки blocker-ов в каждом слое запрещены. Financial transition owner остаётся
+Stable Control Core target ARCH §53–54; competing gate writers мигрируют поэтапно.
+Устаревший aggregate check удаляется только вместе с новым доказанным consumer
+path. Это не разрешение отключить все safety checks одним флагом.
+
+До cutover: scope/capability matrix, shadow parity, positive/negative/race и
+disposable PostgreSQL tests. Обязательные сценарии: historical unread CRITICAL
+не блокирует unrelated Entry; текущая unknown exposure/ambiguous mutation
+блокирует affected scope; MAIN/SUB и symbols изолированы; нет двойного slot/
+capital consumption; DISARM/release drift никогда не auto-arm; late signal не
+исполняется задним числом; Exit продолжает работу при Entry block.
+
+Статус: OWNER DECISION=YES; CANON=YES после merge; IMPLEMENTED=NO;
+DEPLOYED=NO; RUNTIME_VERIFIED=NO. Текущий runtime не считается исправленным
+этой документацией. До verified implementation старые физические gates не
+обходятся вручную и OWNER ARM этим решением не выполняется.

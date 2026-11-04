@@ -549,8 +549,9 @@ exact P90 REAL v3 MICRO_LIVE scope из `TRADING_CONTOUR §4.7` временно
 `critical_delivery.configured=false`, пока владелец работает через
 аутентифицированный Dashboard portal и внешний `OWNER_WEBHOOK` отложен.
 Token валиден только для exact двух P90 Strategy IDs/version и их пяти символов,
-при active `cripta-dashboard.service`, отсутствии active lifecycle faults и
-`pending_or_unacknowledged=0`; stake/leverage/caps продолжают проверяться
+при active `cripta-dashboard.service` и отсутствии текущих `ENTRY_BLOCKER`
+для допускаемого scope по `TRADING_CONTOUR §4.13`. Historical fault/delivery
+backlog не является самостоятельным gate; stake/leverage/caps проверяются
 отдельным `MICRO_LIVE_LIMITS`. Token не означает доставку, не отключает durable
 fault/delivery/retry/ack/escalation и не переносится на другой Strategy/version,
 symbol cohort, увеличенный риск или расширенный LIVE scope.
@@ -1109,3 +1110,34 @@ change, explicit DISARM или unresolved hard-safety condition.
 attempt/deadline budget обязательны; исчерпание — `BLOCKED` с причиной.
 Integrity/identity/continuity violations не маскируются этим статусом.
 Owner contract: OBSERVATION_ANALYTICS §7.5.1 (2026-11-04).
+
+## 43. Scoped Entry admission — OWNER DECISION 2026-11-04
+
+**ENTRY_BLOCKER** — доказанное нарушение либо недоказанный обязательный
+**текущий** proof, без которого нельзя корректно исполнить/защитить конкретный
+Entry по TC §4.13. Обязательны reason, canonical owner, affected scope,
+связь с текущей dependency, evidence/source/time/TTL и recovery criterion.
+Это не синоним любого OPEN/ERROR/CRITICAL incident или непрочитанного сообщения.
+
+**ENTRY_PREPARATION_WAIT** — ожидаемая ограниченная подготовка обязательных
+фактов/синхронизации для текущего допуска. NOT READY с progress/deadline,
+не ложный ERROR; исчерпание budget — BLOCKED с причиной. Для холодной истории
+Observer конкретная проекция — `OBSERVER_PREPARING` (OBS §7.5.1).
+
+**NON_BLOCKING_INCIDENT** — сохраняемая видимая проблема/repair task, для
+которой доказано отсутствие препятствия текущему Entry рассматриваемого scope.
+Severity, OPEN/RESOLVED и delivery/ack state остаются независимыми атрибутами.
+Классификация не стирает history, не подделывает resolution/delivery, не
+превращает неизвестную текущую exposure в безопасную и не даёт OWNER ARM.
+
+**Affected scope для Entry admission** — минимальный доказанный набор текущих
+attempts/symbol-slots/StrategyVersions/TradingAccounts/Connectors/shared
+dependencies, затронутый недоказанным условием. GLOBAL требует основания из
+TC §4.13.4; unrelated account/symbol не наследует запрет по общему fault count.
+
+Уточнение OWNER DECISION 2026-11-04 (TC §4.13.5): закрытые сделки влияют
+на новые Entry исключительно через фактические HARD_STOP события применимого
+SECOND48 exact StrategyVersion. Другие причины закрытия, UNKNOWN и неполная
+атрибуция/история/доставка не являются admission blockers. Для них не требуется
+отдельный proof отсутствия влияния. Текущие exposure/команды/ресурсы проверяются
+независимо; исторические ошибки остаются видимыми без подделки фактов.

@@ -1204,6 +1204,12 @@ visibility, а не доказательство внешней доставки
 active-or-pending critical state отменяет waiver и возвращает обычный blocking
 `CRITICAL_FAULT_DELIVERY=PASS`.
 
+Уточнение OWNER DECISION 2026-11-04: этот абзац сохраняет прежний
+implementation contract/dated evidence. Текущий canonical target — TC §4.13:
+raw pending/fault counts заменяются доказанной scoped Entry-impact
+классификацией. См. новый checkpoint Scoped Entry admission в конце документа;
+replacement пока не IMPLEMENTED/DEPLOYED, historical записи не переписаны.
+
 # 18. LIVE / MICRO_LIVE readiness — CHECKED HERE 2026-09-28
 
 Канонический checklist находится в TRADING_CONTOUR §4.7.
@@ -4830,4 +4836,58 @@ DEPLOYED=NO
 RUNTIME_LIVENESS_VERIFIED=NO
 RUNTIME_BEHAVIOR_VERIFIED=NO
 LIVE_CHANGE=NO
+```
+
+## 2026-11-04 Scoped Entry admission — OWNER DECISION / CANON UPDATE ONLY
+
+Owner требует, чтобы соответствие Strategy/EntryPlan и текущая возможность
+исполнения определяли новые Entry. Независимый historical defect/repair,
+severity label, unread/delivery backlog не должен автоматически запрещать
+unrelated входы. Exact contract: TC §4.13, ARCH §55, GLOSSARY §43,
+OBS §7.6, DEV §54; навигация INDEX §64.
+
+### Finding из проверенной попытки OWNER ARM
+
+Installed runtime на момент finding:
+`c4318bf35cace90136fc20b4188b4eb574091a5d` (PR #437, preparation fix).
+Observer RUNNING/ready=true и текущие account/service health checks не
+означают полного допуска ARM: текущий prearm producer отдельно требует
+`critical_delivery.pending_or_unacknowledged=0`.
+
+Попытка `p90-owner-arm-1793811964585-a0f87c0718c07` 2026-11-04
+17:06:04–17:06:40 UTC завершилась BLOCKED:
+`CRITICAL fault delivery has pending/unacknowledged items`.
+Проверенный pending count1 относился к OWNER_WEBHOOK delivery
+`fault-delivery-eccf3bb6bd5c4b0f1d9959248c18f09a`, state
+`ESCALATION_REQUIRED`, last_error `OWNER_WEBHOOK_NOT_CONFIGURED`.
+Underlying OPEN CRITICAL:
+`EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN`, LTC historical position
+`POS-160b35fd93153dada2b1ceb79cf86eb5`, detected11:15:29UTC.
+Это устанавливает **путь текущей блокировки**, но не доказывает автоматически
+ни безопасность текущего LTC ресурса, ни необходимость общего запрета.
+
+Новая canonical классификация должна независимо доказать current scope/risk;
+неопределённая historical close attribution не равна текущей exposure.
+Historical data/identity/ACK/incident resolution этим changeset не менялись.
+Сам факт появления закрытой сделки в правой панели не является readiness proof.
+
+Отдельный UI finding: beginTimedStatus пишет в ARM status каждую1s,
+readiness poll — каждые750ms; два display writers перебивают текст. Требуется
+один progress presentation owner и точный blocker, не generic сообщение.
+
+### Implementation status
+
+Документировано раздельное admission/incident решение, minimal affected scope,
+полный checklist, preservation matrix и необходимые tests. Installed aggregate
+predicate ещё не заменён. Нельзя объявлять новый admission contract работающим
+по факту merge docs либо вручную снимать delivery/fault safety checks.
+
+```text
+OWNER_DECISION=YES
+CANON=UPDATED_IN_CHANGESET
+SCOPED_ADMISSION_IMPLEMENTED=NO
+SCOPED_ADMISSION_DEPLOYED=NO
+SCOPED_ADMISSION_RUNTIME_VERIFIED=NO
+HISTORICAL_LTC_REPAIR=NOT_PERFORMED
+FINANCIAL_CONTROLS_CHANGED=NO
 ```

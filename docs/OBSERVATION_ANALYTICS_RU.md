@@ -871,3 +871,39 @@ attempt/deadline budget; исчерпание отображается как `B
 отключает их сопровождение. PREPARING/BLOCKED никогда не создаёт OWNER ARM,
 не открывает gate и не считается техническим READY. Исторические faults не
 удаляются и не закрываются автоматически вследствие этой классификации.
+
+## 7.6 Incident visibility отдельно от допуска Entry — OWNER DECISION 2026-11-04
+
+Owner допуска — TC §4.13; architecture capability matrix — ARCH §55.
+Monitoring/Lifecycle/notification owners обязаны сохранять, доставлять и
+показывать проблемы независимо от того, блокируют ли они текущий вход.
+Неотправленный historical OWNER_WEBHOOK, unread notification, OPEN severity
+label, historical report/close-attribution defect либо отсутствие ACK не
+являются самостоятельным запретом новых Entry.
+
+Read-model раздельно показывает current execution readiness и журнал ремонта.
+У каждого incident есть scoped Entry-impact classification, текущий evidence
+и связь с конкретным обязательным condition либо доказанный NON_BLOCKING
+статус. Consumer не вправе выводить global block из общего fault/delivery count.
+Отсутствующий mandatory proof означает scoped NOT READY, не optimistic PASS.
+
+Actual current protection/Exit/exposure/identity/uncertain-mutation fault
+по-прежнему блокирует затронутый Entry scope и запускает соответствующий repair;
+existing position/Exit не прекращается из-за запрета новых входов. Нельзя
+отмечать прочтение/доставку либо resolution без реального события только для
+снятия gate. Новый classifier не переписывает исторические записи.
+
+Dashboard обязан показывать точный текущий blocker отдельно от прошлых ошибок,
+affected account/symbol/dependency и условие восстановления. Readiness progress
+имеет одного presentation owner; timer и poll не перебивают друг друга.
+Исторический RED может оставаться RED в журнале, но не должен выдаваться за
+доказательство текущего global execution block.
+
+Статус: CANON target; implementation/cutover обязательны по DEV §54.
+
+Уточнение OWNER DECISION 2026-11-04 (TC §4.13.5): закрытые сделки влияют
+на новые Entry исключительно через фактические HARD_STOP события применимого
+SECOND48 exact StrategyVersion. Другие причины закрытия, UNKNOWN и неполная
+атрибуция/история/доставка не являются admission blockers. Для них не требуется
+отдельный proof отсутствия влияния. Текущие exposure/команды/ресурсы проверяются
+независимо; исторические ошибки остаются видимыми без подделки фактов.

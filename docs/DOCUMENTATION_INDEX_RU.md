@@ -367,8 +367,9 @@ Project Source size or Project Instructions bootstrap.
   at 10 USDT Entry, isolated 1x, MAIN cap 20 / SUB cap 30.
 - External `OWNER_WEBHOOK` is deferred by explicit owner decision while the
   owner operates through authenticated Dashboard; the waiver is valid only
-  with Dashboard active, no active lifecycle faults and no pending/unacknowledged
-  critical deliveries.
+  with Dashboard active and no current scoped ENTRY_BLOCKER under
+  TRADING_CONTOUR §4.13 (2026-11-04 clarification). Historical fault/delivery
+  backlog is not an independent admission gate; durable delivery remains required.
 - The status is not `PASS`, does not disable durable faults/delivery records,
   and does not transfer to another Strategy/version/cohort or wider risk scope.
 - This change does not modify the active 11-file Project Source set, paths,
@@ -1639,3 +1640,25 @@ Active document set, pre-read routing and Project Source bundle are unchanged;
 README/AGENTS/Project Instructions therefore do not change in this changeset.
 
 Status: CANON update only; IMPLEMENTED=NO; DEPLOYED=NO; LIVE_CHANGE=NO.
+
+# 64. Scoped Entry admission / independent incident repair — OWNER DECISION 2026-11-04
+
+- TRADING_CONTOUR §4.13 — exact required Entry dependencies, Strategy decision
+  vs execution admission vs incident history, minimal block scope, historical
+  close vs current exposure, expiry/no late replay and visible verdict contract.
+- ARCH §55 — BEFORE/AFTER capability matrix and single classifier/transition
+  owner boundary, no lost protection/Exit/notification capabilities.
+- GLOSSARY §43 — ENTRY_BLOCKER, ENTRY_PREPARATION_WAIT, NON_BLOCKING_INCIDENT,
+  affected scope.
+- OBSERVATION_ANALYTICS §7.6 — persistent visibility/delivery without raw-count
+  global financial blockade; calm preparation and one progress display owner.
+- DEVELOPMENT_RELEASE §54 — shadow/consumer migration, required negative/race/
+  PostgreSQL tests, no manual gate/ACK/history bypass.
+- CURRENT_PROJECT_MAP dated 2026-11-04 scoped-admission checkpoint — current
+  aggregate blocker finding and IMPLEMENTED/DEPLOYED=NO distinction.
+
+Current P90 notification waiver limits (10 USDT, isolated1x, MAIN20/SUB30)
+and explicit OWNER ARM remain unchanged. This decision does not assert safe
+current exposure from an old close row and does not fabricate historical facts.
+Active 11-document bundle, paths/pre-read/routing unchanged; bootstrap files
+and Project Instructions therefore remain unchanged.
