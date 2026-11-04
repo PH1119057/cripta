@@ -2160,7 +2160,9 @@ execution permission или LIVE-arm.
 
 Resume запрещён при OWNER DISARM, release/scope drift, unresolved ambiguous
 mutation, unknown exposure, unproven identity/protection/Exit ownership или
-critical lifecycle fault. После deploy/release change по-прежнему требуется
+текущем Entry-blocking lifecycle fault для affected scope (TC §4.13).
+Historical OPEN/CRITICAL label либо delivery backlog сам по себе недостаточен.
+После deploy/release change по-прежнему требуется
 fresh explicit OWNER ARM.
 
 ### 53.5 Exit-first availability
@@ -2186,3 +2188,36 @@ mutation owner восстановлены; новая Entry остаётся BLO
 - controlled deploy without automatic OWNER ARM.
 
 Статус этой записи: CANON only; implementation remains pending.
+
+## 54. Ввод scope-aware Entry admission — OWNER DECISION 2026-11-04
+
+Owners: TC §4.13 (admission semantics), ARCH §55 (capability/ownership),
+GLOSSARY (`ENTRY_BLOCKER`, `ENTRY_PREPARATION_WAIT`, `NON_BLOCKING_INCIDENT`).
+
+1. До source mutation зафиксировать точные current checks/writers/consumers,
+   affected scopes, причинную связь каждого blocker с текущим Entry и matrix
+   ARCH §55.1. Не выбирать blockers по одному лишь тексту/severity старой ошибки.
+2. Один canonical classifier/readiness adapter получает fresh typed evidence
+   от прежних owners, публикует одинаковый scoped verdict для Dashboard, ARM,
+   Entry и account Execution. Proof producers/Strategy/financial authorization
+   не передаются этому adapter. Старые aggregate counters остаются diagnostic.
+3. До снятия любого blanket check доказать новый consumer path и отсутствие
+   capability gap. Не обойти gate через ручной ACK, UPDATE fault state, фиктивный
+   delivery PASS, очистку исторических slots/reservations или permissive default.
+4. Shadow parity обязан объяснять различия: исторический backlog допускает
+   независимый текущий Entry только при доказанных текущих proofs; текущая
+   ambiguity/protection/capacity/identity проблема не превращается в warning.
+5. Негативные tests: stale/missing/unknown mandatory proof; uncertain mutation;
+   slot/capital race; per-account/per-symbol isolation; unknown scope текущего
+   риска; changed release/DISARM; blocked signal expiry/no late replay; старое
+   critical notification не блокирует unrelated scope; ACK не разрешает вход.
+6. Проверить полный путь StrategySignal -> durable Entry result -> scoped
+   admission -> existing executor/protected position -> Exit; Entry block
+   не прекращает сопровождение. Сохранять все old incident/delivery identities.
+7. Scope check, quality/lifecycle/disposable PostgreSQL CI, verified release и
+   независимый runtime readback обязательны. Нет deploy/OWNER ARM в docs changeset.
+
+Текущее правило raw `pending_or_unacknowledged=0` в installed prearm producer
+не исправляется записью этого контракта. Это известный implementation gap;
+без tested replacement physical gate не обходится. Canon approval, source
+implementation, deployment и фактический scoped behavior фиксируются отдельно.
