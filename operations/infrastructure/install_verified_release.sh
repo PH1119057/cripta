@@ -537,6 +537,8 @@ migration_files=(
   # Least-privilege recovery for exact PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN.
   # Additive control only; never opens gate, grants permissions/arms or mutates Exchange.
   operations/sql/20261102_p90_account_ws_safety_recovery.sql
+  # Account-specific technical resume; atomic relatch and no OWNER/LIVE effect.
+  operations/sql/20261104_sub_ws_technical_resume.sql
   operations/sql/20261025_account_attempt_fanout.sql
   # Cut over all five physical current-state keys after additive account indexes
   # and complete writer/reader parity gates; no pre-existing rows are rewritten.
