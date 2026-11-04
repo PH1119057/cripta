@@ -146,9 +146,13 @@ def test_supervisor_is_inert_and_does_not_use_broker_client() -> None:
     assert "exit_continuity_verified=False" in source
     assert "request_recovery(" not in source
     assert "StateDirectory=cripta-runtime-recovery" in unit
-    assert "Environment=CRIPTA_RUNTIME_RECOVERY_MODE=OBSERVE_ONLY" in unit
-    assert "[Install]" not in unit.splitlines()
-    assert "cripta-runtime-recovery-supervisor" not in installer
+    assert "Environment=CRIPTA_RUNTIME_RECOVERY_MODE=SUB_WS_TECHNICAL" in unit
+    assert "User=cripta" in unit and "Group=cripta" in unit
+    assert "StartLimitBurst=3" in unit
+    assert "[Install]" in unit.splitlines()
+    assert "CRIPTA_RUNTIME_RECOVERY_MODE" in source
+    assert 'if mode == "SUB_WS_TECHNICAL":' in source
+    assert "cripta-runtime-recovery-supervisor.service|runtime" in installer
 
 
 def test_supervisor_probes_only_and_keeps_engine_unmodified() -> None:
