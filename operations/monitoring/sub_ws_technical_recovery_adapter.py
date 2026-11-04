@@ -84,37 +84,115 @@ def _fresh_iso(value: object, *, now: datetime, ttl: int) -> bool:
     )
 
 
+def _sub_hard_faults_clear() -> bool:
+    """A MAIN-account fault is not a SUB-account hard-safety fault."""
+    with psycopg.connect(DSN, connect_timeout=3) as conn:
+        conn.execute("SET TRANSACTION READ ONLY")
+        row = conn.execute(
+            """SELECT count(*) FROM runtime.lifecycle_faults
+               WHERE state='OPEN' AND severity='CRITICAL'
+                 AND (
+                   coalesce(nullif(exact_ids->>'fault_scope_kind',''),'GLOBAL')
+                     <> 'ACCOUNT'
+                   OR exact_ids->>'trading_account_id'=%s
+                 )""",
+            (ACCOUNT,),
+        ).fetchone()
+    return row == (0,)
+
+
 def _independent_lifecycle(now: datetime) -> tuple[bool, bool]:
-    """Independent flat-account and global Exit/protection health proof."""
-    main = _json(LIFECYCLE)
+    """Prove local SUB Exit/protection, not unrelated MAIN positions."""
+    global_service = _json(LIFECYCLE)
     local = _json(SUB_LIFECYCLE)
     position = _json(SUB_POSITION)
-    exposure = main.get("exposure_audit")
-    protection = main.get("protection_audit")
     if (
-        main.get("state") != "RUNNING"
-        or not _fresh_iso(main.get("observed_at"), now=now, ttl=15)
-        or main.get("active_fault_codes") != []
-        or not isinstance(exposure, dict)
-        or exposure.get("state") != "VERIFIED"
-        or exposure.get("unknown_open_count") != 0
-        or not isinstance(protection, dict)
-        or protection.get("account_read_complete") is not True
+        global_service.get("state") != "RUNNING"
+        or not _fresh_iso(global_service.get("observed_at"), now=now, ttl=15)
+        or not _sub_hard_faults_clear()
     ):
         return False, False
+    count = local.get("positions_seen")
+    exchange_count = local.get("exchange_positions_seen")
+    protections = local.get("protection_states")
     local_ready = (
         local.get("state") == "VERIFIED_ACCOUNT_SCAN"
         and _fresh_iso(local.get("observed_at"), now=now, ttl=30)
-        and local.get("positions_seen") == 0
-        and local.get("exchange_positions_seen") == 0
+        and type(count) is int and count >= 0
+        and type(exchange_count) is int and exchange_count == count
         and local.get("opened_faults") == 0
+        and isinstance(protections, dict)
+        and len(protections) == count
+        and all(value == "VERIFIED" for value in protections.values())
     )
+    sampled = position.get("sampled")
     position_ready = (
         position.get("state") == "SAMPLED_PARTIAL"
         and _fresh_iso(position.get("observed_at"), now=now, ttl=45)
-        and position.get("sampled") == 0
+        and type(sampled) is int and type(count) is int
+        and sampled >= count
     )
     return local_ready, local_ready and position_ready
+
+
+def _signed_inventory_matches(signed_positions: object, *, now: datetime) -> bool:
+    """No fabricated flat precondition: verify every signed open slot/Exit."""
+    from decimal import Decimal, InvalidOperation
+
+    if not isinstance(signed_positions, (tuple, list)):
+        return False
+    with psycopg.connect(DSN, connect_timeout=3) as conn:
+        conn.execute("SET TRANSACTION READ ONLY")
+        rows = conn.execute(
+            """SELECT p.symbol,p.position_idx,p.side,p.actual_qty,p.state,
+                      p.close_link_status,p.initial_protection_confirmed_at,
+                      s.claim_state,s.strategy_position_id,
+                      x.status,x.exit_plan_fingerprint,x.last_seen_at,
+                      p.exit_plan_fingerprint
+                 FROM runtime.position_ownership p
+                 LEFT JOIN runtime.exchange_position_slot_claims s
+                   ON s.exchange_position_slot_claim_id=p.exchange_position_slot_claim_id
+                  AND s.trading_account_id=p.trading_account_id
+                  AND s.identity_status='PROVEN'
+                  AND s.exchange_position_key=p.exchange_position_key
+                 LEFT JOIN runtime.position_exit_claims x
+                   ON x.strategy_position_id=p.position_id
+                WHERE p.trading_account_id=%s
+                  AND p.identity_status='PROVEN'
+                  AND (p.state IN ('OPEN','RECONCILIATION_REQUIRED')
+                       OR p.close_link_status='UNRESOLVED_EXACT_LINK')""",
+            (ACCOUNT,),
+        ).fetchall()
+    if len(rows) != len(signed_positions):
+        return False
+    matching: dict[tuple[str, int, str], tuple[object, ...]] = {}
+    for row in rows:
+        symbol, idx, side, qty, state, link, protected, slot, owner, claim, plan, seen, actual_plan = row
+        if (
+            state != "OPEN" or link != "OPEN" or slot != "BOUND"
+            or not isinstance(owner, str) or not owner
+            or claim != "CLAIMED" or plan != actual_plan
+            or protected is None or not isinstance(seen, datetime)
+            or seen.tzinfo is None
+            or not 0 <= (now - seen).total_seconds() <= 15
+        ):
+            return False
+        key = (str(symbol), int(idx), str(side))
+        if key in matching:
+            return False
+        matching[key] = row
+    for signed in signed_positions:
+        if not isinstance(signed, dict):
+            return False
+        try:
+            key = (str(signed["symbol"]), int(signed["positionIdx"]), str(signed["side"]))
+            signed_qty = Decimal(str(signed["size"]))
+            local_qty = Decimal(str(matching[key][3]))
+        except (KeyError, ValueError, TypeError, InvalidOperation):
+            return False
+        if not 0 < signed_qty <= local_qty:
+            return False
+    return True
 
 
 def _ws_heartbeat(*, blocked_at: datetime, now: datetime) -> datetime | None:
@@ -260,17 +338,23 @@ def run_once(*, now: datetime) -> dict[str, object]:
     heartbeat = _ws_heartbeat(blocked_at=blocked_at, now=now)
     if heartbeat is None:
         return _block("PRIVATE_WS_HEARTBEAT_UNVERIFIED")
-    # Credential-bound worker attests exact signed UID and paged-flat inventory.
+    # Signed exact-account inventory may legitimately contain OPEN positions.
+    # Its producer checks protection/Exit-continuity and current in-process WS.
     proof = P90PrivateProofClient(
         account=ACCOUNT, connector=CONNECTOR, timeout_seconds=15.0,
-    ).read_flat_account()
+    ).read_recovery_account()
     current = datetime.now(UTC)
     protection, exit_owner = _independent_lifecycle(current)
     latest_heartbeat = _ws_heartbeat(blocked_at=blocked_at, now=current)
     row = _generation_and_uid(proof.private_generation_id)
-    if row is None or latest_heartbeat is None:
-        return _block("POST_PROOF_SCOPE_OR_WS_UNVERIFIED")
+    if (
+        row is None or latest_heartbeat is None
+        or not _signed_inventory_matches(proof.positions, now=current)
+    ):
+        return _block("POST_PROOF_SCOPE_OR_EXPOSURE_UNVERIFIED")
     uid, gen, state, completed, positions, orders = row
+    if type(positions) is not int or positions != len(proof.positions):
+        return _block("SIGNED_EXCHANGE_GENERATION_COUNT_MISMATCH")
     evidence = WsTechnicalRecoveryEvidence(
         account_id=ACCOUNT, connector_id=CONNECTOR,
         expected_account_id=ACCOUNT, expected_connector_id=CONNECTOR,
@@ -287,7 +371,7 @@ def run_once(*, now: datetime) -> dict[str, object]:
         generation_complete=state == "COMPLETE",
         proof_observed_at=proof.observed_at,
         generation_completed_at=completed,
-        positions_count=positions, open_orders=orders,
+        positions_count=positions, open_orders=proof.open_orders,
         pending_commands=proof.pending_commands,
         protection_verified=protection, exit_continuity_verified=exit_owner,
         ambiguous_exchange_mutation=False, critical_lifecycle_fault=False,
