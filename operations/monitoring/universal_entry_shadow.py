@@ -25,6 +25,13 @@ from typing import Any, cast
 import psycopg
 import websocket
 
+from operations.monitoring.observer_preparation import (
+    PreparationBudget,
+    PreparationWaiting,
+    cold_preparation_wait,
+    prepare_p90_closed_tails,
+)
+
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.account_state_generation import (
@@ -309,6 +316,7 @@ def _fetch_history(
     *,
     p90l90_full_prev7d: bool = False,
     p90_gap_from: Mapping[str, datetime] | None = None,
+    required_counts: Mapping[str, int] | None = None,
 ) -> dict[str, tuple[Candle, ...]]:
     history: dict[str, tuple[Candle, ...]] = {}
     for interval in intervals:
@@ -316,6 +324,10 @@ def _fetch_history(
         # the current partial day. Bybit REST returns at most 1000 candles
         # per page. Other Strategies retain the old single-page contract.
         required = 2600 if interval == "5" and p90l90_full_prev7d else 1000
+        if required_counts is not None:
+            required = required_counts[interval]
+            if not 1 <= required <= 30000:
+                raise ValueError("CANDLE_PREPARATION_FETCH_COUNT_INVALID")
         if p90_gap_from is not None and interval in p90_gap_from:
             saved = p90_gap_from[interval]
             minutes = int(interval)
@@ -340,6 +352,8 @@ def _fetch_history(
                 "category": "linear", "symbol": symbol,
                 "interval": interval, "limit": 1000,
             }
+            if required_counts is not None:
+                params["limit"] = min(1000, required-len(merged)+1)
             if end_ms is not None:
                 params["end"] = end_ms
             payload = _get_json("/v5/market/kline", params)
@@ -2160,6 +2174,7 @@ def _observer_status(
     sensor_status: Mapping[str, object] | None = None,
     strategy_monitors: tuple[Mapping[str, object], ...] = (),
     p90_owner_arm_stage: str | None = None,
+    preparation: Mapping[str, object] | None = None,
 ) -> None:
     _atomic_json(
         OBSERVER_STATUS_PATH,
@@ -2189,6 +2204,7 @@ def _observer_status(
             "sensor_status": dict(sensor_status or {}),
             "strategy_monitors": [dict(item) for item in strategy_monitors],
             "p90_owner_arm_stage": p90_owner_arm_stage,
+            "preparation": dict(preparation or {}),
         },
     )
 
@@ -2210,6 +2226,7 @@ def _run_observer_epoch(
     bundles: tuple[object, ...],
     stopping: Callable[[], bool],
     service_started_at: datetime,
+    preparation_budget: PreparationBudget | None = None,
 ) -> str:
     epoch_started = datetime.now(UTC)
     signature = _observer_light_signature(connection)
@@ -2451,8 +2468,25 @@ def _run_observer_epoch(
     }
     closed_boundaries: dict[tuple[str, str], datetime] = {}
     p90_closed_recovery_targets: dict[str, tuple[datetime, datetime]] = {}
+    preparation_budget = preparation_budget or PreparationBudget()
+
+    def preparation_progress(detail: dict[str, object]) -> None:
+        preparation_budget.begin(now=time.monotonic())
+        if preparation_budget.remaining(now=time.monotonic()) <= 0:
+            raise PreparationWaiting("CANDLE_PREPARATION_DEADLINE_EXPIRED", **detail)
+        _observer_status(
+            state="PREPARING", epoch_id=None, active_bundles=bundles, symbols=symbols,
+            reason="Подготовка данных · ожидайте / NOT READY",
+            preparation={**detail, "attempt": preparation_budget.attempts+1,
+                         "remaining_seconds": preparation_budget.remaining(now=time.monotonic())},
+        )
+
+    if p90_real_source_only or p90_real_staged:
+        preparation_progress({"stage": "HISTORY_SEED"})
     for symbol in symbols:
         observed = datetime.now(UTC)
+        if p90_real_source_only or p90_real_staged:
+            preparation_progress({"stage": "HISTORY_SEED", "symbol": symbol})
         recovery_from = (
             p90_consumer.recovery_watermarks(symbol)
             if p90_consumer is not None and symbol in p90l90_symbols
@@ -3026,10 +3060,30 @@ def _run_observer_epoch(
                 preflight_p90_real_private_flat_source,
             )
 
-            preflight_p90_real_private_flat_source(
-                connection,
-                bundles=tuple(observer_split.p90_real),
+            preparation_progress({"stage": "PRIVATE_PREFLIGHT"})
+            try:
+                preflight_p90_real_private_flat_source(
+                    connection,
+                    bundles=tuple(observer_split.p90_real),
+                )
+            except RuntimeError as exc:
+                raise cold_preparation_wait(exc) from None
+            prepare_p90_closed_tails(
+                connection, symbols=tuple(sorted(p90l90_symbols)),
+                source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
+                progress=preparation_progress,
             )
+        elif p90_real_live:
+            from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+                inspect_p90_real_open_restart_epoch,
+            )
+            if inspect_p90_real_open_restart_epoch(connection, source_commit=LOADED_COMMIT) is None:
+                # Open-position replay/Exit retains its original contract.
+                prepare_p90_closed_tails(
+                    connection, symbols=tuple(sorted(p90l90_symbols)),
+                    source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
+                    progress=preparation_progress,
+                )
         sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
         # Source proof is issued ONLY in this epoch, after real Bybit
         # WS subscription acknowledgements and the active publicTrade
@@ -3072,19 +3126,25 @@ def _run_observer_epoch(
                     connection, source_commit=LOADED_COMMIT,
                 )
             if restart_epoch_id is None:
-                source_epoch_id = start_current_p90_real_observer_epoch(
-                    connection,
-                    bundles=observer_split.p90_real,
-                    source_commit=LOADED_COMMIT,
-                    mirror=trade_mirror,
-                    subscribed_symbols=frozenset(symbols),
-                    subscribed_intervals=frozenset(intervals),
-                    subscribed_local_at=_ready_local,
-                    subscribed_server_at=_ready_server,
-                    epoch_started_at=epoch_started,
-                )
+                # A boundary may advance while subscribing. Never weaken the
+                # exact source proof: close this attempt, prepare and attest anew.
+                try:
+                    source_epoch_id = start_current_p90_real_observer_epoch(
+                        connection,
+                        bundles=observer_split.p90_real,
+                        source_commit=LOADED_COMMIT,
+                        mirror=trade_mirror,
+                        subscribed_symbols=frozenset(symbols),
+                        subscribed_intervals=frozenset(intervals),
+                        subscribed_local_at=_ready_local,
+                        subscribed_server_at=_ready_server,
+                        epoch_started_at=epoch_started,
+                    )
+                except RuntimeError as exc:
+                    raise cold_preparation_wait(exc) from None
             else:
                 source_epoch_id = restart_epoch_id
+            preparation_budget.reset()
 
             def require_no_real_exposure() -> None:
                 # This diagnostic must stop, not pretend to protect a position.
@@ -3747,6 +3807,7 @@ def _run_multi_strategy_observer() -> None:
     stopping_flag = False
     disconnect_count = 0
     disconnect_window_started = 0.0
+    preparation_budget = PreparationBudget()
 
     def stop(_signum: int, _frame: object) -> None:
         nonlocal stopping_flag
@@ -3783,10 +3844,29 @@ def _run_multi_strategy_observer() -> None:
                     cast(tuple[object, ...], bundles),
                     lambda: stopping_flag,
                     service_started_at,
+                    preparation_budget=preparation_budget,
                 )
                 if outcome == "STOP":
                     break
                 disconnect_count = 0
+            except PreparationWaiting as waiting:
+                connection.rollback()
+                detail = preparation_budget.wait(waiting, now=time.monotonic())
+                blocked = detail["state"] == "BLOCKED"
+                while True:
+                    _observer_status(
+                        state=str(detail["state"]), epoch_id=None,
+                        active_bundles=(), symbols=(), preparation=detail,
+                        reason=("Подготовка приостановлена · " if blocked else
+                                "Подготовка данных · ожидайте / NOT READY · ") + str(waiting),
+                    )
+                    if stopping_flag:
+                        break
+                    time.sleep(1.0)
+                    if not blocked:
+                        break
+                # A terminal preparation block retains its budget/status;
+                # it cannot become a restart/retry loop that resets the limit.
             except websocket.WebSocketConnectionClosedException as exc:
                 now_mono = time.monotonic()
                 if now_mono - disconnect_window_started > 60.0:

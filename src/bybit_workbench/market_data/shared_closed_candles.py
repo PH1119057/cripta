@@ -19,6 +19,18 @@ _SHA = re.compile(r"^[a-f0-9]{40}$")
 _TRANSPORT = frozenset({"BYBIT_REST_KLINE", "BYBIT_WS_KLINE"})
 
 
+class CandleWarmupEndNotProven(RuntimeError):
+    """Exact boundary evidence, preserving the existing error-code contract."""
+
+    def __init__(self, key: MarketCandleKey, expected: datetime, actual: datetime) -> None:
+        super().__init__("CANDLE_WARMUP_END_NOT_PROVEN")
+        self.detail = {
+            "symbol": key.external_symbol, "timeframe": key.timeframe,
+            "expected": expected.isoformat(), "actual": actual.isoformat(),
+            "market_source_id": key.market_source_id,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class MarketCandleKey:
     market_source_id: str
@@ -65,7 +77,7 @@ def verify_closed_window(
         through.utcoffset() != timedelta(0)
         or result[-1].closed_at != through
     ):
-        raise RuntimeError("CANDLE_WARMUP_END_NOT_PROVEN")
+        raise CandleWarmupEndNotProven(key, through, result[-1].closed_at)
     return result
 
 
