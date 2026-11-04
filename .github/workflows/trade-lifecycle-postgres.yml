@@ -49,6 +49,14 @@ jobs:
         run: |
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE cripta LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"
           psql -X -v ON_ERROR_STOP=1 -f tests/postgres_trade_lifecycle_bootstrap.sql
+          # Disposable fixture: the old bootstrap models only connection_events.id.
+          # Add the actual private WS event columns for scoped recovery tests.
+          # Production already has these columns; NEVER run this outside CI.
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER TABLE runtime.connection_events
+            ADD COLUMN at_epoch_ms bigint NOT NULL DEFAULT 0,
+            ADD COLUMN channel text NOT NULL DEFAULT '',
+            ADD COLUMN event text NOT NULL DEFAULT '',
+            ADD COLUMN details_json text NOT NULL DEFAULT '{}'"
           migrations=(
             operations/sql/20260901_exact_position_closure_exit_attribution_v1.sql
             operations/sql/20260908_strategy_entry_u3.sql
