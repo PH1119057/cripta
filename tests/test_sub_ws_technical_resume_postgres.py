@@ -86,9 +86,11 @@ def _seed(conn: psycopg.Connection, *, flat: bool = True) -> tuple[datetime, int
              generation_id,account_ref,reason,state,started_at,completed_at,
              position_mode_refs,error,trading_account_id,
              account_connector_id,identity_status,positions_count,
-             active_orders_count)
+             active_orders_count,account_type,total_equity,
+             wallet_balance,available_balance)
            VALUES(%s,'BYBIT:UNIFIED','reconnect','COMPLETE',%s,%s,
-                  '{}'::jsonb,'',%s,%s,'PROVEN',%s,0)""",
+                  '{}'::jsonb,'',%s,%s,'PROVEN',%s,0,
+                  'UNIFIED',100,100,100)""",
         (
             generation, now - timedelta(milliseconds=50), now,
             SUB, SUB_CONNECTOR, 0 if flat else 1,
@@ -155,8 +157,8 @@ def test_runtime_role_does_not_gain_update_delete_or_owner_arm_permissions(
     disposable: psycopg.Connection,
 ) -> None:
     assert disposable.execute(
-        """SELECT has_table_privilege('cripta',
-                       'runtime.account_entry_safety_blocks','INSERT'),
+        """SELECT has_column_privilege('cripta',
+                       'runtime.account_entry_safety_blocks','reason','INSERT'),
                   has_table_privilege('cripta',
                        'runtime.account_entry_safety_blocks','UPDATE'),
                   has_table_privilege('cripta',
