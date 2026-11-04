@@ -1,0 +1,30 @@
+# Inert source-only service definition. No [Install] auto-enablement.
+[Unit]
+Description=Cripta bounded recovery supervisor (OBSERVE_ONLY until cutover)
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
+Environment=CRIPTA_RUNTIME_RECOVERY_MODE=OBSERVE_ONLY
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/runtime_recovery_supervisor.py
+Restart=on-failure
+RestartSec=5
+StateDirectory=cripta-runtime-recovery
+StateDirectoryMode=0750
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadOnlyPaths=/srv/cripta/runtime/current
+ReadWritePaths=/var/lib/cripta-runtime-recovery
