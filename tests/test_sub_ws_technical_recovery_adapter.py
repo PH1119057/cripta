@@ -105,13 +105,15 @@ def test_verified_flat_recovery_requests_only_scoped_database_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now, blocked, reconnect = _sample()
-    source = "bybit:signed-flat-linear-usdt:exact-account"
+    source = "bybit:signed-recovery-linear-usdt:exact-account"
     proof = SimpleNamespace(
         trading_account_id=adapter.ACCOUNT,
         private_generation_id="generation-fixture",
         signed_uid="123456",
         source_ref=source,
         observed_at=now,
+        positions=(),
+        open_orders=0,
         pending_commands=0,
     )
     saves: list[tuple[int, str]] = []
@@ -146,7 +148,7 @@ def test_verified_flat_recovery_requests_only_scoped_database_transition(
             assert kwargs["account"] == adapter.ACCOUNT
             assert kwargs["connector"] == adapter.CONNECTOR
 
-        def read_flat_account(self) -> SimpleNamespace:
+        def read_recovery_account(self) -> SimpleNamespace:
             return proof
 
     monkeypatch.setattr(adapter, "_release", lambda: "a" * 40)
@@ -161,6 +163,9 @@ def test_verified_flat_recovery_requests_only_scoped_database_transition(
     monkeypatch.setattr(adapter, "_independent_lifecycle", lambda _now: (True, True))
     monkeypatch.setattr(
         adapter, "_ws_heartbeat", lambda **_kwargs: now,
+    )
+    monkeypatch.setattr(
+        adapter, "_signed_inventory_matches", lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(
         adapter, "_generation_and_uid",
@@ -191,7 +196,7 @@ def test_connection_status_file_alone_is_not_signed_exchange_evidence() -> None:
     ).read_text(encoding="utf-8")
     tree = ast.parse(source)
     assert "P90PrivateProofClient(" in source
-    assert "read_flat_account()" in source
+    assert "read_recovery_account()" in source
     assert "control.clear_sub_ws_transient_latch" in source
     assert "SET TRANSACTION READ ONLY" in source
     assert "ISOLATION LEVEL SERIALIZABLE" in source
