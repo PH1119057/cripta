@@ -1100,3 +1100,12 @@ restart/reconciliation contract, но сама не даёт LIVE rights.
 EFFECTIVE_NEW_ENTRY для того же уже OWNER-authorized exact scope после полного
 recovery evidence. Не является новым OWNER ARM и запрещено при release/scope
 change, explicit DISARM или unresolved hard-safety condition.
+
+
+**OBSERVER_PREPARING** — ожидаемый ограниченный этап подготовки проверенной
+рыночной истории перед новой рабочей epoch Observer. Status `PREPARING`,
+`observer_ready=false`; UI «Подготовка данных · ожидайте / NOT READY».
+Не runtime ERROR и не торговое разрешение. Конкретный progress и finite
+attempt/deadline budget обязательны; исчерпание — `BLOCKED` с причиной.
+Integrity/identity/continuity violations не маскируются этим статусом.
+Owner contract: OBSERVATION_ANALYTICS §7.5.1 (2026-11-04).

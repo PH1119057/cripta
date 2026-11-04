@@ -846,3 +846,28 @@ InstrumentIdentity + timeframe + UTC close`. MAYAK/Dispatcher не создаю�
 Strategy/Entry/Exit отвечают только за свои вычисленные state/checkpoints.
 Не создавать новый live cursor из исторических OHLC: trade continuity
 проверяется отдельно по ARCH §48.4.
+
+
+### 7.5.1 Ожидаемая подготовка Observer — OWNER DECISION 2026-11-04
+
+Ожидаемая догрузка подтверждённой истории при холодном запуске является
+`OBSERVER_PREPARING`, а не `UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR`.
+Проекция: `state=PREPARING`, `observer_ready=false`, «Подготовка данных ·
+ожидайте / NOT READY», конкретные symbol/timeframe/expected/actual и deadline.
+Штатный этап не создаёт ERROR incident и не требует закрытия аварии владельцем.
+Это узкий типизированный preparation outcome, не blanket suppression exceptions.
+
+Все participating symbols должны иметь проверенный общий причинный конец
+5m/15m истории перед fresh WS attestation. Пересечение границы свечи требует
+дозагрузки хвоста и новой проверки, а не допуска по устаревшему окну. Source,
+UTC, closed-only, count/gap/immutability и signed proof lifetime не ослабляются.
+Historical candles не создают native trade cursor. Ожидание ограничено finite
+attempt/deadline budget; исчерпание отображается как `BLOCKED` с причиной,
+без бесконечного «подождите». Integrity/identity/ambiguous mutation и иные
+неожиданные runtime exceptions остаются настоящими durable faults.
+
+Этот cold preparation path не заменяет open-position recovery: подтверждённые
+позиции сохраняют exact ownership/protection/Exit, а Entry NOT READY не
+отключает их сопровождение. PREPARING/BLOCKED никогда не создаёт OWNER ARM,
+не открывает gate и не считается техническим READY. Исторические faults не
+удаляются и не закрываются автоматически вследствие этой классификации.
