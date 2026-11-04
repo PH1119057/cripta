@@ -738,3 +738,15 @@ def test_first_fill_survives_unlinked_flat_inventory_in_postgres() -> None:
                  WHERE exchange_position_slot_claim_id=%s""",
             (ids["slot_claim_id"],),
         ).fetchone() == ("BOUND",)
+        # Compile and exercise the real account-scoped child claim too:
+        # a nonexistent decision must roll back without reaching Execution.
+        with (
+            patch.object(private_runtime, "TRADING_ACCOUNT_ID", ids["trading_account_id"]),
+            patch.object(private_runtime, "execute_command") as executor,
+            pytest.raises(private_runtime.ExchangeMutationBarrier, match="NOT_QUEUED"),
+        ):
+            private_runtime._execute_first_fill_trailing(
+                connection, "fake", "fake", entry_command_id=ids["command_id"],
+                exit_decision_id=f"{prefix}-missing-decision", entry_result={},
+            )
+        executor.assert_not_called()
