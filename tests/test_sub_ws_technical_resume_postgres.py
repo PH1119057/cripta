@@ -112,53 +112,15 @@ def _seed(conn: psycopg.Connection, *, flat: bool = True) -> tuple[datetime, int
     return blocked_at, event, generation
 
 
-def _cleanup(conn: psycopg.Connection) -> None:
-    conn.execute(
-        "DELETE FROM runtime.account_ws_technical_resume_events WHERE trading_account_id=%s",
-        (SUB,),
-    )
-    conn.execute(
-        "DELETE FROM runtime.connection_events WHERE trading_account_id=%s",
-        (SUB,),
-    )
-    conn.execute(
-        "DELETE FROM runtime.account_entry_safety_blocks WHERE trading_account_id=%s",
-        (SUB,),
-    )
-    conn.execute(
-        "DELETE FROM runtime.entry_consumer_health WHERE trading_account_id=%s",
-        (SUB,),
-    )
-    conn.execute(
-        "DELETE FROM runtime.account_state_generations WHERE trading_account_id=%s",
-        (SUB,),
-    )
-    conn.execute(
-        "DELETE FROM identity.account_connectors WHERE account_connector_id=%s",
-        (SUB_CONNECTOR,),
-    )
-    conn.execute(
-        "DELETE FROM identity.trading_accounts WHERE trading_account_id=%s",
-        (SUB,),
-    )
-    conn.execute(
-        "DELETE FROM identity.trading_accounts WHERE trading_account_id=%s",
-        (MAIN,),
-    )
-
-
 @pytest.fixture
 def disposable():
     conn = _db()
+    conn.execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
     try:
-        _cleanup(conn)
         yield conn
     finally:
-        try:
-            conn.execute("RESET SESSION AUTHORIZATION")
-            _cleanup(conn)
-        finally:
-            conn.close()
+        conn.execute("ROLLBACK")
+        conn.close()
 
 
 def test_repeat_transient_latch_refreshes_epoch_and_hard_fault_cannot_downgrade(
@@ -227,20 +189,15 @@ def test_stale_epoch_rejected_before_delete_with_serializable_cripta_actor(
     )
     proof_time = datetime.now(UTC)
     disposable.execute("SET SESSION AUTHORIZATION cripta")
-    try:
-        disposable.execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
-        with pytest.raises(psycopg.Error):
-            disposable.execute(
-                """SELECT control.clear_sub_ws_transient_latch(
-                     %s,%s,%s,%s,%s,%s,%s,%s)""",
-                (
-                    SUB, SUB_CONNECTOR, RELEASE, generation, "123456789",
-                    event_id, blocked, proof_time,
-                ),
-            )
-        disposable.execute("ROLLBACK")
-    finally:
-        disposable.execute("RESET SESSION AUTHORIZATION")
+    with pytest.raises(psycopg.Error):
+        disposable.execute(
+            """SELECT control.clear_sub_ws_transient_latch(
+                 %s,%s,%s,%s,%s,%s,%s,%s)""",
+            (
+                SUB, SUB_CONNECTOR, RELEASE, generation, "123456789",
+                event_id, blocked, proof_time,
+            ),
+        )
 
 
 def test_complete_flat_reconnect_can_clear_only_technical_block(
@@ -254,19 +211,15 @@ def test_complete_flat_reconnect_can_clear_only_technical_block(
     if before != 0:
         pytest.skip("CI gate is not in safely disarmed fixture state")
     disposable.execute("SET SESSION AUTHORIZATION cripta")
-    try:
-        disposable.execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
-        result = disposable.execute(
-            "SELECT control.clear_sub_ws_transient_latch(%s,%s,%s,%s,%s,%s,%s,%s)",
-            (
-                SUB, SUB_CONNECTOR, RELEASE, generation, "123456789",
-                event_id, blocked, proof_time,
-            ),
-        ).fetchone()
-        assert result == (SUB,)
-        disposable.execute("COMMIT")
-    finally:
-        disposable.execute("RESET SESSION AUTHORIZATION")
+    result = disposable.execute(
+        "SELECT control.clear_sub_ws_transient_latch(%s,%s,%s,%s,%s,%s,%s,%s)",
+        (
+            SUB, SUB_CONNECTOR, RELEASE, generation, "123456789",
+            event_id, blocked, proof_time,
+        ),
+    ).fetchone()
+    assert result == (SUB,)
+    disposable.execute("RESET SESSION AUTHORIZATION")
     assert disposable.execute(
         "SELECT count(*) FROM runtime.account_entry_safety_blocks WHERE trading_account_id=%s",
         (SUB,),
@@ -275,6 +228,7 @@ def test_complete_flat_reconnect_can_clear_only_technical_block(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
     ).fetchone()[0] == before
     assert disposable.execute(
-        "SELECT count(*) FROM runtime.account_ws_technical_resume_events WHERE trading_account_id=%s",
+        """SELECT count(*) FROM runtime.account_ws_technical_resume_events
+           WHERE trading_account_id=%s""",
         (SUB,),
     ).fetchone()[0] == 1
