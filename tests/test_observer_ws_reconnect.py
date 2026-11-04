@@ -8,7 +8,9 @@ def test_public_ws_disconnect_restarts_epoch_without_immediate_durable_fault() -
         "def _run_parity_main()", 1
     )[0]
     assert "websocket.WebSocketConnectionClosedException, PublicTradeAuditUnavailable," in scope
-    transient = scope.split("websocket.WebSocketConnectionClosedException, PublicTradeAuditUnavailable,", 1)[1]
+    transient = scope.split(
+        "websocket.WebSocketConnectionClosedException, PublicTradeAuditUnavailable,", 1,
+    )[1]
     transient = transient.split("except Exception as exc:", 1)[0]
     assert 'state="RECONNECTING"' in transient
     assert "time.sleep(2.0)" in transient
