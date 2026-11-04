@@ -117,13 +117,15 @@ def test_current_bybit_position_matches_latest_stable_owned_cycle() -> None:
     assert 'and Decimal(str(current.get("avgPrice") or 0)) == Decimal(str(row[4]))' not in source
 
 
-def test_exchange_flat_position_is_closed_even_when_exit_link_is_unresolved() -> None:
+def test_unproven_flat_snapshot_keeps_last_proven_owner_visible_to_exit() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     assert "state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK'" in source
     unresolved_branch = source.split(
         'if close.status != "EXACT" or close.exit_order_id is None:', 1
     )[1].split("protection_rows =", 1)[0]
-    assert "SET state='CLOSED'" in unresolved_branch
+    # OWNER correction: absence in a snapshot is not an exact close fact.
+    # Exit/restart readers must retain the last proven OPEN owner.
+    assert "state='CLOSED'" not in unresolved_branch
     assert "close_link_status='UNRESOLVED_EXACT_LINK'" in unresolved_branch
 
 

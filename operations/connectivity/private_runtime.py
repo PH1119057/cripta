@@ -3465,6 +3465,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             result["actualProtection"] = actual_protection_result
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
+    postfill_evaluation = None
     if p90_real_postfill is not None:
         # This is the FIRST protected, authenticated fill. Consume the strict
         # <=5s native postfill proof BEFORE the generic full-account reconcile:
@@ -3477,7 +3478,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         first_position_id, first_order_id, first_execution_ids = p90_real_postfill
         try:
             with connection.transaction():
-                handoff_real_first_protected_fill(
+                postfill_evaluation = handoff_real_first_protected_fill(
                     connection,
                     position_id=first_position_id,
                     trading_account_id=TRADING_ACCOUNT_ID,
@@ -3514,6 +3515,16 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:"
                 + postfill_reason
             ) from None
+    if postfill_evaluation is not None and postfill_evaluation.decision is not None:
+        # Execute the already-approved, durable first-fill trailing command
+        # BEFORE a full-account REST reconciliation can consume its 5s budget.
+        # This uses the same account-local command executor and safety checks;
+        # it never synthesizes a new Exit decision or repeats order/create.
+        _execute_first_fill_trailing(
+            connection, key, secret, entry_command_id=command_id,
+            exit_decision_id=postfill_evaluation.decision.exit_decision_id,
+            entry_result=result,
+        )
     try:
         reconcile(connection, key, secret, "after_command")
     except Exception as exc:
@@ -3558,6 +3569,66 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             connection.rollback()
             # Never retry a confirmed Exchange mutation for audit failure.
             # Missing evidence stays UNKNOWN until independent reconciliation.
+
+
+def _execute_first_fill_trailing(
+    connection: psycopg.Connection, key: str, secret: str, *,
+    entry_command_id: str, exit_decision_id: str,
+    entry_result: dict[str, object],
+) -> None:
+    """Claim only the exact queued child of this proven protected Entry.
+
+    Both command transitions commit together. A crash cannot turn a confirmed
+    Entry back into a new order; an uncertain child remains a running command
+    for the existing startup reconciliation, never a blind POST retry.
+    """
+    row = connection.execute(
+        """UPDATE runtime.trade_commands c
+              SET state='running',started_at_epoch_ms=%s
+             FROM strategy_exit.execution_dispatches d,
+                  strategy_exit.execution_requests r,
+                  runtime.position_ownership p
+            WHERE d.command_id=c.command_id AND d.state='DISPATCHED'
+              AND r.execution_request_id=d.execution_request_id
+              AND r.exit_decision_id=%s AND r.action_kind='SET_TRAILING'
+              AND p.position_id=r.strategy_position_id
+              AND p.entry_command_id=%s AND p.state='OPEN'
+              AND p.initial_protection_confirmed_at IS NOT NULL
+              AND c.command_type='strategy_exit' AND c.state='queued'
+              AND c.trading_account_id=%s AND c.identity_status='PROVEN'
+              AND p.identity_status='PROVEN' AND r.identity_status='PROVEN'
+              AND p.trading_account_id=c.trading_account_id
+              AND r.trading_account_id=c.trading_account_id
+              AND r.strategy_execution_binding_id=c.strategy_execution_binding_id
+              AND p.strategy_execution_binding_id=c.strategy_execution_binding_id
+            RETURNING c.command_id,c.command_type,c.symbol,c.payload_json""",
+        (int(time.time()*1000), exit_decision_id, entry_command_id, TRADING_ACCOUNT_ID),
+    ).fetchone()
+    if row is None:
+        connection.rollback()
+        raise ExchangeMutationBarrier("P90_REAL_POSTFILL_TRAILING_COMMAND_NOT_QUEUED")
+    parent = connection.execute(
+        """UPDATE runtime.trade_commands SET state='completed',
+                  finished_at_epoch_ms=%s,result_json=%s
+            WHERE command_id=%s AND state='running'
+              AND trading_account_id=%s AND identity_status='PROVEN'""",
+        (int(time.time()*1000), json.dumps(entry_result),
+         entry_command_id, TRADING_ACCOUNT_ID),
+    )
+    if parent.rowcount != 1:
+        connection.rollback()
+        raise ExchangeMutationBarrier("P90_REAL_POSTFILL_ENTRY_COMPLETION_DRIFT")
+    connection.commit()
+    child_id = str(row[0])
+    try:
+        execute_command(connection, key, secret, row)
+    except PreMutationSafetyBlock as exc:
+        handle_pre_mutation_safety_block(connection, child_id, exc)
+    except ExchangeMutationBarrier as exc:
+        handle_exchange_mutation_barrier(connection, key, secret, child_id, exc)
+    except Exception as exc:
+        # No generic retry after an Exchange attempt with an unknown outcome.
+        handle_exchange_mutation_barrier(connection, key, secret, child_id, exc)
 
 
 
@@ -4221,12 +4292,12 @@ def reconcile_position_ownership(
             # confirmed fill is reflected (Entry vs periodic reconciliation).
             # Without exact close executions there is NO confirmed close:
             # retain the physical slot and consumed capital reservation.
-            # A subsequent signed inventory may restore the OPEN owner,
-            # while genuinely closed but unlinked cycles remain fail-closed.
+            # Keep the last proven OPEN owner visible to Exit and restart
+            # readers. An absent snapshot is not a terminal close fact.
+            # Signed position proof still gates every Exit mutation.
             connection.execute(
                 """UPDATE runtime.position_ownership
-                   SET state='CLOSED',
-                       close_link_status='UNRESOLVED_EXACT_LINK'
+                   SET close_link_status='UNRESOLVED_EXACT_LINK'
                    WHERE position_id=%s""",
                 (position_id,),
             )
@@ -4844,6 +4915,27 @@ def _signed_account_mode_proof(key: str, secret: str) -> dict[str, object]:
     }
 
 
+def _require_inventory_not_overtaken_by_fill(
+    connection: psycopg.Connection, *, started_ms: int,
+) -> None:
+    """Called under the account lock, BEFORE publishing a REST generation.
+
+    REST inventory was collected outside that lock. A subsequently committed
+    first fill invalidates the whole older generation, not just its ownership
+    projection. Otherwise hot positions and the COMPLETE admission evidence
+    could contradict the durable first-fill owner.
+    """
+    newer = connection.execute(
+        """SELECT position_id FROM runtime.position_ownership
+             WHERE trading_account_id=%s AND identity_status='PROVEN'
+               AND created_at >= to_timestamp(%s/1000.0)
+             LIMIT 1""",
+        (TRADING_ACCOUNT_ID, started_ms),
+    ).fetchone()
+    if newer is not None:
+        raise ExchangeReadUnavailable("ACCOUNT_INVENTORY_OVERTAKEN_BY_CONFIRMED_FILL")
+
+
 def reconcile(
     connection: psycopg.Connection, key: str, secret: str, reason: str
 ) -> tuple[int, int]:
@@ -4948,6 +5040,7 @@ def reconcile(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
                 (TRADING_ACCOUNT_ID,),
             )
+            _require_inventory_not_overtaken_by_fill(connection, started_ms=started)
             connection.execute(
                 """DELETE FROM runtime.hot_positions
                     WHERE trading_account_id=%s
