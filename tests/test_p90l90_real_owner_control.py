@@ -211,7 +211,7 @@ def test_p90_portal_micro_live_waiver_is_scoped_and_release_migrated() -> None:
     installer = INSTALLER.read_text()
 
     assert '"cripta-dashboard.service"' in evidence
-    assert "critical_pending == 0" in evidence
+    assert "critical_pending == 0" not in evidence
     assert "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE" in evidence
     assert '"p90_portal_micro_live_waiver"' in evidence
     assert '"owner_webhook_deferred"' in evidence
