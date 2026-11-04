@@ -160,7 +160,7 @@ def test_verified_flat_recovery_requests_only_scoped_database_transition(
     )
     monkeypatch.setattr(adapter, "_independent_lifecycle", lambda _now: (True, True))
     monkeypatch.setattr(
-        adapter, "_ws_heartbeat", lambda **_kwargs: datetime.now(UTC),
+        adapter, "_ws_heartbeat", lambda **_kwargs: now,
     )
     monkeypatch.setattr(
         adapter, "_generation_and_uid",
