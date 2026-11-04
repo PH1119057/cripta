@@ -591,6 +591,10 @@ class PublicTradeStreamBehind(ConnectionError):
         self.cutoff_by_symbol = dict(cutoff_by_symbol)
 
 
+class PublicTradeAuditUnavailable(ContinuityNotProvable):
+    """Network unavailable; continuity is NOT proven, bounded reconnect required."""
+
+
 def _fetch_recent_trade_snapshot(
     symbol: str,
 ) -> tuple[list[Mapping[str, object]], datetime]:
@@ -618,7 +622,7 @@ def _fetch_recent_trade_snapshot(
         ) as exc:
             if attempt == 0:
                 continue
-            raise ContinuityNotProvable(
+            raise PublicTradeAuditUnavailable(
                 f"PUBLIC_TRADE silence audit unavailable for {symbol}: {type(exc).__name__}: {exc}"
             ) from exc
         except Exception as exc:
@@ -3848,7 +3852,6 @@ def _run_multi_strategy_observer() -> None:
                 )
                 if outcome == "STOP":
                     break
-                disconnect_count = 0
             except PreparationWaiting as waiting:
                 connection.rollback()
                 detail = preparation_budget.wait(waiting, now=time.monotonic())
@@ -3867,7 +3870,9 @@ def _run_multi_strategy_observer() -> None:
                         break
                 # A terminal preparation block retains its budget/status;
                 # it cannot become a restart/retry loop that resets the limit.
-            except websocket.WebSocketConnectionClosedException as exc:
+            except (
+                websocket.WebSocketConnectionClosedException, PublicTradeAuditUnavailable,
+            ) as exc:
                 now_mono = time.monotonic()
                 if now_mono - disconnect_window_started > 60.0:
                     disconnect_window_started = now_mono
@@ -3879,7 +3884,7 @@ def _run_multi_strategy_observer() -> None:
                     )
                     _observer_status(
                         state="ERROR", epoch_id=None, active_bundles=(), symbols=(),
-                        reason=f"repeated WebSocket disconnects [fault_id={fault_id}]",
+                        reason=f"repeated public transport failures [fault_id={fault_id}]",
                     )
                     if stopping_flag:
                         break
@@ -3892,7 +3897,7 @@ def _run_multi_strategy_observer() -> None:
                     epoch_id=None,
                     active_bundles=(),
                     symbols=(),
-                    reason=f"public WebSocket disconnected: {type(exc).__name__}",
+                    reason=f"public transport temporarily unavailable: {type(exc).__name__}: {exc}",
                 )
                 if stopping_flag:
                     break

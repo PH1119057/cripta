@@ -43,6 +43,7 @@ from bybit_workbench.r1_unified_arm_control import (
     arm_unified_r1,
     disarm_unified_r1,
 )
+from bybit_workbench.p90_readiness_view import observer_arm_ready, technical_preparation_fresh
 from bybit_workbench.p90l90_real_arm_control import (
     disarm_p90l90_real_v3,
     prearm_p90l90_real_v3,
@@ -1266,10 +1267,10 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         p90_arm_blockers.append(
             source_identity.blocker or "SOURCE_LIVE_IDENTITY_NOT_READY"
         )
-    if (
-        str(observer_current.get("state") or "") != "RUNNING"
-        or not bool(observer_current.get("observer_ready"))
-    ):
+    current_observer_ready = observer_arm_ready(
+        observer_current, LOADED_RELEASE_COMMIT, datetime.now(UTC),
+    )
+    if not current_observer_ready:
         p90_arm_blockers.append("P90_REAL_OBSERVER_NOT_READY")
     p90_arm_status = {
         "state": "BLOCKED" if p90_arm_blockers else "FRESH_CHECK_REQUIRED",
@@ -1281,7 +1282,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         "source_delta_paths": list(source_identity.changed_paths),
         "source_identity_blocker": source_identity.blocker,
         "observer_state": observer_current.get("state"),
-        "observer_ready": bool(observer_current.get("observer_ready")),
+        "observer_ready": current_observer_ready,
         "observer_updated_at": observer_current.get("updated_at"),
         "note": (
             "Final OWNER ARM always performs fresh remote/source/installed "
@@ -1332,6 +1333,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             p90_arm_status["previous_readiness_operation"] = readiness_projection
             readiness_projection = None
         p90_arm_status["readiness_operation"] = readiness_projection
+        p90_arm_status["technical_preparation_ready"] = technical_preparation_fresh(
+            readiness_projection, LOADED_RELEASE_COMMIT, datetime.now(UTC),
+        )
         if readiness_projection is not None:
             operation_state = str(readiness_projection.get("state") or "")
             if operation_state in {
@@ -4559,6 +4563,7 @@ R1_UNIFIED_MICRO_LIVE_PATH = "/api/r1/unified/micro-live"
 P90_REAL_V3_PREARM_PATH = "/api/p90l90/real-v3/prearm"
 P90_REAL_V3_PREARM_EVIDENCE_PATH = "/api/p90l90/real-v3/prearm-evidence"
 P90_REAL_V3_ARM_PATH = "/api/p90l90/real-v3/arm"
+P90_REAL_V3_PREPARE_PATH = "/api/p90l90/real-v3/prepare"
 U6_STRATEGY_POST_PATHS = {
     U6_STRATEGY_CREATE_PATH,
     U6_STRATEGY_VERSION_PATH,
@@ -4570,6 +4575,7 @@ U6_STRATEGY_POST_PATHS = {
     P90_REAL_V3_PREARM_PATH,
     P90_REAL_V3_PREARM_EVIDENCE_PATH,
     P90_REAL_V3_ARM_PATH,
+    P90_REAL_V3_PREPARE_PATH,
 }
 
 
@@ -5876,7 +5882,7 @@ def _u6_prepare_p90_real_v3_readiness(
                     ],
                 },
             )
-        evidence = _wait_p90_real_v3_technical_evidence()
+        evidence = _wait_p90_real_v3_technical_evidence(timeout_seconds=180.0)
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
@@ -5924,6 +5930,17 @@ def _u6_prepare_p90_real_v3_readiness(
         )
 
 
+def _u6_p90_real_v3_prepare(handler: object, request: dict[str, object]) -> None:
+    """Technical preparation has no ARM, permission or Exchange effect."""
+    if not _u6_financial_account_same_origin(handler):
+        raise ValueError("P90_REAL_PREPARE_ORIGIN_UNVERIFIED")
+    result = _u6_prepare_p90_real_v3_readiness(
+        operator=handler.session_user() or "UNKNOWN",
+        request_id=str(request.get("request_id") or secrets.token_hex(12)),
+    )
+    _u6_json(handler, 200, result)
+
+
 def _u6_p90_real_v3_arm(
     handler: object, request: dict[str, object]
 ) -> None:
@@ -5937,6 +5954,21 @@ def _u6_p90_real_v3_arm(
     operator = handler.session_user() or "UNKNOWN"
     request_id = str(request.get("request_id") or secrets.token_hex(12))
     if enabled:
+        try:
+            observer = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            observer = {}
+        if not observer_arm_ready(observer, LOADED_RELEASE_COMMIT, datetime.now(UTC)):
+            raise ValueError("P90_REAL_OBSERVER_NOT_READY: дождитесь готовности Observer")
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql "
+            "options=-cdefault_transaction_read_only=on"
+        ) as connection:
+            previous = latest_real_readiness_operation(
+                connection, scope_key=P90_REAL_READINESS_SCOPE_KEY,
+            )
+        if not technical_preparation_fresh(previous, LOADED_RELEASE_COMMIT, datetime.now(UTC)):
+            raise ValueError("P90_REAL_PREPARATION_REQUIRED: сначала проверьте готовность")
         preparation = _u6_prepare_p90_real_v3_readiness(
             operator=operator,
             request_id=request_id,
@@ -6189,6 +6221,8 @@ def _u6_handle_post(handler: object, path: str) -> None:
             _u6_p90_real_v3_prearm(handler, request)
         elif path == P90_REAL_V3_PREARM_EVIDENCE_PATH:
             _u6_p90_real_v3_prearm_evidence(handler, request)
+        elif path == P90_REAL_V3_PREPARE_PATH:
+            _u6_p90_real_v3_prepare(handler, request)
         elif path == P90_REAL_V3_ARM_PATH:
             _u6_p90_real_v3_arm(handler, request)
         else:

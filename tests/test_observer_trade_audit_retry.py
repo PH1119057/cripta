@@ -64,6 +64,7 @@ def _audit_function(response_plan: list[object]) -> tuple[Any, list[float]]:
         "TRADE_AUDIT_REQUEST_TIMEOUT_SECONDS": 4.0,
         "_HTTPS_CONTEXT": object(),
         "ContinuityNotProvable": NotProvable,
+        "PublicTradeAuditUnavailable": NotProvable,
         "socket": socket,
         "http": types.SimpleNamespace(client=http.client),
         "json": json,
