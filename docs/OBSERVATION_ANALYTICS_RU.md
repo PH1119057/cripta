@@ -925,3 +925,15 @@ Trade audio выдаётся только по подтверждённому а
 operational gate/CRITICAL предупреждение должно быть явно отдельным типом и не
 использовать тот же тройной звук. История не генерирует повторную тревогу при
 первой загрузке/восстановлении вкладки. Цвет журнала не означает OPEN gate.
+
+## 7.9 Gateway preparation recovery — OWNER DECISION 2026-11-05
+
+Near-boundary REST OHLCV is provisional until the approved adapter completes
+its bounded closed-tail confirmation. Expected finality lag is PREPARING, not
+an incident. A real immutable conflict is persisted once, then BLOCKED with its
+exact market identity/root reason; it is not retried into a generic deadline.
+Only a newer active authenticated readiness request for the same installed
+release/scope may reset a terminal preparation budget. GET/status polling,
+old requests and passage of time alone cannot do so. This is in-process cold
+preparation, not expansion of the START-only Service Broker to RESTART.
+Existing positions/uncertain mutations retain separate strict recovery owners.

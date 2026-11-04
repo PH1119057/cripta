@@ -1981,3 +1981,17 @@ Entry (кроме применимого SECOND48 по §4.13.5). Unknown/nonter
 Техническая подготовка и текущий Entry обязаны использовать один и тот же
 account-state predicate; нельзя иметь PASS prearm при ином скрытом predicate
 первого кандидата.
+
+## 4.16 Gateway-ready release acceptance — OWNER DECISION 2026-11-05
+
+Execute the approved five-step plan: final closed data, bounded preparation retry,
+consistent admission, one modal and verified installed release. Strategy geometry,
+PREV7D, crossing, SECOND48, stake, leverage and Exit rules remain unchanged.
+One modal OK may create a fresh exact-release preparation attempt; merely opening
+or polling the modal never authorizes finance. A technical verification run can
+finish READY_FOR_OWNER_ARM while mainnet gate/permissions/arms remain OFF.
+A later explicit OWNER ARM still requires the existing staged/final fresh checks.
+The approved ClosedCandleCorrection path is ARCH §58, not an Entry bypass.
+All account fault checks, including dispatch and first-mutation checks, consume
+the same current-vs-closed-history predicate. Safety at the moment of mutation
+remains mandatory; CLOSED records influence entries only via actual SECOND48.

@@ -1147,3 +1147,12 @@ SECOND48 exact StrategyVersion. Другие причины закрытия, UN
 Это не proof continuity и не financial authorization. После budget exhaustion
 публикуется реальная durable ошибка (OBS §7.7). Кнопка OWNER ARM недоступна;
 отдельная техническая подготовка не имеет права открывать gate (TC §4.14).
+
+## 43. ClosedCandleCorrection — OWNER DECISION 2026-11-05
+
+An immutable, explicitly reviewed repair record for one exact canonical closed
+candle key, preserving its original values/provenance and confirmed replacement
+values/provider evidence. Only an approved migration actor writes it. All shared
+candle consumers read the same effective view; runtime neither edits originals
+nor creates corrections automatically. It grants no trading permission and
+never relabels or replays historical causal checkpoints. Owner: ARCH §58.

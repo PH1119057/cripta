@@ -1587,3 +1587,24 @@ failures within 60 seconds require durable runtime fault; no infinite silent ret
 | Audio | shared low alarm for gate/CRITICAL and trade notifications | separately named status notice vs confirmed real trade events; no shared trade sound for operational banner | visibility and actual critical incident notice remain; no stale replay |
 Proof of current checks and negative paths is required before removing any veto.
 No new Exchange mutation owner, financial policy, stake, leverage or Strategy rules.
+
+## 58. Gateway preparation repair — OWNER DECISION 2026-11-05
+
+Owner approved implementation/release of the five-step gateway-readiness plan;
+financial OWNER ARM remains a separate subsequent instruction.
+This narrowly supplements §48.4; it does not authorize silent history rewriting.
+
+| Capability | BEFORE owner/contract | AFTER owner/consumer | Preservation / evidence |
+|---|---|---|---|
+| Immutable source facts | shared MarketSource store, original OHLCV | same original append-only table plus reviewed ClosedCandleCorrection -> one effective read view -> every shared-store consumer | original bytes/provenance retained; runtime cannot write corrections or UPDATE/DELETE originals; unknown conflict blocks |
+| Erroneous early-close repair | no approved correction path | postgres migration only, exact original/corrected key+values, two independently timed provider readbacks and durable evidence | no exposure/pending mutation during scoped repair; no checkpoint reset, historical signal replay, automatic correction or financial authorization |
+| REST finality | local close time alone | same approved adapter; near-boundary provisional values wait; closed tail independently re-read before ingestion | exact UTC end/coverage/OHLCV equality; live WS confirm stays authoritative; no fabricated bar or earlier cutoff |
+| Bounded preparation | terminal BLOCKED cannot be retried in-process | same Observer accepts a newer authenticated exact-release readiness operation as one fresh bounded preparation attempt | no infinite self-reset, service restart, ARM, permission or old-consent reuse |
+| Entry safety | different raw fault vetoes in candidate/dispatch/private worker | shared scoped fault predicate at all three boundaries and prearm | CLOSED history never vetoes; SECOND48, current ambiguity/exposure/identity/mode/slot/capital/protection guards retain owners |
+| Gate control | existing staged/final ARM | unchanged financial owner and guard; modal reports actual request/phase/readback | single confirmation, final current proofs, always-available DISARM; technical preparation alone leaves gate CLOSED |
+
+Corrections are explicit reviewed source-repair evidence, not a second per-Strategy
+market dataset. Effective values are identical for all consumers. An unapproved
+provider disagreement still fails closed. Correction history is immutable;
+original records and old source/Entry checkpoints retain their exact identities.
+No architecture capability is removed; no new Exchange writer or trading filter.

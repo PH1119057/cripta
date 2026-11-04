@@ -4911,3 +4911,16 @@ not necessarily a trade event. Historical incidents remain unchanged.
 Target correction TC §4.15 / ARCH §57; source/deploy status must be recorded
 separately. Last observed gate CLOSED with retained active OWNER ARM sessions
 (DEGRADED), not a verified trading-ready state.
+
+## Gateway-ready release checkpoint — CHECKED HERE 2026-11-05
+
+Baseline installed/source main 8c953d59de47dae58684ab8350eda442503ed2a9.
+Approved five-step follow-up; scope ARCH §58 / TC §4.16 / DEV §56.
+Read-only preflight: Unix/DB cripta, gate OFF, all93 StrategyPositions CLOSED,
+queued/running commands0; readiness SELECT/INSERT/UPDATE granted. Actual postgres
+read preflight proves SELECT original candles and CREATE analytics schema.
+APTUSDT 5m close2026-11-04T22:05Z original C=.6393 V=16987.93 observed
+22:05:00.172217Z; two later approved Bybit REST responses (server times
+1793834968459 /1793834969978) agree C=.6394 V=17006.02, unchanged OHL.
+No source row/checkpoint was changed by this preflight. Implementation/deployment
+and technical readiness must be recorded separately; no OWNER ARM in this task.
