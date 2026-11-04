@@ -1016,6 +1016,9 @@ function refreshP90RealV3ArmControl(){
   else if(blockers.includes('TRADING_OR_UNKNOWN_SOURCE_DELTA')||blockers.includes('INSTALLED_NOT_ANCESTOR_OF_SOURCE')){state='error';message='OWNER ARM заблокирован · найден непроверенный trading/runtime source delta'}
   else if(blockers.includes('REMOTE_SOURCE_IDENTITY_DRIFT')||blockers.includes('SOURCE_WORKTREE_DIRTY')||blockers.includes('GIT_IDENTITY_UNAVAILABLE')||blockers.includes('GIT_IDENTITY_INVALID')){state='error';message='OWNER ARM заблокирован · source identity сейчас нельзя доказать'}
   else if(blockers.includes('P90_REAL_OBSERVER_NOT_READY')){state='warn';message='Observer не готов · открытие недоступно · ожидайте восстановления данных'}
+  if(!armed&&!gateChanging&&(!lastLiveSuccessAt||Date.now()-lastLiveSuccessAt>10000)){
+    state='warn';message='Ожидаю свежий статус системы · открытие недоступно';
+  }
   if(gateChanging&&p90PendingOperation){
     state=p90PendingOperation.state;message=p90PendingOperation.message;
   }
