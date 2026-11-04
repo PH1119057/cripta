@@ -251,6 +251,8 @@ unit_specs=(
   "operations/systemd/cripta-release-controller.service|cripta-release-controller.service|runtime"
   # Generic management-plane broker. It may start only source-allowlisted CRIPTA units.
   "operations/systemd/cripta-real-service-broker.service|cripta-real-service-broker.service|runtime"
+  # Exact SUB WS technical recovery, no restart broker and no OWNER/LIVE rights.
+  "operations/systemd/cripta-runtime-recovery-supervisor.service|cripta-runtime-recovery-supervisor.service|runtime"
   # Inert SUB-only Lifecycle worker; no auto-enable or implicit started service.
   "operations/systemd/cripta-lifecycle-account@.service|cripta-lifecycle-account@.service|runtime"
   "operations/systemd/cripta-account-position@.service|cripta-account-position@.service|runtime"
@@ -387,6 +389,7 @@ managed_services=(
   cripta-position-supervisor.service
   cripta-private-runtime.service
   cripta-real-service-broker.service
+  cripta-runtime-recovery-supervisor.service
   cripta-safety-observer.service
   cripta-shadow-command-worker.service
   cripta-universal-entry-consumer.service
@@ -673,16 +676,26 @@ systemctl is-active --quiet cripta-real-service-broker.service ||
   die "REAL service broker failed after deploy"
 echo "REAL_SERVICE_BROKER=ACTIVE"
 
+# The supervisor only requests narrow, signed-proof account WS technical
+# clearance. It never issues broker restarts, gate changes, or owner re-arms.
+systemctl enable cripta-runtime-recovery-supervisor.service >/dev/null
+systemctl start cripta-runtime-recovery-supervisor.service
+systemctl is-active --quiet cripta-runtime-recovery-supervisor.service ||
+  die "SUB WS technical recovery supervisor failed after deploy"
+echo "SUB_WS_TECHNICAL_RECOVERY_SUPERVISOR=ACTIVE"
+
 for service in "${managed_services[@]}"; do
-  if [[ "$service" == "cripta-real-service-broker.service" ]]; then
+  if [[ "$service" == "cripta-real-service-broker.service" ||
+        "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
     continue
   fi
   if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
 done
 for service in "${managed_services[@]}"; do
-  if [[ "$service" == "cripta-real-service-broker.service" ]]; then
+  if [[ "$service" == "cripta-real-service-broker.service" ||
+        "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
     systemctl is-active --quiet "$service" ||
-      die "REAL service broker became inactive during deploy"
+      die "required control-plane service inactive after deploy: $service"
   elif [[ "${was_active[$service]}" == "1" ]]; then
     systemctl is-active --quiet "$service" || die "service failed after deploy: $service"
   else
