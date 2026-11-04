@@ -55,7 +55,7 @@ def real_entry_account_state(
             WHERE f.state='OPEN' AND f.severity='CRITICAL'
               AND (NULLIF(f.exact_ids->>'trading_account_id','') IS NULL
                    OR f.exact_ids->>'trading_account_id'=%s)
-              AND (p.position_id IS NULL OR p.state<>'CLOSED')
+              AND p.state IS DISTINCT FROM 'CLOSED'
             ORDER BY f.detected_at,f.fault_id LIMIT 1""",
         (exact_account,),
     ).fetchone()

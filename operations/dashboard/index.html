@@ -1074,7 +1074,7 @@ function renderP90ArmModal(operation=null){
   document.getElementById('p90ArmDialogConfirm').hidden=!confirming;
   document.getElementById('p90ArmDialogClose').disabled=busy;
   document.getElementById('p90ArmDialogClose').textContent=confirming?'Отмена':'Закрыть';
-  document.getElementById('p90ArmDialogTitle').textContent=confirming?'Открыть торговый шлюз?':p90ModalState==='success'?'Шлюз открыт':p90ModalState==='error'?'Шлюз не открыт':'Проверяем систему';
+  document.getElementById('p90ArmDialogTitle').textContent=confirming?'Открыть торговый шлюз?':p90ModalState==='success'?'Шлюз открыт':p90ModalState==='error'?'Шлюз закрыт':p90ModalState==='unknown'?'Состояние шлюза уточняется':'Проверяем систему';
   const result=document.getElementById('p90ArmDialogResult');
   result.className='p90-arm-modal-result '+(p90ModalState==='success'?'success':p90ModalState==='error'?'error':'');
   result.textContent=confirming?'После OK проверим систему. Шлюз откроется только при успешном прохождении всех проверок.':p90PendingOperation?.message||'Проверяем готовность · шлюз закрыт';
@@ -1134,11 +1134,12 @@ async function changeP90RealV3Arm(enabled){
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus');
   const requestId='p90-owner-arm-'+Date.now()+'-'+Math.random().toString(16).slice(2);
   p90PendingOperation={requestId,state:'warn',message:enabled?'Выполняю OWNER ARM · шлюз пока закрыт':'Отключаю P90 REAL v3'};
-  const finish=(state,message)=>{p90PendingOperation={requestId,state,message};p90ModalState=state==='success'?'success':state==='error'?'error':'busy';refreshP90RealV3ArmControl()};
+  const finish=(state,message)=>{p90PendingOperation={requestId,state,message};p90ModalState=state==='success'?'success':state==='error'?'error':state==='unknown'?'unknown':'busy';refreshP90RealV3ArmControl()};
   const progress={done:false};
   const poll=enabled?(async()=>{
     while(!progress.done){
       await new Promise(resolve=>setTimeout(resolve,750));
+      if(progress.done)break;
       try{
         const response=await fetchWithTimeout('/api/p90l90/real-v3/readiness-status',{cache:'no-store'},4000);
         if(!response.ok)throw new Error('readiness progress HTTP '+response.status);
@@ -1161,7 +1162,19 @@ async function changeP90RealV3Arm(enabled){
     finish('success',enabled?'Все проверки пройдены. Шлюз открыт.':'Шлюз закрыт. Новые входы запрещены.');
     recordP90ArmResult('success',enabled?'P90 REAL v3 MICRO_LIVE ARMED':'P90 REAL v3 DISARMED',requestId);
   }catch(e){
-    await readLiveStateOnce().catch(()=>{});
+    let readback=false;
+    await readLiveStateOnce().then(()=>{readback=true}).catch(()=>{});
+    progress.done=true;
+    if(readback&&enabled&&p90RealV3Armed()){
+      finish('success','Шлюз открыт · подтверждено фактическим состоянием сервера');
+      recordP90ArmResult('success','Шлюз открыт · сервер подтвердил результат после потери ответа',requestId);
+      return;
+    }
+    if(!readback){
+      finish('unknown','Нет свежего ответа сервера. Результат открытия не подтверждён; повторная команда не отправлена.');
+      recordP90ArmResult('unknown','Результат требует чтения фактического шлюза · '+String(e?.message||''),requestId);
+      throw e;
+    }
     const latest=window.p90ArmStatus?.readiness_operation;
     const op=latest?.request_id===requestId?latest:null;
     const visible=op?.state==='BLOCKED'

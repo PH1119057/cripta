@@ -389,3 +389,51 @@ def test_blocked_native_candidate_is_persisted_without_order_or_epoch_failure(
     assert port.requests == []
     if not technical_ready:
         assert outcome.decision.reason == "LOCAL_ACCOUNT_WAIT"
+
+
+def test_denied_candidate_commits_causal_tick_and_does_not_suppress_exit(monkeypatch):
+    from bybit_workbench.universal_entry import p90l90_durable_paper_processor as processor_module
+
+    engine, activation, entry_fp = _engine(real=True)
+    plan = engine._registry.plans_for("LTCUSDT")[0]
+    candidate, cursor = _native_fact(entry_fp)
+    recorder = _EvaluationRecorder()
+    owner = P90L90RealNativeCandidateOwner(
+        strategy_id=MAIN_ID, strategy_activation_id=activation,
+        strategy_config_fingerprint=plan.strategy_config_fingerprint,
+        entry_plan_fingerprint=entry_fp, engine=engine, store=recorder,
+        provenance=FrozenPolicy.from_mapping({
+            "source_commit": "a"*40, "data_lineage_id": "p90-test-lineage",
+        }),
+    )
+    source_fact = replace(candidate, event_kind="PUBLIC_TRADE",
+                          attributes=FrozenPolicy.from_mapping({"price": "89"}))
+    monkeypatch.setattr(processor_module, "restore_p90l90_fact",
+                        lambda _event: (source_fact, cursor))
+    monkeypatch.setattr(processor_module, "p90l90_crossing_fact", lambda **_kw: candidate)
+    exit_ticks, committed = [], []
+    event = SimpleNamespace(kind="PUBLIC_TRADE", symbol="LTCUSDT", event_at=cursor.traded_at)
+
+    class Atomic:
+        def deliver(self, item, *, recompute_geometry, apply_paper):
+            entry = SimpleNamespace(state=object(), on_trade=lambda **_kw: (object(),))
+            apply_paper(entry, (item,))
+            committed.append(item)  # only reached if all source callbacks complete
+            return (item,)
+
+    processor = object.__new__(processor_module.P90L90DurablePaperProcessor)
+    processor._poisoned = False
+    processor._checked_geometry = {}
+    processor._atomic = Atomic()
+    processor._candidate_plan = entry_fp
+    processor._on_exit = lambda _fact, _cursor: exit_ticks.append(_cursor)
+    processor._on_proven_candidate = lambda fact, tick: owner.accept(
+        fact, tick, account_admissions=_admissions(activation)[activation],
+        arm_and_source_verified=False, admitted_at=AT+timedelta(seconds=2),
+        allow_new_signals=True,
+    )
+    assert processor.accept(event) == (event,)
+    assert committed == [event]
+    assert exit_ticks == [cursor]
+    assert processor._poisoned is False
+    assert recorder.recorded[0].account_outcomes[0].execution_request is None

@@ -3264,34 +3264,21 @@ def _run_observer_epoch(
                         raise RuntimeError(
                             "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
                         )
+                    if staged_gate_closed:
+                        # A causal crossing during staging is an ordinary denied
+                        # Entry. Gate CLOSED must never be treated as a broken
+                        # account/source or terminate the Exit/source epoch.
+                        blocked = _blocked_multi_account_admissions(
+                            real_candidates, symbol=symbol, observed_at=at,
+                            reason="P90_REAL_OWNER_ARM_STAGE_GATE_CLOSED",
+                        )
+                        return blocked.get(activation, ()), False
                     scoped, ready = _multi_account_admissions(
-                        connection,
-                        observer_split.p90_real,
-                        real_candidates,
-                        symbol=symbol,
-                        observed_at=at,
-                        real_selected_for=selected,
+                        connection, observer_split.p90_real, real_candidates,
+                        symbol=symbol, observed_at=at, real_selected_for=selected,
                     )
                     accounts = scoped.get(activation, ())
-                    account_ready = (
-                        len(accounts) == 1 and activation in ready
-                    )
-                    if p90_real_staged:
-                        if not account_ready:
-                            raise RuntimeError(
-                                "P90_REAL_OWNER_ARM_STAGE_ACCOUNT_NOT_READY"
-                            )
-                        if staged_gate_closed:
-                            # Full topology is proven, but the global gate is
-                            # still closed: never expose executable admission.
-                            blocked = _blocked_multi_account_admissions(
-                                real_candidates, symbol=symbol, observed_at=at,
-                                reason="P90_REAL_OWNER_ARM_STAGE_GATE_CLOSED",
-                            )
-                            return blocked.get(activation, ()), False
-                        # Final gate transaction already passed every staged
-                        # check. A fact may arrive before the next signature
-                        # tick; exact OPEN is therefore executable immediately.
+                    account_ready = len(accounts) == 1 and activation in ready
                     return accounts, account_ready
 
                 runtime = assemble_p90_real_observer_runtime(

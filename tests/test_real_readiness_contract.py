@@ -133,7 +133,7 @@ def test_dashboard_contains_persistent_friendly_preparation_states():
     )
     assert "mainnet gate CLOSED" in ui
     assert (
-        "livePostTimed(prepareOnly?'/api/p90l90/real-v3/prepare':'/api/p90l90/real-v3/arm',"
+        "livePostTimed('/api/p90l90/real-v3/arm',"
         "{enabled,confirmed:enabled,request_id:requestId},300000)"
         in ui
     )

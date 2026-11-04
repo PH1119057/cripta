@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from bybit_workbench import account_entry_readiness as readiness
 from operations.connectivity import universal_entry_consumer as entry_consumer
 from operations.monitoring import universal_entry_shadow as observer
 
@@ -29,7 +30,8 @@ def test_per_entry_safety_uses_complete_generation_and_remains_fail_closed() -> 
     ).read_text(encoding="utf-8")
     start = source.index("def _real_entry_account_state(")
     end = source.index("\ndef _observer_objective_inputs(", start)
-    body = source[start:end]
+    body = (ROOT / "src/bybit_workbench/account_entry_readiness.py").read_text(encoding="utf-8")
+    assert "real_entry_account_state(" in source[start:end]
     assert "current_complete_account_state_generation" in body
     assert "generation.position_mode_refs.get(symbol)" in body
     assert "runtime.lifecycle_faults" in body
@@ -347,7 +349,7 @@ def test_observer_real_entry_faults_are_scoped_per_account() -> None:
 
         def execute(self, sql: str, params: tuple[str, ...]):
             assert "runtime.lifecycle_faults" in sql
-            assert "NULLIF(exact_ids->>'trading_account_id','')" in sql
+            assert "NULLIF(f.exact_ids->>'trading_account_id','')" in sql
             assert params == ("ta-sub",)
             row = (
                 ("EXACT_CRITICAL",)
@@ -357,7 +359,7 @@ def test_observer_real_entry_faults_are_scoped_per_account() -> None:
             return SimpleNamespace(fetchone=lambda: row)
 
     with patch.object(
-        observer, "current_complete_account_state_generation",
+        readiness, "current_complete_account_state_generation",
         return_value=generation,
     ) as fetch:
         _ready, allowed = observer._real_entry_account_state(
@@ -378,7 +380,7 @@ def test_observer_real_entry_faults_are_scoped_per_account() -> None:
 def test_observer_real_entry_rejects_missing_account_without_generation() -> None:
     with (
         patch.object(observer, "TRADING_ACCOUNT_ID", ""),
-        patch.object(observer, "current_complete_account_state_generation") as fetch,
+        patch.object(readiness, "current_complete_account_state_generation") as fetch,
     ):
         _readiness, capacity = observer._real_entry_account_state(
             object(),

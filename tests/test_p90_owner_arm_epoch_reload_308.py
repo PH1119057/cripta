@@ -263,7 +263,7 @@ def test_stage_gate_open_is_consumed_without_second_epoch_gap() -> None:
     assert "p90_real_staged = True" in OBSERVER
     assert "staged_gate_closed" in OBSERVER
     assert "staged_gate_finalized" in OBSERVER
-    assert "return (), False" in OBSERVER
+    assert "return blocked.get(activation, ()), False" in OBSERVER
     assert "latest_signature[1:] == current_signature[1:]" in OBSERVER
     assert 'reason="P90_REAL_OWNER_ARM_GATE_OPEN"' in OBSERVER
     assert "p90_real_staged = False" in OBSERVER

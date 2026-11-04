@@ -49,7 +49,7 @@ renderP90ArmModal({request_id:'current',state:'READY_FOR_OWNER_ARM',phase:'armin
 assert.equal(el('p90ArmDialogTitle').textContent,'Проверяем систему');
 assert.equal(rows[6].dataset.state,'busy'); // technical READY is not OPEN
 p90ModalState='error';p90PendingOperation.message='Account proof failed';renderP90ArmModal();
-assert.equal(el('p90ArmDialogTitle').textContent,'Шлюз не открыт');
+assert.equal(el('p90ArmDialogTitle').textContent,'Шлюз закрыт');
 assert.equal(el('p90ArmDialogResult').textContent,'Account proof failed');
 assert.equal(el('p90ArmDialogClose').disabled,false);
 p90ModalState='success';p90PendingOperation.message='Gate readback OPEN';renderP90ArmModal();
@@ -68,3 +68,41 @@ def test_operational_notice_does_not_play_trade_alarm():
     assert "historical_critical_faults" in html
     assert "История закрытых сделок" in html
     assert "entrySoundChoice.value" in html
+
+
+def test_lost_post_reply_uses_actual_gate_readback_instead_of_false_failure():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node required for shipped JavaScript behavior")
+    html = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
+    code = "async function changeP90RealV3Arm(" + html.split(
+        "async function changeP90RealV3Arm(", 1,
+    )[1].split("async function changeTradeGate(", 1)[0]
+    setup = r"""
+const assert=require('node:assert/strict');
+let gateChanging=false,p90PendingOperation=null,p90ModalState='busy',p90ModalOperation=null;
+let tradeGateButton={disabled:false},sent=0,results=[];
+global.document={getElementById:()=>({disabled:false})};
+global.window={p90ArmStatus:{}};
+function refreshP90RealV3ArmControl(){}
+function p90ReadinessOperationText(){return 'phase'}
+function p90ReadinessOperationTechnicalText(){return ''}
+function p90RealV3Armed(){return true}
+async function livePostTimed(){sent++;throw new Error('reply lost')}
+async function readLiveStateOnce(){}
+async function loadStrategies(){}
+async function confirmGateState(){}
+async function fetchWithTimeout(){throw new Error('unused progress')}
+function recordP90ArmResult(state,message){results.push({state,message})}
+"""
+    checks = r"""
+(async()=>{
+await changeP90RealV3Arm(true);
+assert.equal(sent,1); // never blindly resend uncertain financial mutation
+assert.equal(results.at(-1).state,'success');
+assert.equal(p90ModalState,'success');
+assert.ok(p90PendingOperation.message.includes('фактическим состоянием'));
+})().catch(e=>{console.error(e);process.exit(1)});
+"""
+    result = subprocess.run([node, "-e", setup + code + checks], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr

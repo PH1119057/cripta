@@ -216,7 +216,7 @@ def test_p90_portal_micro_live_waiver_is_scoped_and_release_migrated() -> None:
     assert '"p90_portal_micro_live_waiver"' in evidence
     assert '"owner_webhook_deferred"' in evidence
     assert "FROM runtime.lifecycle_faults" in dashboard
-    assert "state='OPEN' AND severity='CRITICAL'" in dashboard
+    assert "f.state='OPEN' AND f.severity='CRITICAL'" in dashboard
 
     assert "OWNER_WAIVED_FOR_R1_MICRO_LIVE" in migration
     assert "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE" in migration

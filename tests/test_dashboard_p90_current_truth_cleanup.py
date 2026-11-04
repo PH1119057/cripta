@@ -63,7 +63,7 @@ def test_p90_owner_arm_status_uses_current_runtime_truth():
     assert 'window.p90ArmStatus=lt.p90_arm_status||null' in INDEX
     assert "Dashboard source новее независимо развёрнутого UI" in INDEX
     assert "непроверенный trading/runtime source delta" in INDEX
-    assert "Observer не готов · открытие недоступно" in INDEX
+    assert "Данные подготавливаются · при открытии дождёмся полной готовности" in INDEX
 
 
 def test_unresolved_observer_faults_stay_visible_until_explicit_resolution():
