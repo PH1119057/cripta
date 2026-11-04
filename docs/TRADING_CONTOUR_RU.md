@@ -1950,3 +1950,34 @@ coordinator без ARM. Оно сохраняет capability запуска/во
 Проверка/ARM имеют один UI display owner; таймер не заменяет phase и не гоняется
 с poll. Отображается exact current request, фаза и реальный blocker_detail;
 старый request не выдаётся за текущую проверку. Ожидание отделено от неисправности.
+
+## 4.15 Один OWNER ARM workflow — OWNER DECISION 2026-11-05
+Это уточнение заменяет требование двух пользовательских действий §4.14: одна
+кнопка открытия показывает модальное окно exact scope. Явное OK владельца
+разрешает **эту одну ограниченную попытку**: подготовка -> полный checklist ->
+проверка account Entry path -> staged gate CLOSED -> финальная проверка -> OPEN.
+Подготовка и financial authorization остаются отдельными серверными фазами;
+права не выдаются до доказанной готовности. Повтор/перезагрузка/старое согласие
+не создают новый ARM. Существующий authenticated same-origin boundary сохраняется.
+
+В модальном окне одна причинная последовательность: проверки версий/данных,
+аккаунтов/Execution, Entry admission, protection/Exit, финальный ARM. PASS означает
+реально выполненный check; зависимости без parent proof показываются WAIT/NOT
+CHECKED. Ошибка не закрывает окно и показывает точную причину. Завершение —
+подтверждённый server gate OPEN; техническое READY не выдаётся за открытие.
+Отдельная кнопка подготовки из основной панели удаляется, но сама capability
+coordinator/broker/evidence сохраняется внутри этого workflow.
+
+Штатный отказ конкретного Entry (нет допуска/ресурса, закрытый gate, SECOND48)
+получает сохраняемый account-scoped результат без Exchange/PAPER запроса, а не
+исключение, отравляющее причинный market checkpoint/весь Observer. Потерянная
+binding identity, неверный native provenance и реальное нарушение continuity
+остаются errors. Exit tick/5m candle продолжают поступать независимо от Entry.
+
+Закрытая StrategyPosition исключает её исторический lifecycle fault из нового
+Entry (кроме применимого SECOND48 по §4.13.5). Unknown/nonterminal current entity,
+реальные competing claims, pending commands, signed inventory/capacity и защита
+проверяются прежними владельцами. Ни история, ни fault severity не переписываются.
+Техническая подготовка и текущий Entry обязаны использовать один и тот же
+account-state predicate; нельзя иметь PASS prearm при ином скрытом predicate
+первого кандидата.

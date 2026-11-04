@@ -1662,3 +1662,9 @@ and explicit OWNER ARM remain unchanged. This decision does not assert safe
 current exposure from an old close row and does not fabricate historical facts.
 Active 11-document bundle, paths/pre-read/routing unchanged; bootstrap files
 and Project Instructions therefore remain unchanged.
+
+## 65. Trading contour / single modal ARM audit — 2026-11-05
+TC §4.15 supersedes the two-button UX of §4.14; ARCH §57 owns capability matrix;
+OBS §7.8 owns ordinary account refusal and separate audio; DEV §55 owns verification;
+MAP trailing 2026-11-05 forensic checkpoint records the remaining raw CRITICAL veto.
+Current document set, paths and mandatory reading are unchanged.
