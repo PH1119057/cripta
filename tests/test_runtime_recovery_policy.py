@@ -217,12 +217,16 @@ def test_policy_module_is_pure() -> None:
             assert node.module.split(".")[0] not in forbidden_roots
 
 
-def test_no_production_module_imports_recovery_policy_yet() -> None:
-    allowed = Path("src/bybit_workbench/runtime_recovery_policy.py")
+def test_only_approved_recovery_supervisor_imports_policy() -> None:
+    allowed = {
+        Path("src/bybit_workbench/runtime_recovery_policy.py"),
+        Path("src/bybit_workbench/runtime_recovery_supervisor.py"),
+        Path("operations/monitoring/runtime_recovery_supervisor.py"),
+    }
     offenders: list[str] = []
     for root in (Path("src/bybit_workbench"), Path("operations")):
         for path in root.rglob("*.py"):
-            if path == allowed:
+            if path in allowed:
                 continue
             if "runtime_recovery_policy" in path.read_text(encoding="utf-8"):
                 offenders.append(path.as_posix())
