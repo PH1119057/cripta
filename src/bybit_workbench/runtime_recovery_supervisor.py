@@ -100,6 +100,9 @@ def plan_recovery(
             return SupervisorPlan(RecoveryAction.NONE, False, complete, complete.reason)
         return block("PENDING_OPERATION_UNCERTAIN_NO_AUTO_RETRY")
 
+    if prior.stage is OperationStage.BLOCKED:
+        return block("RECOVERY_TERMINAL_BLOCKED")
+
     raw = decide_recovery(policy, observation)
     if raw.action is RecoveryAction.NONE:
         return SupervisorPlan(RecoveryAction.NONE, False, prior, "HEALTHY")
