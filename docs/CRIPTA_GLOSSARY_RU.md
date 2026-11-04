@@ -1134,3 +1134,10 @@ Severity, OPEN/RESOLVED и delivery/ack state остаются независи�
 attempts/symbol-slots/StrategyVersions/TradingAccounts/Connectors/shared
 dependencies, затронутый недоказанным условием. GLOBAL требует основания из
 TC §4.13.4; unrelated account/symbol не наследует запрет по общему fault count.
+
+Уточнение OWNER DECISION 2026-11-04 (TC §4.13.5): закрытые сделки влияют
+на новые Entry исключительно через фактические HARD_STOP события применимого
+SECOND48 exact StrategyVersion. Другие причины закрытия, UNKNOWN и неполная
+атрибуция/история/доставка не являются admission blockers. Для них не требуется
+отдельный proof отсутствия влияния. Текущие exposure/команды/ресурсы проверяются
+независимо; исторические ошибки остаются видимыми без подделки фактов.

@@ -2221,3 +2221,10 @@ GLOSSARY (`ENTRY_BLOCKER`, `ENTRY_PREPARATION_WAIT`, `NON_BLOCKING_INCIDENT`).
 не исправляется записью этого контракта. Это известный implementation gap;
 без tested replacement physical gate не обходится. Canon approval, source
 implementation, deployment и фактический scoped behavior фиксируются отдельно.
+
+Уточнение OWNER DECISION 2026-11-04 (TC §4.13.5): закрытые сделки влияют
+на новые Entry исключительно через фактические HARD_STOP события применимого
+SECOND48 exact StrategyVersion. Другие причины закрытия, UNKNOWN и неполная
+атрибуция/история/доставка не являются admission blockers. Для них не требуется
+отдельный proof отсутствия влияния. Текущие exposure/команды/ресурсы проверяются
+независимо; исторические ошибки остаются видимыми без подделки фактов.

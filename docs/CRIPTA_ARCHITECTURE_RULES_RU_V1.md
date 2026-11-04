@@ -1549,3 +1549,16 @@ authorization scope этим решением не расширяются.
 Статус: canonical target; IMPLEMENTED=NO; DEPLOYED=NO; LIVE_CHANGE=NO.
 Ни один physical safety/admission check не считается заменённым до surgical
 implementation, shadow parity, полного CI и runtime verification по DEV §54.
+
+Уточнение OWNER DECISION 2026-11-04 (TC §4.13.5): закрытые сделки влияют
+на новые Entry исключительно через фактические HARD_STOP события применимого
+SECOND48 exact StrategyVersion. Другие причины закрытия, UNKNOWN и неполная
+атрибуция/история/доставка не являются admission blockers. Для них не требуется
+отдельный proof отсутствия влияния. Текущие exposure/команды/ресурсы проверяются
+независимо; исторические ошибки остаются видимыми без подделки фактов.
+
+| Capability | BEFORE | AFTER owner / consumer | Сохранение |
+|---|---|---|---|
+| SECOND48 | Reader проверяет все закрытия | Тот же reader -> prearm/Entry; только actual HARD_STOP | Exact StrategyVersion, реальные stop IDs/time, правило 2/48/48 и durable restart |
+| Historical repair | Неполное закрытие/pending delivery блокирует admission | Те же ledger/notification owners -> видимый repair backlog | История, severity, delivery/ACK не стираются; финансовых прав не создают |
+| Current safety | Reconciliation/admission/Exit | Те же owners/consumers | Fresh inventory, command certainty, capacity/slot/protection сохраняются |
