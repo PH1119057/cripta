@@ -17,6 +17,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+import psycopg
+
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
@@ -41,6 +43,15 @@ CURRENT = Path("/srv/cripta/runtime/current")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 POLL_SECONDS = 15
 RUNNING = True
+MAIN_ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
+ENTRY_CONSUMER_ROUTES = {
+    "cripta-universal-entry-consumer.service": (
+        MAIN_ACCOUNT, "ac-ed73de20410548d6841aeafa5f196f70"
+    ),
+    f"cripta-universal-entry-consumer@{ACCOUNT}.service": (
+        ACCOUNT, "ac-ec57819f875f1bfd929a382d6dc8a125"
+    ),
+}
 STATUS_PATHS: dict[str, tuple[Path, str, int]] = {
     "cripta-universal-entry-observer.service": (
         Path("/var/lib/cripta/universal_entry_observer/status.json"), "RUNNING", 15
@@ -133,6 +144,60 @@ def _healthy_status(
         return None
 
 
+def _entry_consumer_health(
+    *,
+    release_commit: str,
+    now: datetime,
+) -> dict[str, bool | None]:
+    """Use the existing account-scoped DB heartbeat, never a process PID.
+
+    The DB transaction is explicitly READ ONLY; missing/ambiguous evidence
+    cannot be treated as healthy. No owner authorization is read or inferred.
+    """
+    unknown: dict[str, bool | None] = dict.fromkeys(ENTRY_CONSUMER_ROUTES)
+    if not release_commit or not SHA.fullmatch(release_commit):
+        return unknown
+    try:
+        with psycopg.connect("dbname=cripta", connect_timeout=3) as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            rows = connection.execute(
+                """SELECT trading_account_id,account_connector_id,
+                          release_commit,state,observed_at
+                     FROM runtime.entry_consumer_health
+                    WHERE trading_account_id = ANY(%s)""",
+                (sorted({route[0] for route in ENTRY_CONSUMER_ROUTES.values()}),),
+            ).fetchall()
+    except (OSError, psycopg.Error, ValueError, TypeError):
+        return unknown
+
+    by_account: dict[str, list[tuple[object, ...]]] = {}
+    for row in rows:
+        if not isinstance(row, (tuple, list)) or len(row) != 5:
+            return unknown
+        by_account.setdefault(str(row[0]), []).append(tuple(row))
+
+    answer: dict[str, bool | None] = {}
+    for unit, (account_id, connector_id) in ENTRY_CONSUMER_ROUTES.items():
+        matches = by_account.get(account_id, [])
+        if len(matches) != 1:
+            answer[unit] = None
+            continue
+        _, actual_connector, actual_release, state, observed = matches[0]
+        if (
+            str(actual_connector) != connector_id
+            or str(actual_release) != release_commit
+            or str(state) != "READY"
+        ):
+            answer[unit] = False
+            continue
+        if not isinstance(observed, datetime) or observed.tzinfo is None:
+            answer[unit] = None
+            continue
+        age = (now - observed.astimezone(UTC)).total_seconds()
+        answer[unit] = 0 <= age <= 8
+    return answer
+
+
 def _durable_record(unit: str, release: str) -> RecoveryRecord:
     """Old/ambiguous journal never silently transfers across a release."""
     path = STATE_ROOT / "operations.json"
@@ -178,9 +243,12 @@ def collect_once(*, now: datetime) -> dict[str, object]:
     if not release:
         return {"status": "BLOCKED", "reason": "RELEASE_IDENTITY_UNVERIFIED"}
     output: dict[str, object] = {}
+    consumer_health = _entry_consumer_health(release_commit=release, now=now)
     for policy in p90_real_v3_recovery_policies(sub_account_id=ACCOUNT):
         state = _unit_state(policy.unit)
-        if policy.unit in STATUS_PATHS:
+        if policy.unit in consumer_health:
+            behavior = consumer_health[policy.unit]
+        elif policy.unit in STATUS_PATHS:
             path, expected, ttl = STATUS_PATHS[policy.unit]
             behavior = _healthy_status(
                 path=path, state=expected, max_age=ttl,
