@@ -82,7 +82,8 @@ def _ordered_aware(timestamp: object, *, now: datetime) -> bool:
 
 def _fresh(timestamp: object, *, now: datetime) -> bool:
     return (
-        _ordered_aware(timestamp, now=now)
+        isinstance(timestamp, datetime)
+        and _ordered_aware(timestamp, now=now)
         and 0 <= (now - timestamp).total_seconds() <= _FRESH_SECONDS
     )
 
@@ -101,7 +102,9 @@ def plan_ws_technical_recovery(
     """
 
     def block(reason: str) -> WsTechnicalRecoveryDecision:
-        return WsTechnicalRecoveryDecision(WsTechnicalRecoveryAction.KEEP_BLOCKED, reason)
+        return WsTechnicalRecoveryDecision(
+            WsTechnicalRecoveryAction.KEEP_BLOCKED, reason,
+        )
 
     if not _ordered_aware(now, now=now):
         return block("RECOVERY_CLOCK_UNVERIFIED")
@@ -138,10 +141,11 @@ def plan_ws_technical_recovery(
     ):
         return block("INDEPENDENT_PROOF_NOT_VERIFIED")
     if (
-        not evidence.signed_uid
+        not isinstance(evidence.signed_uid, str)
+        or not evidence.signed_uid
         or not evidence.signed_uid.isascii()
         or not evidence.signed_uid.isdigit()
-        or int(evidence.signed_uid) <= 0
+        or not any(char != "0" for char in evidence.signed_uid)
         or evidence.signed_uid != evidence.registered_uid
     ):
         return block("SIGNED_ACCOUNT_IDENTITY_MISMATCH")
