@@ -294,13 +294,27 @@ def collect_once(*, now: datetime) -> dict[str, object]:
 
 
 def main() -> int:
-    if os.environ.get("CRIPTA_RUNTIME_RECOVERY_MODE", "OBSERVE_ONLY") != "OBSERVE_ONLY":
+    mode = os.environ.get("CRIPTA_RUNTIME_RECOVERY_MODE", "OBSERVE_ONLY")
+    if mode not in {"OBSERVE_ONLY", "SUB_WS_TECHNICAL"}:
         raise SystemExit("RECOVERY_EXECUTION_NOT_WIRED")
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
     while RUNNING:
         now = datetime.now(UTC)
         result = collect_once(now=now)
+        if mode == "SUB_WS_TECHNICAL":
+            # Only this independently proven, account-scoped transition is
+            # enabled; service START/RESTART remains OBSERVE_ONLY.
+            from sub_ws_technical_recovery_adapter import run_once
+
+            try:
+                result["sub_ws_technical"] = run_once(now=datetime.now(UTC))
+            except Exception as exc:
+                # Never persist signed Exchange/credential exception details.
+                result["sub_ws_technical"] = {
+                    "state": "BLOCKED",
+                    "reason": type(exc).__name__,
+                }
         if result.get("release"):
             _store_observation(str(result["release"]), result)
         time.sleep(POLL_SECONDS)

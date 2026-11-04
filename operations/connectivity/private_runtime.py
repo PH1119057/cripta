@@ -4217,17 +4217,18 @@ def reconcile_position_ownership(
             executions=executions,
         )
         if close.status != "EXACT" or close.exit_order_id is None:
+            # An in-flight Exchange snapshot can be flat before a newly
+            # confirmed fill is reflected (Entry vs periodic reconciliation).
+            # Without exact close executions there is NO confirmed close:
+            # retain the physical slot and consumed capital reservation.
+            # A subsequent signed inventory may restore the OPEN owner,
+            # while genuinely closed but unlinked cycles remain fail-closed.
             connection.execute(
                 """UPDATE runtime.position_ownership
                    SET state='CLOSED',
                        close_link_status='UNRESOLVED_EXACT_LINK'
                    WHERE position_id=%s""",
                 (position_id,),
-            )
-            release_position_capital_reservation(
-                connection,
-                position_id=position_id,
-                entry_execution_request_id=None if row[9] is None else str(row[9]),
             )
             continue
         protection_rows = connection.execute(
