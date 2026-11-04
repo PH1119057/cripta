@@ -20,16 +20,16 @@ BEGIN
     RAISE EXCEPTION 'ACCOUNT_ENTRY_SAFETY_LATCH_INVALID';
   END IF;
 
-  UPDATE runtime.account_entry_safety_blocks AS old
+  UPDATE runtime.account_entry_safety_blocks AS stored_block
      SET blocked_at = clock_timestamp(),
          reason = CASE
-           WHEN old.reason = 'PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN'
+           WHEN stored_block.reason = 'PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN'
             AND NEW.reason <> 'PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN'
            THEN NEW.reason
-           ELSE old.reason
+           ELSE stored_block.reason
          END
-   WHERE old.trading_account_id = NEW.trading_account_id
-     AND old.account_connector_id = NEW.account_connector_id;
+   WHERE stored_block.trading_account_id = NEW.trading_account_id
+     AND stored_block.account_connector_id = NEW.account_connector_id;
   IF FOUND THEN
     -- Original INSERT ... ON CONFLICT DO NOTHING remains an INSERT-only API.
     RETURN NULL;
