@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from bybit_workbench.account_entry_readiness import entry_blocking_lifecycle_fault
+
 import json
 import os
 import signal
@@ -1169,22 +1171,9 @@ def _execution_gate_enabled(connection: psycopg.Connection[Any]) -> bool:
 def _critical_lifecycle_fault_code(
     connection: psycopg.Connection[Any], *, trading_account_id: str,
 ) -> str | None:
-    """Fail closed on unscoped or matching-account OPEN CRITICAL faults.
-
-    An exact fault for another TradingAccount is independent; legacy/unscoped
-    faults cannot be attributed safely and remain an Entry blocker.
-    """
-    if not trading_account_id:
-        raise RuntimeError("required TradingAccount identity missing")
-    row = connection.execute(
-        """SELECT fault_code FROM runtime.lifecycle_faults
-            WHERE state='OPEN' AND severity='CRITICAL'
-              AND (NULLIF(exact_ids->>'trading_account_id','') IS NULL
-                   OR exact_ids->>'trading_account_id'=%s)
-            ORDER BY detected_at,fault_id LIMIT 1""",
-        (trading_account_id,),
-    ).fetchone()
-    return None if row is None else str(row["fault_code"])
+    return entry_blocking_lifecycle_fault(
+        connection, trading_account_id=trading_account_id,
+    )
 
 
 def _live_arm_ready(

@@ -25,7 +25,8 @@ def _mock_pages(monkeypatch, *, count: int):
     def fake_get_json(_path, params):
         calls.append(dict(params))
         cutoff = int(params.get("end", int(end.timestamp() * 1000)))
-        selected = sorted((ts for ts in bars if ts <= cutoff), reverse=True)[:1000]
+        selected = sorted((ts for ts in bars if int(params.get("start", 0)) <= ts <= cutoff),
+                          reverse=True)[:int(params.get("limit", 1000))]
         return {"result": {"list": [[str(ts)] for ts in selected]}}
 
     def fake_mapper(rows, *, symbol, interval, observed_at):
@@ -44,7 +45,7 @@ def test_p90l90_prev7d_seed_paginates_only_when_requested(monkeypatch):
     )
     five = history["5"]
     assert len(five) == 2600
-    assert len(calls) == 3
+    assert len(calls) == 4  # three pages, then independent closed-tail readback
     assert "end" not in calls[0]
     assert int(calls[1]["end"]) < int(calls[0].get("end", observed_at.timestamp() * 1000))
     assert len({x.opened_at for x in five}) == 2600

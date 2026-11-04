@@ -16,6 +16,33 @@ from .account_state_generation import (
 from .universal_entry.contracts import DataQuality, TechnicalReadiness, TradingCapacitySnapshot
 
 
+def entry_blocking_lifecycle_fault(
+    connection: Any, *, trading_account_id: str,
+) -> str | None:
+    """One predicate for prearm, candidate, dispatch and first mutation.
+
+    CLOSED history is not current exposure. Unknown/current identity remains
+    fail-closed; the separate actual-hard-stop SECOND48 reader is unchanged.
+    """
+    if not trading_account_id:
+        raise RuntimeError("required TradingAccount identity missing")
+    row = connection.execute(
+        """SELECT f.fault_code
+             FROM runtime.lifecycle_faults f
+             LEFT JOIN runtime.position_ownership p
+               ON p.position_id=NULLIF(f.exact_ids->>'strategy_position_id','')
+            WHERE f.state='OPEN' AND f.severity='CRITICAL'
+              AND (NULLIF(f.exact_ids->>'trading_account_id','') IS NULL
+                   OR f.exact_ids->>'trading_account_id'=%s)
+              AND p.state IS DISTINCT FROM 'CLOSED'
+            ORDER BY f.detected_at,f.fault_id LIMIT 1""",
+        (trading_account_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return str(row["fault_code"] if isinstance(row, dict) else row[0])
+
+
 def real_entry_account_state(
     connection: Any,
     *,
@@ -47,24 +74,15 @@ def real_entry_account_state(
             None,
         )
 
-    critical_fault = connection.execute(
-        """SELECT f.fault_code
-             FROM runtime.lifecycle_faults f
-             LEFT JOIN runtime.position_ownership p
-               ON p.position_id=NULLIF(f.exact_ids->>'strategy_position_id','')
-            WHERE f.state='OPEN' AND f.severity='CRITICAL'
-              AND (NULLIF(f.exact_ids->>'trading_account_id','') IS NULL
-                   OR f.exact_ids->>'trading_account_id'=%s)
-              AND p.state IS DISTINCT FROM 'CLOSED'
-            ORDER BY f.detected_at,f.fault_id LIMIT 1""",
-        (exact_account,),
-    ).fetchone()
+    critical_fault = entry_blocking_lifecycle_fault(
+        connection, trading_account_id=exact_account,
+    )
     if critical_fault is not None:
         return (
             TechnicalReadiness(
                 False,
                 observed_at,
-                f"open critical lifecycle fault: {critical_fault[0]}",
+                f"open critical lifecycle fault: {critical_fault}",
             ),
             None,
         )

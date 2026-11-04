@@ -13,6 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from bybit_workbench.account_entry_readiness import entry_blocking_lifecycle_fault
+
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "operations" / "connectivity"
 
@@ -25,7 +27,9 @@ def helper(name: str):
     text = source(name)
     start = text.index("def _critical_lifecycle_fault_code(")
     end = text.index("\n\ndef ", start)
-    namespace: dict[str, object] = {}
+    namespace: dict[str, object] = {
+        "entry_blocking_lifecycle_fault": entry_blocking_lifecycle_fault,
+    }
     code = "from __future__ import annotations\n" + text[start:end]
     exec(compile(code, name, "exec"), namespace)
     return namespace["_critical_lifecycle_fault_code"]
@@ -53,8 +57,9 @@ class DB:
         assert "runtime.lifecycle_faults" in sql
         assert "state='OPEN'" in sql
         assert "severity='CRITICAL'" in sql
-        assert "NULLIF(exact_ids->>" in sql
-        assert "ORDER BY detected_at,fault_id LIMIT 1" in sql
+        assert "NULLIF(f.exact_ids->>" in sql
+        assert "ORDER BY f.detected_at,f.fault_id LIMIT 1" in sql
+        assert "p.state IS DISTINCT FROM 'CLOSED'" in sql
         assert len(params) == 1
         account = params[0]
         matching = [
@@ -63,6 +68,7 @@ class DB:
             if item["state"] == "OPEN"
             and item["severity"] == "CRITICAL"
             and (not item.get("account") or item["account"] == account)
+            and item.get("position_state") != "CLOSED"
         ]
         if not matching:
             return Cursor(None)
@@ -94,6 +100,7 @@ def fault(*, account="account-a", state="OPEN", severity="CRITICAL"):
         ([fault(account="")], "EXIT_LOST"),
         ([fault(state="RESOLVED")], None),
         ([fault(severity="ERROR")], None),
+        ([dict(fault(), position_state="CLOSED")], None),
         ([], None),
     ],
 )

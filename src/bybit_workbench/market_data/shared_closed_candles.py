@@ -19,6 +19,17 @@ _SHA = re.compile(r"^[a-f0-9]{40}$")
 _TRANSPORT = frozenset({"BYBIT_REST_KLINE", "BYBIT_WS_KLINE"})
 
 
+class CandleSourceConflict(RuntimeError):
+    """Committed disagreement must be repaired, never retried as preparation."""
+
+    def __init__(self, key: MarketCandleKey, closed_at: datetime) -> None:
+        super().__init__("CANDLE_IMMUTABLE_SOURCE_CONFLICT")
+        self.detail = {
+            "symbol": key.external_symbol, "timeframe": key.timeframe,
+            "closed_at": closed_at.isoformat(),
+        }
+
+
 class CandleWarmupEndNotProven(RuntimeError):
     """Exact boundary evidence, preserving the existing error-code contract."""
 
@@ -123,7 +134,7 @@ class SharedClosedCandleStore:
                 self.key.timeframe, items[0].closed_at, items[-1].closed_at,
             )
             query = """SELECT closed_at,opened_at,open,high,low,close,volume
-                         FROM analytics.closed_candles
+                         FROM analytics.closed_candles_effective
                         WHERE market_source_id=%s AND instrument_id=%s
                           AND timeframe=%s AND closed_at BETWEEN %s AND %s"""
             before = {
@@ -136,7 +147,7 @@ class SharedClosedCandleStore:
                 )
                 if c.closed_at in before:
                     if before[c.closed_at] != values:
-                        raise RuntimeError("CANDLE_IMMUTABLE_SOURCE_CONFLICT")
+                        raise CandleSourceConflict(self.key, c.closed_at)
                     continue
                 missing.append((
                     self.key.market_source_id, self.key.venue_id,
@@ -170,7 +181,7 @@ class SharedClosedCandleStore:
                 if confirmed.get(c.closed_at) != (
                     c.opened_at, c.open, c.high, c.low, c.close, c.volume,
                 ):
-                    raise RuntimeError("CANDLE_IMMUTABLE_SOURCE_CONFLICT")
+                    raise CandleSourceConflict(self.key, c.closed_at)
         return inserted
 
     def history(
@@ -182,7 +193,7 @@ class SharedClosedCandleStore:
             raise ValueError("CANDLE_HISTORY_TIME_NOT_UTC")
         result = self._db.execute(
             """SELECT opened_at,closed_at,open,high,low,close,volume
-                 FROM analytics.closed_candles
+                 FROM analytics.closed_candles_effective
                 WHERE market_source_id=%s AND instrument_id=%s
                   AND timeframe=%s AND closed_at<=%s
                 ORDER BY closed_at DESC LIMIT %s""",

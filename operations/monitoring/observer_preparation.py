@@ -1,17 +1,55 @@
 """Bounded cold-start preparation. Never grants readiness or trading rights."""
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.candle_warmup import cache_approved_bybit_history
 from bybit_workbench.market_data.shared_closed_candles import (
     MarketCandleKey,
     SharedClosedCandleStore,
 )
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID, bybit_instrument_id
+
+
+def confirm_rest_closed_tail(
+    tail: Candle, *, fetch: Callable[[], tuple[Candle, ...]],
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """A boundary-time REST value is provisional until independent readback.
+
+    Five seconds is an adapter settlement delay, never a Strategy filter or
+    a replacement for live WS confirm. Differing uncommitted values WAIT;
+    differing committed immutable facts still fail closed in the store.
+    """
+    delay = max(0.0, 5.0 - (clock() - tail.closed_at).total_seconds())
+    sleep(max(1.0, delay))
+    confirmed = fetch()
+    if confirmed != (tail,):
+        raise PreparationWaiting(
+            "CANDLE_REST_TAIL_NOT_FINAL", symbol=tail.symbol,
+            timeframe=tail.timeframe, expected=tail.closed_at.isoformat(),
+        )
+
+
+def preparation_retry_request(
+    connection: Any, *, release_commit: str, blocked_at: datetime,
+) -> bool:
+    """Only a new authenticated coordinator operation resets a cold budget."""
+    return connection.execute(
+        """SELECT request_id FROM control.real_readiness_operations
+            WHERE scope_key='P90_REAL_V3' AND release_commit=%s
+              AND created_at > %s
+              AND state IN ('REQUESTED','CHECKING','STARTING_SERVICES',
+                            'RECONCILING','VALIDATING')
+            ORDER BY created_at DESC LIMIT 1""",
+        (release_commit, blocked_at),
+    ).fetchone() is not None
 
 
 class PreparationWaiting(Exception):
