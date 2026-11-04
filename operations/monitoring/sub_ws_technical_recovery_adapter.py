@@ -144,7 +144,7 @@ def _signed_inventory_matches(signed_positions: object, *, now: datetime) -> boo
     with psycopg.connect(DSN, connect_timeout=3) as conn:
         conn.execute("SET TRANSACTION READ ONLY")
         rows = conn.execute(
-            """SELECT p.symbol,p.position_idx,p.side,p.actual_qty,p.state,
+            """SELECT p.position_id,p.symbol,p.position_idx,p.side,p.actual_qty,p.state,
                       p.close_link_status,p.initial_protection_confirmed_at,
                       s.claim_state,s.strategy_position_id,
                       x.status,x.exit_plan_fingerprint,x.last_seen_at,
@@ -167,10 +167,13 @@ def _signed_inventory_matches(signed_positions: object, *, now: datetime) -> boo
         return False
     matching: dict[tuple[str, int, str], tuple[object, ...]] = {}
     for row in rows:
-        symbol, idx, side, qty, state, link, protected, slot, owner, claim, plan, seen, actual_plan = row
+        (
+            position_id, symbol, idx, side, qty, state, link, protected,
+            slot, owner, claim, plan, seen, actual_plan,
+        ) = row
         if (
             state != "OPEN" or link != "OPEN" or slot != "BOUND"
-            or not isinstance(owner, str) or not owner
+            or owner != position_id or not position_id
             or claim != "CLAIMED" or plan != actual_plan
             or protected is None or not isinstance(seen, datetime)
             or seen.tzinfo is None
@@ -187,7 +190,7 @@ def _signed_inventory_matches(signed_positions: object, *, now: datetime) -> boo
         try:
             key = (str(signed["symbol"]), int(signed["positionIdx"]), str(signed["side"]))
             signed_qty = Decimal(str(signed["size"]))
-            local_qty = Decimal(str(matching[key][3]))
+            local_qty = Decimal(str(matching[key][4]))
         except (KeyError, ValueError, TypeError, InvalidOperation):
             return False
         if not 0 < signed_qty <= local_qty:
