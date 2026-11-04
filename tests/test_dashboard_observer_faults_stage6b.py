@@ -144,7 +144,7 @@ def test_dashboard_global_red_banner_and_resolve_ui_are_non_trading() -> None:
 
     assert html.index('class="console-event-list"') < html.index('id="observerFaultBanner"')
     assert html.index('id="observerFaultBanner"') < html.index('id="liveCriticalEventList"')
-    assert "RED · ошибка Universal Entry observer" in html
+    assert "Журнал инцидентов Universal Entry observer" in html
     assert "function renderObserverFaults" in html
     assert "async function resolveObserverFault" in html
     assert "Причина явного resolution durable observer fault" in html

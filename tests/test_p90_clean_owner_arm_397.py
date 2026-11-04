@@ -136,7 +136,7 @@ def test_primary_owner_arm_status_is_plain_language_and_raw_detail_is_collapsed(
     end = UI.index("function refreshP90RealV3ArmControl(", start)
     helper = UI[start:end]
     assert "blockerMap" in helper
-    assert "blocker_detail" not in helper.split(
+    assert "blocker_detail" in helper.split(
         "function p90ReadinessOperationTechnicalText", 1
     )[0]
     assert "Технические детали последней операции OWNER ARM" in UI
