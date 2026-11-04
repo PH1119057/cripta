@@ -118,7 +118,7 @@ def plan_recovery(
     ):
         return block("RECONCILIATION_PATH_UNVERIFIED")
     if prior.attempts >= policy.max_attempts:
-        return block("RECOVERY_BUDGET_EXHAUSTED")
+        return block("ATTEMPT_BUDGET_EXHAUSTED")
     if (
         prior.last_attempt_epoch > 0
         and now_epoch - prior.last_attempt_epoch < policy.cooldown_seconds
