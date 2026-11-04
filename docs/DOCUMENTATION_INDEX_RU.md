@@ -1668,3 +1668,12 @@ TC §4.15 supersedes the two-button UX of §4.14; ARCH §57 owns capability matr
 OBS §7.8 owns ordinary account refusal and separate audio; DEV §55 owns verification;
 MAP trailing 2026-11-05 forensic checkpoint records the remaining raw CRITICAL veto.
 Current document set, paths and mandatory reading are unchanged.
+
+## 66. Gateway-ready release — OWNER DECISION 2026-11-05
+
+ARCH §58 owns preserved-source correction/finality/retry capability matrix;
+TC §4.16 owns five-step acceptance and separate financial ARM; OBS §7.9 owns
+preparation outcomes; GLOSSARY §43 defines ClosedCandleCorrection; DEV §56 owns
+migration/testing/release; MAP records dated independent production evidence.
+Current bundle remains11; routing/mandatory pre-read unchanged. No bootstrap
+change or new Project Source file. Approval is not deployed readiness.

@@ -2239,3 +2239,22 @@ or binding corruption still fails closed; no false OPEN or stale consent replay.
 One-click modal must reflect exact request phases and actual final gate readback.
 Source tests/prearm do not prove actual Exchange fill/TP/trailing. Real smoke
 remains explicit owner-only diagnostic under TC §4.8, never automatic ARM.
+
+## 56. Gateway-ready release / source repair — OWNER DECISION 2026-11-05
+
+Scope: ARCH §58 / TC §4.16 five-step gateway plan. Docs publish first, executable
+code/SQL/tests/installer in a separate core branch. No Strategy/Exit-policy rewrite.
+Migration actor postgres owns correction schema/view and exact guarded repair;
+cripta gets SELECT only on correction/view, retains SELECT/INSERT originals.
+No UPDATE/DELETE/TRUNCATE grants. Exact original row precondition, preserved
+original JSON/provenance, independent provider confirmations, idempotent rerun,
+negative drift/unknown/exposure cases and disposable PostgreSQL proof required.
+Installer runs migration after shared source schema; no ad hoc production UPDATE.
+In-process preparation retry reads one newer exact-release durable readiness
+request; only canonical coordinator writes that existing operation table.
+Release acceptance requires installed/source/loaded identity, fresh source epoch,
+all five candidate contexts and complete technical coordinator PASS with gate,
+permissions and arms still OFF. Financial ARM remains separately owner-triggered.
+CI must exercise the actual shared fault predicate from all execution boundaries,
+closed-tail provisional/conflict cases, retry without automatic budget reset,
+one-modal truth, immutable correction/read-view/permissions and migration rerun.
