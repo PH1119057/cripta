@@ -1575,3 +1575,15 @@ No new Exchange writer or permission issuer. Actual continuity gaps, malformed p
 clock/anchor/execId violations remain real fail-closed errors. Network exception alone
 is bounded RECONNECTING/ready=false, not proven continuity loss. Three transport
 failures within 60 seconds require durable runtime fault; no infinite silent retry.
+
+## 57. Trading-contour audit 2026-11-05 — capability matrix BEFORE / AFTER
+| Capability | BEFORE | AFTER owner/consumer | Сохраняется |
+|---|---|---|---|
+| Owner consent | separate prepare/open buttons | one modal OK -> existing coordinator -> existing staged/final ARM owners | exact authenticated same-origin request, finite attempt, no auto-ARM from GET/history/reload |
+| Account Entry readiness | private observer-only helper with raw OPEN CRITICAL veto | shared account-state predicate -> prearm and per-candidate admission | current generation/identity/mode, unknown/current fault blocks; CLOSED fault is history |
+| Candidate denial | provider false -> runtime exception -> epoch poison | same native candidate/Entry owner -> durable per-account negative decision | no financial reservation/request/PAPER fallback without proven authorization; exact source identity still mandatory |
+| Exit continuity | atomic native/5m dispatch | same source checkpoint and Exit owners; Entry denial commits independently as negative outcome | TP/trailing/protection/recovery not suppressed by ordinary Entry refusal |
+| Health/gate | runtime safety guard closes unavailable source | same guard for real source/execution failures | no blanket disable; operational denial is not service failure |
+| Audio | shared low alarm for gate/CRITICAL and trade notifications | separately named status notice vs confirmed real trade events; no shared trade sound for operational banner | visibility and actual critical incident notice remain; no stale replay |
+Proof of current checks and negative paths is required before removing any veto.
+No new Exchange mutation owner, financial policy, stake, leverage or Strategy rules.

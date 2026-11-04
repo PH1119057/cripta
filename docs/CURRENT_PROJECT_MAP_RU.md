@@ -4891,3 +4891,23 @@ SCOPED_ADMISSION_RUNTIME_VERIFIED=NO
 HISTORICAL_LTC_REPAIR=NOT_PERFORMED
 FINANCIAL_CONTROLS_CHANGED=NO
 ```
+
+## Trading-contour forensic checkpoint — 2026-11-05
+Installed 768b2423. Two successful OWNER ARM gate openings later closed by
+release-arm-runtime-guard with REAL_ENTRY_RUNTIME_NOT_READY. Current MAIN/SUB
+Entry consumers READY, no positions OPEN. Exact repeated Observer fault:
+P90_REAL_NATIVE_ACCOUNT_ADMISSION_NOT_VERIFIED; first 2026-11-04T21:15:23Z,
+four occurrences through 22:04:58Z. _real_entry_account_state still queries raw
+OPEN CRITICAL and blocks MAIN on historical LTC fault
+lifecycle-fault-93d8bec6bc16516377d4e76b4cd5e589 / closed
+POS-160b35fd93153dada2b1ceb79cf86eb5; SUB has no such raw veto.
+Prearm did not consume that predicate: previous repair fixed notification and
+SECOND48 paths but left this actual candidate veto. _on_candidate then raises
+instead of recording a negative account decision, poisoning/restarting source;
+runtime guard sees ERROR/PREPARING and closes global gate. ROOT CAUSE confirmed
+in code and current DB, not a Bybit order rejection. No new trade in forensic.
+Operational triple alarm is emitted by gate close/new CRITICAL handler; it is
+not necessarily a trade event. Historical incidents remain unchanged.
+Target correction TC §4.15 / ARCH §57; source/deploy status must be recorded
+separately. Last observed gate CLOSED with retained active OWNER ARM sessions
+(DEGRADED), not a verified trading-ready state.

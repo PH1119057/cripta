@@ -2228,3 +2228,14 @@ SECOND48 exact StrategyVersion. Другие причины закрытия, UN
 атрибуция/история/доставка не являются admission blockers. Для них не требуется
 отдельный proof отсутствия влияния. Текущие exposure/команды/ресурсы проверяются
 независимо; исторические ошибки остаются видимыми без подделки фактов.
+
+## 55. Trading contour verification after admission audit — 2026-11-05
+Перед release проверить один и тот же account-state predicate из prearm и
+реального candidate callback. Required cases: CLOSED-position old CRITICAL does
+not veto; current/unknown position fault still blocks; temporary account refusal
+persists a negative real attempt with no order/PAPER effect and commits source
+cursor; next independent account proceeds; native/5m Exit still advances; source
+or binding corruption still fails closed; no false OPEN or stale consent replay.
+One-click modal must reflect exact request phases and actual final gate readback.
+Source tests/prearm do not prove actual Exchange fill/TP/trailing. Real smoke
+remains explicit owner-only diagnostic under TC §4.8, never automatic ARM.

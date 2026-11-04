@@ -915,3 +915,13 @@ transport recovery policy, что WebSocket disconnect. Новая epoch доп�
 только после штатного причинного восстановления. Три transport failures за 60s
 создают durable ERROR; malformed/negative/unknown continuity proofs не считаются
 сетевым ожиданием. Исторический fault не стирается последующим RUNNING.
+
+## 7.8 Observer работает, Entry отказан — 2026-11-05
+OPERATIONAL_SAFETY_BLOCKED для одного account Entry — результат допуска, а не
+UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR. Сохранять точный reason/scope без потери
+market checkpoint и без остановки независимого Exit. Реальные source/identity
+нарушения сохраняют durable ERROR и existing runtime guard.
+Trade audio выдаётся только по подтверждённому актуальному событию позиции;
+operational gate/CRITICAL предупреждение должно быть явно отдельным типом и не
+использовать тот же тройной звук. История не генерирует повторную тревогу при
+первой загрузке/восстановлении вкладки. Цвет журнала не означает OPEN gate.
