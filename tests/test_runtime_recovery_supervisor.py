@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-
 from bybit_workbench.runtime_recovery_policy import (
     RecoveryAction,
     RecoveryClass,
