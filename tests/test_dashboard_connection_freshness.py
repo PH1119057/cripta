@@ -10,7 +10,9 @@ def test_operator_connection_distinguishes_portal_from_account_snapshot():
     assert "apiAge<=60" in line
     assert "walletAge<=30" in line
     assert "text='ONLINE'" in line
-    assert "text='OLD DATA'" in line
+    assert "lastPortalHeartbeatAt" in line
+    assert "lastLiveSuccessAt" not in line
+    assert "Данные аккаунта устарели" in line
     assert "text='OFFLINE'" in line
     assert "ПОРТАЛ НЕДОСТУПЕН" not in line
     assert "ДАННЫЕ АККАУНТА УСТАРЕЛИ" not in line

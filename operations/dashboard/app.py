@@ -5504,9 +5504,12 @@ def _wait_p90_real_v3_technical_evidence(
     timeout_seconds: float = 30.0,
 ) -> dict[str, object]:
     deadline = time.monotonic() + timeout_seconds
+    last_blocker: Exception | None = None
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
+            if last_blocker is not None:
+                raise last_blocker
             raise P90PrearmEvidenceBlocked("P90_REAL_TECHNICAL_EVIDENCE_TIMEOUT")
         try:
             with psycopg.connect(
@@ -5522,6 +5525,7 @@ def _wait_p90_real_v3_technical_evidence(
                     ),
                 )
         except P90PrivateIpcUnverified as exc:
+            last_blocker = exc
             if (
                 str(exc) not in P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC
                 or time.monotonic() >= deadline
@@ -5533,7 +5537,8 @@ def _wait_p90_real_v3_technical_evidence(
                     max(0.0, deadline - time.monotonic()),
                 )
             )
-        except P90PrearmEvidenceBlocked:
+        except P90PrearmEvidenceBlocked as exc:
+            last_blocker = exc
             if time.monotonic() >= deadline:
                 raise
             time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
@@ -6320,6 +6325,17 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
         elif path == "/api/status":
             body = json.dumps(snapshot(), ensure_ascii=False).encode("utf-8")
             self.send_body(200, body, "application/json; charset=utf-8")
+        elif path == "/api/p90l90/real-v3/readiness-status":
+            # Read progress only. This endpoint must never prepare, ARM,
+            # inspect Exchange credentials or build the heavy live-state.
+            with psycopg.connect(
+                "dbname=cripta user=cripta host=/var/run/postgresql "
+                "options=-cdefault_transaction_read_only=on"
+            ) as connection:
+                operation = latest_real_readiness_operation(
+                    connection, scope_key=P90_REAL_READINESS_SCOPE_KEY,
+                )
+            _u6_json(self, 200, {"readiness_operation": _readiness_operation_json(operation)})
         elif path == "/api/research/coin-history":
             # Authenticated, read-only projection of Git-versioned PROPOSAL data.
             # No PostgreSQL/strategy/exchange mutation, and no implicit readiness.
