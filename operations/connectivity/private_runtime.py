@@ -3460,10 +3460,16 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     before_position = None if position is None else dict(position)
     postfill_evaluation = None
     if p90_real_postfill is not None:
-        # This is the FIRST protected, authenticated fill. Consume the strict
-        # <=5s native postfill proof BEFORE the generic full-account reconcile:
-        # reconcile may legitimately take longer than the source-proof window.
-        # Existing Exchange TP+SL are already resident at this point.
+        # Signed Exit evidence requires a COMPLETE account generation newer
+        # than both fill and protection. Publish it BEFORE requesting that
+        # evidence, then obtain a NEW <=5s source window (never reuse an old
+        # window across account reconciliation). Exchange TP+SL stay resident.
+        try:
+            reconcile(connection, key, secret, "after_protected_first_fill")
+        except Exception as exc:
+            raise ExchangeMutationBarrier(
+                "P90_REAL_POSTFILL_ACCOUNT_RECONCILIATION_UNVERIFIED"
+            ) from exc
         from p90l90_real_postfill_handoff import (
             handoff_real_first_protected_fill,
         )

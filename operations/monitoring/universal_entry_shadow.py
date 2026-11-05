@@ -3314,6 +3314,7 @@ def _run_observer_epoch(
                     observed_at=datetime.now(UTC),
                     admitted_account=p90_admitted_account,
                     verified_native_coverage=source_ports.native_coverage,
+                    verified_native_prefix=source_ports.native_prefix,
                     verified_closed_history=source_ports.closed_history,
                     verified_closed_continuity=source_ports.closed_continuity,
                     verified_account_mutation_safety=safety,

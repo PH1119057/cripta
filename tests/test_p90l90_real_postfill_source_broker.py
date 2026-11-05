@@ -57,6 +57,39 @@ def test_real_mirror_proves_bounded_original_postfill_window() -> None:
     assert source.best_favorable_price >= pos.actual_avg_fill
 
 
+@pytest.mark.parametrize("omit", [False, True])
+@pytest.mark.parametrize("reconciliation_delay", [0, 10])
+def test_protected_fill_needs_no_new_tick_but_requires_independent_full_history(
+    omit, reconciliation_delay,
+):
+    mirror, position, at = _market()
+    position = replace(position, initial_protection_confirmed_at=at)
+    events = mirror.verified_fill_forward_events(
+        symbol=position.symbol, fill_at=position.fill_at, at=at,
+    )
+    history = [{"symbol": event.symbol, "execId": event.exec_id,
+                "seq": event.seq, "time": int(event.traded_at.timestamp() * 1000),
+                "side": event.side, "price": event.price, "size": event.size}
+               for event in events]
+    history.append({"symbol": position.symbol, "execId": "older-anchor",
+                    "seq": 100, "side": "Buy", "price": "100", "size": ".1",
+                    "time": int((position.fill_at - timedelta(seconds=1)).timestamp()*1000)})
+    if omit:
+        history.pop(0)
+    at += timedelta(seconds=reconciliation_delay)
+    kwargs = dict(mirror=mirror, position=position, source_commit=SHA,
+                  source_epoch_id=EPOCH, evidence_epoch_id=EPOCH, at=at,
+                  fetch_recent_trades=lambda _: (history, at))
+    if omit:
+        with pytest.raises(P90RealPostfillMarketSourceUnverified):
+            build_source_window(**kwargs)
+    else:
+        window = build_source_window(**kwargs)
+        assert window.covered_through == at
+        assert len(window.source_refs) == 2
+        assert not window.no_new_native_trade_rest_verified
+
+
 @pytest.mark.parametrize("reason", ("epoch", "mirror-gap", "empty", "expired"))
 def test_real_mirror_refuses_unproven_fill_forward_window(reason: str) -> None:
     mirror, pos, now = _market(trades=0 if reason == "empty" else 2)

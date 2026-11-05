@@ -90,7 +90,9 @@ def build_source_window(
         or position.fill_at.tzinfo is None
         or position.initial_protection_confirmed_at.tzinfo is None
         or at.tzinfo is None or at.utcoffset() != timedelta()
-        or not 0 <= (at - position.initial_protection_confirmed_at).total_seconds() <= 5
+        # Account reconciliation precedes this NEW source read. The resulting
+        # source window still has its independent <=5s freshness bound below.
+        or not 0 <= (at - position.initial_protection_confirmed_at).total_seconds() <= 15
     ):
         raise P90RealPostfillMarketSourceUnverified(
             "P90_REAL_MARKET_SOURCE_POSITION_OR_TIME_UNVERIFIED"
@@ -189,10 +191,62 @@ def build_source_window(
             no_new_native_trade_rest_verified=True,
         )
     last = events[-1]
-    if (
-        last.traded_at < position.initial_protection_confirmed_at
-        or not 0 <= (at - last.traded_at).total_seconds() <= 5
-    ):
+    covered_through = last.traded_at
+    if (last.traded_at < position.initial_protection_confirmed_at
+            or (at - last.traded_at).total_seconds() > 5):
+        # A quiet market need not emit another tick after the signed SL/TP
+        # readback. Independently prove the complete interval through `at`
+        # with venue history, retaining every original mirror execution ID.
+        try:
+            if fetch_recent_trades is None:
+                raise ValueError("independent history required")
+            rows, server_at = fetch_recent_trades(position.symbol)
+            if (not isinstance(rows, list) or not 1 <= len(rows) <= 1000
+                    or server_at.tzinfo is None
+                    or not 0 <= (server_at - at).total_seconds() <= 5):
+                raise ValueError("history clock or pagination incomplete")
+            exact: set[str] = set()
+            older_anchor = False
+            all_ids: set[str] = set()
+            native = {event.exec_id: event for event in events}
+            for row in rows:
+                identity = row["execId"]
+                when = datetime.fromtimestamp(int(str(row["time"])) / 1000, UTC)
+                if (row["symbol"] != position.symbol or not isinstance(identity, str)
+                        or not identity or identity in all_ids):
+                    raise ValueError("foreign or duplicate native identity")
+                if (str(row["side"]) not in {"Buy", "Sell"}
+                        or int(str(row["seq"])) < 0
+                        or not Decimal(str(row["price"])).is_finite()
+                        or Decimal(str(row["price"])) <= 0
+                        or not Decimal(str(row["size"])).is_finite()
+                        or Decimal(str(row["size"])) < 0):
+                    raise ValueError("native price or sequence malformed")
+                all_ids.add(identity)
+                if when < position.fill_at:
+                    older_anchor = True
+                elif when <= at:
+                    event = native.get(identity)
+                    if (event is None or event.traded_at != when
+                            or event.seq != int(str(row["seq"]))
+                            or Decimal(event.price) != Decimal(str(row["price"]))
+                            or Decimal(event.size) != Decimal(str(row["size"]))
+                            or event.side != row["side"]):
+                        raise ValueError("native execution omitted or changed")
+                    exact.add(identity)
+            if not older_anchor or exact != set(native):
+                raise ValueError("history does not cover fill-forward window")
+            if mirror.verified_fill_forward_events(
+                symbol=position.symbol, fill_at=position.fill_at, at=at,
+            ) != events or mirror.snapshot()["epoch"] != before["epoch"]:
+                raise ValueError("source changed while confirming history")
+            covered_through = at
+        except (TypeError, ValueError, KeyError, OverflowError,
+                InvalidOperation, ContinuityNotProvable):
+            raise P90RealPostfillMarketSourceUnverified(
+                "P90_REAL_MARKET_SOURCE_POST_PROTECTION_NATIVE_MISSING"
+            ) from None
+    if not 0 <= (at - covered_through).total_seconds() <= 5:
         raise P90RealPostfillMarketSourceUnverified(
             "P90_REAL_MARKET_SOURCE_POST_PROTECTION_NATIVE_MISSING"
         )
@@ -226,7 +280,7 @@ def build_source_window(
         position_id=position.strategy_position_id,
         symbol=position.symbol,
         fill_at=position.fill_at,
-        covered_through=last.traded_at,
+        covered_through=covered_through,
         source_commit=source_commit,
         last_native_price=prices[-1],
         best_favorable_price=best,

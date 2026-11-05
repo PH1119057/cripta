@@ -121,6 +121,39 @@ def test_restart_reader_proves_complete_nonflat_account_inventory(monkeypatch) -
     assert requested[1][1]["settleCoin"] == "USDT"
 
 
+def test_restart_sixty_positions_and_protection_orders_are_all_paginated(monkeypatch):
+    reader, db, responses, requested = _reader(monkeypatch)
+    positions = [_position(f"TEST{i}USDT") for i in range(60)]
+    orders = [row for position in positions
+              for row in _protection_orders(position["symbol"])]
+    db.generation = (*db.generation[:4], 60, 0)
+
+    def signed(endpoint, params):
+        requested.append((endpoint, dict(params)))
+        if endpoint == "/v5/user/query-api":
+            return responses[endpoint]
+        all_rows = positions if endpoint == "/v5/position/list" else orders
+        start = int(params.get("cursor", "0"))
+        page_size = 20 if endpoint == "/v5/position/list" else 50
+        end = start + page_size
+        return _raw("linear", all_rows[start:end], str(end) if end < len(all_rows) else "")
+
+    reader._get = signed
+    assert len(reader().positions) == 60
+    assert sum(endpoint == "/v5/position/list" for endpoint, _ in requested) == 3
+    assert sum(endpoint == "/v5/order/realtime" for endpoint, _ in requested) == 3
+
+
+@pytest.mark.parametrize("endpoint", ["/v5/position/list", "/v5/order/realtime"])
+def test_pagination_cycle_or_unavailable_later_page_cannot_prove_inventory(
+    monkeypatch, endpoint,
+):
+    reader, _db, responses, _requested = _reader(monkeypatch)
+    responses[endpoint]["result"]["nextPageCursor"] = "cycle"
+    with pytest.raises(recovery.P90RealRecoveryAccountUnverified):
+        reader()
+
+
 @pytest.mark.parametrize("failure", (
     "hidden_position_page", "open_order", "hidden_order_page",
     "generation_count", "pending_command", "wrong_position_idx",

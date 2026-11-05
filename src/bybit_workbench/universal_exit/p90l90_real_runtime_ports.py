@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.p90l90_real_account_routes import (
     read_p90_real_account_routes,
 )
@@ -34,10 +35,12 @@ from .p90l90_real_exit_execution import (
     SafetyPort,
 )
 from .p90l90_real_exit_port import (
+    NativePrefixProvider,
     P90RealExitNativePort,
     SourceCoverageProvider,
 )
 from .p90l90_real_mfe_ledger import P90RealMfeLedger
+from .p90l90_real_pending import p90_real_exit_no_pending
 from .p90l90_real_position_provider import P90RealPositionProvider
 from .p90l90_real_postfill_port import P90RealPostfillExitPort
 from .p90l90_real_private_router import P90RealPrivateEvidenceRouter
@@ -73,6 +76,7 @@ def assemble_p90_real_exit_runtime(
     independently_verified_closed_history: ClosedHistoryProvider,
     independently_verified_closed_continuity: ClosedCausalSourceProof,
     independently_verified_mutation_safety: SafetyPort,
+    verified_native_prefix: NativePrefixProvider | None = None,
 ) -> P90RealExitRuntimePorts:
     """Bind existing Universal Exit and Execution owners, never invent proofs.
 
@@ -117,6 +121,17 @@ def assemble_p90_real_exit_runtime(
         independently_verified_execution_safety=independently_verified_mutation_safety,
         account_by_strategy=account_by_strategy,
     )
+    def private_state_pending(position: StrategyPosition) -> bool:
+        row = connection.execute(
+            "SELECT state FROM runtime.trade_commands WHERE command_id=%s "
+            "AND trading_account_id=%s AND identity_status='PROVEN'",
+            (position.entry_command_id, position.trading_account_id),
+        ).fetchone()
+        state = row.get("state") if isinstance(row, Mapping) else None
+        return state != "completed" or not p90_real_exit_no_pending(
+            connection, position=position, trading_account_id=position.trading_account_id or "",
+        )
+
     native = P90RealExitNativePort(
         position_provider=positions,
         independently_verified_source_coverage=independently_verified_native_coverage,
@@ -125,6 +140,8 @@ def assemble_p90_real_exit_runtime(
         mfe_ledger=mfe,
         exit_store=store,
         verified_execution_port=execution,
+        verified_native_prefix=verified_native_prefix,
+        private_state_pending=private_state_pending,
     )
     closed = P90RealClosedExitPort(
         position_provider=positions,
@@ -135,6 +152,7 @@ def assemble_p90_real_exit_runtime(
         mfe_ledger=mfe,
         exit_store=store,
         verified_execution_port=execution,
+        private_state_pending=private_state_pending,
     )
     postfill = P90RealPostfillExitPort(
         connection,
@@ -164,6 +182,7 @@ def assemble_p90_real_exit_runtime_from_db_bundles(
     independently_verified_closed_history: ClosedHistoryProvider,
     independently_verified_closed_continuity: ClosedCausalSourceProof,
     independently_verified_mutation_safety: SafetyPort,
+    verified_native_prefix: NativePrefixProvider | None = None,
 ) -> P90RealExitRuntimePorts:
     """Read actual two-account roster, then construct typed Exit owners.
 
@@ -191,4 +210,5 @@ def assemble_p90_real_exit_runtime_from_db_bundles(
         independently_verified_closed_history=independently_verified_closed_history,
         independently_verified_closed_continuity=independently_verified_closed_continuity,
         independently_verified_mutation_safety=independently_verified_mutation_safety,
+        verified_native_prefix=verified_native_prefix,
     )

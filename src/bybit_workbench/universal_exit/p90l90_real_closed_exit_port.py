@@ -37,6 +37,7 @@ from .p90l90_real_observation import (
     ScopedPrivatePositionEvidence,
     build_real_native_exit_observation,
 )
+from .p90l90_real_pending import pending_private_evaluation
 from .storage import PostgresExitShadowStore
 
 PositionProvider = Callable[[str], Sequence[tuple[StrategyPosition, ExitPlan]]]
@@ -62,6 +63,7 @@ class P90RealClosedExitPort:
         mfe_ledger: P90RealMfeLedger,
         exit_store: PostgresExitShadowStore,
         verified_execution_port: ExecutionPort | None = None,
+        private_state_pending: Callable[[StrategyPosition], bool] | None = None,
     ) -> None:
         self._positions = position_provider
         self._bars = independently_verified_closed_history
@@ -72,6 +74,7 @@ class P90RealClosedExitPort:
         self._exit_store = exit_store
         self._execution_port = verified_execution_port
         self._engine = UniversalExitEngine()
+        self._pending = private_state_pending
 
     def __call__(self, fact: MarketFactEnvelope) -> tuple[ExitEvaluation, ...]:
         raw = fact.attributes.to_dict()
@@ -122,6 +125,11 @@ class P90RealClosedExitPort:
                 raise P90RealClosedGeometryUnverified(
                     "P90_REAL_CLOSED_5M_EMITTED_BAR_DRIFT"
                 )
+            if self._pending is not None and self._pending(position):
+                evaluation = pending_private_evaluation(position, fact)
+                self._exit_store.record(evaluation, position=position, plan=plan)
+                results.append(evaluation)
+                continue
             mfe, native_fact_id, native_refs = self._mfe.load_latest(
                 position=position, source_commit=self._source_commit,
             )

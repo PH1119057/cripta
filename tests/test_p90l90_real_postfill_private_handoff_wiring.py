@@ -19,8 +19,11 @@ def test_private_worker_handoffs_proven_first_fill_before_command_completion():
     assert "p90_real_postfill = (" in body
     assert "handoff_real_first_protected_fill(" in body
     assert 'if p90_real_postfill is not None:' in body
-    # Strict postfill source proof is bounded to <=5 seconds after confirmed
-    # protection. Generic full-account reconcile may exceed that window.
+    # A fresh post-protection generation must exist before the signed reader
+    # can accept the first-fill handoff. Source evidence is collected AFTER it.
+    assert body.index('reconcile(connection, key, secret, "after_protected_first_fill")') < (
+        body.index("handoff_real_first_protected_fill(")
+    )
     assert body.index("handoff_real_first_protected_fill(") < (
         body.index('reconcile(connection, key, secret, "after_command")')
     )
