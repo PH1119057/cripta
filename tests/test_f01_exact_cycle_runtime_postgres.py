@@ -66,7 +66,20 @@ def pg():
 
 
 def seed(connection, prefix, *, account=None, symbol="F01USDT", partial=False, protected=True):
-    ids = _seed_request(connection, prefix, reservation_state="DISPATCHED", dispatched=True,
+    class SeedConnection:
+        def execute(self, statement, params=()):
+            if "INSERT INTO strategy_entry.exit_plans(" in statement:
+                # Prepare the complete immutable document BEFORE its INSERT.
+                # Never disable or bypass the canonical immutability trigger.
+                params = list(params)
+                params[4] = json.dumps({
+                    "exit_plan_fingerprint": params[0], "strategy_id": params[1],
+                    "strategy_version": params[2], "strategy_config_fingerprint": params[3],
+                    "exit_policy": {}, "protection_policy": {},
+                })
+            return connection.execute(statement, params)
+
+    ids = _seed_request(SeedConnection(), prefix, reservation_state="DISPATCHED", dispatched=True,
                         symbol=symbol, account_id=account)
     account = ids["trading_account_id"]
     payload = _payload(ids)
@@ -110,12 +123,6 @@ def seed(connection, prefix, *, account=None, symbol="F01USDT", partial=False, p
                                "side": "Sell", "positionIdx": 0}
     inventory = RecoveryInventory(account, prefix + "-connector", FILL_MS, NOW_MS, NOW_MS,
                                   (position,), tuple(executions), orders)
-    # Complete immutable ExitPlan fixture for the real loader after recovery.
-    plan = {"strategy_id": ids["strategy_id"], "strategy_version": "1",
-            "strategy_config_fingerprint": ids["strategy_fp"],
-            "exit_plan_fingerprint": ids["exit_fp"], "exit_policy": {}, "protection_policy": {}}
-    connection.execute("UPDATE strategy_entry.exit_plans SET plan_json=%s::jsonb "
-                       "WHERE exit_plan_fingerprint=%s", (json.dumps(plan), ids["exit_fp"]))
     return ids, inventory
 
 
