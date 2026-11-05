@@ -59,15 +59,47 @@ def pg():
             entry_command_id text,geometry_handoff_id text,signal_id text,
             bot_instance_id text,strategy_id text,strategy_version text)""")
         connection.execute("GRANT SELECT ON runtime.entry_geometry_bindings TO cripta")
+        # The old CI bootstrap omits the installed worker ACL. These exact
+        # rights were independently read back as cripta on production; this
+        # fixture only reproduces the subset needed below, in a rolled-back DB.
+        connection.execute("GRANT SELECT,INSERT,UPDATE ON runtime.trade_commands,"
+                           "runtime.position_ownership TO cripta")
+        connection.execute("GRANT SELECT,INSERT ON runtime.executions,"
+                           "runtime.connection_events TO cripta")
+        connection.execute("GRANT SELECT,UPDATE ON runtime.hot_positions,"
+                           "runtime.capital_reservations,runtime.exchange_position_slot_claims "
+                           "TO cripta")
+        connection.execute("GRANT SELECT,INSERT ON strategy_entry.execution_request_state_events "
+                           "TO cripta")
         yield connection
     finally:
         connection.rollback()
         connection.close()
 
 
-def seed(connection, prefix, *, account=None, symbol="F01USDT", partial=False, protected=True):
+def seed(connection, prefix, *, account=None, symbol="F01USDT", partial=False, protected=True,
+         shared=None):
+    replacements = {} if shared is None else {
+        prefix + suffix: shared[field] for suffix, field in (
+            ("-strategy-fp", "strategy_fp"), ("-strategy", "strategy_id"),
+            ("-activation", "activation_id"), ("-entry-fp", "entry_fp"),
+            ("-exit-fp", "exit_fp"), ("-binding", "binding_id"),
+        )
+    }
+
+    def translate(value):
+        if isinstance(value, str):
+            for old, new in replacements.items():
+                value = value.replace(old, new)
+        return value
+
     class SeedConnection:
         def execute(self, statement, params=()):
+            if shared is not None and any("INSERT INTO strategy_entry." + table + "(" in statement
+                for table in ("strategy_cards", "strategy_activations", "entry_plans",
+                              "exit_plans", "strategy_execution_bindings")):
+                return connection.execute("SELECT 1")
+            params = [translate(p) for p in params]
             if "INSERT INTO strategy_entry.exit_plans(" in statement:
                 # Prepare the complete immutable document BEFORE its INSERT.
                 # Never disable or bypass the canonical immutability trigger.
@@ -81,6 +113,7 @@ def seed(connection, prefix, *, account=None, symbol="F01USDT", partial=False, p
 
     ids = _seed_request(SeedConnection(), prefix, reservation_state="DISPATCHED", dispatched=True,
                         symbol=symbol, account_id=account)
+    ids = {k: translate(v) for k, v in ids.items()}
     account = ids["trading_account_id"]
     payload = _payload(ids)
     payload["initial_protection"] = {
@@ -184,12 +217,14 @@ def test_sixty_actual_positions_restart_idempotently_and_never_hold_exit(pg, mon
     for leg in range(2):
         inventories, commands = [], []
         account = None
+        shared = None
         for index in range(30):
             prefix = f"f{leg}{index}-{batch}"
             ids, inventory = seed(pg, prefix, account=account,
                                   symbol=f"F{leg}{index}{batch.upper()}USDT",
-                                  partial=index % 2 == 0)
+                                  partial=index % 2 == 0, shared=shared)
             account = inventory.account
+            shared = ids
             inventories.append(inventory)
             commands.append(ids["command_id"])
         complete = replace(inventories[0],
