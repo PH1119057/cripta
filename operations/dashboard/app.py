@@ -6026,7 +6026,10 @@ def _u6_p90_real_v3_arm(
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
-            _p90_arm_phase(connection, request_id, "arming_closed_gate")
+            # Commit progress before the financial owner starts its own
+            # SERIALIZABLE transaction; a prior UPDATE would start READ COMMITTED.
+            with connection.transaction():
+                _p90_arm_phase(connection, request_id, "arming_closed_gate")
             stage_p90l90_real_v3(
                 connection,
                 release_commit=LOADED_RELEASE_COMMIT,
@@ -6058,7 +6061,8 @@ def _u6_p90_real_v3_arm(
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
-            _p90_arm_phase(connection, request_id, "finalizing")
+            with connection.transaction():
+                _p90_arm_phase(connection, request_id, "finalizing")
             result = finalize_p90l90_real_v3(
                 connection,
                 release_commit=LOADED_RELEASE_COMMIT,
