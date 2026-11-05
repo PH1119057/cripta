@@ -1239,6 +1239,10 @@ def own_p90_real_signed_position_reader(
         no_pending_exit_command=lambda position: current_p90_real_no_pending_exit(
             connection, position
         ),
+        publication_no_pending=lambda position, decision_id: p90_real_exit_no_pending(
+            connection, position=position, trading_account_id=TRADING_ACCOUNT_ID,
+            publishing_exit_decision_id=decision_id,
+        ),
     )
 
 

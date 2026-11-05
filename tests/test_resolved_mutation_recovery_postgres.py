@@ -234,3 +234,104 @@ def test_incomplete_or_changed_state_never_removes_latch(recovery_db, failure):
     assert admin.execute(
         f"SELECT count(*) FROM {schema}.account_mutation_recovery_events"
     ).fetchone() == (0,)
+
+
+def test_publisher_can_exclude_only_its_exact_unmaterialized_decision(recovery_db):
+    from dataclasses import replace
+
+    from test_p90l90_real_observation import _scope
+
+    from bybit_workbench.exchange_position_identity import exchange_position_key
+    from bybit_workbench.universal_exit.p90l90_real_pending import p90_real_exit_no_pending
+
+    admin, worker, schema, _recover = recovery_db
+    position, *_ = _scope(sub=True)
+    position = replace(
+        position,
+        strategy_position_id="pos",
+        trading_account_id=ACCOUNT,
+        exchange_position_key=exchange_position_key(ACCOUNT, "DOTUSDT", 0),
+    )
+    for column in (
+        "strategy_id text",
+        "strategy_config_fingerprint text",
+        "strategy_execution_binding_id text",
+        "exchange_position_key text",
+        "position_idx integer",
+    ):
+        admin.execute(f"ALTER TABLE {schema}.position_ownership ADD COLUMN {column}")
+    admin.execute(
+        f"UPDATE {schema}.position_ownership SET state='OPEN',strategy_id=%s,"
+        "strategy_config_fingerprint=%s,strategy_execution_binding_id=%s,"
+        "exchange_position_key=%s,position_idx=0",
+        (
+            position.strategy_id,
+            position.strategy_config_fingerprint,
+            position.strategy_execution_binding_id,
+            position.exchange_position_key,
+        ),
+    )
+    admin.execute(
+        f"ALTER TABLE {schema}.trade_commands ADD COLUMN strategy_execution_binding_id text"
+    )
+    admin.execute(
+        f"CREATE TABLE {schema}.exit_decisions(exit_decision_id text,"
+        "strategy_position_id text,strategy_id text,strategy_version text,"
+        "strategy_config_fingerprint text,exit_plan_fingerprint text)"
+    )
+    admin.execute(
+        f"CREATE TABLE {schema}.execution_requests(execution_request_id text,"
+        "exit_decision_id text,identity_status text,trading_account_id text,"
+        "strategy_execution_binding_id text)"
+    )
+    admin.execute(
+        f"CREATE TABLE {schema}.execution_dispatches(dispatch_id text,"
+        "execution_request_id text,state text,command_id text)"
+    )
+    admin.execute(
+        f"GRANT SELECT ON {schema}.exit_decisions,{schema}.execution_requests,"
+        f"{schema}.execution_dispatches TO cripta"
+    )
+    admin.execute(
+        f"INSERT INTO {schema}.exit_decisions VALUES('own','pos',%s,%s,%s,%s)",
+        (
+            position.strategy_id,
+            position.strategy_version,
+            position.strategy_config_fingerprint,
+            position.exit_plan_fingerprint,
+        ),
+    )
+
+    class ScopeDb:
+        def execute(self, sql, args=()):
+            return worker.execute(
+                sql.replace("runtime.", schema + ".").replace("strategy_exit.", schema + "."), args
+            )
+
+    def ready(decision=None):
+        with worker.transaction():
+            return p90_real_exit_no_pending(
+                ScopeDb(),
+                position=position,
+                trading_account_id=ACCOUNT,
+                publishing_exit_decision_id=decision,
+            )
+
+    assert not ready()  # Ordinary signed reads still reject an unmaterialized decision.
+    assert not ready("other")
+    assert ready("own")  # The exact publisher does not deadlock on its own decision.
+    admin.execute(
+        f"INSERT INTO {schema}.exit_decisions SELECT 'competitor',"
+        f"strategy_position_id,strategy_id,strategy_version,"
+        f"strategy_config_fingerprint,exit_plan_fingerprint FROM {schema}.exit_decisions"
+    )
+    assert not ready("own")
+    admin.execute(f"DELETE FROM {schema}.exit_decisions WHERE exit_decision_id='competitor'")
+    admin.execute(
+        f"INSERT INTO {schema}.execution_requests VALUES('request','own','PROVEN',%s,%s)",
+        (ACCOUNT, position.strategy_execution_binding_id),
+    )
+    assert not ready("own")  # Already dispatched/uncertain work is never excluded.
+    admin.execute(f"DELETE FROM {schema}.execution_requests")
+    admin.execute(f"UPDATE {schema}.exit_decisions SET exit_plan_fingerprint='foreign'")
+    assert not ready("own")
