@@ -21,6 +21,7 @@ import json
 import os
 import pathlib
 import pwd
+import re
 import shutil
 import sys
 import time
@@ -278,13 +279,15 @@ def independent_check(path: pathlib.Path, symbol: str, day: dt.date, primary: li
     return {"independent_minute_cells": comparisons, "mismatches": 0, "native_rows": rows_seen}
 
 
-def one_day(symbol: str, day: dt.date, outdir: pathlib.Path) -> dict:
+def one_day(symbol: str, day: dt.date, outdir: pathlib.Path, expected_sha: str) -> dict:
     path = RAW_ROOT / symbol / "public_trades" / f"{symbol}{day.isoformat()}.csv.gz"
     if not path.is_file() or path.is_symlink() or not os.access(path, os.R_OK):
         raise FileNotFoundError(str(path))
     if not 0 < path.stat().st_size <= MAX_ARCHIVE_BYTES:
         raise ValueError("SOURCE_ARCHIVE_SIZE_OUT_OF_BOUNDS")
     source_sha = hash_file(path)
+    if source_sha != expected_sha:
+        raise ValueError("SOURCE_DRIFT_AFTER_PREFLIGHT")
     with localcontext() as c:
         c.prec = 48
         with gzip.open(path, "rt", newline="", encoding="utf-8") as stream:
@@ -321,7 +324,10 @@ def main() -> int:
     parser.add_argument("--start", required=True, help="YYYY-MM-DD UTC")
     parser.add_argument("--days", type=int, required=True)
     parser.add_argument("--run-id", required=True)
+    parser.add_argument("--source-commit", required=True, help="exact 40-char Git commit provenance")
     args = parser.parse_args()
+    if not re.fullmatch(r"[0-9a-f]{40}", args.source_commit):
+        raise ValueError("SOURCE_COMMIT_FORMAT_INVALID")
     start = dt.date.fromisoformat(args.start)
     if not 1 <= args.days <= 7:
         raise ValueError("ONLY_BOUNDED_1_TO_7_DAYS")
@@ -338,12 +344,15 @@ def main() -> int:
     if destination.exists() or shutil.disk_usage(RUN_ROOT).free < SAFETY_FREE_BYTES:
         raise RuntimeError("TARGET_ALREADY_EXISTS_OR_DISK_BELOW_8GIB_RESERVE")
     days = [start + dt.timedelta(days=i) for i in range(args.days)]
+    inputs = []
     for date in days:
         file = RAW_ROOT / args.symbol / "public_trades" / f"{args.symbol}{date.isoformat()}.csv.gz"
         if not file.is_file() or file.is_symlink() or not os.access(file, os.R_OK):
             raise FileNotFoundError(str(file))
         if not 0 < file.stat().st_size <= MAX_ARCHIVE_BYTES:
             raise ValueError("SOURCE_ARCHIVE_SIZE_OUT_OF_BOUNDS")
+        inputs.append({"date_utc": date.isoformat(), "path": str(file),
+                       "bytes": file.stat().st_size, "sha256": hash_file(file)})
     source_text = globals().get("__snapshot_source__")
     if source_text is None:
         source_text = pathlib.Path(__file__).read_text(encoding="utf-8")
@@ -354,18 +363,28 @@ def main() -> int:
     destination.mkdir(mode=0o2770)
     snapshots = destination / "source_snapshot"
     snapshots.mkdir(mode=0o2770)
+    (destination / "logs").mkdir(mode=0o2770)
+    daily_dir = destination / "results"
+    daily_dir.mkdir(mode=0o2770)
     write_once(snapshots / "historical_trade_minute_mart_v1.py", source_text.encode("utf-8"))
     source_checksum = hash_file(snapshots / "historical_trade_minute_mart_v1.py")
     write_once(destination / "source_sha256.txt", (source_checksum + "  source_snapshot/historical_trade_minute_mart_v1.py\n").encode())
+    write_once(destination / "source_commit.txt", (args.source_commit + "\n").encode())
     write_once(destination / "command.txt", json_bytes(vars(args)))
+    write_once(destination / "input_provenance.json", json_bytes({
+        "source_kind": "BYBIT_PUBLIC_TRADES_ARCHIVE", "sources": inputs,
+        "native_archive_complete_qc": "NOT_YET_VERIFIED",
+    }))
     write_once(destination / "environment.txt", json_bytes({
         "uid": os.geteuid(), "actor": "cripta", "python": sys.version,
         "run_pid": os.getpid(), "data_disk_only": True,
+        "source_commit_supplied": args.source_commit,
     }))
     write_once(destination / "run_manifest.json", json_bytes({
         "status": "RUNNING", "algorithm": VERSION, "date_start": args.start,
-        "days": args.days, "symbol": args.symbol,
+        "days": args.days, "symbol": args.symbol, "source_commit": args.source_commit,
         "source_sha256": source_checksum, "raw_purge_allowed": False,
+        "input_hashes_registered_before_run": True,
         "source_binding": "NOT_CANONICAL_INSTRUMENT_IDENTITY_BOUND",
     }))
     results = []
@@ -373,8 +392,8 @@ def main() -> int:
         print(json.dumps({"stage": "START_DAY", "day": str(date), "i": i + 1, "total": len(days)}), flush=True)
         if shutil.disk_usage(RUN_ROOT).free < SAFETY_FREE_BYTES:
             raise RuntimeError("DISK_RESERVE_FELL_BELOW_8GIB")
-        result = one_day(args.symbol, date, destination)
-        write_once(destination / f"{date.isoformat()}_qc.json", json_bytes(result))
+        result = one_day(args.symbol, date, daily_dir, inputs[i]["sha256"])
+        write_once(daily_dir / f"{date.isoformat()}_qc.json", json_bytes(result))
         results.append(result)
         print(json.dumps({"stage": "DAY_QC_PASS", "date": str(date),
                           "output_bytes": result["output_bytes"],
