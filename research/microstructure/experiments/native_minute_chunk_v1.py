@@ -92,8 +92,8 @@ def write_once(path, payload):
         os.fsync(dst.fileno())
     partial.rename(path)
 
-def load(name):
-    path = MODULES / name
+def load(name, source_dir=MODULES):
+    path = source_dir / name
     spec = importlib.util.spec_from_file_location("research_" + name.replace(".", "_"), path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -273,7 +273,7 @@ def main():
                         "symbol": opts.symbol, "start": opts.start, "days": opts.days,
                         "raw_purge_allowed": False,
                         "source_files_sha256": source_checks}))
-    modules = tuple(load(n) for n in FILES)
+    modules = tuple(load(n, snap) for n in FILES)
     started = time.monotonic()
     indicator = {"phase": "setup"}
     halt = threading.Event()
