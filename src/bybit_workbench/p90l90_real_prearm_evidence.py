@@ -458,7 +458,8 @@ def prepare_p90l90_real_v3_prearm_evidence(
         and 0
         <= (observer_checked_at - observer_at.astimezone(UTC)).total_seconds()
         <= 15,
-        "source-only observer not exact/fresh",
+        "source-only observer not exact/fresh: "
+        + str(observer.get("state")) + ": " + str(observer.get("reason")),
     )
 
     main_lifecycle = _read_json(

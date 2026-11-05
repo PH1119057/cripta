@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from bybit_workbench.account_entry_readiness import entry_blocking_lifecycle_fault
+
 import hashlib
 import hmac
 import json
@@ -618,18 +620,9 @@ def restore_r1_gate_after_verified_reconnect(
 
 
 def _critical_lifecycle_fault_code(connection: psycopg.Connection) -> str | None:
-    """Read-only, fail-closed new Entry guard for exact TradingAccount."""
-    if not TRADING_ACCOUNT_ID:
-        raise RuntimeError("required TradingAccount identity missing")
-    row = connection.execute(
-        """SELECT fault_code FROM runtime.lifecycle_faults
-            WHERE state='OPEN' AND severity='CRITICAL'
-              AND (NULLIF(exact_ids->>'trading_account_id','') IS NULL
-                   OR exact_ids->>'trading_account_id'=%s)
-            ORDER BY detected_at,fault_id LIMIT 1""",
-        (TRADING_ACCOUNT_ID,),
-    ).fetchone()
-    return None if row is None else str(row[0])
+    return entry_blocking_lifecycle_fault(
+        connection, trading_account_id=TRADING_ACCOUNT_ID,
+    )
 
 
 def _dispatched_owner_diagnostic_allows_closed_gate(

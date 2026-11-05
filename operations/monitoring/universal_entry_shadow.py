@@ -29,8 +29,11 @@ from operations.monitoring.observer_preparation import (
     PreparationBudget,
     PreparationWaiting,
     cold_preparation_wait,
+    confirm_rest_closed_tail,
+    preparation_retry_request,
     prepare_p90_closed_tails,
 )
+from bybit_workbench.market_data.shared_closed_candles import CandleSourceConflict
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
@@ -387,6 +390,21 @@ def _fetch_history(
             raise RuntimeError(
                 f"P90L90_7D_PLUS_ATR200_SEED_INCOMPLETE:{symbol}:{len(history[interval])}"
             )
+        if history[interval] and (p90l90_full_prev7d or required_counts is not None):
+            tail = history[interval][-1]
+
+            def confirm_tail(tail: Candle = tail, interval: str = interval) -> tuple[Candle, ...]:
+                payload = _get_json("/v5/market/kline", {
+                    "category": "linear", "symbol": symbol, "interval": interval,
+                    "start": int(tail.opened_at.timestamp()*1000),
+                    "end": int(tail.closed_at.timestamp()*1000)-1, "limit": 1,
+                })
+                return tuple(map_rest_klines(
+                    cast(list[list[Any]], _result_list(payload)),
+                    symbol=symbol, interval=interval, observed_at=datetime.now(UTC),
+                ))
+
+            confirm_rest_closed_tail(tail, fetch=confirm_tail)
     return history
 
 
@@ -3756,6 +3774,22 @@ def _run_multi_strategy_observer() -> None:
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+
+    def wait_blocked(connection: Any, detail: dict[str, object]) -> None:
+        blocked_at = datetime.now(UTC)
+        while not stopping_flag:
+            _observer_status(
+                state="BLOCKED", epoch_id=None, active_bundles=(), symbols=(),
+                preparation=detail,
+                reason="Подготовка приостановлена · " + str(detail["reason"]),
+            )
+            time.sleep(1.0)
+            if not stopping_flag and preparation_retry_request(
+                connection, release_commit=LOADED_COMMIT, blocked_at=blocked_at,
+            ):
+                preparation_budget.reset()
+                return
+
     with psycopg.connect(DATABASE_DSN, autocommit=True) as connection:
         while not stopping_flag:
             try:
@@ -3789,10 +3823,22 @@ def _run_multi_strategy_observer() -> None:
                 )
                 if outcome == "STOP":
                     break
+            except CandleSourceConflict as conflict:
+                connection.rollback()
+                fault_id = _record_observer_runtime_fault(
+                    connection, conflict, observed_at=datetime.now(UTC), observer_epoch_id=None,
+                )
+                wait_blocked(connection, {
+                    **conflict.detail, "state": "BLOCKED", "reason": str(conflict),
+                    "fault_id": fault_id,
+                })
             except PreparationWaiting as waiting:
                 connection.rollback()
                 detail = preparation_budget.wait(waiting, now=time.monotonic())
                 blocked = detail["state"] == "BLOCKED"
+                if blocked:
+                    wait_blocked(connection, detail)
+                    continue
                 while True:
                     _observer_status(
                         state=str(detail["state"]), epoch_id=None,
