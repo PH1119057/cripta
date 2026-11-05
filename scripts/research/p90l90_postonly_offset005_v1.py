@@ -254,7 +254,50 @@ def run(*, smoke_ticks=0, output=None):
                         "maker acceptance unproven", "spread/slippage/funding/latency unmodeled"],
     }
     if output is not None:
+        # Durable reproducibility bundle; only approved fresh /data child.
+        import sys
+        source = Path(__file__).resolve()
+        source_bytes = source.read_bytes()
+        source_sha = hashlib.sha256(source_bytes).hexdigest()
+        result["research_source_sha256"] = source_sha
         output.mkdir(mode=0o2770)
+        snapshot = output / "source_snapshot"
+        snapshot.mkdir(mode=0o2770)
+        (snapshot / source.name).write_bytes(source_bytes)
+        (output / "source_sha256.txt").write_text(
+            source_sha + "  " + source.name + "\n", encoding="utf-8"
+        )
+        (output / "command.txt").write_text(
+            "python3 -m scripts.research.p90l90_postonly_offset005_v1 --write-result\n",
+            encoding="utf-8"
+        )
+        (output / "environment.txt").write_text(
+            "uid=" + str(os.geteuid()) + "\npython=" + sys.version + "\n",
+            encoding="utf-8"
+        )
+        provenance = {
+            symbol: {
+                "candidate_sha256": data[symbol]["manifest"]["events_sha256"],
+                "frozen_states_sha256": data[symbol]["manifest"]["frozen_l53_sha256"],
+                "native_public_trades": data[symbol]["manifest"]["inputs"],
+            }
+            for symbol in SYMBOLS
+        }
+        (output / "input_provenance.json").write_text(
+            json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        (output / "run_manifest.json").write_text(
+            json.dumps({
+                "run_id": RESULT_NAME, "period_utc": result["period_utc"],
+                "source_sha256": source_sha,
+                "source": str(source), "effective_uid": os.geteuid(),
+                "baseline_exact_ledger_parity": "PASS",
+                "scenarios": list(SCENARIOS), "offset": str(OFFSET),
+                "fee_model": {"maker_entry": str(base.MAKER),
+                              "taker_control": str(base.TAKER)},
+                "limitations": result["limitations"]
+            }, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         target = output / "result.json"
         with target.open("x", encoding="utf-8") as handle:
             json.dump(result, handle, ensure_ascii=False, indent=2, sort_keys=True)
