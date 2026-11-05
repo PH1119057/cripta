@@ -79,6 +79,9 @@ BEGIN
   -- Same account/mutation epoch locks as the existing state and latch owners.
   PERFORM pg_advisory_xact_lock(hashtextextended(p_account,0));
   PERFORM pg_advisory_xact_lock(hashtext(p_account),hashtext(p_connector));
+  v_now := clock_timestamp();
+  IF p_proof_at < v_now-interval '15 seconds' OR p_proof_at > v_now+interval '1 second'
+  THEN RAISE EXCEPTION 'MUTATION_RECOVERY_PROOF_EXPIRED'; END IF;
   SELECT * INTO v_latch FROM runtime.account_entry_safety_blocks
     WHERE trading_account_id=p_account AND account_connector_id=p_connector FOR UPDATE;
   IF NOT FOUND THEN
@@ -142,7 +145,8 @@ BEGIN
   THEN RAISE EXCEPTION 'MUTATION_RECOVERY_EXECUTIONS_MISSING'; END IF;
 
   SELECT count(DISTINCT e.exec_id),sum(e.exec_qty::numeric) INTO v_count,v_qty
-    FROM runtime.executions e WHERE v_position.execution_ids ? e.exec_id
+    FROM runtime.executions e
+    WHERE e.exec_id=ANY(ARRAY(SELECT jsonb_array_elements_text(v_position.execution_ids)))
       AND e.trading_account_id=p_account AND e.account_connector_id=p_connector
       AND e.identity_status='PROVEN' AND e.symbol=v_position.symbol
       AND e.side=v_position.side AND e.exec_qty::numeric>0
@@ -157,7 +161,7 @@ BEGIN
       AND c.identity_status='PROVEN' AND c.state='completed'
       AND c.command_type IN ('close','strategy_exit')
       AND c.payload_json::jsonb->>'strategy_position_id'=p_position
-    WHERE v_position.exit_execution_ids ? e.exec_id
+    WHERE e.exec_id=ANY(ARRAY(SELECT jsonb_array_elements_text(v_position.exit_execution_ids)))
       AND e.trading_account_id=p_account AND e.account_connector_id=p_connector
       AND e.identity_status='PROVEN' AND e.symbol=v_position.symbol
       AND e.side=CASE WHEN v_position.side='Buy' THEN 'Sell' ELSE 'Buy' END
@@ -166,6 +170,9 @@ BEGIN
      OR v_qty IS DISTINCT FROM v_position.actual_qty
   THEN RAISE EXCEPTION 'MUTATION_RECOVERY_CLOSE_EXECUTIONS_UNPROVEN'; END IF;
 
+  v_now := clock_timestamp();
+  IF p_proof_at < v_now-interval '15 seconds'
+  THEN RAISE EXCEPTION 'MUTATION_RECOVERY_PROOF_EXPIRED'; END IF;
   v_event := 'mutation-recovery-' || md5(p_account||p_request||p_blocked_at::text);
   INSERT INTO control.account_mutation_recovery_events(
       event_id,request_id,operator,trading_account_id,account_connector_id,
