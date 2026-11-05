@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from decimal import Decimal
 from threading import Event
+from time import monotonic, sleep
 from uuid import uuid4
 
 import pytest
@@ -130,7 +131,19 @@ def test_per_position_advisory_lock_serializes_concurrent_runtime_writers(runtim
                 second.connection.commit()
                 future = pool.submit(repeat)
                 assert entered.wait(2)
-                assert not finished.wait(0.2)
+                deadline = monotonic() + 3
+                waiting = False
+                while monotonic() < deadline and not finished.is_set():
+                    waiting = first.execute(
+                        "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid=%s "
+                        "AND locktype='advisory' AND NOT granted) AS waiting",
+                        (second.info.backend_pid,),
+                    ).fetchone()["waiting"]
+                    if waiting:
+                        break
+                    sleep(0.01)
+                assert waiting, "second runtime writer must wait on the exact advisory lock"
+                assert not finished.is_set()
             assert future.result(timeout=8) == expected
         assert (
             first.execute("SELECT count(*) AS n FROM strategy_exit.exit_observations").fetchone()[
