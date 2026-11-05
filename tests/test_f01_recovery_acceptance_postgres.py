@@ -51,7 +51,7 @@ def isolated_pg():
             f"CREATE TABLE {schema}.trade_commands ("
             "command_id text,symbol text,command_type text,state text,"
             "trading_account_id text,identity_status text,"
-            "payload_json jsonb,requested_at_epoch_ms bigint)"
+            "payload_json jsonb,requested_at_epoch_ms bigint,started_at_epoch_ms bigint)"
         )
         connection.execute(
             f"CREATE TABLE {schema}.executions ("
@@ -88,7 +88,9 @@ def _seed(
 ) -> None:
     payload = {"source": "universal_entry", "initial_protection": {"test": True}}
     connection.execute(
-        f"INSERT INTO {schema}.trade_commands VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s)",
+        f"INSERT INTO {schema}.trade_commands "
+        "(command_id,symbol,command_type,state,trading_account_id,identity_status,"
+        "payload_json,requested_at_epoch_ms) VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s)",
         (command, symbol, command_type, command_state, account,
          command_identity, json.dumps(payload), time_ms),
     )
@@ -264,3 +266,74 @@ def test_current_execution_ids_quantities_side_and_exit_queue_remain_distinct(
         (account,),
     ).fetchone()
     assert next_row[:2] == ("exit-queued", "exit")
+
+
+@pytest.mark.parametrize("account", ACCOUNTS)
+@pytest.mark.parametrize("scenario", ("competing", "unproven"))
+def test_actual_worker_passes_ambiguous_recovery_and_dispatches_queued_exit(
+    isolated_pg, account, scenario,
+):
+    """Run the real command_worker_loop AST on isolated PG; no Exchange sender."""
+    import time
+
+    connection, schema = isolated_pg
+    if scenario == "competing":
+        _seed(
+            connection, schema, "prior-unresolved", account,
+            position_state="RECONCILIATION_REQUIRED", time_ms=1000,
+        )
+        _seed(connection, schema, "current", account, time_ms=2000)
+    else:
+        _seed(
+            connection, schema, "current-unproven", account,
+            command_identity="UNKNOWN",
+        )
+    _seed(
+        connection, schema, "exit-queued", account,
+        command_type="exit", command_state="queued", executions=False,
+    )
+    assert _selected(connection, schema, "command_worker_loop", account) == []
+
+    class ScopedConnection:
+        def execute(self, statement, parameters=()):
+            return connection.execute(
+                statement.replace("runtime.", schema + "."), parameters
+            )
+
+        def commit(self):
+            # Keep all test effects in the uncommitted disposable transaction.
+            pass
+
+        def rollback(self):
+            connection.rollback()
+
+    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+    worker = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "command_worker_loop"
+    )
+    observed = []
+    scope = {
+        "running": True,
+        "TRADING_ACCOUNT_ID": account,
+        "db": lambda _label: ScopedConnection(),
+        "time": time,
+        "atomic_status": lambda *_args, **_kw: None,
+        "cancel_expired_entry_limits": lambda *_args: None,
+    }
+
+    def no_exchange_command_sender(_connection, _key, _secret, row):
+        observed.append((row[0], row[1]))
+        scope["running"] = False
+
+    scope["execute_command"] = no_exchange_command_sender
+    exec(
+        compile(ast.Module(body=[worker], type_ignores=[]), str(SOURCE), "exec"),
+        scope,
+    )
+    scope["command_worker_loop"]("unused", "unused")
+    assert observed == [("exit-queued", "exit")]
+    assert connection.execute(
+        f"SELECT state FROM {schema}.trade_commands WHERE command_id='exit-queued'"
+    ).fetchone() == ("running",)
