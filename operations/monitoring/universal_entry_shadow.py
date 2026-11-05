@@ -3069,7 +3069,18 @@ def _run_observer_epoch(
         if trade_mirror.snapshot()["state"] != "ACTIVE":
             raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
         oi_thread.start()
-        if p90_real_staged or p90_real_source_only:
+        preflight_restart_epoch_id: str | None = None
+        if p90_real_live:
+            from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+                inspect_p90_real_open_restart_epoch,
+            )
+
+            preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(
+                connection, source_commit=LOADED_COMMIT,
+            )
+        if p90_real_source_only or (
+            p90_real_staged and preflight_restart_epoch_id is None
+        ):
             # Staged OWNER ARM and normal flat source-only restart both warm
             # exact credential-local MAIN/SUB readiness before starting the
             # short-lived public WS attestation clock. This preflight grants
@@ -3092,17 +3103,12 @@ def _run_observer_epoch(
                 source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
                 progress=preparation_progress,
             )
-        elif p90_real_live:
-            from bybit_workbench.universal_entry.p90l90_real_open_restart import (
-                inspect_p90_real_open_restart_epoch,
+        elif p90_real_live and preflight_restart_epoch_id is None:
+            prepare_p90_closed_tails(
+                connection, symbols=tuple(sorted(p90l90_symbols)),
+                source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
+                progress=preparation_progress,
             )
-            if inspect_p90_real_open_restart_epoch(connection, source_commit=LOADED_COMMIT) is None:
-                # Open-position replay/Exit retains its original contract.
-                prepare_p90_closed_tails(
-                    connection, symbols=tuple(sorted(p90l90_symbols)),
-                    source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
-                    progress=preparation_progress,
-                )
         sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
         # Source proof is issued ONLY in this epoch, after real Bybit
         # WS subscription acknowledgements and the active publicTrade
