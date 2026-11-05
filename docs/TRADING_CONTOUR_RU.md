@@ -2023,4 +2023,3 @@ serialized transaction as deletion. No grant of table-wide DELETE to cripta,
 no altered fault/history state, Strategy/SECOND48 change, Exchange mutation,
 permission or ARM. Financial reopening remains a separate explicit owner step.
 This does not widen diagnostic v3 §4.8 or the WS-only recovery contracts.
-

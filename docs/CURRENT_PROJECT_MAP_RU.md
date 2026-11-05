@@ -4939,4 +4939,3 @@ original Entry order/execution IDs and initial SL/TP evidence retained. No
 trailing was installed for that trade; its closure is not proof of fixed Exit.
 Existing WS and diagnostic-only latch recovery do not cover this actual fill.
 TC §4.17/ARCH §59/DEV §57 define the bounded implementation still required.
-

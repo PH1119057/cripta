@@ -1623,4 +1623,3 @@ TC §4.17 implements the owner's requested repair and existing normal recovery.
 The existing NOLOGIN recovery role owns the narrowly scoped function and audit
 writes; the application role receives function EXECUTE and audit SELECT only.
 This is recovery of resolved current state, not a fault ACK or trading waiver.
-

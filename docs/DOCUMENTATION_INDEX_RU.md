@@ -1686,4 +1686,3 @@ SQL/audit/testing/release. This implements normal recovery and CLOSED-history
 isolation; no automatic ARM or Exchange mutation. Current11-doc set/routing and
 bootstrap unchanged. Owner requested repair, independently confirmed DOT close
 and original/closing execution IDs are the concrete motivating checkpoint.
-
