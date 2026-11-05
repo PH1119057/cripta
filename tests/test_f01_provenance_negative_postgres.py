@@ -47,7 +47,7 @@ def isolated_pg():
         connection.execute(
             f"CREATE TABLE {schema}.hot_positions (symbol text,trading_account_id text,"
             "identity_status text,side text,size numeric,entry_price numeric,"
-            "payload_json jsonb)"
+            "position_idx integer,payload_json jsonb)"
         )
         connection.execute(
             f"CREATE TABLE {schema}.recovered_closed_entry_cycles (entry_order_id text,"
@@ -88,7 +88,7 @@ def seed_counterexample(connection, schema: str, account: str, scenario: str) ->
     }
     connection.execute(
         f"INSERT INTO {schema}.hot_positions VALUES "
-        "(%s,%s,'PROVEN',%s,%s,125.00,%s::jsonb)",
+        "(%s,%s,'PROVEN',%s,%s,125.00,0,%s::jsonb)",
         ("DOTUSDT", account, side, qty, json.dumps(position_payload)),
     )
     if scenario == "already_recovered_closed":
@@ -160,10 +160,11 @@ def test_actual_startup_recovery_must_not_send_old_protection_to_other_position(
         calls.append((args[0], args[1] if len(args) > 1 else None))
         raise AssertionError("would send a stale protection mutation to Exchange")
 
-    fake_api_get = lambda *_a, **_kw: (
-        {"retCode": 0, "result": {"list": [{"priceFilter": {"tickSize": "0.01"}}]}},
-        None,
-    )
+    def fake_api_get(*_a, **_kw):
+        return (
+            {"retCode": 0, "result": {"list": [{"priceFilter": {"tickSize": "0.01"}}]}},
+            None,
+        )
     namespace = {
         "psycopg": SimpleNamespace(Connection=object),
         "TRADING_ACCOUNT_ID": account,
