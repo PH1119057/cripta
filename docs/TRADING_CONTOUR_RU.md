@@ -1995,3 +1995,32 @@ The approved ClosedCandleCorrection path is ARCH §58, not an Entry bypass.
 All account fault checks, including dispatch and first-mutation checks, consume
 the same current-vs-closed-history predicate. Safety at the moment of mutation
 remains mandatory; CLOSED records influence entries only via actual SECOND48.
+
+## 4.17 Recovery of a resolved REAL mutation latch — OWNER repair 2026-11-05
+
+Implements §6 normal recovery and §4.13.5 closed-history isolation for the
+owner-requested repair of the failed DOT first-fill handoff. A closed trade is
+not a continuing mutation ambiguity. The persistent account latch must remain
+until a distinct authenticated owner control operation proves resolution; it
+must not be ignored by Entry or deleted ad hoc by a private worker.
+
+The bounded recovery operation may remove only the exact existing
+PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED latch for an approved P90 account and
+connector, while all gates/permissions/generic and account arms are OFF.
+Require a fresh independently signed FLAT account/UID proof, matching COMPLETE
+account generation <=15s, zero current positions/orders/pending commands, exact
+CLOSED StrategyPosition, original signed Entry IDs and all confirmed close
+executions whose quantities cover the actual position. Its Entry command and
+exact close command must be completed and linked to those executions. Prove
+absence of current account/unknown-scope critical faults with the shared
+current-vs-CLOSED predicate; historical faults remain visible and unchanged.
+Unknown outcome, unmatched IDs/quantity, changed latch epoch, stale/wrong account
+proof or any non-flat/unresolved current state must fail closed.
+
+Append an immutable audit event (operator/request/release, old latch identity,
+position, Entry/close IDs, signed proof/generation, recovered time) in the same
+serialized transaction as deletion. No grant of table-wide DELETE to cripta,
+no altered fault/history state, Strategy/SECOND48 change, Exchange mutation,
+permission or ARM. Financial reopening remains a separate explicit owner step.
+This does not widen diagnostic v3 §4.8 or the WS-only recovery contracts.
+

@@ -1677,3 +1677,13 @@ preparation outcomes; GLOSSARY §43 defines ClosedCandleCorrection; DEV §56 own
 migration/testing/release; MAP records dated independent production evidence.
 Current bundle remains11; routing/mandatory pre-read unchanged. No bootstrap
 change or new Project Source file. Approval is not deployed readiness.
+
+## 67. Resolved REAL mutation latch recovery — 2026-11-05
+
+TC §4.17 owns authenticated recovery after exact confirmed position close;
+ARCH §59 contains BEFORE/AFTER preservation matrix; DEV §57 owns least-privilege
+SQL/audit/testing/release. This implements normal recovery and CLOSED-history
+isolation; no automatic ARM or Exchange mutation. Current11-doc set/routing and
+bootstrap unchanged. Owner requested repair, independently confirmed DOT close
+and original/closing execution IDs are the concrete motivating checkpoint.
+

@@ -1608,3 +1608,19 @@ market dataset. Effective values are identical for all consumers. An unapproved
 provider disagreement still fails closed. Correction history is immutable;
 original records and old source/Entry checkpoints retain their exact identities.
 No architecture capability is removed; no new Exchange writer or trading filter.
+
+## 59. Resolved mutation recovery capability — 2026-11-05
+
+TC §4.17 implements the owner's requested repair and existing normal recovery.
+
+| Capability | BEFORE | AFTER owner / consumer | Preservation |
+|---|---|---|---|
+| Durable ambiguous-mutation veto | private worker latches account; no general post-close recovery | same worker/latch; dedicated owner Control recovery -> narrow SECURITY DEFINER -> Entry reads normal latch state | runtime cannot DELETE; exact epoch and serialized recheck; unknown remains blocked |
+| Exchange/DB truth | independent signed account proof and durable execution lineage | same credential-local read-only producer + same position/execution owners, checked by Control and DB recovery gate | fresh FLAT/UID/generation, exact original fill and confirmed close quantities/IDs; no fabricated terminal state |
+| Scope-aware current faults | shared current-vs-CLOSED classifier | same predicate independently enforced by recovery transaction | closed history and incidents retained; current/unknown faults still block |
+| Audit/control authorization | explicit owner operation required | same owner, exact operator/request/release; append-only recovery evidence | one exact latch removal, no Exchange/Strategy/gate/permission/ARM capability |
+
+The existing NOLOGIN recovery role owns the narrowly scoped function and audit
+writes; the application role receives function EXECUTE and audit SELECT only.
+This is recovery of resolved current state, not a fault ACK or trading waiver.
+
