@@ -359,3 +359,35 @@ def test_startup_uncertain_protection_is_not_replayed_after_restart(pg, monkeypa
     assert len(calls) == 1
     assert pg.execute("SELECT count(*) FROM runtime.position_ownership WHERE entry_command_id=%s",
                       (ids["command_id"],)).fetchone()[0] == 0
+
+
+def test_existing_owner_is_quarantined_on_identity_drift_then_resumes_exact_exit(pg, monkeypatch):
+    prefix = "f01q-" + uuid4().hex[:8]
+    ids, inventory = seed(pg, prefix, partial=True)
+    configure(monkeypatch, pg, inventory)
+    pg.execute("SET LOCAL ROLE cripta")
+    monkeypatch.setattr(runtime, "running", True)
+    runtime.command_worker_loop("unused", "unused")
+    position_id = pg.execute("SELECT position_id FROM runtime.position_ownership "
+                             "WHERE entry_command_id=%s", (ids["command_id"],)).fetchone()[0]
+    changed = {**inventory.positions[0], "size": "9", "seq": "21"}
+    monkeypatch.setattr(runtime, "_f01_signed_inventory",
+                         lambda *_a: replace(inventory, positions=(changed,)))
+    runtime.reconcile_position_ownership(Transaction(pg), [changed], NOW_MS,
+                                         key="unused", secret="unused")
+    state = pg.execute("SELECT state,close_link_status,actual_qty FROM runtime.position_ownership "
+                       "WHERE position_id=%s", (position_id,)).fetchone()
+    assert state == ("RECONCILIATION_REQUIRED", "F01_CURRENT_CYCLE_UNPROVEN", Decimal("1.25"))
+    monkeypatch.setattr(runtime, "_f01_signed_inventory", lambda *_a: inventory)
+    runtime.reconcile_position_ownership(Transaction(pg), list(inventory.positions), NOW_MS,
+                                         key="unused", secret="unused")
+    assert pg.execute("SELECT state,close_link_status,actual_qty FROM runtime.position_ownership "
+                      "WHERE position_id=%s", (position_id,)).fetchone() == (
+                          "OPEN", "OPEN", Decimal("1.25"))
+    # The missing partial close was retained as an exact fact, not just a
+    # derived quantity; terminal close accounting can still consume all fills.
+    quantity = pg.execute(
+        "SELECT exec_qty FROM runtime.executions WHERE trading_account_id=%s AND exec_id=%s",
+        (inventory.account, prefix + "-reduction"),
+    ).fetchone()[0]
+    assert Decimal(str(quantity)) == Decimal(".5")
