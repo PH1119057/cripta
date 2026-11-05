@@ -30,6 +30,7 @@ def recovery_selection(function_name):
 
 
 @pytest.mark.parametrize("account", ["MAIN", "SUB"])
+@pytest.mark.parametrize("current_state", ["OPEN", None])
 @pytest.mark.parametrize(
     "function_name",
     [
@@ -37,7 +38,11 @@ def recovery_selection(function_name):
         "protect_recovered_bot_positions",
     ],
 )
-def test_closed_entry_is_not_a_candidate_for_next_same_symbol_position(account, function_name):
+def test_closed_entry_is_not_a_candidate_for_next_same_symbol_position(
+    account,
+    function_name,
+    current_state,
+):
     with sqlite3.connect(":memory:") as db:
         db.execute("ATTACH DATABASE ':memory:' AS runtime")
         db.execute(
@@ -52,7 +57,11 @@ def test_closed_entry_is_not_a_candidate_for_next_same_symbol_position(account, 
             "CREATE TABLE runtime.position_ownership(position_id,entry_command_id,"
             "trading_account_id,symbol,state)"
         )
-        for entry, state, instant in [("old-closed", "CLOSED", 1000), ("new-open", "OPEN", 2000)]:
+        for entry, state, instant in [
+            ("old-closed", "CLOSED", 1000),
+            ("second-closed", "CLOSED", 2000),
+            ("new-open", current_state, 3000),
+        ]:
             db.execute(
                 "INSERT INTO runtime.trade_commands VALUES(?, 'DOTUSDT', 'entry',"
                 "'completed', ?, 'PROVEN', '{}')",
@@ -62,10 +71,16 @@ def test_closed_entry_is_not_a_candidate_for_next_same_symbol_position(account, 
                 "INSERT INTO runtime.executions VALUES(?, ?, ?, 'PROVEN','{\"closedSize\":\"0\"}')",
                 (entry, instant, account),
             )
-            db.execute(
-                "INSERT INTO runtime.position_ownership VALUES(?, ?, ?, 'DOTUSDT', ?)",
-                ("position-" + entry, entry, account, state),
-            )
+            if state is not None:
+                db.execute(
+                    "INSERT INTO runtime.position_ownership VALUES(?, ?, ?, 'DOTUSDT', ?)",
+                    ("position-" + entry, entry, account, state),
+                )
+        # Another account's terminal projection must never hide this Entry.
+        db.execute(
+            "INSERT INTO runtime.position_ownership VALUES(?, ?, ?, 'DOTUSDT', 'CLOSED')",
+            ("foreign-position", "new-open", "FOREIGN"),
+        )
         selected = db.execute(recovery_selection(function_name), (account, account)).fetchall()
         assert [row[0] for row in selected] == ["new-open"]
         assert db.execute(
