@@ -22,9 +22,10 @@ from bybit_workbench.entry_cycle_recovery import RecoveryInventory
 from bybit_workbench.universal_exit.loader import load_exit_binding
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "operations/connectivity"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research/server/connectivity"))
-import private_runtime as runtime  # noqa: E402
+sys.path.append(str(Path(__file__).resolve().parents[1] / "research/server/connectivity"))
 from test_strategy_position_binding_postgres import NOW, _payload, _seed_request  # noqa: E402
+
+import operations.connectivity.private_runtime as runtime  # noqa: E402
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 pytestmark = pytest.mark.skipif(not DSN, reason="explicit disposable PostgreSQL required")
@@ -89,15 +90,16 @@ def seed(connection, prefix, *, account=None, symbol="F01USDT", partial=False, p
                 "trailingStop": "0", "seq": "20", "updatedTime": str(FILL_MS + 1000)}
     connection.execute("""INSERT INTO runtime.executions(
         exec_id,order_id,order_link_id,symbol,side,exec_qty,exec_price,exec_fee,
-        exec_time_ms,received_at_epoch_ms,payload_json,trading_account_id,identity_status)
-        VALUES(%s,%s,%s,%s,'Buy','1.25','125','0',%s,%s,%s,%s,'PROVEN')""",
+        exec_time_ms,received_at_epoch_ms,payload_json,trading_account_id,
+        account_connector_id,identity_status)
+        VALUES(%s,%s,%s,%s,'Buy','1.25','125','0',%s,%s,%s,%s,%s,'PROVEN')""",
         (exec_id, order_id, ids["command_id"], symbol, FILL_MS, NOW_MS,
-         json.dumps(fill), account))
+         json.dumps(fill), account, prefix + "-connector"))
     connection.execute("""INSERT INTO runtime.hot_positions(
         symbol,position_idx,side,size,entry_price,leverage,refreshed_at_epoch_ms,
-        payload_json,trading_account_id,identity_status)
-        VALUES(%s,0,'Buy',%s,'125','1',%s,%s,%s,'PROVEN')""",
-        (symbol, position["size"], NOW_MS, json.dumps(position), account))
+        payload_json,trading_account_id,account_connector_id,identity_status)
+        VALUES(%s,0,'Buy',%s,'125','1',%s,%s,%s,%s,'PROVEN')""",
+        (symbol, position["size"], NOW_MS, json.dumps(position), account, prefix + "-connector"))
     executions, orders = [fill], {order_id: order}
     if partial:
         close_order = prefix + "-close"
@@ -280,3 +282,38 @@ def test_actual_worker_and_prequeued_protection_reject_unrelated_cycle(pg, monke
     assert pg.execute("SELECT count(*) FROM runtime.connection_events WHERE "
                       "trading_account_id=%s AND event='F01_CURRENT_CYCLE_UNPROVEN'",
                       (inventory.account,)).fetchone()[0] > 0
+
+
+def test_startup_uncertain_protection_is_not_replayed_after_restart(pg, monkeypatch):
+    prefix = "f01r-" + uuid4().hex[:8]
+    ids, inventory = seed(pg, prefix, protected=False)
+    configure(monkeypatch, pg, inventory)
+    calls = []
+
+    def get(endpoint, *_a):
+        if endpoint == "/v5/market/instruments-info":
+            rows = [{"priceFilter": {"tickSize": "0.01"}}]
+        else:
+            assert endpoint == "/v5/position/list"
+            rows = list(inventory.positions)
+        return {"retCode": 0, "result": {"list": rows}}, 0
+
+    def uncertain(endpoint, params, *_a):
+        assert endpoint == "/v5/position/trading-stop"
+        assert "takeProfit" not in params, "existing TP must survive recovery"
+        assert pg.execute("SELECT count(*) FROM runtime.connection_events WHERE "
+                          "event='F01_PROTECTION_MUTATION_ATTEMPT' AND trading_account_id=%s",
+                          (inventory.account,)).fetchone()[0] == 1
+        calls.append(params)
+        raise runtime.AmbiguousBybitMutation("fixture timeout after POST, no retry")
+
+    monkeypatch.setattr(runtime, "api_get", get)
+    monkeypatch.setattr(runtime, "api_post", uncertain)
+    pg.execute("SET LOCAL ROLE cripta")
+    with pytest.raises(runtime.AmbiguousBybitMutation):
+        runtime.protect_recovered_bot_positions(Transaction(pg), "unused", "unused")
+    # Same account/Entry, same unprotected readback: still no second mutation.
+    assert runtime.protect_recovered_bot_positions(Transaction(pg), "unused", "unused") == 0
+    assert len(calls) == 1
+    assert pg.execute("SELECT count(*) FROM runtime.position_ownership WHERE entry_command_id=%s",
+                      (ids["command_id"],)).fetchone()[0] == 0

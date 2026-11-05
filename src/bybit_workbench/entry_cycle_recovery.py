@@ -342,6 +342,12 @@ class SignedRecoveryInventoryReader:
         for order_id in {str(r.get("orderId") or "") for r in executions
                          if r.get("execType") == "Trade"} - set(orders):
             rows = pages("/v5/order/history", {"category": "linear", "orderId": order_id})
+            if not rows:
+                # An actively partially-filled order need not be in terminal
+                # history yet. Its exact authenticated live order is valid
+                # evidence; symbol-only or guessed order matches are not.
+                rows = pages("/v5/order/realtime", {"category": "linear", "orderId": order_id,
+                                                   "openOnly": "0"})
             _require(len(rows) == 1 and rows[0].get("orderId") == order_id,
                      "EXACT_ORDER_HISTORY_MISSING")
             orders[order_id] = rows[0]

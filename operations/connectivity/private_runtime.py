@@ -997,6 +997,41 @@ def _f01_finish_without_mutation(connection, command_id: str, *, reason: str,
     connection.commit()
 
 
+def _f01_claim_protection_attempt(connection, entry_id: str, symbol: str,
+                                  command_id: str = "") -> bool:
+    """Durable before POST: a crash/timeout can never authorize another try."""
+    connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                       (TRADING_ACCOUNT_ID,))
+    prior = connection.execute(
+        """SELECT 1 FROM runtime.connection_events
+             WHERE trading_account_id=%s AND event='F01_PROTECTION_MUTATION_ATTEMPT'
+               AND details_json::jsonb->>'entry_command_id'=%s
+           UNION ALL
+           SELECT 1 FROM runtime.trade_commands
+             WHERE trading_account_id=%s AND command_type='initial_protection'
+               AND payload_json::jsonb->>'entry_command_id'=%s
+               AND state IN ('running','failed','completed') AND command_id<>%s
+           LIMIT 1""",
+        (TRADING_ACCOUNT_ID, entry_id, TRADING_ACCOUNT_ID, entry_id, command_id),
+    ).fetchone()
+    if prior is not None:
+        _f01_recovery_denied(connection, entry_id, symbol,
+                             "F01_PRIOR_PROTECTION_ATTEMPT_NO_AUTOMATIC_REPLAY")
+        return False
+    connection.execute(
+        """INSERT INTO runtime.connection_events(
+               at_epoch_ms,channel,event,details_json,
+               trading_account_id,account_connector_id,identity_status)
+           VALUES(%s,'recovery','F01_PROTECTION_MUTATION_ATTEMPT',%s,%s,%s,'PROVEN')""",
+        (int(time.time() * 1000), json.dumps({"entry_command_id": entry_id,
+            "symbol": symbol, "command_id": command_id, "outcome": "NOT_YET_KNOWN"}),
+         TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID),
+    )
+    # The marker must survive even if POST/its response/the next process fails.
+    connection.commit()
+    return True
+
+
 def protect_recovered_bot_positions(
     connection: psycopg.Connection,
     key: str,
@@ -1130,6 +1165,8 @@ def protect_recovered_bot_positions(
                 or not _f01_position_matches(cycle, exact[0])):
             _f01_recovery_denied(connection, str(command_id), str(symbol),
                                  "F01_POSITION_CHANGED_BEFORE_PROTECTION")
+            continue
+        if not _f01_claim_protection_attempt(connection, str(command_id), str(symbol)):
             continue
         api_post(
             "/v5/position/trading-stop",
@@ -3009,7 +3046,8 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         if (positions.get("retCode") != 0 or len(matching) != 1
                 or not _f01_position_matches(recovery_cycle, matching[0])):
             _f01_finish_without_mutation(
-                connection, command_id, reason="F01_POSITION_CHANGED_BEFORE_PROTECTION", failed=True,
+                connection, command_id,
+                reason="F01_POSITION_CHANGED_BEFORE_PROTECTION", failed=True,
             )
             return
         position = matching[0]
@@ -3087,6 +3125,14 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     }
                 )
         try:
+            if kind == "initial_protection" and not _f01_claim_protection_attempt(
+                connection, str(payload["entry_command_id"]), symbol, command_id,
+            ):
+                _f01_finish_without_mutation(
+                    connection, command_id,
+                    reason="F01_PRIOR_PROTECTION_ATTEMPT_NO_AUTOMATIC_REPLAY", failed=True,
+                )
+                return
             result = api_post("/v5/position/trading-stop", stop_request, key, secret)
         except RuntimeError as exc:
             if kind != "initial_protection" or "not modified" not in str(exc).lower():
