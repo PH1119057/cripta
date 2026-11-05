@@ -164,5 +164,6 @@ def test_runtime_entry_fail_closed_preserves_exit_only_real_owner() -> None:
     assert "selected == expected" in body
     assert "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT" in body
     assert "P90_REAL_DEGRADED_EXIT_ONLY" in body
-    degraded = body.index("if p90_real_degraded:")
-    assert "return blocked.get(activation, ()), False" in body[degraded:degraded + 500]
+    closed = body.index("if gate_row is not None and not gate_row[0]:")
+    permission = body.index("if activation is None or selected != expected_activation_ids:")
+    assert "return blocked.get(activation, ()), False" in body[closed:permission]
