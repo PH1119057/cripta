@@ -14,8 +14,10 @@ assert matches('LONG', D('101'), D('100'))
 assert not matches('LONG', D('99'), D('100'))
 assert matches('SHORT', D('99'), D('100'))
 assert not matches('SHORT', D('101'), D('100'))
-assert (financial('LONG', D('100'), D('101'), True, D('0.0055'))\n        > financial('LONG', D('100'), D('101'), False, D('0.0055')))
-assert (financial('SHORT', D('100'), D('99'), True, D('0.0055'))\n        > financial('SHORT', D('100'), D('99'), False, D('0.0055')))
+assert (financial('LONG', D('100'), D('101'), True, D('0.0055'))
+        > financial('LONG', D('100'), D('101'), False, D('0.0055')))
+assert (financial('SHORT', D('100'), D('99'), True, D('0.0055'))
+        > financial('SHORT', D('100'), D('99'), False, D('0.0055')))
 print('PROTECTED_STOP_MAKER_PURE_PASS')
 """
 
