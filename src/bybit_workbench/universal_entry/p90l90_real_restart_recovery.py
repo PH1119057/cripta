@@ -11,6 +11,7 @@ TP/SL/TRAIL035 as the protection owner while runtime remains fail-closed.
 """
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -92,6 +93,33 @@ def _require(condition: bool, reason: str) -> None:
         raise P90RealOpenSourceRecoveryUnverified(
             "P90_REAL_RESTART_SOURCE_" + reason
         )
+
+
+def _wait_for_live_mirror_cursors(
+    mirror: PublicTradeMirrorBuffer, *, mirror_serial: int, mirror_started_at: datetime,
+) -> None:
+    """Wait for initial ticks, never for a replacement/gapped source session.
+
+    Subscribe ACK can precede the first event on a quieter symbol. Do not open
+    a source transaction or consume signed private proof freshness while waiting.
+    This grants no native coverage: all original replay proofs still run below.
+    """
+    deadline = time.monotonic() + 10.0
+    while True:
+        snapshot = mirror.snapshot()
+        _require(
+            snapshot.get("state") == "ACTIVE" and snapshot.get("gaps") == 0
+            and snapshot.get("epoch") == mirror_serial
+            and snapshot.get("epoch_started_at")
+            == mirror_started_at.astimezone(UTC).isoformat(),
+            "LIVE_MIRROR_SESSION_UNVERIFIED",
+        )
+        remaining = deadline - time.monotonic()
+        _require(remaining >= 0, "LIVE_MIRROR_FIVE_SYMBOL_CURSORS_MISSING")
+        if set(mirror.current_cursors()[0]) == _SYMBOLS:
+            return
+        _require(remaining > 0, "LIVE_MIRROR_FIVE_SYMBOL_CURSORS_MISSING")
+        time.sleep(min(0.05, remaining))
 
 
 def _trade_fact(row: ReplayTrade, received_at: datetime) -> MarketFactEnvelope:
@@ -296,14 +324,8 @@ def recover_p90_real_open_source(
         raise P90RealOpenSourceRecoveryUnverified(
             "P90_REAL_RESTART_SOURCE_DEPENDENCIES_INVALID"
         )
-    snapshot = mirror.snapshot()
-    _require(
-        snapshot.get("state") == "ACTIVE"
-        and snapshot.get("gaps") == 0
-        and snapshot.get("epoch") == mirror_serial
-        and snapshot.get("epoch_started_at")
-        == mirror_started_at.astimezone(UTC).isoformat(),
-        "LIVE_MIRROR_SESSION_UNVERIFIED",
+    _wait_for_live_mirror_cursors(
+        mirror, mirror_serial=mirror_serial, mirror_started_at=mirror_started_at,
     )
 
     with connection.transaction():
