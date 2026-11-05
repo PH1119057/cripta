@@ -1678,10 +1678,6 @@ migration/testing/release; MAP records dated independent production evidence.
 Current bundle remains11; routing/mandatory pre-read unchanged. No bootstrap
 change or new Project Source file. Approval is not deployed readiness.
 
-## 68. P90L90 maker-entry/maker-exit research checkpoint — OWNER DECISION 2026-11-05
-
-`RESEARCH_COMPUTE_RULES_RU.md §22.3` preserves the 90-day evidence and explicit source/result SHA256 for P90L90 maker Entry 0.05% sensitivity (PR #453) and the 441 frozen TRAIL035 stop maker-touch/fallback sensitivity (PR #456). The best 5-second exit-only proxy gives `+1.450919986698 USDT` vs the historical `+14.087200729269 USDT` 5-coin shared SECOND48 control (+10.3% **optimistic model-only**). This is a positive research lead for future separate Strategy Candidate exploration of passive resting maker TP and self-managed 5m-candle trailing, **not an approved or tested 5m-trailing system**, not independently validated real maker fills, not a new immutable StrategyCard or a change to `TRADING_CONTOUR §7.6.3/§7.6.5`. History preserves actual source scripts, native-trade QC, limitations, and follow-up full causal replay/independent QC/OOS gates. Current Source bundle=11; paths, base/routed pre-read and root README/AGENTS/Project Instructions are unchanged. No service/runtime/DB/Exchange/LIVE mutation.
-
 ## 67. Resolved REAL mutation latch recovery — 2026-11-05
 
 TC §4.17 owns authenticated recovery after exact confirmed position close;
@@ -1690,3 +1686,7 @@ SQL/audit/testing/release. This implements normal recovery and CLOSED-history
 isolation; no automatic ARM or Exchange mutation. Current11-doc set/routing and
 bootstrap unchanged. Owner requested repair, independently confirmed DOT close
 and original/closing execution IDs are the concrete motivating checkpoint.
+
+## 68. P90L90 maker-entry/maker-exit research checkpoint — OWNER DECISION 2026-11-05
+
+`RESEARCH_COMPUTE_RULES_RU.md §22.3` preserves the 90-day evidence and explicit source/result SHA256 for P90L90 maker Entry 0.05% sensitivity (PR #453) and the 441 frozen TRAIL035 stop maker-touch/fallback sensitivity (PR #456). The best 5-second exit-only proxy gives `+1.450919986698 USDT` vs the historical `+14.087200729269 USDT` 5-coin shared SECOND48 control (+10.3% **optimistic model-only**). This is a positive research lead for future separate Strategy Candidate exploration of passive resting maker TP and self-managed 5m-candle trailing, **not an approved or tested 5m-trailing system**, not independently validated real maker fills, not a new immutable StrategyCard or a change to `TRADING_CONTOUR §7.6.3/§7.6.5`. History preserves actual source scripts, native-trade QC, limitations, and follow-up full causal replay/independent QC/OOS gates. Current Source bundle=11; paths, base/routed pre-read and root README/AGENTS/Project Instructions are unchanged. No service/runtime/DB/Exchange/LIVE mutation.
