@@ -763,6 +763,18 @@ SYSTEMD_SANDBOX, DB_ROLE, EXPECTED_OWNER/GROUP/MODE/ACL, PREFLIGHT_COMMAND`;
 не доказывает Unix write permission. Успешный read-only smoke
 не считается разрешением на mutation.
 
+### 19.5.1 Обязательный повторный pre-read при отказе доступа — OWNER DECISION 2026-11-05
+
+При **любом** сообщении от OpenAI/tool, SentinelX, операционной системы, PostgreSQL, GitHub или systemd о недостатке прав, запрете команды, неразрешённом actor/path, отказе авторизации или неудачной операции с предполагаемой причиной permissions исполнитель **самостоятельно, без дополнительного вопроса владельцу, перечитывает актуальные правила**:
+
+1. `docs/DEVELOPMENT_RELEASE_RULES_RU.md §5.1, §§19.1–19.5`: exact `SCRIPT/SERVICE`, `EFFECTIVE_ACTOR`, `READ_PATHS`, `WRITE_PATHS`, `CREATE_CHILD_PARENTS`, `RENAME_DELETE_PARENTS`, `SYSTEMD_SANDBOX`, `DB_ROLE`, owner/group/mode/ACL и разрешённый transport/tool;
+2. `docs/CURRENT_PROJECT_MAP_RU.md §1.4`: текущая actor/path matrix, фактические подтверждённые permissions, доступные префиксы SentinelX и service identities;
+3. соответствующий routed contract (`RESEARCH_COMPUTE`, `TRADING_CONTOUR`, `ARCH` или иной) и `CHATGPT_INTERACTION_RULES §11.1`.
+
+Далее сопоставить **точную исходную команду, операцию и effective UID/GID/DB role** с правилом и свежим разрешённым read-only evidence. Если ошибка вызвана неверной подготовкой, выбрать **уже утверждённый** actor/путь/команду до первого нового действия, не расширяя полномочий и не выполняя запрещённую операцию. Самостоятельно устранить подтверждённую ошибку выбора ранее утверждённого маршрута; зафиксировать `CHECKED HERE` или `NOT CHECKED HERE` для каждого gate. Если маршрут не указан, permissions не доказаны, либо security layer запретил конкретный вызов — `HARD_STOP`, точная классификация и решение владельца при необходимости. Перечитывание правил не отменяет tool-security gate и **не разрешает** менять actor, payload, encoding или transport для обхода блокировки.
+
+Для подтверждённых временных технических сбоев — безопасный режим до пяти попыток с интервалом не менее 60 секунд согласно §19.6.1. Явные security-denial не повторяются автоматически. При неизвестном исходе mutation сначала проверять фактический результат/job; не создавать дубликат.
+
 ## 19.6 Ошибки tool access — обязательная классификация, не server permission
 
 Для каждого отказа фиксировать: точную операцию, actor, exit/returncode, исходное сообщение, достигла ли команда host, и `CHECKED HERE` либо `NOT CHECKED HERE`. Не говорить «SentinelX не дал доступ», если фактически ошибку вернул защитный уровень OpenAI.
