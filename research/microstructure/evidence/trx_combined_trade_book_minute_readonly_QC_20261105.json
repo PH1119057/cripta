@@ -1,0 +1,38 @@
+{
+  "date_utc": "2026-11-05",
+  "scope": "TRXUSDT 2026-05-18 UTC",
+  "status": "TRX_1DAY_COMBINED_TRADE_BOOK_READ_ONLY_INDEPENDENT_QC_PASS",
+  "job_id": "job_ed54dd876e20",
+  "job_exit_code": 0,
+  "job_duration_seconds": 30.23,
+  "source": "BYBIT_PUBLIC_TRADES_AND_OB200_ARCHIVE",
+  "raw_compressed_trade_bytes": 2360882,
+  "raw_compressed_book_bytes": 16035545,
+  "combined_input_bytes": 18396427,
+  "combined_mart_in_memory_compressed_bytes": 339941,
+  "ratio": 54.12,
+  "hypothetical_artifact_sha256": "87dcdda389c0aea5c3baf80b6bad3d7257201bccc8d6e6344a23399624ff943e",
+  "minute_rows": 1440,
+  "book_events": 464454,
+  "book_snapshots": 1,
+  "independent_numerical_comparisons": {
+    "book": 12960,
+    "visible_decrease": 10080
+  },
+  "mismatches": 0,
+  "source_readers_sha256": {
+    "book": "0c2c094592a4adf84c59b4c7bacecb4bd286091d95d1016613844caae4491cae",
+    "book_qc": "32284306885be2753d4c3d811ce14f35019c8e0dd65a29982cecc43ebc684fc1",
+    "decrease": "197ec366a9988800e6c8838c9ad36937fc7331480fc2eeb6ac0579f53f28e9ea",
+    "decrease_qc": "d09250f95e7dd1d852a4422658c4502070bd460f7aa266e4c1aebb9ed0a48580"
+  },
+  "source_probe_script": "research/microstructure/experiments/trx_book_trade_minute_readonly_probe_v1.py",
+  "previous_verified_source_reacquisition": "research/microstructure/evidence/trx_20260518_20260524_public_source_reacquisition_sha256_20261105.json",
+  "previous_persisted_trade_mart_path": "/data/cripta/research/runs/historical_trade_minute_mart_v1_TRXUSDT_20260518_7d_20261105",
+  "persisted_combined_mart_created": false,
+  "native_event_sequence_preserved": false,
+  "receiver_clock_unknown": true,
+  "source_book_continuity_unknown": true,
+  "full_replacement_parity_verified": false,
+  "raw_delete_allowed": false
+}
