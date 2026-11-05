@@ -865,6 +865,12 @@ def protect_recovered_bot_positions(
     secret: str,
 ) -> int:
     """Restore initial server protection only for exact bot Entry cycles."""
+    # Serialize selection and use of this account's current inventory with
+    # reconciliation/close projection. CLOSED history is never a fill candidate.
+    connection.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+        (TRADING_ACCOUNT_ID,),
+    )
     rows = connection.execute(
         """SELECT c.command_id,c.symbol,min(e.exec_time_ms),c.payload_json
            FROM runtime.trade_commands c
@@ -872,6 +878,12 @@ def protect_recovered_bot_positions(
            WHERE c.command_type='entry'
              AND (c.trading_account_id=%s AND c.identity_status='PROVEN')
              AND (e.trading_account_id=%s AND e.identity_status='PROVEN')
+             AND NOT EXISTS (
+                 SELECT 1 FROM runtime.position_ownership closed_cycle
+                  WHERE closed_cycle.entry_command_id=c.command_id
+                    AND closed_cycle.trading_account_id=c.trading_account_id
+                    AND closed_cycle.state='CLOSED'
+             )
              AND COALESCE(
                    (e.payload_json::jsonb->>'closedSize')::numeric,
                    0
@@ -3878,6 +3890,12 @@ def command_worker_loop(key: str, secret: str) -> None:
             except Exception:
                 connection.rollback()
             next_limit_cleanup = max(next_limit_cleanup, time.monotonic() + 1)
+        # Reconciliation uses this same account lock. Keep the selected
+        # CLOSED/current cycle state stable until ownership/protection commits.
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+            (TRADING_ACCOUNT_ID,),
+        )
         filled_entries=connection.execute(
             """SELECT c.command_id,c.symbol,max(e.exec_time_ms),c.payload_json
                  FROM runtime.trade_commands c
@@ -3886,6 +3904,12 @@ def command_worker_loop(key: str, secret: str) -> None:
                   AND (c.trading_account_id=%s AND c.identity_status='PROVEN')
                   AND (e.trading_account_id=%s AND e.identity_status='PROVEN')
                   AND COALESCE((e.payload_json::jsonb->>'closedSize')::numeric,0)=0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM runtime.position_ownership closed_cycle
+                       WHERE closed_cycle.entry_command_id=c.command_id
+                         AND closed_cycle.trading_account_id=c.trading_account_id
+                         AND closed_cycle.state='CLOSED'
+                  )
                 GROUP BY c.command_id,c.symbol,c.payload_json""",
             (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
         ).fetchall()
