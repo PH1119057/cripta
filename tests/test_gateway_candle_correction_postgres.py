@@ -3,6 +3,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -30,9 +31,24 @@ def test_guarded_correction_retains_original_is_idempotent_and_shared():
             "VALUES (%s,'venue-bybit','LINEAR','APTUSDT') ON CONFLICT DO NOTHING",
             (KEY[1],),
         )
+        schema = "gateway_fix_" + uuid4().hex
+        c.execute(f"CREATE SCHEMA {schema}")
+        c.execute(f"GRANT USAGE ON SCHEMA {schema} TO cripta")
+        c.execute(f"CREATE TABLE {schema}.closed_candles "
+                  "(LIKE analytics.closed_candles INCLUDING ALL)")
+        c.execute(f"GRANT SELECT,INSERT ON {schema}.closed_candles TO cripta")
+        c.execute(f"CREATE TABLE {schema}.execution_gates(mode text,enabled integer)")
+        c.execute(f"INSERT INTO {schema}.execution_gates VALUES ('mainnet',0)")
+        c.execute(f"CREATE TABLE {schema}.position_ownership(state text)")
+        c.execute(f"CREATE TABLE {schema}.trade_commands(state text)")
+        migration = SQL.replace("analytics.", schema + ".").replace(
+            "control.execution_gates", schema + ".execution_gates",
+        ).replace("runtime.position_ownership", schema + ".position_ownership").replace(
+            "runtime.trade_commands", schema + ".trade_commands",
+        )
         where = "market_source_id=%s AND instrument_id=%s AND timeframe=%s AND closed_at=%s"
         c.execute(
-            "INSERT INTO analytics.closed_candles"
+            f"INSERT INTO {schema}.closed_candles"
             "(market_source_id,venue_id,instrument_id,external_symbol,product_category,"
             "timeframe,opened_at,closed_at,open,high,low,close,volume,source_transport,"
             "producer_release_commit,observed_at) VALUES "
@@ -44,21 +60,31 @@ def test_guarded_correction_retains_original_is_idempotent_and_shared():
         )
         try:
             original = c.execute(
-                "SELECT to_jsonb(c) FROM analytics.closed_candles c WHERE " + where, KEY,
+                f"SELECT to_jsonb(c) FROM {schema}.closed_candles c WHERE " + where, KEY,
             ).fetchone()[0]
             # Gate ON prevents a first correction, never silently changes history.
-            c.execute("UPDATE control.execution_gates SET enabled=1 WHERE mode='mainnet'")
+            c.execute(f"UPDATE {schema}.execution_gates SET enabled=1 WHERE mode='mainnet'")
             with pytest.raises(psycopg.errors.RaiseException, match="DISARMED_FLAT"):
-                c.execute(SQL)
+                c.execute(migration)
             c.execute("ROLLBACK")
-            c.execute("UPDATE control.execution_gates SET enabled=0 WHERE mode='mainnet'")
-            c.execute(SQL)
-            c.execute(SQL)  # installer rerun is an exact no-op
+            c.execute(f"UPDATE {schema}.execution_gates SET enabled=0 WHERE mode='mainnet'")
+            c.execute(f"INSERT INTO {schema}.position_ownership VALUES ('OPEN')")
+            with pytest.raises(psycopg.errors.RaiseException, match="DISARMED_FLAT"):
+                c.execute(migration)
+            c.execute("ROLLBACK")
+            c.execute(f"DELETE FROM {schema}.position_ownership")
+            c.execute(f"UPDATE {schema}.closed_candles SET close=.6392")
+            with pytest.raises(psycopg.errors.RaiseException, match="PRECONDITION_DRIFT"):
+                c.execute(migration)
+            c.execute("ROLLBACK")
+            c.execute(f"UPDATE {schema}.closed_candles SET close=.6393")
+            c.execute(migration)
+            c.execute(migration)  # installer rerun is an exact no-op
             assert c.execute(
-                "SELECT to_jsonb(c) FROM analytics.closed_candles c WHERE " + where, KEY,
+                f"SELECT to_jsonb(c) FROM {schema}.closed_candles c WHERE " + where, KEY,
             ).fetchone()[0] == original
             assert c.execute(
-                "SELECT original_record FROM analytics.closed_candle_corrections WHERE "
+                f"SELECT original_record FROM {schema}.closed_candle_corrections WHERE "
                 + where, KEY,
             ).fetchone()[0] == original
             c.execute("SET ROLE cripta")
@@ -66,7 +92,13 @@ def test_guarded_correction_retains_original_is_idempotent_and_shared():
             corrected = Candle("APTUSDT", "5", KEY[3]-timedelta(minutes=5), KEY[3],
                                Decimal(".6391"), Decimal(".6395"), Decimal(".638"),
                                Decimal(".6394"), Decimal("17006.02"))
-            store = SharedClosedCandleStore(c, key)
+            class IsolatedSource:
+                def execute(self, query, args=()):
+                    return c.execute(query.replace("analytics.", schema + "."), args)
+                def transaction(self): return c.transaction()
+                def cursor(self): return c.cursor()
+
+            store = SharedClosedCandleStore(IsolatedSource(), key)
             assert store.history(through=KEY[3], required=1) == (corrected,)
             assert store.ingest(
                 (corrected,), producer_release_commit="a"*40,
@@ -74,15 +106,13 @@ def test_guarded_correction_retains_original_is_idempotent_and_shared():
             ) == 0
             assert c.execute(
                 "SELECT has_table_privilege(current_user,"
-                "'analytics.closed_candle_corrections','INSERT'),"
-                "has_table_privilege(current_user,'analytics.closed_candles','UPDATE')"
+                f"'{schema}.closed_candle_corrections','INSERT'),"
+                f"has_table_privilege(current_user,'{schema}.closed_candles','UPDATE')"
             ).fetchone() == (False, False)
         finally:
             c.execute("ROLLBACK")
             c.execute("RESET ROLE")
-            c.execute("UPDATE control.execution_gates SET enabled=0 WHERE mode='mainnet'")
-            c.execute("DELETE FROM analytics.closed_candle_corrections WHERE " + where, KEY)
-            c.execute("DELETE FROM analytics.closed_candles WHERE " + where, KEY)
+            c.execute(f"DROP SCHEMA {schema} CASCADE")
 
 
 def test_migration_has_no_original_history_or_financial_mutation():
