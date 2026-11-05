@@ -12,10 +12,34 @@ from typing import Protocol
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.strategy_position import StrategyPosition
+from bybit_workbench.universal_entry.contracts import FrozenPolicy, MarketFactEnvelope
+from bybit_workbench.universal_entry.fingerprint import fingerprint
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
     VERSION,
 )
+
+from .contracts import ExitEvaluation, ExitEvaluationStatus, ExitObservation
+
+
+def pending_private_evaluation(
+    position: StrategyPosition, fact: MarketFactEnvelope,
+) -> ExitEvaluation:
+    """Durable BLOCKED evaluation, never a fabricated signed observation/PASS."""
+    identity = fingerprint({"position": position.strategy_position_id,
+                            "plan": position.exit_plan_fingerprint, "fact": fact.fact_id})
+    observation = ExitObservation(
+        observation_id="p90-private-pending-" + identity[:32],
+        strategy_position_id=position.strategy_position_id, symbol=position.symbol,
+        event_at=fact.event_at, observed_at=fact.observed_at,
+        received_at=fact.received_at, event_kind=fact.event_kind,
+        attributes=FrozenPolicy.from_mapping({"private_evidence_pending": True}),
+        source_refs=fact.source_refs,
+    )
+    return ExitEvaluation(
+        evaluation_id="p90-private-blocked-" + identity[:32], observation=observation,
+        status=ExitEvaluationStatus.BLOCKED, reason="P90_REAL_PENDING_EXIT_COMMAND_UNVERIFIED",
+    )
 
 
 class CursorLike(Protocol):

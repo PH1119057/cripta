@@ -155,22 +155,33 @@ class P90RealSignedRecoveryAccountReader:
             )
         return parsed
 
+    def _pages(self, endpoint: str, params: dict[str, str], code: str) -> list[object]:
+        """A cursor is a continuation, never evidence of a broken account."""
+        rows: list[object] = []
+        seen: set[str] = set()
+        for _ in range(100):
+            raw = self._signed(endpoint, dict(params))
+            result = raw["result"]
+            assert isinstance(result, Mapping)
+            page = result.get("list")
+            cursor = result.get("nextPageCursor")
+            if result.get("category") != "linear" or not isinstance(page, list):
+                raise P90RealRecoveryAccountUnverified(code)
+            rows.extend(page)
+            if cursor in ("", None):
+                return rows
+            if not isinstance(cursor, str) or cursor in seen or len(cursor) > 4096:
+                raise P90RealRecoveryAccountUnverified(code)
+            seen.add(cursor)
+            params = {**params, "cursor": cursor}
+        raise P90RealRecoveryAccountUnverified(code)
+
     def _positions(self) -> tuple[Mapping[str, object], ...]:
-        raw = self._signed(
+        rows = self._pages(
             "/v5/position/list",
             {"category": "linear", "settleCoin": "USDT", "limit": "200"},
+            "P90_REAL_RECOVERY_POSITION_INVENTORY_INCOMPLETE",
         )
-        result = raw["result"]
-        assert isinstance(result, Mapping)
-        rows = result.get("list")
-        if (
-            result.get("category") != "linear"
-            or not isinstance(rows, list)
-            or result.get("nextPageCursor") not in ("", None)
-        ):
-            raise P90RealRecoveryAccountUnverified(
-                "P90_REAL_RECOVERY_POSITION_INVENTORY_INCOMPLETE"
-            )
         positions: list[Mapping[str, object]] = []
         for raw_row in rows:
             if not isinstance(raw_row, Mapping):
@@ -209,24 +220,14 @@ class P90RealSignedRecoveryAccountReader:
         positions: tuple[Mapping[str, object], ...],
     ) -> None:
         """Allow only Exchange-resident TP/SL owned by the signed position."""
-        raw = self._signed(
+        rows = self._pages(
             "/v5/order/realtime",
             {
                 "category": "linear", "settleCoin": "USDT",
                 "openOnly": "0", "limit": "50",
             },
+            "P90_REAL_RECOVERY_OPEN_ORDER_OR_INCOMPLETE_INVENTORY",
         )
-        result = raw["result"]
-        assert isinstance(result, Mapping)
-        rows = result.get("list")
-        if (
-            result.get("category") != "linear"
-            or not isinstance(rows, list)
-            or result.get("nextPageCursor") not in ("", None)
-        ):
-            raise P90RealRecoveryAccountUnverified(
-                "P90_REAL_RECOVERY_OPEN_ORDER_OR_INCOMPLETE_INVENTORY"
-            )
         expected: dict[tuple[str, str], tuple[str, Decimal, Decimal]] = {}
         for position in positions:
             symbol = str(position["symbol"])

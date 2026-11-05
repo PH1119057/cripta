@@ -19,6 +19,7 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
     VERSION,
 )
+from bybit_workbench.universal_entry.trade_mirror import MirrorTrade
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 
 from .contracts import ExitEvaluation, ExitEvaluationStatus
@@ -29,11 +30,13 @@ from .p90l90_real_observation import (
     ScopedPrivatePositionEvidence,
     build_real_native_exit_observation,
 )
+from .p90l90_real_pending import pending_private_evaluation
 from .storage import PostgresExitShadowStore
 
 PositionProvider = Callable[[str], Sequence[tuple[StrategyPosition, ExitPlan]]]
 ExecutionPort = Callable[[ExitEvaluation, StrategyPosition, ExitPlan], object]
 SourceCoverageProvider = Callable[[StrategyPosition, TradeCursor], tuple[bool, bool]]
+NativePrefixProvider = Callable[[StrategyPosition, TradeCursor], Sequence[MirrorTrade]]
 SignedPrivateProvider = Callable[
     [StrategyPosition, TradeCursor], ScopedPrivatePositionEvidence,
 ]
@@ -52,6 +55,8 @@ class P90RealExitNativePort:
         mfe_ledger: P90RealMfeLedger,
         exit_store: PostgresExitShadowStore,
         verified_execution_port: ExecutionPort | None = None,
+        verified_native_prefix: NativePrefixProvider | None = None,
+        private_state_pending: Callable[[StrategyPosition], bool] | None = None,
     ) -> None:
         self._positions = position_provider
         self._coverage = independently_verified_source_coverage
@@ -61,6 +66,8 @@ class P90RealExitNativePort:
         self._exit_store = exit_store
         self._execution_port = verified_execution_port
         self._engine = UniversalExitEngine()
+        self._prefix = verified_native_prefix
+        self._pending = private_state_pending
 
     def __call__(
         self,
@@ -97,8 +104,22 @@ class P90RealExitNativePort:
                 or position.initial_protection_confirmed_at is None
             ):
                 raise P90RealMfeUnverified("P90_REAL_EXIT_WRONG_POSITION_OR_PLAN")
+            if self._prefix is not None:
+                for trade in self._prefix(position, cursor):
+                    earlier = TradeCursor(
+                        symbol=trade.symbol, seq=trade.seq, exec_id=trade.exec_id,
+                        traded_at=trade.traded_at,
+                    )
+                    first, contiguous = self._coverage(position, earlier)
+                    self._mfe.on_trade(
+                        position=position, source_commit=self._source_commit,
+                        fact_id="trade-" + trade.exec_id, cursor=earlier,
+                        price=Decimal(trade.price), received_at=trade.received_at,
+                        source_refs=(f"bybit:publicTrade:{trade.symbol}:{trade.exec_id}",),
+                        first_fill_forward_coverage_proven=first,
+                        native_continuity_proven=contiguous,
+                    )
             first_contiguous, subsequent_contiguous = self._coverage(position, cursor)
-            private = self._private(position, cursor)
             mfe = self._mfe.on_trade(
                 position=position,
                 source_commit=self._source_commit,
@@ -110,6 +131,12 @@ class P90RealExitNativePort:
                 first_fill_forward_coverage_proven=first_contiguous,
                 native_continuity_proven=subsequent_contiguous,
             )
+            if self._pending is not None and self._pending(position):
+                evaluation = pending_private_evaluation(position, fact)
+                self._exit_store.record(evaluation, position=position, plan=plan)
+                results.append(evaluation)
+                continue
+            private = self._private(position, cursor)
             observation = build_real_native_exit_observation(
                 position=position, checkpoint=mfe, cursor=cursor,
                 price=price, native_fact_id=fact.fact_id,

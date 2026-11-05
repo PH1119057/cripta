@@ -23,7 +23,7 @@ from bybit_workbench.universal_entry.p90l90_real_restart_bridge import (
 from bybit_workbench.universal_entry.p90l90_real_shared_candle_ledger import (
     P90RealSharedCandleLedger,
 )
-from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
+from bybit_workbench.universal_entry.trade_mirror import MirrorTrade, PublicTradeMirrorBuffer
 from bybit_workbench.universal_entry.transport_continuity import (
     ContinuityNotProvable,
     TradeCursor,
@@ -274,6 +274,53 @@ class P90RealLiveSourcePorts:
                 )
         self._snapshot()
         return True, True
+
+    def native_prefix(
+        self, position: StrategyPosition, cursor: TradeCursor,
+    ) -> tuple[MirrorTrade, ...]:
+        """Original ticks seen before the newly committed fill became visible.
+
+        Return evidence only. The Exit owner appends every tick to MFE in the
+        source transaction; historical ticks never publish historical commands.
+        Existing native_coverage still independently verifies each transition.
+        """
+        self._source_transaction()
+        row = self._db.execute(
+            "SELECT attributes FROM strategy_exit.exit_observations "
+            "WHERE strategy_position_id=%s AND exit_plan_fingerprint=%s "
+            "AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT' "
+            "ORDER BY (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,"
+            "event_at DESC,observation_id DESC LIMIT 1",
+            (position.strategy_position_id, position.exit_plan_fingerprint),
+        ).fetchone()
+        prior = None
+        if row is not None:
+            attrs = row.get("attributes") if isinstance(row, Mapping) else row[0]
+            if not isinstance(attrs, Mapping):
+                raise P90RealLiveSourceUnverified("P90_REAL_LIVE_SOURCE_MFE_ATTRIBUTES_INVALID")
+            prior = P90RealMfeCheckpoint.restore(attrs.get("checkpoint"))
+        trades = self._mirror.verified_fill_forward_events(
+            symbol=position.symbol,
+            fill_at=position.fill_at if prior is None else prior.cursor_at,
+            at=datetime.now(UTC),
+        )
+        exact = [(t.exec_id, t.seq, t.traded_at) for t in trades]
+        current = (cursor.exec_id, cursor.seq, cursor.traded_at)
+        if exact.count(current) != 1:
+            raise P90RealLiveSourceUnverified("P90_REAL_LIVE_SOURCE_CURRENT_EXACT_TRADE_MISSING")
+        start = 0
+        if prior is not None:
+            anchor = (prior.cursor_exec_id, prior.cursor_seq, prior.cursor_at)
+            if exact.count(anchor) != 1:
+                raise P90RealLiveSourceUnverified(
+                    "P90_REAL_LIVE_SOURCE_PREVIOUS_ANCHOR_EVICTED_OR_REORDERED"
+                )
+            start = exact.index(anchor) + 1
+        end = exact.index(current)
+        if end < start - 1 or end - start > 10000:
+            raise P90RealLiveSourceUnverified("P90_REAL_LIVE_SOURCE_NATIVE_CURSOR_REGRESSION")
+        self._snapshot()
+        return trades[start:end] if end >= start else ()
 
     def closed_history(self, symbol: str, boundary: datetime):
         """Only the 36 already-emitted original 5m bars, no future OHLC."""
