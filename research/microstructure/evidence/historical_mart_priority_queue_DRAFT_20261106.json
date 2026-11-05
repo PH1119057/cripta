@@ -1,0 +1,193 @@
+{
+  "status": "RESEARCH_BATCH_PRIORITY_DRAFT_NO_DELETE_NO_EXECUTION",
+  "as_of": "2026-11-06",
+  "source_inventory": "research/microstructure/evidence/legacy_raw_storage_inventory_20261105.json",
+  "source_scope": "May 18 to Aug 15 2026 native orderbook and May 17 to Aug 15 public trades, historical Bybit",
+  "ordering": "eligible non-protected symbols sorted ascending by exact compressed input bytes, heavy BTC/ETH later",
+  "readiness_gate": "one-symbol-day stage1 -> one-symbol-week stage2 -> bounded 30d -> full 90d and independent QC, no concurrent heavy jobs",
+  "raw_purge": false,
+  "queue": [
+    {
+      "research_priority": 1,
+      "symbol": "TRXUSDT",
+      "total_bytes": 1271917632,
+      "ob200_bytes": 1107130535,
+      "trade_bytes": 164787097,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 7,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 2,
+      "symbol": "BCHUSDT",
+      "total_bytes": 1644886535,
+      "ob200_bytes": 1393562500,
+      "trade_bytes": 251324035,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 3,
+      "symbol": "HBARUSDT",
+      "total_bytes": 2107781917,
+      "ob200_bytes": 1788658457,
+      "trade_bytes": 319123460,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 4,
+      "symbol": "BNBUSDT",
+      "total_bytes": 2152726446,
+      "ob200_bytes": 1874045107,
+      "trade_bytes": 278681339,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 5,
+      "symbol": "UNIUSDT",
+      "total_bytes": 2371612913,
+      "ob200_bytes": 1913122766,
+      "trade_bytes": 458490147,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 6,
+      "symbol": "ADAUSDT",
+      "total_bytes": 2480841883,
+      "ob200_bytes": 2006242897,
+      "trade_bytes": 474598986,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 7,
+      "symbol": "OPUSDT",
+      "total_bytes": 3192071137,
+      "ob200_bytes": 2522855412,
+      "trade_bytes": 669215725,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 8,
+      "symbol": "AVAXUSDT",
+      "total_bytes": 3282321847,
+      "ob200_bytes": 2719284205,
+      "trade_bytes": 563037642,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 9,
+      "symbol": "LINKUSDT",
+      "total_bytes": 3581459983,
+      "ob200_bytes": 3022161560,
+      "trade_bytes": 559298423,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 10,
+      "symbol": "SUIUSDT",
+      "total_bytes": 3805917381,
+      "ob200_bytes": 3113040696,
+      "trade_bytes": 692876685,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 11,
+      "symbol": "AAVEUSDT",
+      "total_bytes": 3915246642,
+      "ob200_bytes": 3149305589,
+      "trade_bytes": 765941053,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 12,
+      "symbol": "SOLUSDT",
+      "total_bytes": 5687741755,
+      "ob200_bytes": 4275064166,
+      "trade_bytes": 1412677589,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 13,
+      "symbol": "XRPUSDT",
+      "total_bytes": 6978553365,
+      "ob200_bytes": 5596142176,
+      "trade_bytes": 1382411189,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 14,
+      "symbol": "BTCUSDT",
+      "total_bytes": 21151835245,
+      "ob200_bytes": 15186574369,
+      "trade_bytes": 5965260876,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    },
+    {
+      "research_priority": 15,
+      "symbol": "ETHUSDT",
+      "total_bytes": 21245674164,
+      "ob200_bytes": 14420736694,
+      "trade_bytes": 6824937470,
+      "full_90d_materialized": false,
+      "external_source_reacquisition_sha_proved_days": 0,
+      "ready_to_delete": false
+    }
+  ],
+  "protected": [
+    {
+      "symbol": "APTUSDT",
+      "bytes": 3098994998,
+      "reason": "native_event_consumers_and_455_P90_symlink_dependencies",
+      "ready_to_delete": false
+    },
+    {
+      "symbol": "ARBUSDT",
+      "bytes": 3481052377,
+      "reason": "native_event_consumers_and_455_P90_symlink_dependencies",
+      "ready_to_delete": false
+    },
+    {
+      "symbol": "DOTUSDT",
+      "bytes": 3144450820,
+      "reason": "native_event_consumers_and_455_P90_symlink_dependencies",
+      "ready_to_delete": false
+    },
+    {
+      "symbol": "INJUSDT",
+      "bytes": 2890068834,
+      "reason": "native_event_consumers_and_455_P90_symlink_dependencies",
+      "ready_to_delete": false
+    },
+    {
+      "symbol": "LTCUSDT",
+      "bytes": 1778207616,
+      "reason": "native_event_consumers_and_455_P90_symlink_dependencies",
+      "ready_to_delete": false
+    }
+  ]
+}
