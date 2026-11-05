@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 from decimal import Decimal as D
+from pathlib import Path
+import importlib.util
 
 from scripts.research import p90l90_exit_90d_v2 as base
-from scripts.research import p90l90_postonly_offset005_v1 as research
+
+# CI can load 'scripts.research' from an installed namespace package that
+# lacks newly added research files. Read the exact checked-out source directly.
+source = Path(__file__).resolve().parents[1] / "scripts/research/p90l90_postonly_offset005_v1.py"
+spec = importlib.util.spec_from_file_location("p90l90_postonly_offset005_v1", source)
+assert spec is not None and spec.loader is not None
+research = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(research)
 
 
 def event(side="LONG", price="100", t=1000):
