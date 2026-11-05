@@ -183,6 +183,8 @@ mainnet gate, Strategy activation или фактических данных с�
 
 ## 11.1 Точная коммуникация об отказах доступа
 
+**OWNER DECISION 2026-11-05 — permission-denial first action:** при любом сообщении о недостатке прав, запрете actor/path, `command_not_allowed`, Unix `EACCES` / `EPERM`, DB-role или GitHub-authorization failure самостоятельно перечитать `DEVELOPMENT_RELEASE §5.1, §§19.1–19.5` и `CURRENT_PROJECT_MAP §1.4`, а также соответствующий routed contract. Сверить exact effective actor, инструмент, путь, операции READ/WRITE/CREATE/RENAME/DELETE, owner/group/mode/ACL, systemd sandbox и DB role с фактическим ответом. Не требовать от владельца повторного объяснения давно закреплённого маршрута. Исправлять ошибки подготовки только в рамках ранее утверждённых прав; явный upstream security-denial не обходить и не превращать в автоматические повторы.
+
 **OWNER DECISION 2026-11-05 — автономное восстановление:** до обращения к
 владельцу самостоятельно применить `DEVELOPMENT_RELEASE §19.6.1`: до пяти
 безопасных повторов подтверждённых временных технических ошибок, с интервалом
