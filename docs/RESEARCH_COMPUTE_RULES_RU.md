@@ -8,6 +8,8 @@
 
 ### Tool refusals и сохранение прогресса
 
+**OWNER DECISION 2026-11-05 — permission pre-read before research retry:** если инструмент, Unix, PostgreSQL или service сообщает об отсутствии прав, немедленно перечитать `DEVELOPMENT_RELEASE §5.1, §§19.1–19.5`, `CURRENT_PROJECT_MAP §1.4` и соответствующий research actor/path contract. Сверить actual UID/GID, group, path traverse/read/write/create, ACL, sandbox, DB role, exact allowlisted command и наличие результата/job перед дальнейшим действием. Не подменять ошибку подготовки мнением, что надо просить владельца изменить права; только уже approved route. Запрещённую защитой операцию не повторять автоматически и не обходить сменой actor или транспортом.
+
 **OWNER DECISION 2026-11-05:** технические transient ошибки в пределах
 разрешённого research rail самостоятельно обрабатывать до пяти попыток с
 интервалами не менее 60 секунд по `DEVELOPMENT_RELEASE §19.6.1`.
