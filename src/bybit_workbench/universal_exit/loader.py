@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol, cast
 
+from bybit_workbench.entry_cycle_recovery import position_fingerprint
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import ExitPlan, FrozenPolicy, TradeDirection
 
@@ -46,13 +48,18 @@ def load_exit_binding(
                   p.symbol,p.side,p.actual_avg_fill,p.actual_qty,p.fill_at,
                   p.strategy_execution_binding_id,p.execution_leg,p.trading_account_id,
                   p.identity_status,p.initial_protection_confirmed_at,
-                  ep.exit_plan_version,ep.plan_json
+                  ep.exit_plan_version,ep.plan_json,p.close_link_status,p.execution_ids,
+                  hp.payload_json AS current_position_payload
              FROM runtime.position_ownership p
              JOIN strategy_entry.exit_plans ep
                ON ep.exit_plan_fingerprint=p.exit_plan_fingerprint
               AND ep.strategy_id=p.strategy_id
               AND ep.strategy_version=p.strategy_version
               AND ep.strategy_config_fingerprint=p.strategy_config_fingerprint
+             LEFT JOIN runtime.hot_positions hp
+               ON hp.trading_account_id=p.trading_account_id
+              AND hp.symbol=p.symbol AND hp.position_idx=p.position_idx
+              AND hp.identity_status='PROVEN'
             WHERE p.position_id=%s
               AND p.state IN ('OPEN','RECONCILIATION_REQUIRED')
               AND p.bot_instance_id='universal-entry'
@@ -64,6 +71,33 @@ def load_exit_binding(
         raise KeyError(
             f"logically open Universal StrategyPosition not found: {strategy_position_id}"
         )
+    if row.get("close_link_status") == "F01_CURRENT_CYCLE_UNPROVEN":
+        raise RuntimeError("F01_CURRENT_CYCLE_UNPROVEN")
+
+    # Original fills remain immutable in the ownership row. A recovery proof
+    # supplies the current partial remainder only for this exact position.
+    actual_qty = Decimal(str(row.get("actual_qty")))
+    raw = row.get("current_position_payload")
+    current = json.loads(raw) if isinstance(raw, str) else raw
+    if isinstance(current, Mapping):
+        proof = current.get("__cripta_entry_cycle")
+        if isinstance(proof, Mapping) and proof.get("entry_command_id") == row["entry_command_id"]:
+            executions = row.get("execution_ids")
+            executions = json.loads(executions) if isinstance(executions, str) else executions
+            proven_ids = proof.get("entry_execution_ids")
+            remainder = Decimal(str(proof.get("remaining_qty")))
+            if not (
+                proof.get("schema") == "EXACT_CURRENT_ENTRY_CYCLE_V1"
+                and proof.get("account") == row["trading_account_id"]
+                and proof.get("position_fingerprint") == position_fingerprint(current)
+                and Decimal(str(proof.get("filled_qty"))) == actual_qty
+                and isinstance(executions, list) and isinstance(proven_ids, list)
+                and set(proven_ids) == set(executions)
+                and 0 < remainder <= actual_qty
+                and remainder == Decimal(str(current.get("size")))
+            ):
+                raise RuntimeError("F01_CURRENT_REMAINDER_UNPROVEN")
+            actual_qty = remainder
 
     fill_at = row.get("fill_at")
     if not isinstance(fill_at, datetime):
@@ -101,7 +135,7 @@ def load_exit_binding(
         symbol=_required_text(row, "symbol"),
         direction=direction,
         actual_avg_fill=Decimal(str(row.get("actual_avg_fill"))),
-        actual_qty=Decimal(str(row.get("actual_qty"))),
+        actual_qty=actual_qty,
         fill_at=fill_at.astimezone(UTC),
         strategy_execution_binding_id=(
             None if row.get("strategy_execution_binding_id") is None

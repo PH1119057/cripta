@@ -71,6 +71,10 @@ def isolated_pg():
             "side text,size numeric,entry_price numeric,"
             "position_idx integer,payload_json jsonb)"
         )
+        connection.execute(
+            f"CREATE TABLE {schema}.recovered_closed_entry_cycles ("
+            "entry_order_id text,entry_execution_ids jsonb)"
+        )
         yield connection, schema
     finally:
         # No COMMIT: even successful tests destroy their temporary schema/data.

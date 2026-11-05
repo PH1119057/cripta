@@ -113,13 +113,14 @@ def test_current_bybit_position_matches_latest_stable_owned_cycle() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     assert "latest_by_key" in source
     assert 'and str(current.get("side") or "") == side' in source
-    assert 'and Decimal(str(current.get("size") or 0)) == Decimal(str(row[5]))' not in source
-    assert 'and Decimal(str(current.get("avgPrice") or 0)) == Decimal(str(row[4]))' not in source
+    recovery = source.split("if (current_matches and not native_first_fill", 1)[1]
+    assert "_f01_current_cycle(" in recovery
+    assert "position_id == verified_first_fill_position_id" in source
 
 
 def test_unproven_flat_snapshot_keeps_last_proven_owner_visible_to_exit() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert "state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK'" in source
+    assert "state IN ('OPEN','RECONCILIATION_REQUIRED')" in source
     unresolved_branch = source.split(
         'if close.status != "EXACT" or close.exit_order_id is None:', 1
     )[1].split("protection_rows =", 1)[0]

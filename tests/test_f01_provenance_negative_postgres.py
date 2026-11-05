@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import sys
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,8 +17,13 @@ from uuid import uuid4
 
 import pytest
 
+from bybit_workbench.entry_cycle_recovery import RecoveryInventory
+
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 SOURCE = Path(__file__).resolve().parents[1] / "operations/connectivity/private_runtime.py"
+sys.path.insert(0, str(SOURCE.parent))
+import private_runtime as runtime  # noqa: E402
+
 pytestmark = pytest.mark.skipif(not DSN, reason="requires disposable PostgreSQL")
 
 
@@ -38,7 +44,7 @@ def isolated_pg():
         connection.execute(
             f"CREATE TABLE {schema}.executions (exec_id text,order_id text,"
             "order_link_id text,exec_time_ms bigint,trading_account_id text,"
-            "identity_status text,payload_json jsonb,side text,exec_qty numeric)"
+            "identity_status text,payload_json jsonb,side text,exec_qty numeric,exec_price numeric)"
         )
         connection.execute(
             f"CREATE TABLE {schema}.position_ownership (entry_command_id text,"
@@ -52,6 +58,11 @@ def isolated_pg():
         connection.execute(
             f"CREATE TABLE {schema}.recovered_closed_entry_cycles (entry_order_id text,"
             "symbol text,entry_execution_ids jsonb)"
+        )
+        connection.execute(
+            f"CREATE TABLE {schema}.connection_events (at_epoch_ms bigint,channel text,"
+            "event text,details_json text,trading_account_id text,account_connector_id text,"
+            "identity_status text)"
         )
         yield connection, schema
     finally:
@@ -72,7 +83,7 @@ def seed_counterexample(connection, schema: str, account: str, scenario: str) ->
     )
     connection.execute(
         f"INSERT INTO {schema}.executions VALUES "
-        "(%s,%s,%s,1000,%s,'PROVEN',%s::jsonb,'Buy',1.25)",
+        "(%s,%s,%s,1000,%s,'PROVEN',%s::jsonb,'Buy',1.25,125)",
         ("old-exec", "old-order", "old-entry", account, '{"closedSize":"0"}'),
     )
     side = "Sell" if scenario == "wrong_side" else "Buy"
@@ -84,6 +95,7 @@ def seed_counterexample(connection, schema: str, account: str, scenario: str) ->
         "size": str(qty),
         "stopLoss": "0",
         "trailingStop": "0",
+        "avgPrice": "125", "seq": "20", "updatedTime": "2000",
         # No openTime, just like the audited production failure shape.
     }
     connection.execute(
@@ -128,30 +140,64 @@ def current_candidates(connection, schema: str, account: str, path: str) -> list
     return [str(x[0]) for x in connection.execute(sql, (account, account)).fetchall()]
 
 
+class ScopedConnection:
+    def __init__(self, connection, schema):
+        self.connection, self.schema = connection, schema
+
+    def execute(self, statement, parameters=()):
+        return self.connection.execute(statement.replace("runtime.", self.schema + "."), parameters)
+
+    def commit(self):
+        pass  # All disposable effects remain in the rolled-back transaction.
+
+
+def inventory_for(connection, schema, account):
+    position = connection.execute(f"SELECT payload_json FROM {schema}.hot_positions").fetchone()[0]
+    fill = {"execId": "old-exec", "orderId": "old-order", "orderLinkId": "old-entry",
+            "execTime": "1000", "execType": "Trade", "symbol": "DOTUSDT", "side": "Buy",
+            "execQty": "1.25", "execPrice": "125", "closedSize": "0", "seq": "10"}
+    order = {"orderId": "old-order", "orderLinkId": "old-entry", "symbol": "DOTUSDT",
+             "side": "Buy", "positionIdx": 0, "cumExecQty": "1.25", "avgPrice": "125"}
+    return RecoveryInventory(account, "connector-" + account, 999, 2500, 3000,
+                             (position,), (fill,), {"old-order": order})
+
+
+def configure_runtime(monkeypatch, connection, schema, account):
+    inventory = inventory_for(connection, schema, account)
+    monkeypatch.setattr(runtime, "TRADING_ACCOUNT_ID", account)
+    monkeypatch.setattr(runtime, "ACCOUNT_CONNECTOR_ID", "connector-" + account)
+    monkeypatch.setattr(runtime, "_f01_recovery_denials", {})
+    monkeypatch.setattr(runtime, "_f01_signed_inventory", lambda *_a: inventory)
+    monkeypatch.setattr(runtime, "atomic_status", lambda *_a: None)
+    monkeypatch.setattr(runtime, "time", SimpleNamespace(time=lambda: 3))
+    return inventory
+
+
 @pytest.mark.parametrize("account", ["MAIN", "SUB"])
 @pytest.mark.parametrize("path", ["command_worker_loop", "protect_recovered_bot_positions"])
 @pytest.mark.parametrize("scenario", ["wrong_side", "excess_qty", "already_recovered_closed"])
 def test_unrelated_unique_historical_entry_must_not_bind_current_position(
-    isolated_pg, account, path, scenario,
+    isolated_pg, monkeypatch, account, path, scenario,
 ):
     connection, schema = isolated_pg
     seed_counterexample(connection, schema, account, scenario)
-    # Zero eligible: current open position has no proven link to old Entry.
-    # Single account/symbol candidate is not exact Exchange execution proof.
-    assert current_candidates(connection, schema, account, path) == []
+    configure_runtime(monkeypatch, connection, schema, account)
+    # SQL discovers candidates; only the production exact-cycle proof can
+    # authorize ownership. Test the final verdict, not discovery alone.
+    accepted = [entry for entry in current_candidates(connection, schema, account, path)
+                if runtime._f01_current_cycle(ScopedConnection(connection, schema), entry,
+                                              "DOTUSDT", "unused", "unused") is not None]
+    assert accepted == []
 
 
 @pytest.mark.parametrize("account", ["MAIN", "SUB"])
 @pytest.mark.parametrize("scenario", ["wrong_side", "already_recovered_closed"])
 def test_actual_startup_recovery_must_not_send_old_protection_to_other_position(
-    isolated_pg, account, scenario,
+    isolated_pg, monkeypatch, account, scenario,
 ):
     connection, schema = isolated_pg
     seed_counterexample(connection, schema, account, scenario)
-
-    class ScopedConnection:
-        def execute(self, statement, parameters=()):
-            return connection.execute(statement.replace("runtime.", schema + "."), parameters)
+    configure_runtime(monkeypatch, connection, schema, account)
 
     function = production_function("protect_recovered_bot_positions")
     calls = []
@@ -179,12 +225,13 @@ def test_actual_startup_recovery_must_not_send_old_protection_to_other_position(
             Decimal("120.00"), None,
         ),
         "reconcile": lambda *_a, **_kw: None,
+        "_f01_current_cycle": runtime._f01_current_cycle,
     }
     exec(
         compile(ast.Module(body=[function], type_ignores=[]), str(SOURCE), "exec"),
         namespace,
     )
     assert namespace["protect_recovered_bot_positions"](
-        ScopedConnection(), "unused", "unused"
+        ScopedConnection(connection, schema), "unused", "unused"
     ) == 0
     assert calls == [], "no Exchange post is permitted without exact cycle proof"

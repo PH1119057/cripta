@@ -229,7 +229,9 @@ def test_startup_recovery_order_and_exact_fill_protection() -> None:
     protect = source[protect_start:protect_end]
     assert "JOIN runtime.executions e ON e.order_link_id=c.command_id" in protect
     assert "min(e.exec_time_ms)" in protect
-    assert "abs(open_time_ms - int(fill_time_ms or 0)) > 10_000" in protect
+    assert "_f01_current_cycle(" in protect
+    assert "open_time_ms" not in protect
+    assert protect.index("_f01_current_cycle(") < protect.index("api_post(")
     assert "resolve_initial_protection_boundaries(" in protect
     assert '"/v5/position/trading-stop"' in protect
     assert '"restart_recovered_entry_protection"' in protect
