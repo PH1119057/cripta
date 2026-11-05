@@ -1079,7 +1079,7 @@ def protect_recovered_bot_positions(
     ).fetchall()
     protected = 0
 
-    for command_id, symbol, fill_time_ms, raw_entry_payload in rows:
+    for command_id, symbol, _fill_time_ms, raw_entry_payload in rows:
         cycle = _f01_current_cycle(connection, str(command_id), str(symbol), key, secret)
         if cycle is None:
             continue

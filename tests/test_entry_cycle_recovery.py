@@ -167,3 +167,27 @@ def test_signed_reader_requires_all_pages_and_stable_position_versions(bad):
         assert len(read.executions) == 1
         assert any(p.get("cursor") == "page2" for _, p in calls)
         assert {p["startTime"] for e, p in calls if e == "/v5/execution/list"} == {"999"}
+
+
+def test_partially_filled_live_order_is_read_by_exact_id_when_history_has_not_arrived():
+    args = case()
+    inv = args["inventory"]
+    calls = []
+
+    def get(endpoint, params):
+        calls.append((endpoint, params))
+        rows = []
+        if endpoint == "/v5/position/list":
+            rows = list(inv.positions)
+        elif endpoint == "/v5/execution/list":
+            rows = list(inv.executions)
+        elif endpoint == "/v5/order/realtime":
+            assert params["orderId"] == "entry-order"
+            rows = [{**inv.orders["entry-order"], "orderStatus": "PartiallyFilled", "qty": "5"}]
+        return {"retCode": 0, "result": {"list": rows}}
+
+    reader = SignedRecoveryInventoryReader(get, account="MAIN", connector="connector-MAIN",
+                                            clock_ms=lambda: 3000)
+    args["inventory"] = reader.read(999)
+    assert prove_current_entry_cycle(**args).filled_qty == Decimal("1.25")
+    assert any(e == "/v5/order/realtime" for e, _ in calls)
