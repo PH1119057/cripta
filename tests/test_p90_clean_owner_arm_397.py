@@ -89,8 +89,12 @@ def test_staged_and_source_only_private_preflight_precede_public_ws_clock():
         if "\ndef main()" in OBSERVER[OBSERVER.index("def _run_observer_epoch("):]
         else len(OBSERVER)
     ]
-    assert "if p90_real_staged or p90_real_source_only:" in epoch
+    assert "if p90_real_source_only or (" in epoch
+    assert "p90_real_staged and preflight_restart_epoch_id is None" in epoch
     assert "preflight_p90_real_private_flat_source(" in epoch
+    assert epoch.index("preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(") < (
+        epoch.index("preflight_p90_real_private_flat_source(")
+    )
     assert epoch.index("preflight_p90_real_private_flat_source(") < epoch.index(
         "sock, _ready_local, _ready_server, buffered = _connect_and_subscribe"
     )

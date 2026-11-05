@@ -1334,6 +1334,48 @@ def _observer_light_signature(connection: Any) -> tuple[tuple[str, ...], ...]:
 OWNER_FULL_CONTOUR_SIGNATURE_STRATEGY_IDS = frozenset(
     {OWNER_FULL_CONTOUR_MAIN_ID, OWNER_FULL_CONTOUR_SUB_ID}
 )
+
+
+def _p90_disarmed_signature_compatible(
+    current_signature: tuple[tuple[str, ...], ...],
+    latest_signature: tuple[tuple[str, ...], ...],
+    *,
+    activation_ids: frozenset[str],
+) -> bool:
+    """Retire Entry permissions without detaching the original Exit/source.
+
+    Only the gate and exact P90 permission columns may differ. Strategy,
+    activation, both plans, ordinary consumers and account bindings stay exact.
+    A later OPEN is deliberately incompatible and requires normal reattestation.
+    """
+    if (
+        not current_signature or not latest_signature
+        or len(current_signature) != len(latest_signature)
+        or not current_signature[0] or current_signature[0][0] != "MAINNET_GATE"
+        or latest_signature[0] != ("MAINNET_GATE", "False")
+        or len(activation_ids) != 2
+    ):
+        return False
+    for signature in (current_signature, latest_signature):
+        if {
+            row[0] for row in signature[1:]
+            if len(row) == 9 and row[0] in activation_ids
+            and row[1] in {P90_MAIN_ID, P90_SUB_ID} and row[2] == P90_REAL_VERSION
+        } != activation_ids:
+            return False
+
+    def normalized(signature: tuple[tuple[str, ...], ...]) -> tuple[tuple[str, ...], ...]:
+        return tuple(
+            row[:7]
+            if len(row) == 9 and row[0] in activation_ids
+            and row[1] in {P90_MAIN_ID, P90_SUB_ID} and row[2] == P90_REAL_VERSION
+            else row
+            for row in signature[1:]
+        )
+
+    return normalized(current_signature) == normalized(latest_signature)
+
+
 OWNER_FULL_CONTOUR_GATE_CLOSE_PREFIX = (
     OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON + " closed:"
 )
@@ -2238,8 +2280,21 @@ def _run_observer_epoch(
                 raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
             p90_real_source_only = True
         elif not gate_enabled and not selected:
-            # Normal pre-arm state: source/private topology only, no execution.
-            p90_real_source_only = True
+            # Entry authorization is not ownership of an existing position.
+            # Recovery below must still prove original cursors, signed complete
+            # inventory and exact protection; this read grants no permission.
+            exposure = connection.execute(
+                "SELECT count(*) FROM runtime.position_ownership "
+                "WHERE strategy_version=%s "
+                "AND state IN ('OPEN','RECONCILIATION_REQUIRED')",
+                (P90_REAL_VERSION,),
+            ).fetchone()
+            if exposure and exposure[0]:
+                p90_real_live = True
+                p90_real_degraded = True
+            else:
+                # Only genuinely flat pre-arm uses the no-order bootstrap.
+                p90_real_source_only = True
         elif (
             gate_enabled
             and gate_reason == OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON
@@ -3014,7 +3069,18 @@ def _run_observer_epoch(
         if trade_mirror.snapshot()["state"] != "ACTIVE":
             raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
         oi_thread.start()
-        if p90_real_staged or p90_real_source_only:
+        preflight_restart_epoch_id: str | None = None
+        if p90_real_live:
+            from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+                inspect_p90_real_open_restart_epoch,
+            )
+
+            preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(
+                connection, source_commit=LOADED_COMMIT,
+            )
+        if p90_real_source_only or (
+            p90_real_staged and preflight_restart_epoch_id is None
+        ):
             # Staged OWNER ARM and normal flat source-only restart both warm
             # exact credential-local MAIN/SUB readiness before starting the
             # short-lived public WS attestation clock. This preflight grants
@@ -3037,17 +3103,12 @@ def _run_observer_epoch(
                 source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
                 progress=preparation_progress,
             )
-        elif p90_real_live:
-            from bybit_workbench.universal_entry.p90l90_real_open_restart import (
-                inspect_p90_real_open_restart_epoch,
+        elif p90_real_live and preflight_restart_epoch_id is None:
+            prepare_p90_closed_tails(
+                connection, symbols=tuple(sorted(p90l90_symbols)),
+                source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
+                progress=preparation_progress,
             )
-            if inspect_p90_real_open_restart_epoch(connection, source_commit=LOADED_COMMIT) is None:
-                # Open-position replay/Exit retains its original contract.
-                prepare_p90_closed_tails(
-                    connection, symbols=tuple(sorted(p90l90_symbols)),
-                    source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
-                    progress=preparation_progress,
-                )
         sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
         # Source proof is issued ONLY in this epoch, after real Bybit
         # WS subscription acknowledgements and the active publicTrade
@@ -3245,52 +3306,35 @@ def _run_observer_epoch(
                         "SELECT enabled,reason FROM control.execution_gates "
                         "WHERE mode='mainnet'"
                     ).fetchone()
-                    if activation is None or selected != expected_activation_ids:
-                        raise RuntimeError(
-                            "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
-                        )
-                    staged_gate_closed = (
-                        p90_real_staged
-                        and gate_row == (False, OWNER_ARM_STAGE_GATE_REASON)
-                    )
-                    staged_gate_finalized = (
-                        p90_real_staged
-                        and gate_row == (True, OWNER_ARM_OPEN_GATE_REASON)
-                    )
-                    degraded_gate_closed = (
-                        p90_real_degraded
-                        and gate_row == (
-                            False, REAL_ENTRY_RUNTIME_NOT_READY_REASON
-                        )
-                    )
-                    if p90_real_degraded and not degraded_gate_closed:
-                        raise RuntimeError(
-                            "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT"
-                        )
-                    if p90_real_degraded:
+                    if gate_row is not None and not gate_row[0]:
+                        # DISARM/runtime/staging closure denies this Entry. It
+                        # does not revoke the already verified source/Exit owner
+                        # or require the retired Entry permissions to survive.
                         blocked = _blocked_multi_account_admissions(
                             real_candidates, symbol=symbol, observed_at=at,
                             reason="P90_REAL_NEW_ENTRY_GATE_CLOSED",
                         )
                         return blocked.get(activation, ()), False
-                    if p90_real_staged:
-                        if not (staged_gate_closed or staged_gate_finalized):
-                            raise RuntimeError(
-                                "P90_REAL_OWNER_ARM_STAGE_GATE_DRIFT"
-                            )
-                    elif gate_row != (True, OWNER_ARM_OPEN_GATE_REASON):
+                    if activation is None or selected != expected_activation_ids:
                         raise RuntimeError(
                             "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
                         )
-                    if staged_gate_closed:
-                        # A causal crossing during staging is an ordinary denied
-                        # Entry. Gate CLOSED must never be treated as a broken
-                        # account/source or terminate the Exit/source epoch.
-                        blocked = _blocked_multi_account_admissions(
-                            real_candidates, symbol=symbol, observed_at=at,
-                            reason="P90_REAL_OWNER_ARM_STAGE_GATE_CLOSED",
+                    if p90_real_degraded:
+                        raise RuntimeError(
+                            "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT"
                         )
-                        return blocked.get(activation, ()), False
+                    staged_gate_finalized = (
+                        p90_real_staged
+                        and gate_row == (True, OWNER_ARM_OPEN_GATE_REASON)
+                    )
+                    if p90_real_staged and not staged_gate_finalized:
+                        raise RuntimeError(
+                            "P90_REAL_OWNER_ARM_STAGE_GATE_DRIFT"
+                        )
+                    if gate_row != (True, OWNER_ARM_OPEN_GATE_REASON):
+                        raise RuntimeError(
+                            "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
+                        )
                     scoped, ready = _multi_account_admissions(
                         connection, observer_split.p90_real, real_candidates,
                         symbol=symbol, observed_at=at, real_selected_for=selected,
@@ -3511,6 +3555,23 @@ def _run_observer_epoch(
                     selected_now = _real_execution_selected_activation_ids(
                         connection, observer_split.p90_real
                     )
+                    if (
+                        p90_real_live
+                        and gate_row is not None and not gate_row[0]
+                        and not selected_now
+                        and _p90_disarmed_signature_compatible(
+                            current_signature, latest_signature,
+                            activation_ids=expected,
+                        )
+                    ):
+                        # Explicit DISARM can retire both Entry permissions.
+                        # Keep the SAME verified runtime/cursors and approved
+                        # ExitPlan; only fresh normal ARM may permit new Entry.
+                        p90_real_staged = False
+                        p90_real_degraded = True
+                        current_signature = latest_signature
+                        next_signature = now_mono + 1.0
+                        continue
                     if (
                         p90_real_live
                         and not p90_real_staged
