@@ -561,6 +561,7 @@ migration_files=(
   # One strategy-agnostic cache owner for verified closed OHLCV, independent of TradingAccount.
   operations/sql/20261028_shared_closed_candle_source.sql
   operations/sql/20261105_gateway_closed_candle_corrections.sql
+  operations/sql/20261105_resolved_mutation_recovery.sql
   # Owner-approved exact P90L90 REAL v3 INACTIVE two-account writer only.
   # Never creates enabled Strategy or bypasses per-account LIVE arm.
   operations/sql/20261029_p90l90_real_v3_inactive_binding_writer.sql
