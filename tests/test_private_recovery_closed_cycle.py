@@ -25,6 +25,11 @@ def recovery_selection(function_name):
                         "CAST(json_extract(e.payload_json,'$.closedSize') AS REAL)",
                     )
                     .replace("::numeric", "")
+                    .replace(
+                        "recovered.entry_execution_ids @> jsonb_build_array(e.exec_id)",
+                        "EXISTS (SELECT 1 FROM json_each(recovered.entry_execution_ids) "
+                        "WHERE value=e.exec_id)",
+                    )
                 )
     raise AssertionError("production recovery selection not found")
 
@@ -51,7 +56,10 @@ def test_closed_entry_is_not_a_candidate_for_next_same_symbol_position(
         )
         db.execute(
             "CREATE TABLE runtime.executions(order_link_id,exec_time_ms,"
-            "trading_account_id,identity_status,payload_json)"
+            "trading_account_id,identity_status,payload_json,order_id,exec_id)"
+        )
+        db.execute(
+            "CREATE TABLE runtime.recovered_closed_entry_cycles(entry_order_id,entry_execution_ids)"
         )
         db.execute(
             "CREATE TABLE runtime.position_ownership(position_id,entry_command_id,"
@@ -68,8 +76,9 @@ def test_closed_entry_is_not_a_candidate_for_next_same_symbol_position(
                 (entry, account),
             )
             db.execute(
-                "INSERT INTO runtime.executions VALUES(?, ?, ?, 'PROVEN','{\"closedSize\":\"0\"}')",
-                (entry, instant, account),
+                "INSERT INTO runtime.executions VALUES(?, ?, ?, 'PROVEN',"
+                "'{\"closedSize\":\"0\"}',?,?)",
+                (entry, instant, account, entry + "-order", entry + "-exec"),
             )
             if state is not None:
                 db.execute(

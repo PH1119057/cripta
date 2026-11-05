@@ -19,6 +19,13 @@ from pathlib import Path
 
 import psycopg
 import websocket
+from bybit_workbench.entry_cycle_recovery import (
+    RecoveryCycleUnproven,
+    SignedRecoveryInventoryReader,
+    load_current_entry_cycle,
+    position_fingerprint,
+    project_cycle_executions,
+)
 from exact_close import (
     classify_exit,
     number,
@@ -859,6 +866,172 @@ def cancel_bot_owned_pending_entry_orders(
     return cancelled
 
 
+_f01_inventory_cache = None
+_f01_inventory_lock = threading.RLock()
+_f01_recovery_denials: dict[str, str] = {}
+
+
+def _f01_signed_inventory(start_ms: int, key: str, secret: str):
+    global _f01_inventory_cache
+    with _f01_inventory_lock:
+        cached = _f01_inventory_cache
+        if (cached is not None and cached.start_ms <= start_ms <= cached.end_ms
+                and 0 <= int(time.time() * 1000) - cached.observed_ms <= 5000):
+            return cached
+        reader = SignedRecoveryInventoryReader(
+            lambda endpoint, params: api_get(endpoint, params, key, secret)[0],
+            account=TRADING_ACCOUNT_ID, connector=ACCOUNT_CONNECTOR_ID,
+            clock_ms=lambda: int(time.time() * 1000),
+        )
+        # Failed/partial reads never replace a previously certified snapshot.
+        inventory = reader.read(start_ms)
+        _f01_inventory_cache = inventory
+        return inventory
+
+
+def _f01_recovery_denied(connection, entry_id: str, symbol: str, reason: str) -> None:
+    # Durable scoped diagnostics, once per changed verdict; no gate/arm writer.
+    if _f01_recovery_denials.get(entry_id) == reason:
+        return
+    connection.execute(
+        """INSERT INTO runtime.connection_events(
+               at_epoch_ms,channel,event,details_json,
+               trading_account_id,account_connector_id,identity_status)
+           VALUES(%s,'recovery','F01_CURRENT_CYCLE_UNPROVEN',%s,%s,%s,'PROVEN')""",
+        (int(time.time() * 1000), json.dumps({"entry_command_id": entry_id,
+            "symbol": symbol, "reason": reason, "mutation_sent": False}),
+         TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID),
+    )
+    _f01_recovery_denials[entry_id] = reason
+    atomic_status("recovery", {"state": "BLOCKED", "symbol": symbol,
+                              "entry_command_id": entry_id, "reason": reason})
+
+
+def _f01_current_cycle(connection, entry_id: str, symbol: str, key: str, secret: str):
+    """One shared proof BEFORE ownership, queued protection or Exchange mutation."""
+    try:
+        cycle = load_current_entry_cycle(
+            connection, account=TRADING_ACCOUNT_ID, connector=ACCOUNT_CONNECTOR_ID,
+            entry_command_id=entry_id, symbol=symbol,
+            inventory_provider=lambda start: _f01_signed_inventory(start, key, secret),
+            now_ms=lambda: int(time.time() * 1000),
+        )
+    except (RecoveryCycleUnproven, ValueError, TypeError, KeyError) as exc:
+        reason = str(exc) if isinstance(exc, RecoveryCycleUnproven) else "F01_INVALID_SOURCE_DATA"
+        _f01_recovery_denied(connection, entry_id, symbol, reason)
+        return None
+    command = connection.execute(
+        """SELECT payload_json FROM runtime.trade_commands WHERE command_id=%s
+            AND command_type='entry' AND state='completed'
+            AND trading_account_id=%s AND identity_status='PROVEN'""",
+        (entry_id, TRADING_ACCOUNT_ID),
+    ).fetchone()
+    if command is None:
+        _f01_recovery_denied(connection, entry_id, symbol, "F01_ENTRY_COMMAND_UNPROVEN")
+        return None
+    try:
+        payload = command[0] if isinstance(command[0], dict) else json.loads(command[0])
+        if not isinstance(payload, dict):
+            raise ValueError("Entry payload must be an object")
+        initial_protection_contract(payload)
+    except (RuntimeError, ValueError, TypeError, InvalidOperation):
+        _f01_recovery_denied(connection, entry_id, symbol, "F01_ENTRY_CONTRACT_UNPROVEN")
+        return None
+    if payload.get("source") == "universal_entry":
+        try:
+            lineage = load_universal_entry_lineage(
+                connection, command_id=entry_id, command_payload=payload,
+            )
+        except (RuntimeError, ValueError):
+            lineage = None
+        if lineage is None:
+            _f01_recovery_denied(connection, entry_id, symbol, "F01_STRATEGY_LINEAGE_UNPROVEN")
+            return None
+    elif connection.execute(
+        "SELECT 1 FROM runtime.entry_geometry_bindings WHERE entry_command_id=%s", (entry_id,),
+    ).fetchone() is None:
+        _f01_recovery_denied(connection, entry_id, symbol, "F01_STRATEGY_LINEAGE_UNPROVEN")
+        return None
+    try:
+        project_cycle_executions(connection, cycle)
+    except RecoveryCycleUnproven as exc:
+        _f01_recovery_denied(connection, entry_id, symbol, str(exc))
+        return None
+    _f01_recovery_denials.pop(entry_id, None)
+    return cycle
+
+
+def _f01_position_matches(cycle, position) -> bool:
+    try:
+        return position_fingerprint(position) == cycle.fingerprint
+    except (RecoveryCycleUnproven, ValueError, TypeError, KeyError):
+        return False
+
+
+def _f01_stamp_partial_cycle(connection, cycle) -> None:
+    if cycle.remaining_qty == cycle.filled_qty:
+        return
+    # A derived current projection, never a rewrite of historical Entry fills.
+    connection.execute(
+        """UPDATE runtime.hot_positions
+              SET payload_json=payload_json::jsonb || %s::jsonb
+            WHERE trading_account_id=%s AND symbol=%s AND position_idx=%s
+              AND identity_status='PROVEN' AND side=%s AND size::numeric=%s""",
+        (json.dumps({"__cripta_entry_cycle": cycle.certificate()}), TRADING_ACCOUNT_ID,
+         cycle.position["symbol"], int(cycle.position["positionIdx"]),
+         cycle.position["side"], cycle.remaining_qty),
+    )
+
+
+def _f01_finish_without_mutation(connection, command_id: str, *, reason: str,
+                                 failed: bool) -> None:
+    connection.execute(
+        """UPDATE runtime.trade_commands SET state=%s,finished_at_epoch_ms=%s,
+                  error=%s,result_json=%s WHERE command_id=%s
+              AND trading_account_id=%s AND identity_status='PROVEN'""",
+        ("failed" if failed else "completed", int(time.time() * 1000),
+         reason if failed else "",
+         json.dumps({"mutation_sent": False, "reason": reason}),
+         command_id, TRADING_ACCOUNT_ID),
+    )
+    connection.commit()
+
+
+def _f01_claim_protection_attempt(connection, entry_id: str, symbol: str,
+                                  command_id: str = "") -> bool:
+    """Durable before POST: a crash/timeout can never authorize another try."""
+    connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                       (TRADING_ACCOUNT_ID,))
+    prior = connection.execute(
+        """SELECT 1 FROM runtime.connection_events
+             WHERE trading_account_id=%s AND event='F01_PROTECTION_MUTATION_ATTEMPT'
+               AND details_json::jsonb->>'entry_command_id'=%s
+           UNION ALL
+           SELECT 1 FROM runtime.trade_commands
+             WHERE trading_account_id=%s AND command_type='initial_protection'
+               AND payload_json::jsonb->>'entry_command_id'=%s
+               AND state IN ('running','failed','completed') AND command_id<>%s
+           LIMIT 1""",
+        (TRADING_ACCOUNT_ID, entry_id, TRADING_ACCOUNT_ID, entry_id, command_id),
+    ).fetchone()
+    if prior is not None:
+        _f01_recovery_denied(connection, entry_id, symbol,
+                             "F01_PRIOR_PROTECTION_ATTEMPT_NO_AUTOMATIC_REPLAY")
+        return False
+    connection.execute(
+        """INSERT INTO runtime.connection_events(
+               at_epoch_ms,channel,event,details_json,
+               trading_account_id,account_connector_id,identity_status)
+           VALUES(%s,'recovery','F01_PROTECTION_MUTATION_ATTEMPT',%s,%s,%s,'PROVEN')""",
+        (int(time.time() * 1000), json.dumps({"entry_command_id": entry_id,
+            "symbol": symbol, "command_id": command_id, "outcome": "NOT_YET_KNOWN"}),
+         TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID),
+    )
+    # The marker must survive even if POST/its response/the next process fails.
+    connection.commit()
+    return True
+
+
 def protect_recovered_bot_positions(
     connection: psycopg.Connection,
     key: str,
@@ -880,6 +1053,11 @@ def protect_recovered_bot_positions(
              AND (c.trading_account_id=%s AND c.identity_status='PROVEN')
              AND (e.trading_account_id=%s AND e.identity_status='PROVEN')
              AND NOT EXISTS (
+                 SELECT 1 FROM runtime.recovered_closed_entry_cycles recovered
+                  WHERE recovered.entry_order_id=e.order_id
+                    AND recovered.entry_execution_ids @> jsonb_build_array(e.exec_id)
+             )
+             AND NOT EXISTS (
                  SELECT 1 FROM runtime.position_ownership closed_cycle
                   WHERE closed_cycle.entry_command_id=c.command_id
                     AND closed_cycle.trading_account_id=c.trading_account_id
@@ -896,12 +1074,15 @@ def protect_recovered_bot_positions(
                SELECT candidates.*,count(*) OVER (PARTITION BY symbol) AS active_cycles
                FROM candidates
            ) scoped
-           WHERE active_cycles=1""",
+           WHERE active_cycles=1 ORDER BY fill_time_ms""",
         (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
     ).fetchall()
     protected = 0
 
-    for command_id, symbol, fill_time_ms, raw_entry_payload in rows:
+    for command_id, symbol, _fill_time_ms, raw_entry_payload in rows:
+        cycle = _f01_current_cycle(connection, str(command_id), str(symbol), key, secret)
+        if cycle is None:
+            continue
         position_row = connection.execute(
             """SELECT side,entry_price,payload_json
                FROM runtime.hot_positions
@@ -914,21 +1095,13 @@ def protect_recovered_bot_positions(
         if position_row is None:
             continue
 
-        raw = (
-            position_row[2]
-            if isinstance(position_row[2], dict)
-            else json.loads(position_row[2])
-        )
-        open_time_ms = int(raw.get("openTime") or 0)
-        if open_time_ms and abs(open_time_ms - int(fill_time_ms or 0)) > 10_000:
-            continue
-
+        raw = dict(cycle.position)
         stop = Decimal(str(raw.get("stopLoss") or 0))
         trailing = Decimal(str(raw.get("trailingStop") or 0))
         if stop > 0 or trailing > 0:
             continue
 
-        actual_entry = Decimal(str(position_row[1] or 0))
+        actual_entry = cycle.entry_avg_fill
         if actual_entry <= 0:
             raise RuntimeError(
                 f"recovered position has no actual avg fill symbol={symbol}"
@@ -959,7 +1132,7 @@ def protect_recovered_bot_positions(
         contract = initial_protection_contract(entry_payload)
         actual_stop, actual_target = resolve_initial_protection_boundaries(
             entry=actual_entry,
-            side=str(position_row[0]),
+            side=str(raw["side"]),
             tick=tick,
             contract=contract,
         )
@@ -972,7 +1145,7 @@ def protect_recovered_bot_positions(
             "slTriggerBy": str(contract["trigger_by"]),
             "slOrderType": "Market",
         }
-        if actual_target is not None:
+        if actual_target is not None and Decimal(str(raw.get("takeProfit") or 0)) <= 0:
             protection_request.update(
                 {
                     "takeProfit": str(actual_target),
@@ -980,6 +1153,21 @@ def protect_recovered_bot_positions(
                     "tpOrderType": "Market",
                 }
             )
+        # History read and instrument lookup are not an Exchange CAS. Recheck
+        # the exact position version immediately before the one mutation.
+        fresh, _ = api_get(
+            "/v5/position/list", {"category": "linear", "symbol": str(symbol)}, key, secret,
+        )
+        fresh_rows = ((fresh.get("result") or {}).get("list") or [])
+        exact = [p for p in fresh_rows if str(p.get("positionIdx")) == str(raw["positionIdx"])
+                 and Decimal(str(p.get("size") or 0)) > 0]
+        if (fresh.get("retCode") != 0 or len(exact) != 1
+                or not _f01_position_matches(cycle, exact[0])):
+            _f01_recovery_denied(connection, str(command_id), str(symbol),
+                                 "F01_POSITION_CHANGED_BEFORE_PROTECTION")
+            continue
+        if not _f01_claim_protection_attempt(connection, str(command_id), str(symbol)):
+            continue
         api_post(
             "/v5/position/trading-stop",
             protection_request,
@@ -2810,6 +2998,26 @@ def _require_entry_bybit_read_ok(payload: dict[str, object], path: str) -> None:
 def execute_command(connection: psycopg.Connection, key: str, secret: str, row: tuple[object, ...]) -> None:
     command_id, kind, symbol, raw_payload = map(str, row)
     payload = json.loads(raw_payload)
+    recovery_cycle = None
+    if kind == "initial_protection":
+        entry_id = str(payload.get("entry_command_id") or "")
+        recovery_cycle = _f01_current_cycle(connection, entry_id, symbol, key, secret)
+        if recovery_cycle is None:
+            _f01_finish_without_mutation(
+                connection, command_id, reason="F01_CURRENT_CYCLE_UNPROVEN", failed=True,
+            )
+            return
+        parent = connection.execute(
+            "SELECT payload_json FROM runtime.trade_commands WHERE command_id=%s "
+            "AND trading_account_id=%s AND identity_status='PROVEN'",
+            (entry_id, TRADING_ACCOUNT_ID),
+        ).fetchone()
+        original = _db_json_object(parent[0] if parent else None)
+        if payload.get("initial_protection") != original.get("initial_protection"):
+            _f01_finish_without_mutation(
+                connection, command_id, reason="F01_PROTECTION_CONTRACT_CHANGED", failed=True,
+            )
+            return
     if kind == "entry":
         if _is_sub_private_worker():
             ready, reasons = account_entry_safety_ready(
@@ -2831,6 +3039,24 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     if kind == "entry":
         _require_entry_bybit_read_ok(positions, "/v5/position/list")
     position = next((p for p in ((positions.get("result") or {}).get("list") or []) if Decimal(str(p.get("size") or 0)) > 0), None)
+    if recovery_cycle is not None:
+        matching = [p for p in ((positions.get("result") or {}).get("list") or [])
+                    if str(p.get("positionIdx")) == str(recovery_cycle.position["positionIdx"])
+                    and Decimal(str(p.get("size") or 0)) > 0]
+        if (positions.get("retCode") != 0 or len(matching) != 1
+                or not _f01_position_matches(recovery_cycle, matching[0])):
+            _f01_finish_without_mutation(
+                connection, command_id,
+                reason="F01_POSITION_CHANGED_BEFORE_PROTECTION", failed=True,
+            )
+            return
+        position = matching[0]
+        if (Decimal(str(position.get("stopLoss") or 0)) > 0
+                or Decimal(str(position.get("trailingStop") or 0)) > 0):
+            _f01_finish_without_mutation(
+                connection, command_id, reason="F01_EXISTING_PROTECTION_PRESERVED", failed=False,
+            )
+            return
     instruments, _ = api_get("/v5/market/instruments-info", {"category": "linear", "symbol": symbol})
     if kind == "entry":
         _require_entry_bybit_read_ok(instruments, "/v5/market/instruments-info")
@@ -2884,11 +3110,13 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 tick=tick,
                 contract=contract,
             )
+            if Decimal(str(position.get("takeProfit") or 0)) > 0:
+                target = Decimal(str(position["takeProfit"]))
         if (side=="Buy" and stop >= mark) or (side=="Sell" and stop <= mark): raise RuntimeError("calculated stop is already beyond current price")
         stop_request: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":trigger_by,"slOrderType":"Market"}
         if kind == "initial_protection":
             stop_request["tpslMode"] = str(contract["tpsl_mode"])
-            if target is not None:
+            if target is not None and Decimal(str(position.get("takeProfit") or 0)) <= 0:
                 stop_request.update(
                     {
                         "takeProfit": str(target),
@@ -2897,6 +3125,14 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     }
                 )
         try:
+            if kind == "initial_protection" and not _f01_claim_protection_attempt(
+                connection, str(payload["entry_command_id"]), symbol, command_id,
+            ):
+                _f01_finish_without_mutation(
+                    connection, command_id,
+                    reason="F01_PRIOR_PROTECTION_ATTEMPT_NO_AUTOMATIC_REPLAY", failed=True,
+                )
+                return
             result = api_post("/v5/position/trading-stop", stop_request, key, secret)
         except RuntimeError as exc:
             if kind != "initial_protection" or "not modified" not in str(exc).lower():
@@ -3489,7 +3725,10 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         # evidence, then obtain a NEW <=5s source window (never reuse an old
         # window across account reconciliation). Exchange TP+SL stay resident.
         try:
-            reconcile(connection, key, secret, "after_protected_first_fill")
+            reconcile(
+                connection, key, secret, "after_protected_first_fill",
+                verified_first_fill_position_id=p90_real_postfill[0],
+            )
         except Exception as exc:
             raise ExchangeMutationBarrier(
                 "P90_REAL_POSTFILL_ACCOUNT_RECONCILIATION_UNVERIFIED"
@@ -3549,7 +3788,13 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             entry_result=result,
         )
     try:
-        reconcile(connection, key, secret, "after_command")
+        if p90_real_postfill is None:
+            reconcile(connection, key, secret, "after_command")
+        else:
+            reconcile(
+                connection, key, secret, "after_command",
+                verified_first_fill_position_id=p90_real_postfill[0],
+            )
     except Exception as exc:
         raise ExchangeMutationBarrier(
             f"post-mutation reconciliation failed: {exc}"
@@ -3912,6 +4157,11 @@ def command_worker_loop(key: str, secret: str) -> None:
                 WHERE c.command_type='entry' AND c.state='completed'
                   AND (c.trading_account_id=%s AND c.identity_status='PROVEN')
                   AND (e.trading_account_id=%s AND e.identity_status='PROVEN')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM runtime.recovered_closed_entry_cycles recovered
+                       WHERE recovered.entry_order_id=e.order_id
+                         AND recovered.entry_execution_ids @> jsonb_build_array(e.exec_id)
+                  )
                   AND COALESCE((e.payload_json::jsonb->>'closedSize')::numeric,0)=0
                   AND NOT EXISTS (
                       SELECT 1 FROM runtime.position_ownership closed_cycle
@@ -3926,10 +4176,20 @@ def command_worker_loop(key: str, secret: str) -> None:
                SELECT candidates.*,count(*) OVER (PARTITION BY symbol) AS active_cycles
                FROM candidates
            ) scoped
-           WHERE active_cycles=1""",
+           WHERE active_cycles=1 ORDER BY fill_time_ms""",
             (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
         ).fetchall()
         for entry_id,symbol,fill_time_ms,raw_entry_payload in filled_entries:
+            # Recovery never holds queued Exit behind a batch of history GETs.
+            if connection.execute(
+                "SELECT 1 FROM runtime.trade_commands WHERE state='queued' "
+                "AND command_type<>'entry' AND trading_account_id=%s "
+                "AND identity_status='PROVEN' LIMIT 1", (TRADING_ACCOUNT_ID,),
+            ).fetchone():
+                break
+            cycle = _f01_current_cycle(connection, str(entry_id), str(symbol), key, secret)
+            if cycle is None:
+                continue
             position_row=connection.execute(
                 """SELECT side,size,entry_price,payload_json
                      FROM runtime.hot_positions
@@ -3940,11 +4200,10 @@ def command_worker_loop(key: str, secret: str) -> None:
             ).fetchone()
             if not position_row:
                 continue
-            raw=json.loads(position_row[3])
-            open_time_ms=int(raw.get("openTime") or 0)
-            if open_time_ms and abs(open_time_ms-int(fill_time_ms or 0)) > 10_000:
-                continue
-            actual_entry=Decimal(str(position_row[2]))
+            raw = dict(cycle.position)
+            position_row = (raw["side"], str(cycle.remaining_qty),
+                            str(cycle.entry_avg_fill), json.dumps(raw))
+            actual_entry = cycle.entry_avg_fill
             entry_payload = (
                 raw_entry_payload
                 if isinstance(raw_entry_payload, dict)
@@ -4019,7 +4278,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                             position_id, trade_id, owner_bot, owner_strategy_id,
                             owner_strategy_version, owner_signal_id, entry_id,
                             geometry_handoff_id, symbol, position_row[0],
-                            actual_entry, Decimal(str(position_row[1])), first_fill_ms,
+                            actual_entry, cycle.filled_qty, first_fill_ms,
                             json.dumps(exchange_order_ids),
                             json.dumps(client_order_ids),
                             json.dumps(execution_ids),
@@ -4038,19 +4297,16 @@ def command_worker_loop(key: str, secret: str) -> None:
                         symbol=str(symbol),
                         side=str(position_row[0]),
                         actual_avg_fill=actual_entry,
-                        actual_qty=Decimal(str(position_row[1])),
+                        actual_qty=cycle.filled_qty,
                         fill_at=datetime.fromtimestamp(first_fill_ms / 1000, tz=UTC),
                         exchange_order_ids=exchange_order_ids,
                         client_order_ids=client_order_ids,
                         execution_ids=execution_ids,
                         position_idx=position_idx,
                     )
-            current_stop=Decimal(str(raw.get("stopLoss") or 0))
-            profit_already_protected=current_stop > 0 and (
-                (position_row[0] == "Buy" and current_stop >= actual_entry)
-                or (position_row[0] == "Sell" and current_stop <= actual_entry)
-            )
-            if profit_already_protected or Decimal(str(raw.get("trailingStop") or 0)) > 0:
+            _f01_stamp_partial_cycle(connection, cycle)
+            current_stop = Decimal(str(raw.get("stopLoss") or 0))
+            if current_stop > 0 or Decimal(str(raw.get("trailingStop") or 0)) > 0:
                 continue
             # Recovery is a child of the proven Entry command, not a new
             # legacy/unattributed command. Preserve its account/binding identity
@@ -4191,8 +4447,17 @@ def reconcile_position_ownership(
     position_list: list[dict[str, object]],
     now: int,
     order_history: list[dict[str, object]] | None = None,
+    *,
+    key: str | None = None,
+    secret: str | None = None,
+    verified_first_fill_position_id: str | None = None,
 ) -> None:
     """Reconcile durable ownership from exact Bybit position inventory and IDs."""
+    global _f01_inventory_cache
+    # A new reconciliation can follow an acknowledged mutation. Never reuse
+    # the previous position version to classify its outcome or exact owner.
+    with _f01_inventory_lock:
+        _f01_inventory_cache = None
     current_positions = {
         (str(item.get("symbol") or ""), int(item.get("positionIdx") or 0)): item
         for item in position_list
@@ -4204,7 +4469,8 @@ def reconcile_position_ownership(
                   entry_execution_request_id,exchange_position_key,
                   strategy_id,strategy_version
            FROM runtime.position_ownership
-           WHERE (state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK')
+           WHERE (state IN ('OPEN','RECONCILIATION_REQUIRED')
+                  OR close_link_status='UNRESOLVED_EXACT_LINK')
              AND (trading_account_id=%s AND identity_status='PROVEN')
            ORDER BY fill_at""",
         (TRADING_ACCOUNT_ID,),
@@ -4221,6 +4487,23 @@ def reconcile_position_ownership(
             and latest_by_key.get((symbol, position_idx)) == position_id
             and str(current.get("side") or "") == side
         )
+        identity_unproven = False
+        # The in-flight native Entry has already proved its exact signed fill
+        # and protection before publishing this owner. Recovery must not add
+        # history latency to that same command's <=5s first-fill Exit handoff.
+        native_first_fill = (
+            position_id == verified_first_fill_position_id
+            and Decimal(str(current.get("size") or 0)) == Decimal(str(row[5]))
+            and Decimal(str(current.get("avgPrice") or 0)) == Decimal(str(row[4]))
+        ) if current is not None else False
+        if (current_matches and not native_first_fill
+                and key is not None and secret is not None):
+            cycle = _f01_current_cycle(connection, str(row[8]), symbol, key, secret)
+            if cycle is None or not _f01_position_matches(cycle, current):
+                current_matches = False
+                identity_unproven = True
+            else:
+                _f01_stamp_partial_cycle(connection, cycle)
         if current_matches:
             # A filled StrategyPosition is not initial-protection-confirmed
             # from a stopLoss field alone. Respect the immutable Entry-time
@@ -4331,6 +4614,16 @@ def reconcile_position_ownership(
             executions=executions,
         )
         if close.status != "EXACT" or close.exit_order_id is None:
+            if identity_unproven:
+                # Keep the original Entry/filled quantity and protection facts.
+                # Do not authorize Exit on a different current physical cycle.
+                connection.execute(
+                    """UPDATE runtime.position_ownership
+                       SET state='RECONCILIATION_REQUIRED',
+                           close_link_status='F01_CURRENT_CYCLE_UNPROVEN'
+                       WHERE position_id=%s""", (position_id,),
+                )
+                continue
             # An in-flight Exchange snapshot can be flat before a newly
             # confirmed fill is reflected (Entry vs periodic reconciliation).
             # Without exact close executions there is NO confirmed close:
@@ -4980,7 +5273,8 @@ def _require_inventory_not_overtaken_by_fill(
 
 
 def reconcile(
-    connection: psycopg.Connection, key: str, secret: str, reason: str
+    connection: psycopg.Connection, key: str, secret: str, reason: str,
+    *, verified_first_fill_position_id: str | None = None,
 ) -> tuple[int, int]:
     started = int(time.time() * 1000)
     generation_id = _account_generation_id(started, reason)
@@ -5104,7 +5398,10 @@ def reconcile(
             for item in order_history:
                 upsert_exchange_order_history(connection, item, now)
             upsert_wallet(connection, account, now)
-            reconcile_position_ownership(connection, position_list, now, order_history)
+            reconcile_position_ownership(
+                connection, position_list, now, order_history, key=key, secret=secret,
+                verified_first_fill_position_id=verified_first_fill_position_id,
+            )
             reconcile_orphan_closed_entry_cycles(
                 connection, generation_id=generation_id, now_ms=now
             )

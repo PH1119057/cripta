@@ -80,8 +80,11 @@ def test_source_contract_partial_fill_and_owner_matching() -> None:
     assert "actual_qty=excluded.actual_qty" in source
     assert "AND p.size=o.actual_qty" not in source
     assert "AND p.entry_price=o.actual_avg_fill" not in source
-    assert 'Decimal(str(current.get("size") or 0)) == Decimal(str(row[5]))' not in source
-    assert 'Decimal(str(current.get("avgPrice") or 0)) == Decimal(str(row[4]))' not in source
+    # Equality is only an extra restriction on the already signed native
+    # first-fill handoff, never a substitute for recovery provenance.
+    assert "position_id == verified_first_fill_position_id" in source
+    assert "if (current_matches and not native_first_fill" in source
+    assert "_f01_current_cycle(connection, str(row[8]), symbol, key, secret)" in source
 
 
 def test_source_contract_restart_and_entry_barrier() -> None:
