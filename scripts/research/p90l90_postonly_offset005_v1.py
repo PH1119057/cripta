@@ -88,7 +88,20 @@ class PassiveBook(embargo.EntryEmbargo):
             self.handle(symbol, t, seq, price, fill_candidate, state)
 
         if fill_candidate:
-            if self.pos[symbol] is not None and self.pos[symbol] is not initial_position:
+            position = self.pos[symbol]
+            if position is not None and position is not initial_position:
+                # Original baseline evaluates initial TP eligibility at the
+                # native signal print. A delayed passive fill must instead
+                # use its OWN actual modeled Entry price.
+                target = None if state is None else (
+                    state[1] if position.side == "LONG" else state[0]
+                )
+                position.tp = (
+                    target if target is not None
+                    and base.take_profit_eligible(position.side, position.entry, target)
+                    else None
+                )
+                position.tp_live_after_seq = seq if position.tp is not None else -1
                 self.extra["proxy_filled"] += 1
             else:
                 self.extra["touch_rejected"] += 1
