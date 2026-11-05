@@ -185,6 +185,10 @@ class _MfeDB:
     def execute(
         self, sql: str, params: tuple[object, ...] = (),
     ) -> _Row:
+        # Production cripta can append/read immutable evidence, not UPDATE it.
+        # PostgreSQL requires UPDATE privilege even for a zero-row locking SELECT.
+        if "exit_observations" in sql and "FOR UPDATE" in sql:
+            raise PermissionError("permission denied for table exit_observations")
         if "pg_advisory_xact_lock" in sql:
             self.locked = True
             self.audit.append("lock")
