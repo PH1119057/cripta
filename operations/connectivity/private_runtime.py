@@ -872,10 +872,11 @@ def protect_recovered_bot_positions(
         (TRADING_ACCOUNT_ID,),
     )
     rows = connection.execute(
-        """SELECT c.command_id,c.symbol,min(e.exec_time_ms),c.payload_json
+        """WITH candidates AS (
+             SELECT c.command_id,c.symbol,min(e.exec_time_ms) AS fill_time_ms,c.payload_json
            FROM runtime.trade_commands c
            JOIN runtime.executions e ON e.order_link_id=c.command_id
-           WHERE c.command_type='entry'
+           WHERE c.command_type='entry' AND c.state='completed'
              AND (c.trading_account_id=%s AND c.identity_status='PROVEN')
              AND (e.trading_account_id=%s AND e.identity_status='PROVEN')
              AND NOT EXISTS (
@@ -888,7 +889,14 @@ def protect_recovered_bot_positions(
                    (e.payload_json::jsonb->>'closedSize')::numeric,
                    0
                  )=0
-           GROUP BY c.command_id,c.symbol,c.payload_json""",
+           GROUP BY c.command_id,c.symbol,c.payload_json
+           )
+           SELECT command_id,symbol,fill_time_ms,payload_json
+           FROM (
+               SELECT candidates.*,count(*) OVER (PARTITION BY symbol) AS active_cycles
+               FROM candidates
+           ) scoped
+           WHERE active_cycles=1""",
         (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
     ).fetchall()
     protected = 0
@@ -3897,7 +3905,8 @@ def command_worker_loop(key: str, secret: str) -> None:
             (TRADING_ACCOUNT_ID,),
         )
         filled_entries=connection.execute(
-            """SELECT c.command_id,c.symbol,max(e.exec_time_ms),c.payload_json
+            """WITH candidates AS (
+             SELECT c.command_id,c.symbol,max(e.exec_time_ms) AS fill_time_ms,c.payload_json
                  FROM runtime.trade_commands c
                  JOIN runtime.executions e ON e.order_link_id=c.command_id
                 WHERE c.command_type='entry' AND c.state='completed'
@@ -3910,7 +3919,14 @@ def command_worker_loop(key: str, secret: str) -> None:
                          AND closed_cycle.trading_account_id=c.trading_account_id
                          AND closed_cycle.state='CLOSED'
                   )
-                GROUP BY c.command_id,c.symbol,c.payload_json""",
+                GROUP BY c.command_id,c.symbol,c.payload_json
+           )
+           SELECT command_id,symbol,fill_time_ms,payload_json
+           FROM (
+               SELECT candidates.*,count(*) OVER (PARTITION BY symbol) AS active_cycles
+               FROM candidates
+           ) scoped
+           WHERE active_cycles=1""",
             (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
         ).fetchall()
         for entry_id,symbol,fill_time_ms,raw_entry_payload in filled_entries:
