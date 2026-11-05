@@ -4924,3 +4924,18 @@ APTUSDT 5m close2026-11-04T22:05Z original C=.6393 V=16987.93 observed
 1793834968459 /1793834969978) agree C=.6394 V=17006.02, unchanged OHL.
 No source row/checkpoint was changed by this preflight. Implementation/deployment
 and technical readiness must be recorded separately; no OWNER ARM in this task.
+
+## First-fill repair and residual latch checkpoint — CHECKED HERE 2026-11-05
+
+PR447 merge ec4d50e2a498f2241fd669d8e219d389c868bb9f installed01:56:26Z;
+independent10:12Z readback: Observer RUNNING/readytrue exact release, gateOFF,
+permissions/arms0, MAIN consumerREADY, SUB ACCOUNT_ENTRY_SAFETY_BLOCKED.
+The remaining latch is PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED from01:15:39Z.
+Owner explicitly ordered market close of DOT. Canonical private executor command
+web-clos-DOT-owner-20261105-0144 completed01:43:15.897Z, order
+2894c3d0-950d-46d5-8538-c84409d6a553, two Sell executions totaling10.5@0.9562.
+Original StrategyPosition POS-6f227934669119e073ee1cc56e7c93e2 is CLOSED;
+original Entry order/execution IDs and initial SL/TP evidence retained. No
+trailing was installed for that trade; its closure is not proof of fixed Exit.
+Existing WS and diagnostic-only latch recovery do not cover this actual fill.
+TC §4.17/ARCH §59/DEV §57 define the bounded implementation still required.

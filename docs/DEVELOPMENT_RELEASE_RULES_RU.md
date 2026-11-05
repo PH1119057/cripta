@@ -2258,3 +2258,22 @@ permissions and arms still OFF. Financial ARM remains separately owner-triggered
 CI must exercise the actual shared fault predicate from all execution boundaries,
 closed-tail provisional/conflict cases, retry without automatic budget reset,
 one-modal truth, immutable correction/read-view/permissions and migration rerun.
+
+## 57. Resolved mutation recovery implementation — 2026-11-05
+
+Owners: TC §4.17, ARCH §59. Docs before executable changes, separate docs/core
+changesets. postgres installer actor owns additive SQL/function/audit schema;
+cripta gets no direct DELETE/UPDATE on latch or audit history. Control script
+uses installed exact release, connected explicit owner authorization, independent
+signed-FLAT proof and a fresh read-only preflight; filesystem writes NONE.
+Before mutation prove actual actor/function ACLs and state under §§5.1,19.1–19.4.
+One SERIALIZABLE transaction rechecks exact latch epoch, account/UID/generation,
+all-off authorization, CLOSED lineage and quantity-complete executions/current
+fault classification; record original latch and proof before deletion.
+Disposable PostgreSQL tests must cover successful real lineage, immutable audit,
+repeat no-op, changed epoch, non-flat/stale/wrong identity, partial/missing/foreign
+executions, unresolved commands, current/unknown fault and active gate/arm.
+Existing diagnostic/WS recovery paths and Strategy semantics remain untouched.
+Publish/install through verified release controller, then independently read
+back latch removal, preserved position/history and technical readiness. Do not
+claim a successful real Entry/trailing from this maintenance operation.
