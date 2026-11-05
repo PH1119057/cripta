@@ -39,6 +39,11 @@ def test_private_worker_handoffs_proven_first_fill_before_command_completion():
     assert "signed_position_reader=(" in body
     assert "current_private_ws=current_p90_real_private_ws_epoch" in body
     assert "no_pending_exit_command=(" in body
+    helper = Path("operations/connectivity/p90l90_real_postfill_handoff.py").read_text(
+        encoding="utf-8"
+    )
+    assert "publishing_exit_decision_id=decision.exit_decision_id" in helper
+    assert "reader.for_exit_publication(" in helper
 
 
 def test_source_broker_is_bound_to_live_observer_not_private_credentials():

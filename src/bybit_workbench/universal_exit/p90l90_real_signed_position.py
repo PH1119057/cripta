@@ -63,6 +63,7 @@ class P90RealSignedPositionReader:
         signed_get: SignedGet,
         verified_private_ws_continuity: RuntimeProof,
         no_pending_exit_command: RuntimeProof,
+        publication_no_pending: Callable[[StrategyPosition, str], bool] | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         max_age_seconds: int = 15,
     ) -> None:
@@ -85,6 +86,7 @@ class P90RealSignedPositionReader:
         self._get = signed_get
         self._ws = verified_private_ws_continuity
         self._no_pending = no_pending_exit_command
+        self._publication_no_pending = publication_no_pending
         self._clock = clock
         self._age = max_age_seconds
 
@@ -130,8 +132,22 @@ class P90RealSignedPositionReader:
         """Closed-5m port; its caller must prove exact causal candle history."""
         return self._read_for_event(position, closed_at)
 
+    def for_exit_publication(
+        self, position: StrategyPosition, event_at: datetime, decision_id: str,
+    ) -> ScopedPrivatePositionEvidence:
+        """Account-local re-read under the publisher lock, excluding ONLY itself.
+
+        No IPC caller may supply this context. The independently wired SQL
+        guard must prove exact unmaterialized decision/plan/position identity;
+        every other decision/request/command still blocks.
+        """
+        if not isinstance(decision_id, str) or not 1 <= len(decision_id) <= 160:
+            raise P90RealSignedPositionUnverified("P90_REAL_PENDING_EXIT_COMMAND_UNVERIFIED")
+        return self._read_for_event(position, event_at, decision_id)
+
     def _read_for_event(
         self, position: StrategyPosition, event_at: datetime,
+        publishing_exit_decision_id: str | None = None,
     ) -> ScopedPrivatePositionEvidence:
         now = self._clock()
         if (
@@ -159,7 +175,12 @@ class P90RealSignedPositionReader:
         # and no REST read or UID information is requested in that state.
         try:
             ws_proven = self._ws(position)
-            commands_clear = self._no_pending(position)
+            if publishing_exit_decision_id is None:
+                commands_clear = self._no_pending(position)
+            elif callable(self._publication_no_pending):
+                commands_clear = self._publication_no_pending(position, publishing_exit_decision_id)
+            else:
+                commands_clear = False
         except Exception:
             raise P90RealSignedPositionUnverified(
                 "P90_REAL_PRIVATE_RUNTIME_PROOF_UNAVAILABLE"

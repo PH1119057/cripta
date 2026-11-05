@@ -31,6 +31,7 @@ from bybit_workbench.universal_exit.loader import load_exit_binding
 from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
     P90RealExitExecutionPort,
 )
+from bybit_workbench.universal_exit.p90l90_real_pending import p90_real_exit_no_pending
 from bybit_workbench.universal_exit.p90l90_real_postfill_port import (
     P90RealPostfillExitPort,
 )
@@ -211,12 +212,17 @@ def handoff_real_first_protected_fill(
         # Protection/ownership has already passed a current *signed* read
         # inside this account worker. These dynamic predicates are rechecked
         # after the durable account lock, not taken from a test-only Boolean.
+        decision = getattr(_evaluation, "decision", None)
         if (
             subject != position
+            or decision is None
             or checked_at.tzinfo is None
             or (datetime.now(UTC) - checked_at).total_seconds() > 5
             or current_private_ws(subject) is not True
-            or no_pending_exit_command(subject) is not True
+            or p90_real_exit_no_pending(
+                connection, position=subject, trading_account_id=trading_account_id,
+                publishing_exit_decision_id=decision.exit_decision_id,
+            ) is not True
         ):
             return False
         gate = connection.execute(
@@ -232,8 +238,8 @@ def handoff_real_first_protected_fill(
         # changed protection. Re-attest Exchange position UNDER the durable
         # account lock, before persisting a fresh trailing request.
         try:
-            current = reader.for_closed_boundary(
-                subject, coverage.covered_through,
+            current = reader.for_exit_publication(
+                subject, coverage.covered_through, decision.exit_decision_id,
             )
         except Exception:
             return False

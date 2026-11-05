@@ -101,7 +101,7 @@ class _Bybit:
         raise AssertionError("unknown endpoint")
 
 
-def _setup(*, sub: bool = False):
+def _setup(*, sub: bool = False, publication_guard=None):
     position, _, _, cursor, _, _ = _scope(sub=sub)
     database = _DB(sub=sub)
     api = _Bybit(sub=sub)
@@ -115,10 +115,34 @@ def _setup(*, sub: bool = False):
             mounted_credential_ref="mount-ref", signed_get=api.get,
             verified_private_ws_continuity=lambda _position: proof["ws"],
             no_pending_exit_command=lambda _position: proof["pending_clear"],
+            publication_no_pending=publication_guard,
             clock=lambda: now,
         )
 
     return position, cursor, database, api, proof, reader
+
+
+@pytest.mark.parametrize("sub", [False, True])
+def test_account_local_publication_context_never_weakens_ordinary_signed_reads(sub):
+    seen = []
+
+    def publication_guard(position, decision):
+        seen.append((position.strategy_position_id, decision))
+        return decision == "exact-own-decision"
+
+    position, cursor, _, api, proof, reader = _setup(
+        sub=sub, publication_guard=publication_guard,
+    )
+    proof["pending_clear"] = False
+    with pytest.raises(P90RealSignedPositionUnverified, match="PENDING_EXIT_COMMAND"):
+        reader()(position, cursor)
+    assert api.calls == [] and seen == []
+    with pytest.raises(P90RealSignedPositionUnverified, match="PENDING_EXIT_COMMAND"):
+        reader().for_exit_publication(position, cursor.traded_at, "competitor")
+    assert api.calls == []
+    private = reader().for_exit_publication(position, cursor.traded_at, "exact-own-decision")
+    assert private.position == api.position
+    assert seen[-1] == (position.strategy_position_id, "exact-own-decision")
 
 
 @pytest.mark.parametrize("sub", [False, True])

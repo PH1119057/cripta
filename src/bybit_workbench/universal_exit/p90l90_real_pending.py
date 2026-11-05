@@ -63,6 +63,7 @@ def p90_real_exit_no_pending(
     *,
     position: StrategyPosition,
     trading_account_id: str,
+    publishing_exit_decision_id: str | None = None,
 ) -> bool:
     """Prove no unresolved Exit decision/dispatch/command for exact position.
 
@@ -70,7 +71,14 @@ def p90_real_exit_no_pending(
     malformed, foreign-account or nonterminal state means no proof.
     """
     if (
-        not trading_account_id
+        (
+            publishing_exit_decision_id is not None
+            and (
+                not isinstance(publishing_exit_decision_id, str)
+                or not publishing_exit_decision_id.strip()
+            )
+        )
+        or not trading_account_id
         or position.trading_account_id != trading_account_id
         or position.identity_status != "PROVEN"
         or position.strategy_id not in ALLOWED_SYMBOLS
@@ -78,9 +86,8 @@ def p90_real_exit_no_pending(
         or position.symbol not in ALLOWED_SYMBOLS[position.strategy_id]
         or not position.strategy_execution_binding_id
         or position.position_idx != 0
-        or position.exchange_position_key != exchange_position_key(
-            trading_account_id, position.symbol, 0
-        )
+        or position.exchange_position_key
+        != exchange_position_key(trading_account_id, position.symbol, 0)
     ):
         return False
     try:
@@ -115,6 +122,13 @@ def p90_real_exit_no_pending(
                  LEFT JOIN runtime.trade_commands c
                    ON c.command_id=v.command_id
                 WHERE d.strategy_position_id=%s
+                  AND NOT coalesce((
+                    %s::text IS NOT NULL AND d.exit_decision_id=%s
+                    AND d.strategy_id=%s AND d.strategy_version=%s
+                    AND d.strategy_config_fingerprint=%s
+                    AND d.exit_plan_fingerprint=%s
+                    AND r.execution_request_id IS NULL
+                  ),false)
                   AND (
                     r.execution_request_id IS NULL
                     OR r.identity_status IS DISTINCT FROM 'PROVEN'
@@ -131,8 +145,16 @@ def p90_real_exit_no_pending(
                   )
                 ) AS pending""",
             (
-                position.strategy_position_id, trading_account_id,
-                position.strategy_execution_binding_id, trading_account_id,
+                position.strategy_position_id,
+                publishing_exit_decision_id,
+                publishing_exit_decision_id,
+                position.strategy_id,
+                position.strategy_version,
+                position.strategy_config_fingerprint,
+                position.exit_plan_fingerprint,
+                trading_account_id,
+                position.strategy_execution_binding_id,
+                trading_account_id,
                 position.strategy_execution_binding_id,
             ),
         ).fetchone()
