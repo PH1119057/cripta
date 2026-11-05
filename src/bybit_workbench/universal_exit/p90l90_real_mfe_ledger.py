@@ -82,6 +82,8 @@ class P90RealMfeLedger:
             "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
             (position.strategy_position_id,),
         )
+        # Evidence rows are immutable. The advisory lock above serializes
+        # append/read; a row lock would require the deliberately revoked UPDATE.
         previous = self._db.execute(
             """SELECT observation_id,attributes,source_refs
                  FROM strategy_exit.exit_observations
@@ -89,7 +91,7 @@ class P90RealMfeLedger:
                   AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT'
                 ORDER BY (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
                          event_at DESC, observation_id DESC
-                LIMIT 1 FOR UPDATE""",
+                LIMIT 1""",
             (position.strategy_position_id, position.exit_plan_fingerprint),
         ).fetchone()
         if previous is None:
@@ -187,7 +189,7 @@ class P90RealMfeLedger:
                   AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT'
                 ORDER BY (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
                          event_at DESC, observation_id DESC
-                LIMIT 1 FOR UPDATE""",
+                LIMIT 1""",
             (position.strategy_position_id, position.exit_plan_fingerprint),
         ).fetchone()
         if row is None:
