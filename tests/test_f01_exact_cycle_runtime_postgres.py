@@ -22,6 +22,7 @@ from bybit_workbench.entry_cycle_recovery import RecoveryInventory
 from bybit_workbench.universal_exit.loader import load_exit_binding
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "operations/connectivity"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research/server/connectivity"))
 import private_runtime as runtime  # noqa: E402
 from test_strategy_position_binding_postgres import NOW, _payload, _seed_request  # noqa: E402
 

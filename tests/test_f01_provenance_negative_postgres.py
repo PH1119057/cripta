@@ -22,6 +22,7 @@ from bybit_workbench.entry_cycle_recovery import RecoveryInventory
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 SOURCE = Path(__file__).resolve().parents[1] / "operations/connectivity/private_runtime.py"
 sys.path.insert(0, str(SOURCE.parent))
+sys.path.insert(0, str(SOURCE.parents[2] / "research/server/connectivity"))
 import private_runtime as runtime  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not DSN, reason="requires disposable PostgreSQL")
