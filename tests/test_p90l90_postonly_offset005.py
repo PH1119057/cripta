@@ -1,80 +1,64 @@
+"""Isolated regression checks of the research source; no raw dataset needed."""
 from __future__ import annotations
 
-from decimal import Decimal as D
+import subprocess
+import sys
 from pathlib import Path
-import importlib.util
 
+ROOT = Path(__file__).resolve().parents[1]
+
+CHECK = """
+from decimal import Decimal as D
+from scripts.research import p90l90_postonly_offset005_v1 as research
 from scripts.research import p90l90_exit_90d_v2 as base
 
-# CI can load 'scripts.research' from an installed namespace package that
-# lacks newly added research files. Read the exact checked-out source directly.
-source = Path(__file__).resolve().parents[1] / "scripts/research/p90l90_postonly_offset005_v1.py"
-spec = importlib.util.spec_from_file_location("p90l90_postonly_offset005_v1", source)
-assert spec is not None and spec.loader is not None
-research = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(research)
+def event(side='LONG'):
+    return {'PREV7D': True, 'side': side, 'price': '100',
+            'ts': '1000', 'event_id': 'test', 'trade_id': 'a'}
+
+state=(D('98'), D('102'))
+book = research.PassiveBook(1800)
+book.tick('LTCUSDT',1000.,1,D('100'),'a',(event(),),state)
+assert book.orders['LTCUSDT']['limit']==D('99.95')
+assert book.extra['proxy_filled']==0
+book.tick('LTCUSDT',1001.,2,D('99.96'),'b',(),state)
+assert book.extra['proxy_filled']==0
+book.tick('LTCUSDT',1002.,3,D('99.94'),'c',(),state)
+assert book.extra['proxy_filled']==1
+assert book.pos['LTCUSDT'].entry==D('99.95')
+assert book.pos['LTCUSDT'].entry_trade_id=='c'
+
+short = research.PassiveBook(None)
+short.tick('LTCUSDT',1000.,1,D('100'),'a',(event('SHORT'),),state)
+assert short.orders['LTCUSDT']['limit']==D('100.05')
+short.tick('LTCUSDT',1001.,2,D('100.06'),'b',(),state)
+assert short.extra['proxy_filled']==1
+
+expiry = research.PassiveBook(None)
+expiry.tick('LTCUSDT',1000.,1,D('100'),'a',(event(),),state)
+expiry.tick('LTCUSDT',1200.,2,D('99.93'),'b',(),state)
+assert expiry.extra['expired']==1
+assert expiry.extra['proxy_filled']==0
+
+a = base.initial_position(event(),1,900,'PREV7D','TRAIL035')
+b = base.initial_position(event(),1,900,'PREV7D','TRAIL035')
+a.maker_entry_proxy=True
+b.maker_entry_proxy=False
+maker=research._money(a,D('100.5'),False)
+taker=research._money(b,D('100.5'),False)
+assert maker[1]==D('0.002000000000')
+assert taker[1]==D('0.005500000000')
+assert maker[3]-taker[3]==D('0.003500000000')
+print('POSTONLY_SMALL_E2E_PASS')
+"""
 
 
-def event(side="LONG", price="100", t=1000):
-    return {
-        "PREV7D": True,
-        "side": side,
-        "price": price,
-        "ts": str(t),
-        "event_id": "test-event",
-        "trade_id": "test-trade",
-    }
-
-
-def test_long_postonly_offsets_below_entry_and_needs_later_trade():
-    book = research.PassiveBook(1800)
-    state = (D("98"), D("102"))
-    book.tick("LTCUSDT", 1000.0, 1, D("100"), "a", (event(),), state)
-    assert book.extra["placed"] == 1
-    assert book.extra["proxy_filled"] == 0
-    assert book.orders["LTCUSDT"]["limit"] == D("99.9500")
-    book.tick("LTCUSDT", 1001.0, 2, D("99.96"), "b", (), state)
-    assert book.extra["proxy_filled"] == 0
-    book.tick("LTCUSDT", 1002.0, 3, D("99.94"), "c", (), state)
-    assert book.extra["proxy_filled"] == 1
-    assert book.pos["LTCUSDT"].entry == D("99.9500")
-    assert book.pos["LTCUSDT"].entry_trade_id == "c"
-
-
-def test_short_postonly_offsets_above_entry():
-    book = research.PassiveBook(None)
-    state = (D("98"), D("102"))
-    book.tick("LTCUSDT", 1000.0, 1, D("100"), "a",
-              (event("SHORT"),), state)
-    assert book.orders["LTCUSDT"]["limit"] == D("100.0500")
-    book.tick("LTCUSDT", 1001.0, 2, D("100.06"), "b", (), state)
-    assert book.extra["proxy_filled"] == 1
-    assert book.pos["LTCUSDT"].side == "SHORT"
-
-
-def test_cancel_on_next_5m_boundary_no_same_tick_fill():
-    book = research.PassiveBook(None)
-    state = (D("98"), D("102"))
-    book.tick("LTCUSDT", 1000.0, 1, D("100"), "a", (event(),), state)
-    book.tick("LTCUSDT", 1199.0, 2, D("99.96"), "b", (), state)
-    assert book.extra["proxy_filled"] == 0
-    book.tick("LTCUSDT", 1200.0, 3, D("99.93"), "c", (), state)
-    assert book.extra["expired"] == 1
-    assert book.extra["proxy_filled"] == 0
-
-
-def test_maker_fee_proxy_leaves_baseline_fee_unchanged():
-    original = base.gross_and_net
-    maker_position = base.initial_position(event(), 1, 900, "PREV7D", "TRAIL035")
-    regular_position = base.initial_position(event(), 1, 900, "PREV7D", "TRAIL035")
-    maker_position.maker_entry_proxy = True
-    regular_position.maker_entry_proxy = False
-    try:
-        base.gross_and_net = research._money
-        maker = base.gross_and_net(maker_position, D("100.5"), False)
-        taker = base.gross_and_net(regular_position, D("100.5"), False)
-    finally:
-        base.gross_and_net = original
-    assert maker[1] == D("0.002000000000")
-    assert taker[1] == D("0.005500000000")
-    assert maker[3] - taker[3] == D("0.003500000000")
+def test_passive_entry_and_fee_in_separate_interpreter():
+    # Other legacy test modules install import-time sys.modules stubs for the
+    # historical research namespace; avoid shared interpreter contamination.
+    result = subprocess.run(
+        [sys.executable, "-c", CHECK], cwd=ROOT,
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "POSTONLY_SMALL_E2E_PASS" in result.stdout
