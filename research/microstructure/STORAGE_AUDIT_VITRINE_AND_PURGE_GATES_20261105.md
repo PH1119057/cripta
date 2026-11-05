@@ -113,3 +113,15 @@ RAW_PURGE_EXECUTED                 = NO
 RECLAIMED_BYTES                    = 0
 OTHER_SYSTEM_MUTATION              = NONE IN THIS WORKSTREAM
 ```
+
+
+## 6. Дополнение 2026-11-05 — частичная trade-only M1 реализация без тяжёлого server run
+
+- Новый `research/microstructure/experiments/historical_trade_minute_mart_v1.py` (branch-only, не deployed) поддерживает 20 **существующих исторических** символов и ограниченный 1–7-day processing; не означает покрытие отдельных 15 будущих исследуемых монет.
+- Отдельный offline `research/microstructure/tests/test_historical_trade_minute_mart_v1.py`: **10 / 10 PASS** в процессе `cripta`, все synthetic in-memory, без файловой записи.
+- Read-only реальный TRXUSDT за 2026-05-18: оригинальный public trade SHA256 `231a61877d0ddccfe62d191d0f1d98ec6c9387c2df6d24fc545d3a78bf2f03ff` совпал с previously remote-reacquired source; 61 680 prints, 1 411 наблюдавшихся торговых минут, 1 440 output-minute values; **8 640 independent field comparisons, 0 mismatches**; pure in-memory output gzip 184 713 bytes, SHA256 `9553d71be4b6fe334212e4c58da0fde97ea64fb9fb9b8a9eb380ff4b2edd5d1e` — не файл на сервере. Сжатие **12.78x относительно trade gzip alone**. Trade open/close при timestamp ties сомнительны: 1 038 минут отмечены `FILE_ORDER_TIE_UNVERIFIED`, не native closed candles.
+- Версионный сборщик сохраняет `source_snapshot`, `source_sha256.txt`, точный `source_commit` (supplied), `command.txt`, `environment.txt`, `input_provenance.json` с SHA каждого source ещё до запуска, daily readback+QC, `final_manifest.json` с SHA и explicit `raw_purge_allowed=false`. Все output writes только на Data-disk research-root от `cripta`; run-id immutable. Это **ещё не проверенный persistent real run**, тестированы отдельно pure calculator и source syntax.
+- На server preflight в ходе выполнения другой system change job `job_f02fb4d6d4f6` был `RUNNING` более 10 минут и свободно ~9.1 GiB Data + ~977 MiB System. Поэтому реальную запись исторической M1 **не запускали**, по требованию владельца оставить сервер максимально свободным.
+- Идентификаторы `market_source_id/venue_id/instrument_id` намеренно null при таком raw source: `UNBOUND_EXTERNAL_BYBIT_RESEARCH_SOURCE`. Нельзя превращать эту trade-only витрину в каноническую R8 `analytics.market_minutes` без exact source/venue identity binding + full-feature QC. OB200/OI/liquidations/native trade sequence отсутствуют. `SAFE_TO_DELETE_NOW=0`.
+- Адресный REVIEW-only whitelist 14 TRX source файлов: `research/microstructure/evidence/raw_purge_candidates_trx_week1_REVIEW_ONLY_20261105.json` (110 497 121 bytes; `raw_purge_authorized=false` для **каждого** файла), не запускать очистку по нему.
+
