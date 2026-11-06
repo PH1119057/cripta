@@ -52,7 +52,10 @@ from bybit_workbench.account_entry_safety import (
     account_entry_safety_ready,
     latch_account_entry_safety,
 )
-from bybit_workbench.release_arm_safety import REAL_ENTRY_RUNTIME_NOT_READY_REASON
+from bybit_workbench.release_arm_safety import (
+    PRIVATE_RECONNECT_GATE_REASON,
+    REAL_ENTRY_RUNTIME_NOT_READY_REASON,
+)
 from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 from bybit_workbench.private_worker_status import (
     DEFAULT_STATUS_DIR,
@@ -153,7 +156,6 @@ SIGNED_READ_TIMEOUT_SECONDS = 5.0
 SIGNED_MUTATION_TIMEOUT_SECONDS = 3.0
 BYBIT_TIME_PROBE_MAX_RTT_MS = 1000.0
 BYBIT_TIME_PROBE_ATTEMPTS = 3
-PRIVATE_RECONNECT_GATE_REASON = "private WS reconnect: verification pending"
 PRIVATE_RECONNECT_RECOVERED_REASON = (
     "private WS reconnect recovered: verified R1 arm restored"
 )
@@ -447,11 +449,13 @@ def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
         connection.commit()
         return
     now_ms = int(time.time() * 1000)
+    # A reconnect is a technical stop, not a replacement for an existing
+    # owner DISARM/safety barrier. Keep the original closed state and timestamp.
     connection.execute(
         """UPDATE control.execution_gates
            SET enabled=0,reason=%s,updated_at_epoch_ms=%s
-           WHERE mode='mainnet'""",
-        (reason, now_ms),
+           WHERE mode='mainnet' AND (enabled<>0 OR %s<>%s)""",
+        (reason, now_ms, reason, PRIVATE_RECONNECT_GATE_REASON),
     )
     connection.commit()
 
