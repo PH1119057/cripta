@@ -15,6 +15,7 @@ from uuid import uuid4
 import psycopg
 import pytest
 from psycopg.rows import dict_row
+from test_p90l90_real_postfill_observation import _proof
 
 from bybit_workbench.account_entry_safety import (
     account_entry_safety_ready,
@@ -26,7 +27,6 @@ from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeUnverified
 from bybit_workbench.universal_exit.p90l90_real_mfe_ledger import P90RealMfeLedger
 from bybit_workbench.universal_exit.p90l90_real_postfill_port import P90RealPostfillExitPort
 from bybit_workbench.universal_exit.storage import PostgresExitShadowStore
-from test_p90l90_real_postfill_observation import _proof
 
 DSN = os.getenv("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 REQUIRED = os.getenv("CRIPTA_P90_POSTFILL_E2E_REQUIRED") == "1"
@@ -60,7 +60,7 @@ class ScopedDB:
         return self.connection.execute(sql, params)
 
 
-class TestExecution:
+class _TestExecution:
     def __init__(self, db):
         self.db = db
 
@@ -84,7 +84,7 @@ def postfill(db, position, plan, private, coverage):
     return P90RealPostfillExitPort(
         db, position_provider=lambda sym: ((position, plan),) if sym == position.symbol else (),
         exit_store=PostgresExitShadowStore(db),
-        execution_port=TestExecution(db),
+        execution_port=_TestExecution(db),
     )(
         position=position, plan=plan, private=private, coverage=coverage,
         signed_fill_execution_ids=("synthetic-fill-id",),
@@ -165,13 +165,12 @@ def test_two_connections_keep_protected_fill_and_exit_across_mfe_rollback():
 
                 # Owner transaction A: native position + protection is
                 # visible only AFTER COMMIT; no first Exit observation yet.
-                with owner.transaction():
+                with owner.transaction(), source.transaction():
                     owner.execute(
                         f"INSERT INTO {schema}.simulated_protected_fill VALUES (%s,%s,TRUE)",
                         (p.strategy_position_id, p.trading_account_id),
                     )
-                    with source.transaction():
-                        assert count(source, "simulated_protected_fill") == 0
+                    assert count(source, "simulated_protected_fill") == 0
                 with source.transaction():
                     assert count(source, "simulated_protected_fill") == 1
                     assert count(source, "exit_observations") == 0
