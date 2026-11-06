@@ -37,11 +37,11 @@ from bybit_workbench.universal_exit.p90l90_real_runtime_ports import (
 from .contracts import FrozenPolicy, MarketFactEnvelope
 from .fingerprint import fingerprint
 from .p90l90_causal_fact_codec import encode_p90l90_fact
-from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_causal_transport_join import (
     P90L90CausalTransportJoin,
     P90TransportEvent,
 )
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_observer_real_consumer import P90L90ObserverRealConsumer
 from .p90l90_real_bounded_native_restart import (
     attest_bounded_native_restart,
