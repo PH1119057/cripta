@@ -37,3 +37,12 @@ def test_installer_only_installs_operator_unit_and_does_not_manage_start_it():
     assert source.count(spec) == 1
     managed = source[source.index("managed_services=("):]
     assert "cripta-p90-source-compatibility-register.service" not in managed
+
+def test_pruned_origin_fallback_is_local_read_only_git_only():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert 'SOURCE_CHECKOUT = Path("/srv/cripta/source_checkout")' in source
+    assert 'if (retained_origin / "INSTALLED_COMMIT").is_file()' in source
+    assert '"origin_git_checkout": SOURCE_CHECKOUT' in source
+    for forbidden in ("git fetch", "git clone", "git worktree", "git checkout"):
+        assert forbidden not in source
+
