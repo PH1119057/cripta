@@ -309,6 +309,7 @@ def recover_p90_real_open_source(
     fetch_recent_trades: FetchRecentTrades,
     fetch_closed_candles: FetchClosedCandles,
     bind_restart_bridge: Callable[[str], None],
+    loaded_release_commit: str | None = None,
 ) -> P90RealOpenSourceRecovery:
     """Recover old epoch through current live mirror with zero replay actions."""
     if (
@@ -334,7 +335,7 @@ def recover_p90_real_open_source(
         inventory = prove_p90_real_open_restart_inventory(
             connection,
             bundles=bundles,
-            source_commit=source_commit,
+            source_commit=loaded_release_commit or source_commit,
             source_epoch_id=source_epoch_id,
             checked_at=started_at,
             allow_missing_trail035=True,
@@ -412,7 +413,7 @@ def recover_p90_real_open_source(
             replay: list[tuple[datetime, int, P90TransportEvent]] = []
             for event in _closed_replay(
                 connection,
-                source_commit=source_commit,
+                source_commit=loaded_release_commit or source_commit,
                 symbol=symbol,
                 join=joins[symbol],
                 live_anchor=recovery.live_anchor,
@@ -540,7 +541,7 @@ def recover_p90_real_open_source(
         final_inventory = prove_p90_real_open_restart_inventory(
             connection,
             bundles=bundles,
-            source_commit=source_commit,
+            source_commit=loaded_release_commit or source_commit,
             source_epoch_id=source_epoch_id,
             checked_at=datetime.now(UTC),
             allow_missing_trail035=True,

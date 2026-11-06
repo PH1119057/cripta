@@ -99,7 +99,7 @@ def _require(condition: bool, reason: str) -> None:
 
 
 def _active_epoch_with_open_positions(
-    connection: Any, *, source_commit: str,
+    connection: Any, *, source_commit: str, bundles: tuple[object, ...] = (),
 ) -> str | None:
     """Return the one resumable epoch, or None only for genuinely flat v3."""
     _require(bool(_SHA.fullmatch(source_commit)), "SOURCE_COMMIT_INVALID")
@@ -162,10 +162,19 @@ def _active_epoch_with_open_positions(
         len(epochs) == 1
         and isinstance(epochs[0][0], str)
         and _EPOCH.fullmatch(epochs[0][0]) is not None
-        and epochs[0][1] == source_commit,
+        and isinstance(epochs[0][1], str)
+        and _SHA.fullmatch(epochs[0][1]) is not None,
         "ACTIVE_SOURCE_EPOCH_IDENTITY_UNVERIFIED",
     )
     epoch_id = str(epochs[0][0])
+    origin_commit = str(epochs[0][1])
+    if origin_commit != source_commit:
+        from .p90l90_real_source_compatibility import inspect_real_source_identity
+
+        identity = inspect_real_source_identity(
+            connection, epoch_id=epoch_id, loaded_commit=source_commit, bundles=bundles,
+        )
+        _require(identity.origin_commit == origin_commit, "SOURCE_ORIGIN_CHANGED")
     checkpoints = connection.execute(
         """SELECT symbol,checkpoint_json,source_commit
              FROM strategy_entry.p90l90_real_causal_checkpoints
@@ -175,7 +184,7 @@ def _active_epoch_with_open_positions(
     _require(
         len(checkpoints) == len(_SYMBOLS)
         and {row[0] for row in checkpoints} == _SYMBOLS
-        and all(row[2] == source_commit for row in checkpoints),
+        and all(row[2] == origin_commit for row in checkpoints),
         "EXACT_SOURCE_CHECKPOINT_SET_MISSING",
     )
     for symbol, snapshot, _commit in checkpoints:
@@ -198,11 +207,11 @@ def _active_epoch_with_open_positions(
 
 
 def inspect_p90_real_open_restart_epoch(
-    connection: Any, *, source_commit: str,
+    connection: Any, *, source_commit: str, bundles: tuple[object, ...] = (),
 ) -> str | None:
     """Read-only startup branch selector; performs no signed/network reads."""
     return _active_epoch_with_open_positions(
-        connection, source_commit=source_commit,
+        connection, source_commit=source_commit, bundles=bundles,
     )
 
 
@@ -326,7 +335,7 @@ def prove_p90_real_open_restart_inventory(
         "CHECK_TIME_OR_EPOCH_INVALID",
     )
     current = _active_epoch_with_open_positions(
-        connection, source_commit=source_commit,
+        connection, source_commit=source_commit, bundles=bundles,
     )
     _require(current == source_epoch_id, "SOURCE_EPOCH_CHANGED")
 

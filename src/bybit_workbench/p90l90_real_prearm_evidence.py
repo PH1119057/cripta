@@ -575,9 +575,19 @@ def prepare_p90l90_real_v3_prearm_evidence(
     ).fetchall()
     _require(len(epoch) == 1, "exact one ACTIVE source epoch required")
     epoch_id, epoch_commit, market_source, source_ready, mirror_ready = epoch[0]
+    if str(epoch_commit) != release_commit:
+        from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+            inspect_real_source_identity,
+        )
+
+        inspect_real_source_identity(
+            connection, epoch_id=str(epoch_id), loaded_commit=release_commit,
+            bundles=tuple(b for b in load_active_strategy_bundles(connection)
+                          if b.card.strategy_version == VERSION
+                          and b.card.strategy_id in {MAIN_ID, SUB_ID}),
+        )
     _require(
-        str(epoch_commit) == release_commit
-        and str(market_source) == BYBIT_PUBLIC_MARKET_SOURCE_ID
+        str(market_source) == BYBIT_PUBLIC_MARKET_SOURCE_ID
         and _aware(source_ready, "source WS") <= current
         and _aware(mirror_ready, "native mirror") <= current,
         "source epoch identity/readiness mismatch",
@@ -593,7 +603,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
     _require(
         len(checkpoint_rows) == 5
         and {str(row[0]) for row in checkpoint_rows} == expected_symbols
-        and all(str(row[1]) == release_commit and str(row[2]) == release_commit
+        and all(str(row[1]) == str(epoch_commit) and str(row[2]) == release_commit
                 for row in checkpoint_rows),
         "five-symbol causal checkpoint proof incomplete",
     )
