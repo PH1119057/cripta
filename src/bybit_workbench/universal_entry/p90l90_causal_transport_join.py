@@ -168,6 +168,14 @@ class P90L90CausalTransportJoin:
                 for e in self.pending
             ):
                 return ()
+            # Fail before changing last_trade_* or pending. The atomic DB
+            # writer will roll back too, but a pure join must not silently
+            # lose the rejected native envelope from its in-memory queue.
+            if (
+                sequence == self.last_emitted_trade_sequence
+                and len(self.last_emitted_exec_ids) >= 512
+            ):
+                raise RuntimeError("P90L90 same-sequence cursor capacity exceeded")
         if len(self.pending) >= _MAX_PENDING:
             raise RuntimeError("P90L90 causal transport backlog capacity exceeded")
         if event.kind == "PUBLIC_TRADE":
@@ -276,13 +284,20 @@ class P90L90CausalTransportJoin:
                 )
             ):
                 raise RuntimeError("P90L90 causally late trade vs committed bar")
+            # The pending close/bar release path can emit a batch. Reject
+            # overflow before removing this trade or moving its emitted
+            # cursor; the surrounding DB checkpoint transaction will roll
+            # back any earlier staged batch effects on failure.
+            if (
+                self.last_emitted_trade_sequence == trade.exchange_sequence
+                and len(self.last_emitted_exec_ids) >= 512
+            ):
+                raise RuntimeError("P90L90 same-sequence cursor capacity exceeded")
             self.pending.remove(trade)
             self.last_emitted_trade_at = _utc(trade.event_at)
             if self.last_emitted_trade_sequence != trade.exchange_sequence:
                 self.last_emitted_exec_ids.clear()
             self.last_emitted_trade_sequence = trade.exchange_sequence
-            if len(self.last_emitted_exec_ids) >= 512:
-                raise RuntimeError("P90L90 same-sequence cursor capacity exceeded")
             self.last_emitted_exec_ids.add(str(trade.exec_id))
             emitted.append(trade)
         return tuple(emitted)
