@@ -1,7 +1,9 @@
 """Only sanitized source tokens may be persisted by SUB Execution."""
 from __future__ import annotations
+
 import ast
 from pathlib import Path
+
 import pytest
 
 SOURCE = Path(__file__).resolve().parents[1] / "operations/connectivity/private_runtime.py"

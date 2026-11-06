@@ -4,9 +4,11 @@ The required CI mode MUST fail (not SKIP) if the disposable connection is absent
 Two-session first-fill handoff race is a separate, still-open acceptance gate.
 """
 from __future__ import annotations
+
 import ast
 import os
 from pathlib import Path
+
 import pytest
 
 DSN = os.getenv("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")

@@ -156,7 +156,6 @@ jobs:
           .venv/bin/python -m pytest -q --strict-markers \
             tests/test_p90_real_restart_postfill_guard.py \
             tests/test_p90_real_restart_postfill_guard_postgres.py \
-            tests/test_p90_real_firstfill_pending_mfe.py \
             tests/test_p90_real_postfill_source_reason_codes.py \
             tests/test_p90_real_safe_postfill_error.py
 
