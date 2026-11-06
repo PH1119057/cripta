@@ -165,6 +165,61 @@ def test_tampered_restored_checkpoint_and_wrong_account_fail_closed() -> None:
         )
 
 
+def test_same_seq_equal_ms_requires_source_owned_delivery_proof() -> None:
+    pos = _position()
+    first = _cursor(pos, seq=101, exec_id="original-A", millis=3)
+    tied = _cursor(pos, seq=101, exec_id="original-B", millis=3)
+    prior = P90RealMfeCheckpoint.begin(
+        position=pos, source_commit=SHA, first_cursor=first,
+        first_price=D("100.1"), verified_fill_to_first_trade_coverage=True,
+    )
+    with pytest.raises(P90RealMfeUnverified, match="NATIVE_ORDER_NOT_PROVEN"):
+        prior.advance(
+            position=pos, cursor=tied, price=D("100.5"),
+            proven_contiguous_native_cursor=True,
+        )
+    with pytest.raises(P90RealMfeUnverified, match="NATIVE_CURSOR_GAP"):
+        prior.advance(
+            position=pos, cursor=tied, price=D("100.5"),
+            proven_contiguous_native_cursor=False,
+            proven_same_timestamp_delivery_order=True,
+        )
+    result = prior.advance(
+        position=pos, cursor=tied, price=D("100.5"),
+        proven_contiguous_native_cursor=True,
+        proven_same_timestamp_delivery_order=True,
+    )
+    assert result.cursor_exec_id == "original-B"
+    assert result.cursor_at == first.traded_at
+    assert result.best_favorable_price == D("100.5")
+    assert P90RealMfeCheckpoint.restore(result.snapshot()) == result
+
+
+def test_original_tie_replay_requires_same_fact_price_and_identity() -> None:
+    pos = _position()
+    first = _cursor(pos, seq=100, exec_id="first", millis=3)
+    next_one = _cursor(pos, seq=100, exec_id="second", millis=3)
+    prior = P90RealMfeCheckpoint.begin(
+        position=pos, source_commit=SHA, first_cursor=first,
+        first_price=D("100.1"), verified_fill_to_first_trade_coverage=True,
+    )
+    second = prior.advance(
+        position=pos, cursor=next_one, price=D("100.2"),
+        proven_contiguous_native_cursor=True,
+        proven_same_timestamp_delivery_order=True,
+    )
+    assert second.advance(
+        position=pos, cursor=next_one, price=D("100.2"),
+        proven_contiguous_native_cursor=True,
+    ) is second
+    with pytest.raises(P90RealMfeUnverified, match="NATIVE_ORDER_NOT_PROVEN"):
+        second.advance(
+            position=pos, cursor=next_one, price=D("100.3"),
+            proven_contiguous_native_cursor=True,
+            proven_same_timestamp_delivery_order=True,
+        )
+
+
 class _Row:
     def __init__(self, item: dict[str, object] | None = None) -> None:
         self.item = item

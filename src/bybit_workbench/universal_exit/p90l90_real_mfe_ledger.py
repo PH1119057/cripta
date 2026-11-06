@@ -8,7 +8,7 @@ unverified tick. The caller provides independently verified source coverage.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
@@ -63,6 +63,7 @@ class P90RealMfeLedger:
         source_refs: tuple[str, ...],
         first_fill_forward_coverage_proven: bool,
         native_continuity_proven: bool,
+        prove_same_timestamp_order: Callable[[], bool] | None = None,
     ) -> P90RealMfeCheckpoint:
         if (
             not fact_id
@@ -89,11 +90,15 @@ class P90RealMfeLedger:
                  FROM strategy_exit.exit_observations
                 WHERE strategy_position_id=%s AND exit_plan_fingerprint=%s
                   AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT'
-                ORDER BY (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
+                ORDER BY COALESCE(
+                             (attributes->>'native_order_index')::bigint, 0
+                         ) DESC,
+                         (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
                          event_at DESC, observation_id DESC
                 LIMIT 1""",
             (position.strategy_position_id, position.exit_plan_fingerprint),
         ).fetchone()
+        native_order_index = 1  # First V2 append; historical V1 has no ordinal.
         if previous is None:
             checkpoint = P90RealMfeCheckpoint.begin(
                 position=position,
@@ -108,13 +113,30 @@ class P90RealMfeLedger:
                 raise P90RealMfeUnverified("P90_REAL_MFE_DURABLE_ROW_CORRUPT")
             prior_raw = attrs.get("checkpoint")
             prior = P90RealMfeCheckpoint.restore(prior_raw)
+            stored_index = attrs.get("native_order_index")
+            if stored_index is not None:
+                if type(stored_index) is not int or stored_index < 1:
+                    raise P90RealMfeUnverified(
+                        "P90_REAL_MFE_NATIVE_ORDER_INDEX_CORRUPT"
+                    )
+                native_order_index = stored_index + 1
             if prior.source_commit != source_commit:
                 raise P90RealMfeUnverified("P90_REAL_MFE_SOURCE_RELEASE_DRIFT")
+            tied = (
+                prior.cursor_seq == cursor.seq
+                and prior.cursor_at == cursor.traded_at.astimezone(UTC)
+                and prior.cursor_exec_id != cursor.exec_id
+            )
+            order_verified = (
+                prove_same_timestamp_order() is True
+                if tied and prove_same_timestamp_order is not None else False
+            )
             checkpoint = prior.advance(
                 position=position,
                 cursor=cursor,
                 price=price,
                 proven_contiguous_native_cursor=native_continuity_proven,
+                proven_same_timestamp_delivery_order=order_verified,
             )
             if checkpoint is prior:
                 if (
@@ -133,6 +155,7 @@ class P90RealMfeLedger:
         attributes = FrozenPolicy.from_mapping({
             "checkpoint": checkpoint.snapshot(),
             "native_fact_id": fact_id,
+            "native_order_index": native_order_index,
         })
         self._db.execute(
             """INSERT INTO strategy_exit.exit_observations(
@@ -187,7 +210,10 @@ class P90RealMfeLedger:
                  FROM strategy_exit.exit_observations
                 WHERE strategy_position_id=%s AND exit_plan_fingerprint=%s
                   AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT'
-                ORDER BY (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
+                ORDER BY COALESCE(
+                             (attributes->>'native_order_index')::bigint, 0
+                         ) DESC,
+                         (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
                          event_at DESC, observation_id DESC
                 LIMIT 1""",
             (position.strategy_position_id, position.exit_plan_fingerprint),

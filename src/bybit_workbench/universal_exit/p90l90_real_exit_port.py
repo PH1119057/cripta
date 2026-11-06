@@ -37,6 +37,7 @@ PositionProvider = Callable[[str], Sequence[tuple[StrategyPosition, ExitPlan]]]
 ExecutionPort = Callable[[ExitEvaluation, StrategyPosition, ExitPlan], object]
 SourceCoverageProvider = Callable[[StrategyPosition, TradeCursor], tuple[bool, bool]]
 NativePrefixProvider = Callable[[StrategyPosition, TradeCursor], Sequence[MirrorTrade]]
+NativeTieOrderProvider = Callable[[StrategyPosition, TradeCursor], bool]
 SignedPrivateProvider = Callable[
     [StrategyPosition, TradeCursor], ScopedPrivatePositionEvidence,
 ]
@@ -57,6 +58,7 @@ class P90RealExitNativePort:
         verified_execution_port: ExecutionPort | None = None,
         verified_native_prefix: NativePrefixProvider | None = None,
         private_state_pending: Callable[[StrategyPosition], bool] | None = None,
+        independently_verified_native_tie_order: NativeTieOrderProvider | None = None,
     ) -> None:
         self._positions = position_provider
         self._coverage = independently_verified_source_coverage
@@ -68,6 +70,23 @@ class P90RealExitNativePort:
         self._engine = UniversalExitEngine()
         self._prefix = verified_native_prefix
         self._pending = private_state_pending
+        self._tie_order = independently_verified_native_tie_order
+
+    def _prove_same_time_order(
+        self, position: StrategyPosition, cursor: TradeCursor,
+    ) -> bool:
+        return (
+            self._tie_order(position, cursor)
+            if self._tie_order is not None else False
+        )
+
+    def _tie_order_proof(
+        self, position: StrategyPosition, cursor: TradeCursor,
+    ) -> Callable[[], bool]:
+        def prove() -> bool:
+            return self._prove_same_time_order(position, cursor)
+
+        return prove
 
     def __call__(
         self,
@@ -118,6 +137,9 @@ class P90RealExitNativePort:
                         source_refs=(f"bybit:publicTrade:{trade.symbol}:{trade.exec_id}",),
                         first_fill_forward_coverage_proven=first,
                         native_continuity_proven=contiguous,
+                        prove_same_timestamp_order=self._tie_order_proof(
+                            position, earlier,
+                        ),
                     )
             first_contiguous, subsequent_contiguous = self._coverage(position, cursor)
             mfe = self._mfe.on_trade(
@@ -130,6 +152,9 @@ class P90RealExitNativePort:
                 source_refs=fact.source_refs,
                 first_fill_forward_coverage_proven=first_contiguous,
                 native_continuity_proven=subsequent_contiguous,
+                prove_same_timestamp_order=self._tie_order_proof(
+                    position, cursor,
+                ),
             )
             if self._pending is not None and self._pending(position):
                 evaluation = pending_private_evaluation(position, fact)

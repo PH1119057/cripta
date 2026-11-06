@@ -71,6 +71,21 @@ def read_real_postfill_source_window(
         raise P90RealPostfillSourceClientUnverified(
             "P90_REAL_POSTFILL_SOURCE_TRANSPORT_UNAVAILABLE"
         ) from None
+    if result.get("status") == "BLOCKED":
+        reason = result.get("reason_code")
+        if (
+            result.get("version") != 1
+            or result.get("nonce") != nonce
+            or result.get("position_id") != position.strategy_position_id
+            or result.get("trading_account_id") != position.trading_account_id
+            or result.get("source_epoch_id") != source_epoch_id
+            or not isinstance(reason, str)
+            or re.fullmatch(r"P90_REAL_MARKET_SOURCE_[A-Z0-9_]{1,96}", reason) is None
+        ):
+            raise P90RealPostfillSourceClientUnverified(
+                "P90_REAL_POSTFILL_SOURCE_RESPONSE_UNVERIFIED"
+            )
+        raise P90RealPostfillSourceClientUnverified(reason)
     if (
         result.get("version") != 1
         or result.get("status") != "VERIFIED"
