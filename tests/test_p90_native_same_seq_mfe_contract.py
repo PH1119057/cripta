@@ -95,15 +95,8 @@ def test_strictly_later_timestamp_within_same_seq_remains_supported():
     assert advanced.best_favorable_price == Decimal("100.2")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "NATIVE TIE CAUSAL PROOF REQUIRED: no durable exchange matching-order "
-        "ordinal or canon-approved unordered-batch Exit contract yet"
-    ),
-)
-def test_pending_fix_uses_proven_native_tie_order_without_losing_exec_ids():
-    """RED contract; must NOT be made green by sorting UUIDs or ignoring ticks."""
+def test_proven_native_tie_order_advances_mfe_without_losing_exec_ids():
+    """Source-owner proof is required; no UUID sorting or ignored native tick."""
     position, join, events, first, second = _two_source_trades()
     assert join.accept(events[0]) and join.accept(events[1])
     state = P90RealMfeCheckpoint.begin(
@@ -111,10 +104,12 @@ def test_pending_fix_uses_proven_native_tie_order_without_losing_exec_ids():
         first_price=Decimal("100.1"),
         verified_fill_to_first_trade_coverage=True,
     )
-    # A successful future fix must pass source-owned durable ordering proof
-    # rather than treating an unproven boolean as exchange matching order.
+    # The exact source-owner boundary is tested in
+    # test_p90l90_real_live_source_ports.py; the pure state consumes only
+    # its already-verified boolean proof.
     resolved = state.advance(
         position=position, cursor=second, price=Decimal("100.2"),
         proven_contiguous_native_cursor=True,
+        proven_same_timestamp_delivery_order=True,
     )
     assert resolved.cursor_exec_id == second.exec_id
