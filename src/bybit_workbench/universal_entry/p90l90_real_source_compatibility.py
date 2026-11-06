@@ -139,6 +139,7 @@ def inspect_real_source_identity(connection: Any, *, epoch_id: str,
     contract = consumer_contract_digest()
     plans = plan_pair_digest(bundles)
     approved = {origin}
+    recorded_producers = {origin, *(r[0] for r in rows)}
     for release, saved_origin, version, code, pair, checksum, evidence in rows:
         _require(isinstance(release, str) and _SHA.fullmatch(release) is not None
                  and saved_origin == origin and version == CONTRACT_VERSION
@@ -148,6 +149,24 @@ def inspect_real_source_identity(connection: Any, *, epoch_id: str,
                  and {x.get("symbol") for x in evidence if isinstance(x, dict)} == _SYMBOLS
                  and fingerprint(evidence) == checksum,
                  "ATTESTATION_CORRUPT_OR_INCOMPATIBLE")
+        for item in evidence:
+            _require(isinstance(item, dict)
+                     and set(item) == {"symbol", "checkpoint", "entry", "source_commit",
+                                       "generation", "writer_release_commit"}
+                     and item["source_commit"] == origin
+                     and (item["writer_release_commit"] or origin) in recorded_producers
+                     and type(item["generation"]) is int and item["generation"] >= 0
+                     and isinstance(item["entry"], dict)
+                     and item["entry"].get("schema") == "P90L90_CAUSAL_ENTRY_RESTART_V1",
+                     "ATTESTATION_CHECKPOINT_IDENTITY_INVALID")
+            try:
+                saved_join = P90L90CausalTransportJoin.restore(item["checkpoint"])
+            except (ValueError, RuntimeError, TypeError, KeyError):
+                raise P90RealSourceCompatibilityUnverified(
+                    "P90_REAL_SOURCE_COMPATIBILITY_ATTESTATION_CHECKPOINT_CORRUPT"
+                ) from None
+            _require(saved_join.symbol == item["symbol"] and not saved_join.pending,
+                     "ATTESTATION_CHECKPOINT_SOURCE_GAP")
         approved.add(release)
     _require(loaded_commit in approved, "RELEASE_NOT_REGISTERED")
     checkpoint_evidence(connection, epoch_id=epoch_id, origin=origin,
@@ -165,6 +184,8 @@ def register_real_source_compatibility(connection: Any, *, epoch_id: str,
     _require(getattr(getattr(getattr(connection, "info", None),
                              "transaction_status", None), "name", None) == "INTRANS",
              "REGISTRATION_TRANSACTION_REQUIRED")
+    _require(connection.execute("SHOW transaction_isolation").fetchone() == ("serializable",),
+             "REGISTRATION_SERIALIZABLE_REQUIRED")
     _require(current_root.resolve().name == loaded_commit, "CURRENT_RELEASE_PATH_INVALID")
     _require(connection.execute("SELECT session_user,current_user").fetchone()
              == ("cripta", "cripta"), "DB_ACTOR_INVALID")

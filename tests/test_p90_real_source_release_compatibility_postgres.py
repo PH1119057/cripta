@@ -71,6 +71,15 @@ def pg():
     c = psycopg.connect(DSN)
     assert c.info.dbname != "cripta", "production forbidden"
     try:
+        c.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        # The minimal CI bootstrap creates these pre-existing runtime tables
+        # without production reader ACL or a gate row. Supply only the exact
+        # SELECT rights needed by this real actor; all changes roll back.
+        c.execute("GRANT SELECT ON control.execution_gates,"
+                  "strategy_entry.execution_requests,strategy_entry.execution_dispatches,"
+                  "strategy_exit.execution_requests,strategy_exit.execution_dispatches TO cripta")
+        c.execute("INSERT INTO control.execution_gates VALUES('mainnet',0,'FIXTURE_OFF',0) "
+                  "ON CONFLICT(mode) DO UPDATE SET enabled=0")
         for symbol in SYMBOLS:
             c.execute(
                 """INSERT INTO identity.instruments(

@@ -150,6 +150,21 @@ def test_same_release_keeps_existing_no_registration_contract():
     assert identity.approved_producers == {ORIGIN}
 
 
+@pytest.mark.parametrize("field,value", [("source_commit", "f" * 40),
+                                        ("writer_release_commit", "f" * 40),
+                                        ("generation", -1), ("checkpoint", {})])
+def test_self_consistent_checksum_cannot_approve_foreign_or_corrupt_checkpoint(field, value):
+    db = SourceDB()
+    attest(db)
+    row = list(db.attestations[0])
+    row[6][0][field] = value
+    row[5] = fingerprint(row[6])
+    db.attestations[0] = tuple(row)
+    with pytest.raises(compat.P90RealSourceCompatibilityUnverified):
+        compat.inspect_real_source_identity(db, epoch_id=EPOCH,
+                                            loaded_commit=LOADED, bundles=bundles())
+
+
 def test_current_checkpoint_writer_may_advance_only_to_registered_producer():
     db = SourceDB()
     attest(db)
