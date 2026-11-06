@@ -1,0 +1,21 @@
+[Unit]
+Description=Cripta explicit P90 REAL source compatibility registration
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/implementation/register_p90_real_source_compatibility.py --current-release --active-epoch --register
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+UMask=0027
