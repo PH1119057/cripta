@@ -249,6 +249,8 @@ unit_specs=(
   "operations/systemd/cripta-account-enrollment-probe@.service|cripta-account-enrollment-probe@.service|runtime"
   # Inert owner-triggered Release Controller; never auto-enabled or managed.
   "operations/systemd/cripta-release-controller.service|cripta-release-controller.service|runtime"
+  # Inert explicit P90 source-compatibility registration; DB append only, no Exchange/ARM.
+  "operations/systemd/cripta-p90-source-compatibility-register.service|cripta-p90-source-compatibility-register.service|runtime"
   # Generic management-plane broker. It may start only source-allowlisted CRIPTA units.
   "operations/systemd/cripta-real-service-broker.service|cripta-real-service-broker.service|runtime"
   # Exact SUB WS technical recovery, no restart broker and no OWNER/LIVE rights.
