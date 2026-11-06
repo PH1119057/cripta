@@ -54,10 +54,15 @@ from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _EPOCH = re.compile(r"p90-real-epoch-[0-9a-f]{40}\Z")
 _SYMBOLS = frozenset().union(*ALLOWED_SYMBOLS.values())
-_RECOVERY_KEYS = frozenset((
+_RECOVERY_REQUIRED_KEYS = frozenset((
     "symbol", "side", "positionIdx", "size", "avgPrice",
     "stopLoss", "takeProfit", "trailingStop", "markPrice",
 ))
+_RECOVERY_STABLE_KEYS = frozenset((
+    "symbol", "side", "positionIdx", "size", "avgPrice",
+    "stopLoss", "takeProfit", "trailingStop",
+))
+_RECOVERY_GENERATION_MAX_AGE_SECONDS = 15.0
 _RECOVERY_ACCOUNT_PROOF_BUDGET_SECONDS = 20.0
 _RECOVERY_ACCOUNT_PROOF_MAX_ATTEMPT_SECONDS = 15.0
 _RECOVERY_ACCOUNT_PROOF_RETRY_SLEEP_SECONDS = 0.25
@@ -262,12 +267,96 @@ def _verify_trailing(
     raise AssertionError("unreachable")
 
 
-def _minimal_position(row: Mapping[str, object]) -> dict[str, object]:
+def _stable_position(row: Mapping[str, object]) -> dict[str, object]:
+    """Cross-proof identity/protection fields; markPrice is intentionally volatile."""
     _require(
-        set(row).issuperset(_RECOVERY_KEYS),
+        set(row).issuperset(_RECOVERY_REQUIRED_KEYS),
         "SIGNED_POSITION_SHAPE_INCOMPLETE",
     )
-    return {key: row.get(key) for key in _RECOVERY_KEYS}
+    return {key: row.get(key) for key in _RECOVERY_STABLE_KEYS}
+
+
+def _verified_generation_completed_at(
+    connection: Any,
+    *,
+    generation_id: str,
+    route: P90RealAccountRoute,
+    observed_at: datetime,
+) -> datetime:
+    _require(
+        bool(generation_id)
+        and observed_at.tzinfo is not None
+        and observed_at.utcoffset() is not None,
+        "POSITION_GENERATION_EVIDENCE_INVALID",
+    )
+    row = connection.execute(
+        """SELECT state,started_at,completed_at
+             FROM runtime.account_state_generations
+            WHERE generation_id=%s
+              AND trading_account_id=%s
+              AND account_connector_id=%s
+              AND identity_status='PROVEN'""",
+        (
+            generation_id,
+            route.trading_account_id,
+            route.account_connector_id,
+        ),
+    ).fetchone()
+    _require(
+        isinstance(row, (tuple, list))
+        and len(row) == 3
+        and row[0] == "COMPLETE"
+        and isinstance(row[1], datetime)
+        and isinstance(row[2], datetime)
+        and row[1].tzinfo is not None
+        and row[2].tzinfo is not None
+        and row[1] <= row[2]
+        and 0
+        <= (observed_at.astimezone(UTC) - row[2].astimezone(UTC)).total_seconds()
+        <= _RECOVERY_GENERATION_MAX_AGE_SECONDS,
+        "POSITION_GENERATION_EVIDENCE_INVALID",
+    )
+    return row[2].astimezone(UTC)
+
+
+def _verify_cross_snapshot_position(
+    connection: Any,
+    *,
+    position: StrategyPosition,
+    route: P90RealAccountRoute,
+    account_proof: P90RealSignedRecoveryAccount,
+    account_row: Mapping[str, object],
+    signed: ScopedPrivatePositionEvidence,
+) -> None:
+    _require(
+        signed.trading_account_id == route.trading_account_id
+        and signed.connector_id == route.account_connector_id
+        and signed.signed_provider_uid == route.registered_exchange_uid
+        and signed.exchange_position_key == position.exchange_position_key
+        and signed.position_idx == 0
+        and signed.pending_exit_mutation is False,
+        "POSITION_SIGNED_IDENTITY_DRIFT",
+    )
+    account_completed = _verified_generation_completed_at(
+        connection,
+        generation_id=account_proof.private_generation_id,
+        route=route,
+        observed_at=account_proof.observed_at,
+    )
+    signed_completed = _verified_generation_completed_at(
+        connection,
+        generation_id=signed.generation_id,
+        route=route,
+        observed_at=signed.observed_at,
+    )
+    _require(
+        signed_completed >= account_completed,
+        "POSITION_SIGNED_GENERATION_REGRESSED",
+    )
+    _require(
+        _stable_position(signed.position) == _stable_position(account_row),
+        "POSITION_SIGNED_INVENTORY_DRIFT",
+    )
 
 
 def _read_recovery_account_bounded(
@@ -425,17 +514,16 @@ def prove_p90_real_open_restart_inventory(
             if row.get("symbol") == position.symbol
         ]
         _require(
-            len(account_rows) == 1
-            and signed.trading_account_id == account
-            and signed.connector_id == route.account_connector_id
-            and signed.signed_provider_uid == route.registered_exchange_uid
-            and signed.generation_id == account_proof.private_generation_id
-            and signed.exchange_position_key == position.exchange_position_key
-            and signed.position_idx == 0
-            and signed.pending_exit_mutation is False
-            and _minimal_position(signed.position)
-            == _minimal_position(account_rows[0]),
+            len(account_rows) == 1,
             "POSITION_SIGNED_INVENTORY_DRIFT",
+        )
+        _verify_cross_snapshot_position(
+            connection,
+            position=position,
+            route=route,
+            account_proof=account_proof,
+            account_row=account_rows[0],
+            signed=signed,
         )
         side = "Buy" if position.direction is TradeDirection.LONG else "Sell"
         _require(
