@@ -282,11 +282,14 @@ def _verified_generation_completed_at(
     generation_id: str,
     route: P90RealAccountRoute,
     observed_at: datetime,
+    max_age_seconds: float,
 ) -> datetime:
     _require(
         bool(generation_id)
         and observed_at.tzinfo is not None
-        and observed_at.utcoffset() is not None,
+        and observed_at.utcoffset() is not None
+        and isinstance(max_age_seconds, (int, float))
+        and 0 < float(max_age_seconds) <= 30.0,
         "POSITION_GENERATION_EVIDENCE_INVALID",
     )
     row = connection.execute(
@@ -313,7 +316,7 @@ def _verified_generation_completed_at(
         and row[1] <= row[2]
         and 0
         <= (observed_at.astimezone(UTC) - row[2].astimezone(UTC)).total_seconds()
-        <= _RECOVERY_GENERATION_MAX_AGE_SECONDS,
+        <= float(max_age_seconds),
         "POSITION_GENERATION_EVIDENCE_INVALID",
     )
     return cast(datetime, row[2]).astimezone(UTC)
@@ -342,12 +345,19 @@ def _verify_cross_snapshot_position(
         generation_id=account_proof.private_generation_id,
         route=route,
         observed_at=account_proof.observed_at,
+        # RecoveryAccountReader proves generation age <=15s at read start,
+        # then proves the entire signed account read window <=15s. Its
+        # observed_at is the END of that signed-read window.
+        max_age_seconds=_RECOVERY_GENERATION_MAX_AGE_SECONDS * 2,
     )
     signed_completed = _verified_generation_completed_at(
         connection,
         generation_id=signed.generation_id,
         route=route,
         observed_at=signed.observed_at,
+        # SignedPositionReader stamps observed_at at read START and already
+        # requires its COMPLETE generation to be <=15s old at that moment.
+        max_age_seconds=_RECOVERY_GENERATION_MAX_AGE_SECONDS,
     )
     _require(
         signed_completed >= account_completed,
