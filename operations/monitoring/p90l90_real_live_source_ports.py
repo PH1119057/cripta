@@ -353,8 +353,8 @@ class P90RealLiveSourcePorts:
             "SELECT attributes FROM strategy_exit.exit_observations "
             "WHERE strategy_position_id=%s AND exit_plan_fingerprint=%s "
             "AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT' "
-            "ORDER BY COALESCE((attributes->>'native_order_index')::bigint,0) DESC,
-                         (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,"
+            "ORDER BY COALESCE((attributes->>'native_order_index')::bigint,0) DESC,"
+            "(attributes->'checkpoint'->>'cursor_seq')::bigint DESC,"
             "event_at DESC,observation_id DESC LIMIT 1",
             (position.strategy_position_id, position.exit_plan_fingerprint),
         ).fetchone()
