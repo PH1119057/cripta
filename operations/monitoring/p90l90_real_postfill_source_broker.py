@@ -400,6 +400,7 @@ def serve_source_windows(
                 stream.settimeout(5.0)
                 if not peer_same_runtime_uid(stream):
                     continue
+                nonce = None
                 try:
                     request = _receive(stream)
                     position_id, account, symbol, nonce = checked_request(
@@ -431,6 +432,24 @@ def serve_source_windows(
                         "position_id": position_id, "trading_account_id": account,
                         "window": window_to_wire(window),
                     }))
+                except P90RealPostfillMarketSourceUnverified as exc:
+                    # Only a source-owned allowlisted code may cross authenticated
+                    # IPC. Never leak raw DB/Exchange information.
+                    if nonce is None:
+                        continue
+                    reason = str(exc)
+                    if re.fullmatch(r"P90_REAL_MARKET_SOURCE_[A-Z0-9_]{1,96}", reason) is None:
+                        reason = "P90_REAL_MARKET_SOURCE_UNVERIFIED"
+                    try:
+                        stream.sendall(_frame({
+                            "version": 1, "nonce": nonce,
+                            "status": "BLOCKED", "reason_code": reason,
+                            "source_epoch_id": source_epoch_id,
+                            "position_id": position_id,
+                            "trading_account_id": account,
+                        }))
+                    except (OSError, ValueError):
+                        pass
                 except Exception:
-                    # No DB, signed Exchange, path or source exception detail.
+                    # Unexpected/foreign errors remain private.
                     continue

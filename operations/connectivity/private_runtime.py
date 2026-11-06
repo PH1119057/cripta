@@ -422,6 +422,19 @@ def _private_worker_safe_error(exc: BaseException) -> str:
             safe_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:-")
             if 0 < len(message) <= 180 and set(message) <= safe_chars:
                 return f"{type(exc).__name__}:{message}"
+        # Keep only typed, allowlisted POSTFILL source failures for SUB audit.
+        prefix = "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:"
+        if isinstance(exc, ExchangeMutationBarrier) and message.startswith(prefix):
+            code = message[len(prefix):]
+            if (
+                0 < len(code) <= 120
+                and code.startswith((
+                    "P90_REAL_MARKET_SOURCE_", "P90_REAL_POSTFILL_SOURCE_",
+                    "P90_REAL_POSTFILL_",
+                ))
+                and set(code) <= set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+            ):
+                return f"{type(exc).__name__}:{message}"
         return type(exc).__name__
     return f"{type(exc).__name__}: {exc}"
 
@@ -1270,12 +1283,86 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
             (str(command_id)[:36], TRADING_ACCOUNT_ID),
         ).fetchone()
         if execution:
+            # A real fill alone cannot certify first-fill POSTFILL/Exit handoff.
+            # The first protected position is committed before its Exit owner
+            # hands off a native observation and child Execution request.
+            from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+                VERSION as p90_real_version,
+            )
+
+            entry_payload = connection.execute(
+                """SELECT payload_json FROM runtime.trade_commands
+                   WHERE command_id=%s AND trading_account_id=%s
+                     AND identity_status='PROVEN'""",
+                (command_id, TRADING_ACCOUNT_ID),
+            ).fetchone()
+            try:
+                payload = (
+                    entry_payload[0] if isinstance(entry_payload[0], dict)
+                    else json.loads(entry_payload[0])
+                )
+            except (TypeError, ValueError, IndexError, KeyError):
+                raise ExchangeMutationBarrier(
+                    "RESTART_ENTRY_PAYLOAD_UNVERIFIED"
+                ) from None
+            if not isinstance(payload, dict):
+                raise ExchangeMutationBarrier("RESTART_ENTRY_PAYLOAD_UNVERIFIED")
+            if str(payload.get("strategy_version") or "") == p90_real_version:
+                handoff = connection.execute(
+                    """SELECT 1 FROM runtime.position_ownership p
+                       JOIN strategy_exit.exit_observations o
+                         ON o.strategy_position_id=p.position_id
+                        AND o.exit_plan_fingerprint=p.exit_plan_fingerprint
+                        AND o.event_kind='P90L90_REAL_POSTFILL'
+                       JOIN strategy_exit.exit_decisions d
+                         ON d.observation_id=o.observation_id
+                        AND d.strategy_position_id=p.position_id
+                        AND d.action_kind='SET_TRAILING'
+                       JOIN strategy_exit.execution_requests r
+                         ON r.exit_decision_id=d.exit_decision_id
+                        AND r.strategy_position_id=p.position_id
+                        AND r.action_kind='SET_TRAILING'
+                        AND r.trading_account_id=p.trading_account_id
+                        AND r.identity_status='PROVEN'
+                       JOIN strategy_exit.execution_dispatches ed
+                         ON ed.execution_request_id=r.execution_request_id
+                        AND ed.state='DISPATCHED'
+                       JOIN runtime.trade_commands child
+                         ON child.command_id=ed.command_id
+                        AND child.command_type='strategy_exit'
+                        AND child.state IN ('running','completed')
+                        AND child.trading_account_id=p.trading_account_id
+                        AND child.identity_status='PROVEN'
+                      WHERE p.entry_command_id=%s
+                        AND p.trading_account_id=%s
+                        AND p.identity_status='PROVEN'
+                        AND p.initial_protection_confirmed_at IS NOT NULL
+                      LIMIT 1""",
+                    (command_id, TRADING_ACCOUNT_ID),
+                ).fetchone()
+                if handoff is None:
+                    # Preserve original error and NEVER repeat /v5/order/create.
+                    connection.execute(
+                        """UPDATE runtime.trade_commands
+                           SET state='running',
+                               error=CASE WHEN COALESCE(error,'')=''
+                                          THEN 'P90_REAL_RESTART_POSTFILL_UNVERIFIED'
+                                          ELSE error END
+                           WHERE command_id=%s AND state IN ('queued','running')
+                             AND trading_account_id=%s
+                             AND identity_status='PROVEN'""",
+                        (command_id, TRADING_ACCOUNT_ID),
+                    )
+                    continue
             connection.execute(
                 """UPDATE runtime.trade_commands
                    SET state='completed',finished_at_epoch_ms=%s,
-                       error='recovered after restart from exact execution evidence'
-                   WHERE command_id=%s""",
-                (now_ms, command_id),
+                       error=CASE WHEN COALESCE(error,'')=''
+                                  THEN 'recovered after restart from exact execution evidence'
+                                  ELSE error END
+                   WHERE command_id=%s
+                     AND trading_account_id=%s AND identity_status='PROVEN'""",
+                (now_ms, command_id, TRADING_ACCOUNT_ID),
             )
             continue
 

@@ -104,6 +104,16 @@ class P90RealExitNativePort:
                 or position.initial_protection_confirmed_at is None
             ):
                 raise P90RealMfeUnverified("P90_REAL_EXIT_WRONG_POSITION_OR_PLAN")
+            # Execution may commit the protected Fill before the first
+            # native POSTFILL/Exit dispatch. During this intermediate state,
+            # do not advance MFE or issue a mutation. Original native ticks
+            # remain the MarketSource owner's responsibility; on completion
+            # the verified native prefix is replayed, or coverage fails closed.
+            if self._pending is not None and self._pending(position):
+                evaluation = pending_private_evaluation(position, fact)
+                self._exit_store.record(evaluation, position=position, plan=plan)
+                results.append(evaluation)
+                continue
             if self._prefix is not None:
                 for trade in self._prefix(position, cursor):
                     earlier = TradeCursor(
@@ -131,11 +141,6 @@ class P90RealExitNativePort:
                 first_fill_forward_coverage_proven=first_contiguous,
                 native_continuity_proven=subsequent_contiguous,
             )
-            if self._pending is not None and self._pending(position):
-                evaluation = pending_private_evaluation(position, fact)
-                self._exit_store.record(evaluation, position=position, plan=plan)
-                results.append(evaluation)
-                continue
             private = self._private(position, cursor)
             observation = build_real_native_exit_observation(
                 position=position, checkpoint=mfe, cursor=cursor,
