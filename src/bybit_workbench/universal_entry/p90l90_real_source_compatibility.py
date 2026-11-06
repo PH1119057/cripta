@@ -13,8 +13,8 @@ from typing import Any
 
 from .fingerprint import canonical_json, fingerprint
 from .p90l90_causal_transport_join import P90L90CausalTransportJoin
-from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 
 CONTRACT_VERSION = "P90_REAL_SOURCE_RELEASE_COMPATIBILITY_V1"
