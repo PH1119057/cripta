@@ -159,7 +159,8 @@ class P90RealLiveSourcePorts:
                  FROM strategy_exit.exit_observations
                 WHERE strategy_position_id=%s AND exit_plan_fingerprint=%s
                   AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT'
-                ORDER BY (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
+                ORDER BY COALESCE((attributes->>'native_order_index')::bigint,0) DESC,
+                         (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
                          event_at DESC,observation_id DESC
                 LIMIT 1""",
             (position.strategy_position_id, position.exit_plan_fingerprint),
@@ -275,6 +276,69 @@ class P90RealLiveSourcePorts:
         self._snapshot()
         return True, True
 
+    def native_tie_order(
+        self, position: StrategyPosition, cursor: TradeCursor,
+    ) -> bool:
+        """Verify original adjacent WebSocket delivery order for a same-ms tie.
+
+        Source-owned MirrorTrade.ordinal reflects original frame and array
+        order. An unknown REST ordering or new unbridged epoch is rejected.
+        """
+        self._source_transaction()
+        row = self._db.execute(
+            "SELECT attributes FROM strategy_exit.exit_observations "
+            "WHERE strategy_position_id=%s AND exit_plan_fingerprint=%s "
+            "AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT' "
+            "ORDER BY COALESCE((attributes->>'native_order_index')::bigint,0) DESC,"
+            "(attributes->'checkpoint'->>'cursor_seq')::bigint DESC,"
+            "event_at DESC,observation_id DESC LIMIT 1",
+            (position.strategy_position_id, position.exit_plan_fingerprint),
+        ).fetchone()
+        if row is None:
+            return False
+        attrs = row.get("attributes") if isinstance(row, Mapping) else (
+            row[0] if isinstance(row, (tuple, list)) and len(row) == 1 else None
+        )
+        if not isinstance(attrs, Mapping):
+            raise P90RealLiveSourceUnverified(
+                "P90_REAL_LIVE_SOURCE_MFE_ATTRIBUTES_INVALID"
+            )
+        prior = P90RealMfeCheckpoint.restore(attrs.get("checkpoint"))
+        if (
+            cursor.seq != prior.cursor_seq
+            or cursor.traded_at != prior.cursor_at
+            or cursor.exec_id == prior.cursor_exec_id
+        ):
+            return False
+        # Revalidate actual source epoch, mirror continuity, original anchor
+        # and exact adjacency on the same PostgreSQL source transaction.
+        self.native_coverage(position, cursor)
+        trades = self._mirror.verified_fill_forward_events(
+            symbol=position.symbol, fill_at=prior.cursor_at,
+            at=datetime.now(UTC),
+        )
+        previous = [
+            i for i, trade in enumerate(trades)
+            if (trade.exec_id, trade.seq, trade.traded_at) == (
+                prior.cursor_exec_id, prior.cursor_seq, prior.cursor_at
+            )
+        ]
+        current = [
+            i for i, trade in enumerate(trades)
+            if (trade.exec_id, trade.seq, trade.traded_at) == (
+                cursor.exec_id, cursor.seq, cursor.traded_at
+            )
+        ]
+        if (
+            len(previous) != 1 or len(current) != 1
+            or current[0] != previous[0] + 1
+            or trades[previous[0]].ordinal >= trades[current[0]].ordinal
+        ):
+            raise P90RealLiveSourceUnverified(
+                "P90_REAL_LIVE_SOURCE_TIED_NATIVE_ORDER_UNVERIFIED"
+            )
+        return True
+
     def native_prefix(
         self, position: StrategyPosition, cursor: TradeCursor,
     ) -> tuple[MirrorTrade, ...]:
@@ -289,7 +353,8 @@ class P90RealLiveSourcePorts:
             "SELECT attributes FROM strategy_exit.exit_observations "
             "WHERE strategy_position_id=%s AND exit_plan_fingerprint=%s "
             "AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT' "
-            "ORDER BY (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,"
+            "ORDER BY COALESCE((attributes->>'native_order_index')::bigint,0) DESC,
+                         (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,"
             "event_at DESC,observation_id DESC LIMIT 1",
             (position.strategy_position_id, position.exit_plan_fingerprint),
         ).fetchone()
