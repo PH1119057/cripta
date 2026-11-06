@@ -24,11 +24,11 @@ from .p90l90_causal_transport_join import (
     P90L90CausalTransportJoin,
     P90TransportEvent,
 )
-from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_entry_restart_checkpoint import (
     entry_restart_snapshot,
     restore_entry_restart_snapshot,
 )
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _SYMBOLS = frozenset({"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"})
