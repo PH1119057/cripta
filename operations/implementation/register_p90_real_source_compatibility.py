@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Explicit technical registration, never invoked by installer or Observer.
 
-Actor cripta/DB cripta. Reads current and retained origin release, source state,
-canonical candles and active immutable plans. Only inserts compatibility evidence.
-No filesystem writes, Exchange calls, provenance edits or financial authorization.
+Actor cripta/DB cripta. Reads current release, active-source provenance and exact
+local Git object bytes for a pruned origin when needed. Only inserts compatibility
+evidence. No filesystem writes, network fetch, Exchange calls, provenance edits or
+financial authorization.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path("/srv/cripta/runtime/current")
+SOURCE_CHECKOUT = Path("/srv/cripta/source_checkout")
 sys.path.insert(0, str(ROOT / "src"))
 
 import psycopg  # noqa: E402
@@ -74,10 +76,19 @@ def perform(
             ).fetchone()
             if row is None:
                 raise RuntimeError("P90_REAL_COMPATIBILITY_EPOCH_MISSING")
+            retained_origin = ROOT.resolve().parent / row[0]
+            kwargs = (
+                {"origin_root": retained_origin}
+                if (retained_origin / "INSTALLED_COMMIT").is_file()
+                else {"origin_git_checkout": SOURCE_CHECKOUT}
+            )
             register_real_source_compatibility(
-                c, epoch_id=epoch_id, loaded_commit=release_commit, bundles=bundles,
+                c,
+                epoch_id=epoch_id,
+                loaded_commit=release_commit,
+                bundles=bundles,
                 current_root=ROOT.resolve(),
-                origin_root=ROOT.resolve().parent / row[0],
+                **kwargs,
             )
         identity = inspect_real_source_identity(
             c, epoch_id=epoch_id, loaded_commit=release_commit, bundles=bundles,
