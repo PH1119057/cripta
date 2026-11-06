@@ -144,12 +144,13 @@ class P90RealMfeCheckpoint:
         cursor: TradeCursor,
         price: Decimal,
         proven_contiguous_native_cursor: bool,
+        proven_same_timestamp_delivery_order: bool = False,
     ) -> P90RealMfeCheckpoint:
         """Return a new state, or the identical checkpoint for an exact replay.
 
-        Same-sequence different executions are supported only when their
-        timestamp proves strict causal order; ambiguous batching cannot
-        change stop/TP decisions. Continuity is a separate source proof.
+        Same-sequence equal-timestamp executions require a separate proof
+        of exact original WS delivery order, not merely gap-free coverage.
+        Never infer ordering from a UUID, price or fabricated timestamp.
         """
         _proof(position, self.source_commit)
         if (
@@ -187,7 +188,14 @@ class P90RealMfeCheckpoint:
         if (
             cursor.seq < self.cursor_seq
             or at < self.cursor_at
-            or (cursor.seq == self.cursor_seq and at <= self.cursor_at)
+            or (
+                cursor.seq == self.cursor_seq
+                and at <= self.cursor_at
+                and not (
+                    at == self.cursor_at
+                    and proven_same_timestamp_delivery_order is True
+                )
+            )
             or cursor.exec_id == self.cursor_exec_id
         ):
             raise P90RealMfeUnverified("P90_REAL_MFE_NATIVE_ORDER_NOT_PROVEN")
