@@ -568,6 +568,9 @@ migration_files=(
   # Additive independent REAL-only source-epoch state; never resets old PAPER evidence.
   operations/sql/20261029_p90l90_real_source_epochs.sql
   operations/sql/20261106_p90_real_source_release_compatibility.sql
+  # Same source checkpoint owner: exact rolling trade-ID journal and V2 JSON
+  # accepted atomically; the migration never opens any financial gate.
+  operations/sql/20261106_p90_native_sequence_exec_ids.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
