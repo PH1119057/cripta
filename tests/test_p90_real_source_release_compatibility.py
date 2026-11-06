@@ -1,0 +1,199 @@
+"""Cross-release recovery must retain origin; no fabricated compatibility."""
+from __future__ import annotations
+
+import copy
+from datetime import UTC, datetime
+from decimal import Decimal
+from types import SimpleNamespace
+
+import pytest
+
+from bybit_workbench.universal_entry import p90l90_real_source_compatibility as compat
+from bybit_workbench.universal_entry.fingerprint import fingerprint
+from bybit_workbench.universal_entry.p90l90_causal import P90L90CausalEntry
+from bybit_workbench.universal_entry.p90l90_causal_transport_join import P90L90CausalTransportJoin
+from bybit_workbench.universal_entry.p90l90_entry_restart_checkpoint import entry_restart_snapshot
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
+from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+    inspect_p90_real_open_restart_epoch,
+)
+
+ORIGIN = "a" * 40
+LOADED = "b" * 40
+EPOCH = "p90-real-epoch-" + "c" * 40
+AT = datetime(2026, 11, 6, 0, 0, tzinfo=UTC)
+SYMBOLS = ("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT")
+
+
+def bundles():
+    return tuple(SimpleNamespace(
+        card=SimpleNamespace(strategy_id=name, strategy_version=VERSION,
+                             strategy_config_fingerprint="config-" + name),
+        activation=SimpleNamespace(enabled=True, strategy_id=name, activation_id="act-" + name),
+        entry_plan=SimpleNamespace(strategy_activation_id="act-" + name,
+                                   entry_plan_fingerprint="entry-" + name),
+        exit_plan=SimpleNamespace(exit_plan_fingerprint="exit-" + name),
+    ) for name in (MAIN_ID, SUB_ID))
+
+
+def checkpoints():
+    rows = []
+    for symbol in SYMBOLS:
+        join = P90L90CausalTransportJoin(symbol=symbol, closed_5m_at=AT, closed_15m_at=AT,
+                                       last_emitted_trade_at=AT,
+                                       last_emitted_trade_sequence=100,
+                                       last_emitted_exec_ids={"exec-" + symbol})
+        entry = P90L90CausalEntry(previous_at=AT, previous_price=Decimal("100"))
+        rows.append((symbol, join.snapshot(), entry_restart_snapshot(entry), ORIGIN, 3, ORIGIN))
+    return rows
+
+
+class SourceDB:
+    def __init__(self, *, count=1):
+        self.epoch = (ORIGIN, "ACTIVE")
+        self.checkpoints = checkpoints()
+        self.attestations = []
+        self.count = count
+        self.sql = []
+
+    def execute(self, sql, params=()):
+        self.sql.append(sql)
+        if "position_id,state,strategy_id,symbol,trading_account_id" in sql:
+            rows = [("pos-" + str(i), "OPEN", MAIN_ID, "LTCUSDT", "account-" + str(i))
+                    for i in range(self.count)]
+        elif "count(*)" in sql:
+            return SimpleNamespace(fetchone=lambda: (0,))
+        elif "p90l90_real_source_release_compatibility" in sql:
+            rows = self.attestations
+        elif "FROM strategy_entry.p90l90_real_source_epochs" in sql:
+            if "SELECT epoch_id,source_commit" in sql:
+                rows = [(EPOCH, self.epoch[0])]
+            else:
+                return SimpleNamespace(fetchone=lambda: self.epoch)
+        elif "p90l90_real_causal_checkpoints" in sql:
+            if "generation,writer_release_commit" in sql:
+                rows = self.checkpoints
+            else:
+                rows = [(r[0], r[1], r[3]) for r in self.checkpoints]
+        else:
+            raise AssertionError(sql)
+        return SimpleNamespace(fetchall=lambda: rows)
+
+
+def attest(db):
+    evidence = compat.checkpoint_evidence(db, epoch_id=EPOCH, origin=ORIGIN,
+                                          approved=frozenset({ORIGIN}))
+    db.attestations = [(LOADED, ORIGIN, compat.CONTRACT_VERSION,
+                        compat.consumer_contract_digest(), compat.plan_pair_digest(bundles()),
+                        fingerprint(evidence), evidence)]
+
+
+@pytest.mark.parametrize("count", [1, 2, 5, 60])
+def test_actual_startup_selector_accepts_registered_release_without_relabel(count):
+    db = SourceDB(count=count)
+    attest(db)
+    before = copy.deepcopy(db.checkpoints)
+    assert inspect_p90_real_open_restart_epoch(
+        db, source_commit=LOADED, bundles=bundles(),
+    ) == EPOCH
+    identity = compat.inspect_real_source_identity(
+        db, epoch_id=EPOCH, loaded_commit=LOADED, bundles=bundles(),
+    )
+    assert identity.origin_commit == ORIGIN and identity.loaded_commit == LOADED
+    assert identity.approved_producers == {ORIGIN, LOADED}
+    assert db.checkpoints == before and db.epoch == (ORIGIN, "ACTIVE")
+    assert all(sql.lstrip().startswith("SELECT") for sql in db.sql)
+
+
+def test_new_release_is_not_approved_by_valid_sha_or_ancestry_alone():
+    db = SourceDB()
+    with pytest.raises(compat.P90RealSourceCompatibilityUnverified,
+                       match="RELEASE_NOT_REGISTERED"):
+        inspect_p90_real_open_restart_epoch(db, source_commit=LOADED, bundles=bundles())
+
+
+@pytest.mark.parametrize("bad", [
+    "origin", "release", "contract", "consumer", "plans", "digest", "snapshot",
+    "retired", "missing-symbol", "mixed-origin", "unknown-writer", "invalid-generation",
+])
+def test_incomplete_or_incompatible_attestation_never_grants_restart(bad):
+    db = SourceDB()
+    attest(db)
+    row = list(db.attestations[0])
+    indices = {"origin": 1, "release": 0, "contract": 2, "consumer": 3,
+               "plans": 4, "digest": 5}
+    if bad in indices:
+        row[indices[bad]] = "0" * (64 if bad in {"consumer", "plans", "digest"} else 40)
+    elif bad == "snapshot":
+        row[6][0]["generation"] += 1
+    elif bad == "retired":
+        db.epoch = (ORIGIN, "RETIRED")
+    elif bad == "missing-symbol":
+        db.checkpoints.pop()
+    else:
+        r = list(db.checkpoints[0])
+        r[{"mixed-origin": 3, "unknown-writer": 5, "invalid-generation": 4}[bad]] = (
+            -1 if bad == "invalid-generation" else "f" * 40
+        )
+        db.checkpoints[0] = tuple(r)
+    db.attestations[0] = tuple(row)
+    with pytest.raises(compat.P90RealSourceCompatibilityUnverified):
+        compat.inspect_real_source_identity(db, epoch_id=EPOCH,
+                                            loaded_commit=LOADED, bundles=bundles())
+
+
+def test_same_release_keeps_existing_no_registration_contract():
+    identity = compat.inspect_real_source_identity(SourceDB(), epoch_id=EPOCH,
+                                                    loaded_commit=ORIGIN, bundles=())
+    assert identity.origin_commit == ORIGIN
+    assert identity.approved_producers == {ORIGIN}
+
+
+@pytest.mark.parametrize("field,value", [("source_commit", "f" * 40),
+                                        ("writer_release_commit", "f" * 40),
+                                        ("generation", -1), ("checkpoint", {})])
+def test_self_consistent_checksum_cannot_approve_foreign_or_corrupt_checkpoint(field, value):
+    db = SourceDB()
+    attest(db)
+    row = list(db.attestations[0])
+    row[6][0][field] = value
+    row[5] = fingerprint(row[6])
+    db.attestations[0] = tuple(row)
+    with pytest.raises(compat.P90RealSourceCompatibilityUnverified):
+        compat.inspect_real_source_identity(db, epoch_id=EPOCH,
+                                            loaded_commit=LOADED, bundles=bundles())
+
+
+def test_current_checkpoint_writer_may_advance_only_to_registered_producer():
+    db = SourceDB()
+    attest(db)
+    db.checkpoints = [(*r[:4], r[4] + 1, LOADED) for r in db.checkpoints]
+    assert compat.inspect_real_source_identity(
+        db, epoch_id=EPOCH, loaded_commit=LOADED, bundles=bundles(),
+    ).origin_commit == ORIGIN
+
+
+def test_contract_digest_detects_changed_consumer_bytes(tmp_path):
+    for folder in ("universal_entry", "universal_exit"):
+        p = tmp_path / "src/bybit_workbench" / folder / "algorithm.py"
+        p.parent.mkdir(parents=True)
+        p.write_text("original")
+    for name in ("strategy_position.py", "exchange_position_identity.py",
+                 "domain/models.py", "market_data/shared_closed_candles.py"):
+        p = tmp_path / "src/bybit_workbench" / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("original")
+    before = compat.consumer_contract_digest(tmp_path)
+    (tmp_path / "src/bybit_workbench/universal_exit/algorithm.py").write_text("changed")
+    assert compat.consumer_contract_digest(tmp_path) != before
+
+
+def test_registration_refuses_without_explicit_actor_transaction_and_off_gate():
+    with pytest.raises(compat.P90RealSourceCompatibilityUnverified,
+                       match="REGISTRATION_TRANSACTION_REQUIRED"):
+        compat.register_real_source_compatibility(
+            SourceDB(), epoch_id=EPOCH, loaded_commit=LOADED, bundles=bundles(),
+            current_root=__import__("pathlib").Path(LOADED),
+            origin_root=__import__("pathlib").Path(ORIGIN),
+        )

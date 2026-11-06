@@ -3082,6 +3082,7 @@ def _run_observer_epoch(
 
             preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(
                 connection, source_commit=LOADED_COMMIT,
+                bundles=tuple(observer_split.p90_real),
             )
         if p90_real_source_only or (
             p90_real_staged and preflight_restart_epoch_id is None
@@ -3154,6 +3155,7 @@ def _run_observer_epoch(
 
                 restart_epoch_id = inspect_p90_real_open_restart_epoch(
                     connection, source_commit=LOADED_COMMIT,
+                    bundles=tuple(observer_split.p90_real),
                 )
             if restart_epoch_id is None:
                 # A boundary may advance while subscribing. Never weaken the
@@ -3174,6 +3176,15 @@ def _run_observer_epoch(
                     raise cold_preparation_wait(exc) from None
             else:
                 source_epoch_id = restart_epoch_id
+            from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+                inspect_real_source_identity,
+            )
+
+            source_identity = inspect_real_source_identity(
+                connection, epoch_id=source_epoch_id, loaded_commit=LOADED_COMMIT,
+                bundles=tuple(observer_split.p90_real),
+            )
+            real_source_commit = source_identity.origin_commit
             preparation_budget.reset()
 
             def require_no_real_exposure() -> None:
@@ -3206,7 +3217,7 @@ def _run_observer_epoch(
                 p90_consumer = P90L90ObserverRealConsumer(
                     connection,
                     bundles=observer_split.p90_real,
-                    source_commit=LOADED_COMMIT,
+                    source_commit=real_source_commit,
                     source_epoch_id=source_epoch_id,
                     producer_release_commit=LOADED_COMMIT,
                     provenance=FrozenPolicy.from_mapping({
@@ -3255,14 +3266,14 @@ def _run_observer_epoch(
                 )
                 shared_p90_real_ledger = P90RealSharedCandleLedger(
                     connection, epoch_id=source_epoch_id,
-                    source_commit=LOADED_COMMIT,
+                    source_commit=real_source_commit,
                 )
                 source_ports = P90RealLiveSourcePorts(
                     connection,
                     mirror=trade_mirror,
                     ledger=shared_p90_real_ledger,
                     source_epoch_id=source_epoch_id,
-                    source_commit=LOADED_COMMIT,
+                    source_commit=real_source_commit,
                     mirror_serial=mirror_serial,
                     mirror_started_at=mirror_started_at,
                 )
@@ -3351,9 +3362,10 @@ def _run_observer_epoch(
                 runtime = assemble_p90_real_observer_runtime(
                     connection,
                     bundles=observer_split.p90_real,
-                    source_commit=LOADED_COMMIT,
+                    source_commit=real_source_commit,
                     source_epoch_id=source_epoch_id,
                     producer_release_commit=LOADED_COMMIT,
+                    accepted_source_commits=source_identity.approved_producers,
                     provenance=FrozenPolicy.from_mapping({
                         "source": "p90_real_live_original_native_main_sub",
                         "source_commit": LOADED_COMMIT,
@@ -3378,7 +3390,8 @@ def _run_observer_epoch(
                     restart_recovery = recover_p90_real_open_source(
                         connection,
                         bundles=observer_split.p90_real,
-                        source_commit=LOADED_COMMIT,
+                        source_commit=real_source_commit,
+                        loaded_release_commit=LOADED_COMMIT,
                         source_epoch_id=source_epoch_id,
                         consumer=p90_consumer,
                         exit_ports=runtime.exit_ports,
@@ -3441,14 +3454,14 @@ def _run_observer_epoch(
                 target=serve_source_windows,
                 kwargs={
                     "mirror": trade_mirror,
-                    "source_commit": LOADED_COMMIT,
+                    "source_commit": real_source_commit,
                     "source_epoch_id": source_epoch_id,
                     "read_position": (
                         lambda position_id, account, symbol:
                         read_exact_source_position(
                             database_dsn=DATABASE_DSN,
                             source_epoch_id=source_epoch_id,
-                            source_commit=LOADED_COMMIT,
+                            source_commit=real_source_commit,
                             position_id=position_id,
                             trading_account_id=account,
                             symbol=symbol,

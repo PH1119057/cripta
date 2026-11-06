@@ -5679,6 +5679,43 @@ def _recover_p90_real_ws_safety_if_needed(
     return recovered
 
 
+def _prepare_p90_source_compatibility_for_owner_request() -> None:
+    """Technical QC in explicit preparation only, never a polling/ARM writer."""
+    from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+        register_real_source_compatibility,
+    )
+    from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
+
+    with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+        connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        epochs = connection.execute(
+            "SELECT epoch_id,source_commit FROM strategy_entry.p90l90_real_source_epochs "
+            "WHERE status='ACTIVE'",
+        ).fetchall()
+        if not epochs:
+            return
+        if len(epochs) != 1:
+            raise RuntimeError("P90_REAL_COMPATIBILITY_MULTIPLE_ACTIVE_EPOCHS")
+        epoch_id, origin = epochs[0]
+        if origin == LOADED_RELEASE_COMMIT:
+            return
+        exposure = connection.execute(
+            "SELECT count(*) FROM runtime.position_ownership WHERE strategy_version=%s "
+            "AND state IN ('OPEN','RECONCILIATION_REQUIRED')", (P90_REAL_V3_VERSION,),
+        ).fetchone()
+        if exposure == (0,):
+            # Flat startup owns a genuinely new epoch; do not register old data
+            # unnecessarily or race that existing source owner's retirement.
+            return
+        root = Path("/srv/cripta/runtime/current").resolve()
+        register_real_source_compatibility(
+            connection, epoch_id=str(epoch_id), loaded_commit=LOADED_RELEASE_COMMIT,
+            bundles=tuple(b for b in load_active_strategy_bundles(connection)
+                          if b.card.strategy_version == P90_REAL_V3_VERSION),
+            current_root=root, origin_root=root.parent / str(origin),
+        )
+
+
 def _u6_prepare_p90_real_v3_readiness(
     *,
     operator: str,
@@ -5848,6 +5885,11 @@ def _u6_prepare_p90_real_v3_readiness(
                         "missing_services": list(missing),
                     },
                 )
+
+        # Explicit owner preparation may register exact code/data compatibility
+        # only after all NEW Entry controls were proved OFF above. It grants no
+        # financial rights and does not relax native/private recovery evidence.
+        _prepare_p90_source_compatibility_for_owner_request()
 
         # Account-local recovery requires its private-runtime IPC owner to be
         # active first. Never fail on a missing transport before the bounded

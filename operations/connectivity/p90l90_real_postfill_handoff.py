@@ -24,6 +24,9 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
     VERSION,
 )
+from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+    inspect_real_source_identity,
+)
 from bybit_workbench.universal_entry.runtime_loader import (
     load_active_strategy_bundles,
 )
@@ -132,18 +135,22 @@ def handoff_real_first_protected_fill(
     ).fetchall()
     if (
         len(rows) != 1 or len(rows[0]) != 2
-        or rows[0][1] != loaded_release_commit
+        or not isinstance(rows[0][1], str)
     ):
         raise P90RealImmediatePostfillUnverified(
             "P90_REAL_POSTFILL_SOURCE_EPOCH_NOT_EXACT_RELEASE"
         )
     epoch_id = str(rows[0][0])
+    bundles = tuple(
+        bundle for bundle in load_active_strategy_bundles(connection)
+        if bundle.card.strategy_version == VERSION
+    )
+    identity = inspect_real_source_identity(
+        connection, epoch_id=epoch_id, loaded_commit=loaded_release_commit, bundles=bundles,
+    )
     routes = read_p90_real_account_routes(
         connection,
-        bundles=tuple(
-            bundle for bundle in load_active_strategy_bundles(connection)
-            if bundle.card.strategy_version == VERSION
-        ),
+        bundles=bundles,
         at=now,
     )
     route = (
@@ -170,7 +177,7 @@ def handoff_real_first_protected_fill(
     # epoch. No locally fabricated best price, candle or publicTrade proxy.
     coverage = read_real_postfill_source_window(
         position=position, source_epoch_id=epoch_id,
-        source_commit=loaded_release_commit,
+        source_commit=identity.origin_commit,
     )
     reader = signed_position_reader(connection)
     private = reader.for_closed_boundary(
@@ -229,7 +236,7 @@ def handoff_real_first_protected_fill(
             """SELECT epoch_id FROM strategy_entry.p90l90_real_source_epochs
                 WHERE status='ACTIVE' AND epoch_id=%s
                   AND source_commit=%s""",
-            (epoch_id, loaded_release_commit),
+            (epoch_id, identity.origin_commit),
         ).fetchone()
         if gate != (epoch_id,):
             return False
