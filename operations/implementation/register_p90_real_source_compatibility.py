@@ -28,19 +28,45 @@ from bybit_workbench.universal_entry.runtime_loader import (  # noqa: E402
 )
 
 
-def perform(*, release_commit: str, epoch_id: str, register: bool) -> None:
+def perform(
+    *,
+    release_commit: str,
+    epoch_id: str | None,
+    active_epoch: bool,
+    register: bool,
+) -> None:
     if (os.geteuid() != pwd.getpwnam("cripta").pw_uid
             or ROOT.resolve().name != release_commit
             or Path(sys.prefix).resolve() != (ROOT / ".venv").resolve()
             or Path(__file__).resolve() != (ROOT / "operations/implementation/"
                                            "register_p90_real_source_compatibility.py").resolve()):
         raise RuntimeError("P90_REAL_COMPATIBILITY_OPERATOR_CONTEXT_INVALID")
-    with (psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as c,
-          c.transaction()):
-        c.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, "
-                  + ("READ WRITE" if register else "READ ONLY"))
-        bundles = tuple(b for b in load_active_strategy_bundles(c)
-                        if b.card.strategy_id in (MAIN_ID, SUB_ID))
+    with (
+        psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as c,
+        c.transaction(),
+    ):
+        c.execute(
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, "
+            + ("READ WRITE" if register else "READ ONLY")
+        )
+        if active_epoch:
+            rows = c.execute(
+                "SELECT epoch_id FROM strategy_entry.p90l90_real_source_epochs "
+                "WHERE status='ACTIVE' ORDER BY opened_at,epoch_id"
+            ).fetchall()
+            if len(rows) != 1 or not isinstance(rows[0][0], str):
+                raise RuntimeError(
+                    "P90_REAL_COMPATIBILITY_ACTIVE_EPOCH_UNVERIFIED"
+                )
+            epoch_id = rows[0][0]
+        if not epoch_id:
+            raise RuntimeError("P90_REAL_COMPATIBILITY_EPOCH_REQUIRED")
+        bundles = tuple(
+            b for b in load_active_strategy_bundles(c)
+            if b.card.strategy_id in (MAIN_ID, SUB_ID)
+        )
         if register:
             row = c.execute(
                 "SELECT source_commit FROM strategy_entry.p90l90_real_source_epochs "
@@ -63,10 +89,22 @@ def perform(*, release_commit: str, epoch_id: str, register: bool) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--release-commit", required=True)
-    parser.add_argument("--epoch-id", required=True)
+    release = parser.add_mutually_exclusive_group(required=True)
+    release.add_argument("--release-commit")
+    release.add_argument("--current-release", action="store_true")
+    epoch = parser.add_mutually_exclusive_group(required=True)
+    epoch.add_argument("--epoch-id")
+    epoch.add_argument("--active-epoch", action="store_true")
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--register", action="store_true")
     modes.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    perform(release_commit=args.release_commit, epoch_id=args.epoch_id, register=args.register)
+    release_commit = (
+        ROOT.resolve().name if args.current_release else str(args.release_commit)
+    )
+    perform(
+        release_commit=release_commit,
+        epoch_id=args.epoch_id,
+        active_epoch=args.active_epoch,
+        register=args.register,
+    )
