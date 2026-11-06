@@ -101,6 +101,7 @@ jobs:
             operations/sql/20261105_gateway_closed_candle_corrections.sql
             operations/sql/20261029_p90l90_real_source_epochs.sql
             operations/sql/20261106_p90_real_source_release_compatibility.sql
+            operations/sql/20261106_p90_real_source_release_compatibility_v2.sql
             operations/sql/20261106_p90_native_sequence_exec_ids.sql
             operations/sql/20261101_owner_full_contour_diagnostic.sql
             operations/sql/20261101_subordinate_diagnostic_binding.sql
