@@ -29,6 +29,24 @@ def _join() -> P90L90CausalTransportJoin:
     )
 
 
+class _MemoryExactIdJournal:
+    """Fake for the checkpoint's same-transaction exact PG B-tree adapter."""
+
+    def __init__(self) -> None:
+        self.rows: dict[int, set[str]] = {}
+
+    def contains(self, seq: int, exec_id: str) -> bool:
+        return exec_id in self.rows.get(seq, set())
+
+    def append(self, seq: int, exec_id: str, previous: int | None) -> None:
+        if previous != seq:
+            self.rows = {}
+        ids = self.rows.setdefault(seq, set())
+        if exec_id in ids:
+            raise RuntimeError("P90_NATIVE_SEQ_ID_DUPLICATE_INSERT_AFTER_PROOF")
+        ids.add(exec_id)
+
+
 def _trade(index: int, *, seq: int = 17) -> P90TransportEvent:
     return P90TransportEvent(
         event_id=f"synthetic-{seq}-{index}",
@@ -44,6 +62,8 @@ def _trade(index: int, *, seq: int = 17) -> P90TransportEvent:
 def test_one_valid_message_can_have_1024_distinct_trades_with_one_sequence() -> None:
     """Bybit per-message 1024 is larger than current 512-ID cursor."""
     join = _join()
+    journal = _MemoryExactIdJournal()
+    join.bind_exact_journal(journal)
     delivered = []
     for index in range(1024):
         event = _trade(index)
@@ -58,6 +78,8 @@ def test_one_valid_message_can_have_1024_distinct_trades_with_one_sequence() -> 
 def test_same_sequence_can_span_multiple_messages_and_survive_restore() -> None:
     """Do not drop any unique execId or replay duplicates across a checkpoint."""
     join = _join()
+    journal = _MemoryExactIdJournal()
+    join.bind_exact_journal(journal)
     first_frame = [_trade(index) for index in range(1024)]
     next_frame = [_trade(index) for index in range(1024, 1300)]
 
@@ -72,6 +94,8 @@ def test_same_sequence_can_span_multiple_messages_and_survive_restore() -> None:
     ]
 
     restored = P90L90CausalTransportJoin.restore(join.snapshot())
+    # The exact ID journal is durable across JSON checkpoint/restart.
+    restored.bind_exact_journal(journal)
     for duplicate in (first_frame[0], first_frame[511], next_frame[-1]):
         assert restored.accept(duplicate) == ()
 
