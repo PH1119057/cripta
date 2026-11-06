@@ -80,6 +80,14 @@ class P90RealExitNativePort:
             if self._tie_order is not None else False
         )
 
+    def _tie_order_proof(
+        self, position: StrategyPosition, cursor: TradeCursor,
+    ) -> Callable[[], bool]:
+        def prove() -> bool:
+            return self._prove_same_time_order(position, cursor)
+
+        return prove
+
     def __call__(
         self,
         fact: MarketFactEnvelope,
@@ -129,10 +137,8 @@ class P90RealExitNativePort:
                         source_refs=(f"bybit:publicTrade:{trade.symbol}:{trade.exec_id}",),
                         first_fill_forward_coverage_proven=first,
                         native_continuity_proven=contiguous,
-                        prove_same_timestamp_order=(
-                            lambda earlier=earlier, position=position: (
-                                self._prove_same_time_order(position, earlier)
-                            )
+                        prove_same_timestamp_order=self._tie_order_proof(
+                            position, earlier,
                         ),
                     )
             first_contiguous, subsequent_contiguous = self._coverage(position, cursor)
@@ -146,10 +152,8 @@ class P90RealExitNativePort:
                 source_refs=fact.source_refs,
                 first_fill_forward_coverage_proven=first_contiguous,
                 native_continuity_proven=subsequent_contiguous,
-                prove_same_timestamp_order=(
-                    lambda position=position, cursor=cursor: (
-                        self._prove_same_time_order(position, cursor)
-                    )
+                prove_same_timestamp_order=self._tie_order_proof(
+                    position, cursor,
                 ),
             )
             if self._pending is not None and self._pending(position):
