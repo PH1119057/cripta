@@ -316,7 +316,7 @@ def _verified_generation_completed_at(
         <= _RECOVERY_GENERATION_MAX_AGE_SECONDS,
         "POSITION_GENERATION_EVIDENCE_INVALID",
     )
-    return row[2].astimezone(UTC)
+    return cast(datetime, row[2]).astimezone(UTC)
 
 
 def _verify_cross_snapshot_position(
