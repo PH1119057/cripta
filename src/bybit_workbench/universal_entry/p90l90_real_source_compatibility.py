@@ -150,8 +150,7 @@ def _git_bytes(source_checkout: Path, *args: str) -> bytes:
     )
     result = subprocess.run(
         ("git", "-C", str(source_checkout), *args),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     _require(result.returncode == 0, "ORIGIN_GIT_READ_FAILED")
@@ -163,10 +162,18 @@ def _consumer_inventory_from_git(
 ) -> dict[str, bytes]:
     """Read exact historical consumer bytes from local Git; never fetch/network."""
     _require(_SHA.fullmatch(origin_commit) is not None, "ORIGIN_GIT_COMMIT_INVALID")
-    _require(
-        _git_bytes(source_checkout, "cat-file", "-t", origin_commit).strip() == b"commit",
-        "ORIGIN_GIT_COMMIT_MISSING",
-    )
+    try:
+        commit_probe = subprocess.run(
+            ("git", "-C", str(source_checkout), "cat-file", "-t", origin_commit),
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise P90RealSourceCompatibilityUnverified(
+            "P90_REAL_SOURCE_COMPATIBILITY_ORIGIN_GIT_READ_FAILED"
+        ) from exc
+    _require(commit_probe.returncode == 0, "ORIGIN_GIT_COMMIT_MISSING")
+    _require(commit_probe.stdout.strip() == b"commit", "ORIGIN_GIT_COMMIT_INVALID")
     package_prefix = "src/bybit_workbench/"
     shared = {
         "strategy_position.py",
