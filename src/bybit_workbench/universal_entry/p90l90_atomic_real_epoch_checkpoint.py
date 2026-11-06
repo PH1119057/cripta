@@ -28,6 +28,7 @@ from .p90l90_entry_restart_checkpoint import (
     entry_restart_snapshot,
     restore_entry_restart_snapshot,
 )
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _SYMBOLS = frozenset({"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"})
@@ -68,6 +69,12 @@ class P90L90AtomicRealEpochCheckpointStore:
     def _symbol(symbol: str) -> None:
         if symbol not in _SYMBOLS:
             raise ValueError("P90L90 atomic state symbol outside two Strategies")
+
+    def _journal(self, symbol: str) -> P90NativeSequenceIdJournal:
+        return P90NativeSequenceIdJournal(
+            self._db, mode="REAL", source_epoch_id=self._epoch_id,
+            source_commit=self._sha, symbol=symbol,
+        )
 
     def seed(
         self,
@@ -145,6 +152,7 @@ class P90L90AtomicRealEpochCheckpointStore:
         if row is None or row[2] != self._sha or row[1] is None:
             raise RuntimeError("P90L90 atomic restart missing matching durable state")
         join = P90L90CausalTransportJoin.restore(row[0])
+        self._journal(symbol).verify(join)
         entry = restore_entry_restart_snapshot(
             row[1], seeded_geometry=recomputed_geometry,
         )
@@ -179,6 +187,7 @@ class P90L90AtomicRealEpochCheckpointStore:
             if row is None or row[2] != self._sha or row[1] is None:
                 raise RuntimeError("P90L90 verified restart durable state missing")
             join = P90L90CausalTransportJoin.restore(row[0])
+            self._journal(symbol).verify(join)
             geometry = recompute_geometry(symbol, row[1])
             entry = restore_entry_restart_snapshot(
                 row[1], seeded_geometry=geometry,
@@ -218,6 +227,8 @@ class P90L90AtomicRealEpochCheckpointStore:
             if row is None or row[2] != self._sha or row[1] is None:
                 raise RuntimeError("P90L90 causal REAL state absent/untrusted")
             join = P90L90CausalTransportJoin.restore(row[0])
+            journal = self._journal(event.symbol)
+            journal.bind(join)
             geometry = recompute_geometry(event.symbol, row[1])
             entry = restore_entry_restart_snapshot(
                 row[1], seeded_geometry=geometry,
@@ -227,6 +238,7 @@ class P90L90AtomicRealEpochCheckpointStore:
             ):
                 raise RuntimeError("P90L90 restored Entry ahead of committed candle")
             released = join.accept(event)
+            journal.verify(join)
             # Dependent DB effects, including REAL position mutations, MUST
             # share this transaction, not a second connection.
             apply_paper(entry, released)

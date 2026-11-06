@@ -58,11 +58,13 @@ def resolve_durable_restart_anchor(
             symbol not in _SYMBOLS
             or type(last_sequence) is not int or last_sequence < 0
             or at is None
-            or not ids or len(ids) > 512
-            or any(not isinstance(item, str) or not item for item in ids)
-            or len(set(ids)) != len(ids)
             or not isinstance(latest_rest_rows, (tuple, list))
             or not 1 <= len(latest_rest_rows) <= 1000
+            # The REST page itself (max 1000) is the verified physical bound.
+            # Reject missing or truncated proof, not a smaller invented ID cap.
+            or not ids or len(ids) > len(latest_rest_rows)
+            or any(not isinstance(item, str) or not item for item in ids)
+            or len(set(ids)) != len(ids)
         ):
             raise P90RealNativeRestartUnverified(
                 "P90_RESTART_DURABLE_CHECKPOINT_CURSOR_MISSING"
@@ -237,7 +239,9 @@ def attest_bounded_native_restart(
         )
         if (
             not known_old_ids
-            or len(known_old_ids) > 512
+            # Every original ID must be independently present in this exact
+            # already-validated bounded (<=1000) native REST proof window.
+            or len(known_old_ids) > len(parsed)
             or durable_anchor.exec_id not in known_old_ids
             or any(not isinstance(item, str) or not item for item in known_old_ids)
             or len(set(known_old_ids)) != len(known_old_ids)

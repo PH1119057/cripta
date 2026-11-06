@@ -33,6 +33,10 @@ class Result:
     def fetchone(self) -> tuple[Any, ...]:
         return self._row
 
+    def fetchall(self) -> list[tuple[Any, ...]]:
+        # Only the empty, complete legacy V1 sidecar is represented here.
+        return []
+
 
 class Connection:
     def __init__(self, mode: str, *, source: str = SHA) -> None:
@@ -56,6 +60,10 @@ class Connection:
         self.queries.append(sql)
         if sql == "SHOW transaction_read_only":
             return Result((self.mode,))
+        if "FROM strategy_entry.p90l90_native_sequence_exec_ids" in sql:
+            assert params == ("PAPER", "PAPER", SHA, "LTCUSDT")
+            assert "FOR UPDATE" not in sql
+            return Result(())
         assert params == ("LTCUSDT",)
         return Result(self.row)
 
@@ -74,8 +82,16 @@ def test_verified_restart_respects_transaction_read_only(
     )
     assert result.closed_5m_at == CLOSED
     assert entry.previous_price is None
-    selects = [sql for sql in conn.queries if "FROM strategy_entry." in sql]
+    selects = [
+        sql for sql in conn.queries
+        if "FROM strategy_entry.p90l90_causal_transport_checkpoints" in sql
+    ]
+    journal = [
+        sql for sql in conn.queries
+        if "FROM strategy_entry.p90l90_native_sequence_exec_ids" in sql
+    ]
     assert len(selects) == 1
+    assert len(journal) == 1  # read-only journal integrity check is required
     assert ("FOR UPDATE" in selects[0]) is should_lock
 
 

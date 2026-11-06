@@ -25,6 +25,7 @@ from .p90l90_causal import P90L90EntryState, causal_entry_state
 from .p90l90_causal_fact_codec import restore_p90l90_fact
 from .p90l90_causal_transport_join import P90L90CausalTransportJoin, P90TransportEvent
 from .p90l90_immutable_bar_ledger import P90L90ImmutableBarLedger
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 
 _SYMBOLS = frozenset({"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"})
 
@@ -63,6 +64,10 @@ class P90SharedCandleLedger:
             if row is None or row[1] != source_commit:
                 raise RuntimeError("P90_SHARED_ORIGINAL_CHECKPOINT_MISSING")
             join = P90L90CausalTransportJoin.restore(row[0])
+            P90NativeSequenceIdJournal(
+                connection, mode="PAPER", source_epoch_id="PAPER",
+                source_commit=source_commit, symbol=symbol,
+            ).verify(join)
             if join.pending:
                 raise RuntimeError("P90_SHARED_PENDING_NATIVE_QUEUE_NOT_EMPTY")
             for tf, boundary in (

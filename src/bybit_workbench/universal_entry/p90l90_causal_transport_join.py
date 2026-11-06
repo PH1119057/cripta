@@ -10,10 +10,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, Protocol
 
 EventKind = Literal["PUBLIC_TRADE", "CANDLE_CLOSED"]
+
+
+class ExactNativeIdJournal(Protocol):
+    """One source checkpoint transaction owns the journal; not a new actor."""
+
+    def contains(self, seq: int, exec_id: str) -> bool: ...
+
+    def append(self, seq: int, exec_id: str, previous: int | None) -> None: ...
 _SCHEMA = "P90L90_CAUSAL_TRANSPORT_JOIN_V1"
+_SCHEMA_JOURNALED = "P90L90_CAUSAL_TRANSPORT_JOIN_V2"
 _MAX_PENDING = 10000
 _INTERVALS = {"5": 5, "15": 15}
 
@@ -130,6 +139,12 @@ class P90L90CausalTransportJoin:
     last_emitted_trade_at: datetime | None = None
     last_emitted_trade_sequence: int | None = None
     last_emitted_exec_ids: set[str] = field(default_factory=set)
+    # None: original V1 full-set checkpoint. Integer: V2 exact external
+    # rolling journal, with at most 512 IDs retained as a local witness.
+    native_id_journal_count: int | None = None
+    _exact_journal: ExactNativeIdJournal | None = field(
+        default=None, init=False, repr=False, compare=False,
+    )
     last_5m_event_id: str = ""
     last_15m_event_id: str = ""
 
@@ -145,7 +160,19 @@ class P90L90CausalTransportJoin:
         ):
             raise ValueError("P90L90 causal join seed bar boundaries inconsistent")
 
+    def bind_exact_journal(self, journal: ExactNativeIdJournal) -> None:
+        """Only the atomic checkpoint writer may bind its verified sidecar."""
+        if self._exact_journal is not None:
+            raise RuntimeError("P90_NATIVE_SEQ_ID_JOURNAL_DOUBLE_BIND")
+        if self.native_id_journal_count is None:
+            self.native_id_journal_count = len(self.last_emitted_exec_ids)
+        self._exact_journal = journal
+
     def accept(self, event: P90TransportEvent) -> tuple[P90TransportEvent, ...]:
+        # A V2 snapshot without its exact DB journal cannot evaluate a
+        # public event OR a candle which might release pending public events.
+        if self.native_id_journal_count is not None and self._exact_journal is None:
+            raise RuntimeError("P90_NATIVE_SEQ_ID_JOURNAL_UNBOUND")
         if event.symbol != self.symbol:
             raise ValueError("P90L90 cross-symbol public fact prohibited")
         if event.event_id in {e.event_id for e in self.pending}:
@@ -168,6 +195,21 @@ class P90L90CausalTransportJoin:
                 for e in self.pending
             ):
                 return ()
+            # Fail before changing last_trade_* or pending. The atomic DB
+            # writer will roll back too, but a pure join must not silently
+            # lose the rejected native envelope from its in-memory queue.
+            if (
+                sequence == self.last_emitted_trade_sequence
+                and self._exact_journal is not None
+                and self._exact_journal.contains(sequence, str(event.exec_id))
+            ):
+                return ()
+            if (
+                sequence == self.last_emitted_trade_sequence
+                and self._exact_journal is None
+                and len(self.last_emitted_exec_ids) >= 512
+            ):
+                raise RuntimeError("P90L90 same-sequence cursor capacity exceeded")
         if len(self.pending) >= _MAX_PENDING:
             raise RuntimeError("P90L90 causal transport backlog capacity exceeded")
         if event.kind == "PUBLIC_TRADE":
@@ -276,20 +318,48 @@ class P90L90CausalTransportJoin:
                 )
             ):
                 raise RuntimeError("P90L90 causally late trade vs committed bar")
+            # The pending close/bar release path can emit a batch. Reject
+            # overflow before removing this trade or moving its emitted
+            # cursor; the surrounding DB checkpoint transaction will roll
+            # back any earlier staged batch effects on failure.
+            if (
+                self.last_emitted_trade_sequence == trade.exchange_sequence
+                and self._exact_journal is None
+                and len(self.last_emitted_exec_ids) >= 512
+            ):
+                raise RuntimeError("P90L90 same-sequence cursor capacity exceeded")
+            previous = self.last_emitted_trade_sequence
+            if self._exact_journal is not None:
+                # Atomically INSERT the original exact ID and retire only
+                # previous-sequence rows inside the caller's locked xact.
+                self._exact_journal.append(
+                    trade_seq, str(trade.exec_id), previous,
+                )
             self.pending.remove(trade)
             self.last_emitted_trade_at = _utc(trade.event_at)
-            if self.last_emitted_trade_sequence != trade.exchange_sequence:
+            if previous != trade.exchange_sequence:
                 self.last_emitted_exec_ids.clear()
+                if self._exact_journal is not None:
+                    self.native_id_journal_count = 0
             self.last_emitted_trade_sequence = trade.exchange_sequence
-            if len(self.last_emitted_exec_ids) >= 512:
-                raise RuntimeError("P90L90 same-sequence cursor capacity exceeded")
+            if self._exact_journal is not None:
+                if len(self.last_emitted_exec_ids) >= 512:
+                    # Deterministic witness eviction; the full exact set is
+                    # still indexed transactionally in PostgreSQL.
+                    self.last_emitted_exec_ids.remove(min(self.last_emitted_exec_ids))
+                self.native_id_journal_count = (
+                    (self.native_id_journal_count or 0) + 1
+                )
             self.last_emitted_exec_ids.add(str(trade.exec_id))
             emitted.append(trade)
         return tuple(emitted)
 
     def snapshot(self) -> dict[str, object]:
-        return {
-            "schema": _SCHEMA,
+        snapshot: dict[str, object] = {
+            "schema": (
+                _SCHEMA_JOURNALED
+                if self.native_id_journal_count is not None else _SCHEMA
+            ),
             "symbol": self.symbol,
             "closed_5m_at": self.closed_5m_at.isoformat(),
             "closed_15m_at": self.closed_15m_at.isoformat(),
@@ -308,15 +378,25 @@ class P90L90CausalTransportJoin:
             "last_5m_event_id": self.last_5m_event_id,
             "last_15m_event_id": self.last_15m_event_id,
         }
+        if self.native_id_journal_count is not None:
+            snapshot["native_id_journal_count"] = self.native_id_journal_count
+        return snapshot
 
     @classmethod
     def restore(cls, raw: object) -> P90L90CausalTransportJoin:
-        if not isinstance(raw, dict) or set(raw) != {
+        keys = {
             "schema", "symbol", "closed_5m_at", "closed_15m_at",
             "pending", "last_trade_event_at", "last_trade_sequence",
             "last_emitted_trade_at", "last_emitted_trade_sequence",
             "last_emitted_exec_ids", "last_5m_event_id", "last_15m_event_id",
-        } or raw["schema"] != _SCHEMA:
+        }
+        if not isinstance(raw, dict) or not (
+            (set(raw) == keys and raw.get("schema") == _SCHEMA)
+            or (
+                set(raw) == keys | {"native_id_journal_count"}
+                and raw.get("schema") == _SCHEMA_JOURNALED
+            )
+        ):
             raise ValueError("P90L90 causal join snapshot schema unsupported")
         def date(value: object) -> datetime | None:
             if value is None:
@@ -342,6 +422,23 @@ class P90L90CausalTransportJoin:
             or len(set(ids)) != len(ids)
         ):
             raise ValueError("P90L90 join last emitted cursor IDs invalid")
+        count: int | None = None
+        if raw["schema"] == _SCHEMA_JOURNALED:
+            candidate = raw["native_id_journal_count"]
+            sequence = raw["last_emitted_trade_sequence"]
+            if (
+                type(candidate) is not int or candidate < len(ids)
+                or (
+                    sequence is None
+                    and (candidate != 0 or bool(ids))
+                )
+                or (
+                    sequence is not None
+                    and (candidate < 1 or not ids)
+                )
+            ):
+                raise ValueError("P90L90 external native ID checkpoint invalid")
+            count = candidate
         state = cls(
             symbol=raw["symbol"],
             closed_5m_at=bars_5,
@@ -351,6 +448,7 @@ class P90L90CausalTransportJoin:
             last_emitted_trade_at=date(raw["last_emitted_trade_at"]),
             last_emitted_trade_sequence=raw["last_emitted_trade_sequence"],
             last_emitted_exec_ids=set(ids),
+            native_id_journal_count=count,
             last_5m_event_id=raw["last_5m_event_id"],
             last_15m_event_id=raw["last_15m_event_id"],
         )

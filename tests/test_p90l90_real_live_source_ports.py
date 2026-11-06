@@ -162,6 +162,57 @@ def test_previous_durable_mfe_anchor_must_exist_in_same_current_mirror(
         _ports(db, mirror).native_coverage(position, later)
 
 
+def test_tied_native_exec_ids_use_only_adjacent_original_ws_ordinals(
+    monkeypatch,
+) -> None:
+    position, _plan, state, first, _private, _price = _scope()
+    tied = TradeCursor(
+        symbol=first.symbol, seq=first.seq,
+        exec_id="synthetic-next-original-ws", traded_at=first.traded_at,
+    )
+    mirror = _real_mirror()
+    _trade(mirror, first)
+    _trade(mirror, tied)
+    monkeypatch.setattr(module, "datetime", SimpleNamespace(now=lambda _tz: NOW))
+    ports = _ports(
+        StubDB(latest={"attributes": {"checkpoint": state.snapshot()}}),
+        mirror,
+    )
+    trades = mirror.verified_fill_forward_events(
+        symbol=first.symbol, fill_at=first.traded_at, at=NOW,
+    )
+    assert [item.exec_id for item in trades] == [
+        first.exec_id, tied.exec_id,
+    ]
+    assert trades[0].ordinal < trades[1].ordinal
+    assert ports.native_tie_order(position, tied) is True
+    assert ports.native_tie_order(position, first) is False
+
+
+def test_tied_native_order_rejects_reversed_ws_receipt_or_gap(monkeypatch) -> None:
+    position, _plan, state, first, _private, _price = _scope()
+    tied = TradeCursor(
+        symbol=first.symbol, seq=first.seq,
+        exec_id="synthetic-second-original-ws", traded_at=first.traded_at,
+    )
+    mirror = _real_mirror()
+    _trade(mirror, tied)
+    _trade(mirror, first)
+    monkeypatch.setattr(module, "datetime", SimpleNamespace(now=lambda _tz: NOW))
+    ports = _ports(
+        StubDB(latest={"attributes": {"checkpoint": state.snapshot()}}),
+        mirror,
+    )
+    with pytest.raises(
+        module.P90RealLiveSourceUnverified,
+        match="PREVIOUS_ANCHOR_EVICTED_OR_REORDERED",
+    ):
+        ports.native_tie_order(position, tied)
+    mirror.mark_gap("synthetic original websocket gap")
+    with pytest.raises(module.P90RealLiveSourceUnverified):
+        ports.native_tie_order(position, tied)
+
+
 def test_canonical_5m_closed_history_and_watermark_are_source_transaction_scoped() -> None:
     db = StubDB()
     mirror = _real_mirror()

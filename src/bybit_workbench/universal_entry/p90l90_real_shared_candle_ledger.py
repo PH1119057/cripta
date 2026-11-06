@@ -19,6 +19,7 @@ from bybit_workbench.market_data.shared_closed_candles import (
 from .p90l90_causal import P90L90EntryState, causal_entry_state
 from .p90l90_causal_fact_codec import restore_p90l90_fact
 from .p90l90_causal_transport_join import P90L90CausalTransportJoin, P90TransportEvent
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 
 _SYMBOLS = frozenset(("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"))
 
@@ -62,6 +63,10 @@ class P90RealSharedCandleLedger:
             if commit != source_commit:
                 raise RuntimeError("P90_REAL_CANDLE_SOURCE_COMMIT_DRIFT")
             join = P90L90CausalTransportJoin.restore(snapshot)
+            P90NativeSequenceIdJournal(
+                connection, mode="REAL", source_epoch_id=epoch_id,
+                source_commit=source_commit, symbol=symbol,
+            ).verify(join)
             if join.symbol != symbol:
                 raise RuntimeError("P90_REAL_CANDLE_JOIN_SYMBOL_DRIFT")
             if join.pending:

@@ -19,6 +19,7 @@ from bybit_workbench.universal_exit.p90l90_real_closed_exit_port import (
 from bybit_workbench.universal_exit.p90l90_real_exit_execution import SafetyPort
 from bybit_workbench.universal_exit.p90l90_real_exit_port import (
     NativePrefixProvider,
+    NativeTieOrderProvider,
     SourceCoverageProvider,
 )
 from bybit_workbench.universal_exit.p90l90_real_row_connection import (
@@ -64,6 +65,7 @@ def assemble_p90_real_observer_runtime(
     producer_release_commit: str | None = None,
     accepted_source_commits: frozenset[str] | None = None,
     verified_native_prefix: NativePrefixProvider | None = None,
+    verified_native_tie_order: NativeTieOrderProvider | None = None,
 ) -> P90RealObserverRuntime:
     """Bind source checkpoint, MAIN/SUB signed private and execution owners.
 
@@ -102,6 +104,7 @@ def assemble_p90_real_observer_runtime(
         independently_verified_closed_continuity=verified_closed_continuity,
         independently_verified_mutation_safety=verified_account_mutation_safety,
         verified_native_prefix=verified_native_prefix,
+        independently_verified_native_tie_order=verified_native_tie_order,
     )
     consumer = P90L90ObserverRealConsumer(
         connection,

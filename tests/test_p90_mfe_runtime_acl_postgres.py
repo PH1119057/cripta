@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from test_p90l90_real_mfe import SHA, _cursor, _position
 
+from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeUnverified
 from bybit_workbench.universal_exit.p90l90_real_mfe_ledger import P90RealMfeLedger
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -154,3 +155,62 @@ def test_per_position_advisory_lock_serializes_concurrent_runtime_writers(runtim
     finally:
         first.connection.close()
         second.connection.close()
+
+def test_same_seq_equal_ms_uses_durable_append_index_for_restart(runtime_db):
+    db = runtime_db()
+    position = _position()
+    first = _cursor(position, seq=777, exec_id="same-seq-A", millis=3)
+    second = _cursor(position, seq=777, exec_id="same-seq-B", millis=3)
+
+    def native_args(cursor, fact_id, price):
+        return dict(
+            position=position,
+            source_commit=SHA,
+            fact_id=fact_id,
+            cursor=cursor,
+            price=Decimal(price),
+            received_at=cursor.traded_at + timedelta(milliseconds=1),
+            source_refs=("native:exact:" + fact_id,),
+            first_fill_forward_coverage_proven=True,
+            native_continuity_proven=True,
+        )
+
+    try:
+        with db.connection.transaction():
+            ledger = P90RealMfeLedger(db)
+            first_state = ledger.on_trade(
+                **native_args(first, "same-seq-fact-A", "100.2")
+            )
+            second_state = ledger.on_trade(
+                **native_args(second, "same-seq-fact-B", "100.4"),
+                prove_same_timestamp_order=lambda: True,
+            )
+            assert first_state.cursor_exec_id == "same-seq-A"
+            assert second_state.cursor_exec_id == "same-seq-B"
+            assert second_state.best_favorable_price == Decimal("100.4")
+            rows = db.execute(
+                "SELECT attributes FROM strategy_exit.exit_observations "
+                "WHERE strategy_position_id=%s "
+                "AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT' "
+                "ORDER BY (attributes->>'native_order_index')::bigint",
+                (position.strategy_position_id,),
+            ).fetchall()
+            assert [row["attributes"]["native_order_index"] for row in rows] == [1, 2]
+            restored, fact_id, refs = ledger.load_latest(
+                position=position, source_commit=SHA,
+            )
+            assert restored == second_state
+            assert fact_id == "same-seq-fact-B"
+            assert refs == ("native:exact:same-seq-fact-B",)
+
+            with pytest.raises(
+                P90RealMfeUnverified,
+                match="P90_REAL_MFE_NATIVE_ORDER_NOT_PROVEN",
+            ):
+                ledger.on_trade(
+                    **native_args(first, "same-seq-fact-A-reversed", "100.2"),
+                    prove_same_timestamp_order=lambda: False,
+                )
+    finally:
+        db.connection.close()
+

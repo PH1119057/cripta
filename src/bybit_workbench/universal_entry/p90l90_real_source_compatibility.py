@@ -14,6 +14,7 @@ from typing import Any
 from .fingerprint import canonical_json, fingerprint
 from .p90l90_causal_transport_join import P90L90CausalTransportJoin
 from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 
 CONTRACT_VERSION = "P90_REAL_SOURCE_RELEASE_COMPATIBILITY_V1"
@@ -108,6 +109,10 @@ def checkpoint_evidence(connection: Any, *, epoch_id: str, origin: str,
                  and type(generation) is int and generation >= 0
                  and isinstance(entry, dict), "CHECKPOINT_PROVENANCE_UNVERIFIED")
         join = P90L90CausalTransportJoin.restore(snapshot)
+        P90NativeSequenceIdJournal(
+            connection, mode="REAL", source_epoch_id=epoch_id,
+            source_commit=origin, symbol=symbol,
+        ).verify(join)
         _require(join.symbol == symbol, "CHECKPOINT_SYMBOL_DRIFT")
         result.append({"symbol": symbol, "checkpoint": snapshot, "entry": entry,
                        "source_commit": commit, "generation": generation,
