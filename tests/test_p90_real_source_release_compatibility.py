@@ -62,6 +62,12 @@ class SourceDB:
         if "position_id,state,strategy_id,symbol,trading_account_id" in sql:
             rows = [("pos-" + str(i), "OPEN", MAIN_ID, "LTCUSDT", "account-" + str(i))
                     for i in range(self.count)]
+        elif "FROM strategy_entry.p90l90_native_sequence_exec_ids" in sql:
+            # Every fixture checkpoint is a complete legacy V1 exact-ID set.
+            # The new sidecar must be empty until a locked writer migrates it;
+            # compatibility is SELECT-only and never bootstraps a journal.
+            assert "GROUP BY exchange_sequence" in sql
+            return SimpleNamespace(fetchall=lambda: [])
         elif "count(*)" in sql:
             return SimpleNamespace(fetchone=lambda: (0,))
         elif "p90l90_real_source_release_compatibility" in sql:
