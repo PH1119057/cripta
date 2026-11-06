@@ -116,7 +116,7 @@ class P90NativeSequenceIdJournal:
                   AND symbol=%s AND exchange_sequence=%s AND exec_id=%s""",
             (*self._scope, seq, exec_id),
         ).fetchone()
-        return row == (1,)
+        return bool(row == (1,))
 
     def _insert(self, seq: int, exec_id: str) -> None:
         if type(seq) is not int or seq < 0 or not exec_id:
