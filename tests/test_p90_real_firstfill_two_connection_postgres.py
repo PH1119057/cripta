@@ -190,9 +190,11 @@ def test_two_connections_keep_protected_fill_and_exit_across_mfe_rollback():
                 with source.transaction():
                     first = append_native(source, p, "first", 17, 3)
                 assert first.cursor_exec_id == "first"
-                with pytest.raises(P90RealMfeUnverified, match="NATIVE_ORDER_NOT_PROVEN"):
-                    with source.transaction():
-                        append_native(source, p, "second", 17, 3)
+                with (
+                    pytest.raises(P90RealMfeUnverified, match="NATIVE_ORDER_NOT_PROVEN"),
+                    source.transaction(),
+                ):
+                    append_native(source, p, "second", 17, 3)
                 with owner.transaction():
                     assert count(owner, "simulated_protected_fill") == 1
                     assert count(owner, "exit_decisions") == 1
