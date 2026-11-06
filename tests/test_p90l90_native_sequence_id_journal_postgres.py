@@ -13,7 +13,8 @@ import psycopg
 import pytest
 
 from bybit_workbench.universal_entry.p90l90_causal_transport_join import (
-    P90L90CausalTransportJoin, P90TransportEvent,
+    P90L90CausalTransportJoin,
+    P90TransportEvent,
 )
 from bybit_workbench.universal_entry.p90l90_native_sequence_id_journal import (
     P90NativeSequenceIdJournal,
@@ -82,80 +83,84 @@ def test_native_seq_journal_1300_ids_restart_dedup_retention_and_rollback(
     mode: str, epoch: str,
 ) -> None:
     assert DSN is not None
-    with psycopg.connect(DSN) as conn:
-        with pytest.raises(RuntimeError, match="ROLLBACK_NATIVE_SEQ_TEST"):
-            with conn.transaction():
-                journal = P90NativeSequenceIdJournal(
-                    conn, mode=mode, source_epoch_id=epoch,
-                    source_commit=SOURCE, symbol=SYMBOL,
-                )
-                join = P90L90CausalTransportJoin(
-                    symbol=SYMBOL, closed_5m_at=B, closed_15m_at=B,
-                )
-                journal.bind(join)
-                all_facts = [_trade(i) for i in range(1300)]
-                for fact in all_facts:
-                    assert join.accept(fact) == (fact,)
-                journal.verify(join)
-                assert join.native_id_journal_count == 1300
-                assert len(join.last_emitted_exec_ids) == 512
-                assert journal._group_counts() == [(17, 1300)]
-                snapshot = join.snapshot()
-                assert snapshot["schema"] == "P90L90_CAUSAL_TRANSPORT_JOIN_V2"
+    with (
+        psycopg.connect(DSN) as conn,
+        pytest.raises(RuntimeError, match="ROLLBACK_NATIVE_SEQ_TEST"),
+        conn.transaction(),
+    ):
+        journal = P90NativeSequenceIdJournal(
+            conn, mode=mode, source_epoch_id=epoch,
+            source_commit=SOURCE, symbol=SYMBOL,
+        )
+        join = P90L90CausalTransportJoin(
+            symbol=SYMBOL, closed_5m_at=B, closed_15m_at=B,
+        )
+        journal.bind(join)
+        all_facts = [_trade(i) for i in range(1300)]
+        for fact in all_facts:
+            assert join.accept(fact) == (fact,)
+        journal.verify(join)
+        assert join.native_id_journal_count == 1300
+        assert len(join.last_emitted_exec_ids) == 512
+        assert journal._group_counts() == [(17, 1300)]
+        snapshot = join.snapshot()
+        assert snapshot["schema"] == "P90L90_CAUSAL_TRANSPORT_JOIN_V2"
 
-                restarted = P90L90CausalTransportJoin.restore(snapshot)
-                with pytest.raises(RuntimeError, match="JOURNAL_UNBOUND"):
-                    restarted.accept(_trade(1299))
-                journal.bind(restarted)
-                for duplicate in (all_facts[0], all_facts[511], all_facts[1299]):
-                    assert restarted.accept(duplicate) == ()
-                with pytest.raises(RuntimeError, match="EXCEED_REST_WINDOW"):
-                    journal.full_restart_ids(restarted)
+        restarted = P90L90CausalTransportJoin.restore(snapshot)
+        with pytest.raises(RuntimeError, match="JOURNAL_UNBOUND"):
+            restarted.accept(_trade(1299))
+        journal.bind(restarted)
+        for duplicate in (all_facts[0], all_facts[511], all_facts[1299]):
+            assert restarted.accept(duplicate) == ()
+        with pytest.raises(RuntimeError, match="EXCEED_REST_WINDOW"):
+            journal.full_restart_ids(restarted)
 
-                next_trade = _trade(1300, seq=18)
-                assert restarted.accept(next_trade) == (next_trade,)
-                journal.verify(restarted)
-                assert journal._group_counts() == [(18, 1)]
-                assert journal.full_restart_ids(restarted) == (
-                    next_trade.exec_id,
-                )
-                with pytest.raises(RuntimeError, match="regressed"):
-                    restarted.accept(_trade(1301, seq=17))
+        next_trade = _trade(1300, seq=18)
+        assert restarted.accept(next_trade) == (next_trade,)
+        journal.verify(restarted)
+        assert journal._group_counts() == [(18, 1)]
+        assert journal.full_restart_ids(restarted) == (
+            next_trade.exec_id,
+        )
+        with pytest.raises(RuntimeError, match="regressed"):
+            restarted.accept(_trade(1301, seq=17))
 
-                # Inject an invalid out-of-band deletion in disposable DB.
-                conn.execute(
-                    """DELETE FROM strategy_entry.p90l90_native_sequence_exec_ids
-                        WHERE mode=%s AND source_epoch_id=%s
-                          AND source_commit=%s AND symbol=%s
-                          AND exchange_sequence=%s""",
-                    (mode, epoch, SOURCE, SYMBOL, 18),
-                )
-                with pytest.raises(RuntimeError, match="COUNT_MISMATCH"):
-                    journal.verify(restarted)
-                raise RuntimeError("ROLLBACK_NATIVE_SEQ_TEST")
+        # Inject an invalid out-of-band deletion in disposable DB.
+        conn.execute(
+            """DELETE FROM strategy_entry.p90l90_native_sequence_exec_ids
+                WHERE mode=%s AND source_epoch_id=%s
+                  AND source_commit=%s AND symbol=%s
+                  AND exchange_sequence=%s""",
+            (mode, epoch, SOURCE, SYMBOL, 18),
+        )
+        with pytest.raises(RuntimeError, match="COUNT_MISMATCH"):
+            journal.verify(restarted)
+        raise RuntimeError("ROLLBACK_NATIVE_SEQ_TEST")
 
 
 def test_legacy_v1_native_ids_upgrade_exactly_once_under_checkpoint_lock() -> None:
     assert DSN is not None
-    with psycopg.connect(DSN) as conn:
-        with pytest.raises(RuntimeError, match="ROLLBACK_V1_BRIDGE_TEST"):
-            with conn.transaction():
-                join = P90L90CausalTransportJoin(
-                    symbol=SYMBOL, closed_5m_at=B, closed_15m_at=B,
-                )
-                first = _trade(0)
-                assert join.accept(first) == (first,)
-                assert join.native_id_journal_count is None
-                journal = P90NativeSequenceIdJournal(
-                    conn, mode="REAL", source_epoch_id=EPOCH,
-                    source_commit=SOURCE, symbol=SYMBOL,
-                )
-                journal.bind(join)
-                journal.verify(join)
-                assert journal._group_counts() == [(17, 1)]
-                assert journal.full_restart_ids(join) == (first.exec_id,)
-                assert join.accept(first) == ()
-                assert join.accept(_trade(1)) == (_trade(1),)
-                journal.verify(join)
-                assert journal._group_counts() == [(17, 2)]
-                raise RuntimeError("ROLLBACK_V1_BRIDGE_TEST")
+    with (
+        psycopg.connect(DSN) as conn,
+        pytest.raises(RuntimeError, match="ROLLBACK_V1_BRIDGE_TEST"),
+        conn.transaction(),
+    ):
+        join = P90L90CausalTransportJoin(
+            symbol=SYMBOL, closed_5m_at=B, closed_15m_at=B,
+        )
+        first = _trade(0)
+        assert join.accept(first) == (first,)
+        assert join.native_id_journal_count is None
+        journal = P90NativeSequenceIdJournal(
+            conn, mode="REAL", source_epoch_id=EPOCH,
+            source_commit=SOURCE, symbol=SYMBOL,
+        )
+        journal.bind(join)
+        journal.verify(join)
+        assert journal._group_counts() == [(17, 1)]
+        assert journal.full_restart_ids(join) == (first.exec_id,)
+        assert join.accept(first) == ()
+        assert join.accept(_trade(1)) == (_trade(1),)
+        journal.verify(join)
+        assert journal._group_counts() == [(17, 2)]
+        raise RuntimeError("ROLLBACK_V1_BRIDGE_TEST")
