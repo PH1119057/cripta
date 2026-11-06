@@ -143,8 +143,8 @@ def test_stable_position_or_protection_drift_still_fails_closed(field, value):
 
 def test_position_generation_may_not_regress_behind_account_wide_snapshot():
     db = _db(
-        account_completed=AT + timedelta(seconds=3),
-        signed_completed=AT + timedelta(seconds=1),
+        account_completed=AT + timedelta(seconds=1),
+        signed_completed=AT,
     )
     account = _account_proof()
     signed = _signed()
