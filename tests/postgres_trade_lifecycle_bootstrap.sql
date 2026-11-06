@@ -148,3 +148,7 @@ CREATE TABLE control.execution_gates (
     reason text NOT NULL,
     updated_at_epoch_ms bigint NOT NULL
 );
+
+-- Disposable CI mirrors production's read-only runtime actor contract.
+-- This is a TEST fixture grant, not a production role or release migration.
+GRANT SELECT ON runtime.trade_commands TO cripta;
