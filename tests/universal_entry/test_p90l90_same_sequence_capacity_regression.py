@@ -95,3 +95,23 @@ def test_duplicate_in_pending_queue_remains_exactly_once() -> None:
     assert join.accept(event) == ()
     assert join.pending == [event]
     assert P90L90CausalTransportJoin.restore(join.snapshot()).pending == [event]
+
+
+
+def test_rejected_513th_exec_id_preserves_pure_join_checkpoint() -> None:
+    """Until the durable unbounded-ID journal exists, rejection is atomic.
+
+    The historical code popped the rejected trade from pending and advanced
+    last_emitted_trade_at before throwing. The exact previous checkpoint
+    must remain intact after a fail-closed rejection in the pure join.
+    """
+    join = _join()
+    for index in range(512):
+        assert join.accept(_trade(index)) == (_trade(index),)
+    before = join.snapshot()
+    with pytest.raises(RuntimeError, match="same-sequence cursor capacity exceeded"):
+        join.accept(_trade(512))
+    assert join.snapshot() == before
+    assert join.pending == []
+    # Already-committed exact IDs stay deduplicated.
+    assert join.accept(_trade(511)) == ()
