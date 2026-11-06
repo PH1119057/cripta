@@ -424,7 +424,7 @@ def _private_worker_safe_error(exc: BaseException) -> str:
                 return f"{type(exc).__name__}:{message}"
         # Keep only typed, allowlisted POSTFILL source failures for SUB audit.
         prefix = "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:"
-        if isinstance(exc, ExchangeMutationBarrier) and message.startswith(prefix):
+        if message.startswith(prefix) and isinstance(exc, ExchangeMutationBarrier):
             code = message[len(prefix):]
             if (
                 0 < len(code) <= 120
