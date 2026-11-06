@@ -18,6 +18,7 @@ from .p90l90_causal_transport_join import (
     P90L90CausalTransportJoin,
     P90TransportEvent,
 )
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 
 _CHECKPOINT_TABLE = "strategy_entry.p90l90_causal_transport_checkpoints"
 _SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -29,6 +30,12 @@ class P90L90CausalJoinStore:
             raise ValueError("P90L90 causal join requires exact 40-char source commit")
         self._connection = connection
         self._source_commit = source_commit
+
+    def _journal(self, symbol: str) -> P90NativeSequenceIdJournal:
+        return P90NativeSequenceIdJournal(
+            self._connection, mode="PAPER", source_epoch_id="PAPER",
+            source_commit=self._source_commit, symbol=symbol,
+        )
 
     def initialize(
         self, *, symbol: str, last_closed_5m: datetime, last_closed_15m: datetime
@@ -56,6 +63,7 @@ class P90L90CausalJoinStore:
             if row is None or row[1] != self._source_commit:
                 raise RuntimeError("P90L90 causal checkpoint source release mismatch")
             previous = P90L90CausalTransportJoin.restore(row[0])
+            self._journal(symbol).verify(previous)
             if previous.pending:
                 raise RuntimeError(
                     "P90L90 restored pending native trades require ordered historical "
@@ -94,7 +102,10 @@ class P90L90CausalJoinStore:
                     "checkpoint and source commit"
                 )
             state = P90L90CausalTransportJoin.restore(row[0])
+            journal = self._journal(event.symbol)
+            journal.bind(state)
             released = state.accept(event)
+            journal.verify(state)
             # This callback MUST use only the same transaction/connection.
             dispatch(released)
             updated = self._connection.execute(
