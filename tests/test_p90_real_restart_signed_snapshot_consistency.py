@@ -68,15 +68,19 @@ def _row(*, mark="100.0", size="1", stop="90", tp="110", trailing="0.35"):
     }
 
 
-def _account_proof(*, generation="g-account", mark="100.0"):
+def _account_proof(
+    *, generation="g-account", mark="100.0", observed_seconds=2,
+):
     return cast(Any, SimpleNamespace(
         private_generation_id=generation,
-        observed_at=AT + timedelta(seconds=2),
+        observed_at=AT + timedelta(seconds=observed_seconds),
         positions=(_row(mark=mark),),
     ))
 
 
-def _signed(*, generation="g-position", mark="101.0", pending=False):
+def _signed(
+    *, generation="g-position", mark="101.0", pending=False, observed_seconds=4,
+):
     return cast(Any, SimpleNamespace(
         trading_account_id=ACCOUNT,
         connector_id=CONNECTOR,
@@ -85,7 +89,7 @@ def _signed(*, generation="g-position", mark="101.0", pending=False):
         exchange_position_key=POSITION_KEY,
         position_idx=0,
         pending_exit_mutation=pending,
-        observed_at=AT + timedelta(seconds=4),
+        observed_at=AT + timedelta(seconds=observed_seconds),
         position=_row(mark=mark),
     ))
 
@@ -206,3 +210,62 @@ def test_mark_price_remains_required_shape_even_though_cross_read_value_is_volat
         match="P90_REAL_RESTART_SIGNED_POSITION_SHAPE_INCOMPLETE",
     ):
         _stable_position(raw)
+
+def test_account_wide_end_of_read_may_be_up_to_thirty_seconds_after_generation():
+    db = _db(
+        account_completed=AT,
+        signed_completed=AT + timedelta(seconds=20),
+    )
+    account = _account_proof(observed_seconds=29)
+    signed = _signed(observed_seconds=21)
+    _verify_cross_snapshot_position(
+        db,
+        position=_position(),
+        route=_route(),
+        account_proof=account,
+        account_row=account.positions[0],
+        signed=signed,
+    )
+
+
+def test_account_wide_generation_older_than_producer_composite_budget_still_blocks():
+    db = _db(
+        account_completed=AT,
+        signed_completed=AT + timedelta(seconds=20),
+    )
+    account = _account_proof(observed_seconds=31)
+    signed = _signed(observed_seconds=21)
+    with pytest.raises(
+        P90RealOpenRestartUnverified,
+        match="P90_REAL_RESTART_POSITION_GENERATION_EVIDENCE_INVALID",
+    ):
+        _verify_cross_snapshot_position(
+            db,
+            position=_position(),
+            route=_route(),
+            account_proof=account,
+            account_row=account.positions[0],
+            signed=signed,
+        )
+
+
+def test_position_specific_generation_keeps_fifteen_second_start_time_budget():
+    db = _db(
+        account_completed=AT,
+        signed_completed=AT,
+    )
+    account = _account_proof(observed_seconds=20)
+    signed = _signed(observed_seconds=16)
+    with pytest.raises(
+        P90RealOpenRestartUnverified,
+        match="P90_REAL_RESTART_POSITION_GENERATION_EVIDENCE_INVALID",
+    ):
+        _verify_cross_snapshot_position(
+            db,
+            position=_position(),
+            route=_route(),
+            account_proof=account,
+            account_row=account.positions[0],
+            signed=signed,
+        )
+
