@@ -71,6 +71,14 @@ def pg():
     c = psycopg.connect(DSN)
     assert c.info.dbname != "cripta", "production forbidden"
     try:
+        for symbol in SYMBOLS:
+            c.execute(
+                """INSERT INTO identity.instruments(
+                      instrument_id,venue_id,product_category,external_symbol)
+                   VALUES(%s,'venue-bybit','LINEAR',%s)
+                   ON CONFLICT(instrument_id) DO NOTHING""",
+                ("inst-bybit-linear-" + symbol.lower(), symbol),
+            )
         c.execute(
             """INSERT INTO strategy_entry.p90l90_real_source_epochs(
                    epoch_id,source_commit,market_source_id,opened_at,
