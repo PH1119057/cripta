@@ -53,14 +53,29 @@ def roots(tmp_path):
     for sha in (ORIGIN, LOADED):
         root = tmp_path / sha
         for folder in ("universal_entry", "universal_exit"):
-            shutil.copytree(package / folder, root / package / folder,
-                            ignore=shutil.ignore_patterns("__pycache__"))
-        for name in ("strategy_position.py", "exchange_position_identity.py",
-                     "domain/models.py", "market_data/shared_closed_candles.py"):
+            shutil.copytree(
+                package / folder,
+                root / package / folder,
+                ignore=shutil.ignore_patterns("__pycache__"),
+            )
+        for name in (
+            "strategy_position.py", "exchange_position_identity.py",
+            "domain/models.py", "market_data/shared_closed_candles.py",
+        ):
             target = root / package / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(package / name, target)
         (root / "INSTALLED_COMMIT").write_text(sha)
+
+    origin = tmp_path / ORIGIN / package
+    for relative in compat.REVIEWED_BUGFIX_CONSUMER_SHA256:
+        target = origin / relative
+        if relative.endswith("p90l90_native_sequence_id_journal.py"):
+            target.unlink()
+        else:
+            target.write_text(
+                "# retained origin fixture: intentionally differs from reviewed bugfix\n"
+            )
     return tmp_path / LOADED, tmp_path / ORIGIN
 
 
@@ -212,10 +227,22 @@ def test_actual_pg_append_only_acl_and_changed_consumer_block(pg, tmp_path):
     changed = pair[0] / "src/bybit_workbench/universal_exit/p90l90_real_mfe.py"
     changed.write_bytes(changed.read_bytes() + b"\n# incompatible consumer bytes\n")
     with pytest.raises(compat.P90RealSourceCompatibilityUnverified,
-                       match="ORIGIN_CONSUMER_CONTRACT_CHANGED"):
+                       match="REVIEWED_BUGFIX_CONTENT_DRIFT"):
         register(pg, pair)
     assert pg.execute(f"SELECT count(*) FROM {TABLE} WHERE epoch_id=%s", (EPOCH,)
                       ).fetchone() == (0,)
+
+    pair = roots(tmp_path / "extra")
+    extra = pair[0] / "src/bybit_workbench/universal_exit/engine.py"
+    extra.write_bytes(extra.read_bytes() + b"\n# unreviewed consumer delta\n")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        register(pg, pair)
+    assert pg.execute(f"SELECT count(*) FROM {TABLE} WHERE epoch_id=%s", (EPOCH,)
+                      ).fetchone() == (0,)
+
     assert pg.execute("SELECT has_table_privilege(current_user,%s,%s),"
                       "has_table_privilege(current_user,%s,%s),"
                       "has_table_privilege(current_user,%s,%s)",

@@ -17,7 +17,7 @@ from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 
-CONTRACT_VERSION = "P90_REAL_SOURCE_RELEASE_COMPATIBILITY_V1"
+CONTRACT_VERSION = "P90_REAL_SOURCE_RELEASE_COMPATIBILITY_V2"
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _EPOCH = re.compile(r"p90-real-epoch-[0-9a-f]{40}\Z")
@@ -31,6 +31,41 @@ _ADAPTERS = frozenset({
     "p90l90_real_open_restart.py",
     "p90l90_real_restart_recovery.py",
 })
+
+# Reviewed bugfix delta from the retained origin 08344a12... into the
+# integrated stabilization release.  These are consumer/transport fixes, not
+# Strategy/EntryPlan/ExitPlan policy changes.  Registration accepts exactly
+# this delta and exact bytes; any other consumer change remains fail-closed.
+REVIEWED_BUGFIX_CONSUMER_SHA256 = {
+    "universal_entry/p90l90_atomic_paper_checkpoint.py":
+        "737fdd8020c255b8aee7616c4dac2050fc415cd25c40db574f41ded332d9e5d0",
+    "universal_entry/p90l90_atomic_real_epoch_checkpoint.py":
+        "5836e301977d6f84131f583fe067d5b766fb96bfcd4ab6508826c53a8cad280c",
+    "universal_entry/p90l90_causal_transport_join.py":
+        "7905ac5ac1bbb581ad0ebca17d32adedbe10abc756ec6e493d182b1ad5efbb3b",
+    "universal_entry/p90l90_causal_transport_store.py":
+        "5fe47593b7672ced88980e664c6c098541392988c6cfb1c53e7381f34d7fa5b0",
+    "universal_entry/p90l90_native_sequence_id_journal.py":
+        "d04dbd48d07f66bfd33d999886cba9a00a443903d7034c3ff8b25523447fefec",
+    "universal_entry/p90l90_observer_paper_consumer.py":
+        "788c4b964cbb88d114882f6ff9e55f1e32b7c3468352c36f824132d7fd155e53",
+    "universal_entry/p90l90_real_bounded_native_restart.py":
+        "ade34d3ec160b249286ec9946edb7c312ccc359a89f8a5f96efc05b630b735ad",
+    "universal_entry/p90l90_real_observer_runtime.py":
+        "8d93f93b29446dab448e172a36ea2d74260ec6526022d92785c42e70e762cee9",
+    "universal_entry/p90l90_real_shared_candle_ledger.py":
+        "67baca3d0e8e73be61859a053052c4691f108a1adb98f8aa8dccc8069a6e1401",
+    "universal_entry/p90l90_shared_candle_bridge.py":
+        "01bfb15924c9fcae07b70568e79327d5426e015f5879c8fc8bf7dd4431f0ba2f",
+    "universal_exit/p90l90_real_exit_port.py":
+        "3a245cba87891a53b05c81ec86bc9caa11d7b93893743717a73aed40dc0ed506",
+    "universal_exit/p90l90_real_mfe.py":
+        "53bd13487b70c632a724caeebd257fcd04dd9c92a993f9e0072f5dd2750be4ed",
+    "universal_exit/p90l90_real_mfe_ledger.py":
+        "e85fb4c788ffa1a178a4b887e3e06593871e267573fc87b4ad221424bad26fab",
+    "universal_exit/p90l90_real_runtime_ports.py":
+        "5a2fb5b6075065250b9ecb6445cc25b8459ecdab79ec641bc88e3f40172c4753",
+}
 
 
 class P90RealSourceCompatibilityUnverified(RuntimeError):
@@ -50,9 +85,7 @@ class P90RealSourceIdentity:
     approved_producers: frozenset[str]
 
 
-def consumer_contract_digest(root: Path | None = None) -> str:
-    """Exact content proof, not Git ancestry or a caller's compatibility flag."""
-    root = root or Path(__file__).resolve().parents[3]
+def _consumer_inventory(root: Path) -> tuple[Path, dict[str, Path]]:
     package = root / "src/bybit_workbench"
     paths: list[Path] = []
     for directory in ("universal_entry", "universal_exit"):
@@ -62,12 +95,49 @@ def consumer_contract_digest(root: Path | None = None) -> str:
     for name in ("strategy_position.py", "exchange_position_identity.py",
                  "domain/models.py", "market_data/shared_closed_candles.py"):
         paths.append(package / name)
+    inventory: dict[str, Path] = {}
+    for item in paths:
+        _require(item.is_file() and not item.is_symlink(), "CONSUMER_FILE_UNVERIFIED")
+        relative = item.relative_to(package).as_posix()
+        _require(relative not in inventory, "CONSUMER_FILE_DUPLICATE")
+        inventory[relative] = item
+    return package, inventory
+
+
+def consumer_contract_digest(root: Path | None = None) -> str:
+    """Exact loaded-consumer bytes, independently bound to contract V2."""
+    root = root or Path(__file__).resolve().parents[3]
+    _package, inventory = _consumer_inventory(root)
     digest = hashlib.sha256(CONTRACT_VERSION.encode())
-    for path in sorted(paths):
-        _require(path.is_file() and not path.is_symlink(), "CONSUMER_FILE_UNVERIFIED")
-        digest.update(path.relative_to(package).as_posix().encode() + b"\0")
-        digest.update(hashlib.sha256(path.read_bytes()).digest())
+    for relative in sorted(inventory):
+        digest.update(relative.encode() + b"\0")
+        digest.update(hashlib.sha256(inventory[relative].read_bytes()).digest())
     return digest.hexdigest()
+
+
+def verify_reviewed_bugfix_delta(*, current_root: Path, origin_root: Path) -> None:
+    """Allow only the reviewed stabilization delta; no ancestry shortcut."""
+    _current_package, current = _consumer_inventory(current_root)
+    _origin_package, origin = _consumer_inventory(origin_root)
+    changed = {
+        relative
+        for relative in set(current) | set(origin)
+        if relative not in current
+        or relative not in origin
+        or current[relative].read_bytes() != origin[relative].read_bytes()
+    }
+    _require(
+        changed == set(REVIEWED_BUGFIX_CONSUMER_SHA256),
+        "UNREVIEWED_CONSUMER_DELTA",
+    )
+    for relative, expected in REVIEWED_BUGFIX_CONSUMER_SHA256.items():
+        item = current.get(relative)
+        if item is None:
+            raise P90RealSourceCompatibilityUnverified(
+                "P90_REAL_SOURCE_COMPATIBILITY_REVIEWED_BUGFIX_FILE_MISSING"
+            )
+        actual = hashlib.sha256(item.read_bytes()).hexdigest()
+        _require(actual == expected, "REVIEWED_BUGFIX_CONTENT_DRIFT")
 
 
 def plan_pair_digest(bundles: tuple[object, ...]) -> str:
@@ -210,8 +280,10 @@ def register_real_source_compatibility(connection: Any, *, epoch_id: str,
         _require((path / "INSTALLED_COMMIT").read_text().strip() == sha,
                  "RETAINED_RELEASE_MARKER_INVALID")
     contract = consumer_contract_digest(current_root)
-    _require(consumer_contract_digest(origin_root) == contract,
-             "ORIGIN_CONSUMER_CONTRACT_CHANGED")
+    verify_reviewed_bugfix_delta(
+        current_root=current_root,
+        origin_root=origin_root,
+    )
     plans = plan_pair_digest(bundles)
     prior = connection.execute(
         f"SELECT loaded_commit FROM {_TABLE} WHERE epoch_id=%s", (epoch_id,),

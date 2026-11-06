@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -193,6 +194,58 @@ def test_contract_digest_detects_changed_consumer_bytes(tmp_path):
     before = compat.consumer_contract_digest(tmp_path)
     (tmp_path / "src/bybit_workbench/universal_exit/algorithm.py").write_text("changed")
     assert compat.consumer_contract_digest(tmp_path) != before
+
+
+def test_v2_reviewed_bugfix_delta_is_exact_and_hash_bound(tmp_path, monkeypatch):
+    package = "src/bybit_workbench"
+    origin = tmp_path / ("a" * 40)
+    current = tmp_path / ("b" * 40)
+    for root in (origin, current):
+        for folder in ("universal_entry", "universal_exit"):
+            p = root / package / folder / "algorithm.py"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("original")
+        for name in (
+            "strategy_position.py", "exchange_position_identity.py",
+            "domain/models.py", "market_data/shared_closed_candles.py",
+        ):
+            p = root / package / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("original")
+    changed = current / package / "universal_exit/algorithm.py"
+    changed.write_text("reviewed-bugfix")
+    monkeypatch.setattr(
+        compat,
+        "REVIEWED_BUGFIX_CONSUMER_SHA256",
+        {
+            "universal_exit/algorithm.py":
+                hashlib.sha256(b"reviewed-bugfix").hexdigest(),
+        },
+    )
+    compat.verify_reviewed_bugfix_delta(
+        current_root=current, origin_root=origin,
+    )
+
+    changed.write_text("different-bytes")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="REVIEWED_BUGFIX_CONTENT_DRIFT",
+    ):
+        compat.verify_reviewed_bugfix_delta(
+            current_root=current, origin_root=origin,
+        )
+
+    changed.write_text("reviewed-bugfix")
+    (current / package / "universal_entry/algorithm.py").write_text(
+        "unreviewed-extra-change"
+    )
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat.verify_reviewed_bugfix_delta(
+            current_root=current, origin_root=origin,
+        )
 
 
 def test_registration_refuses_without_explicit_actor_transaction_and_off_gate():
