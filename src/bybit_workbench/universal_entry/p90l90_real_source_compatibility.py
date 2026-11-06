@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -140,6 +141,115 @@ def verify_reviewed_bugfix_delta(*, current_root: Path, origin_root: Path) -> No
         _require(actual == expected, "REVIEWED_BUGFIX_CONTENT_DRIFT")
 
 
+def _git_bytes(source_checkout: Path, *args: str) -> bytes:
+    _require(
+        source_checkout.is_dir()
+        and (source_checkout / ".git").is_dir()
+        and not source_checkout.is_symlink(),
+        "ORIGIN_GIT_REPOSITORY_INVALID",
+    )
+    result = subprocess.run(
+        ("git", "-C", str(source_checkout), *args),
+        capture_output=True,
+        check=False,
+    )
+    _require(result.returncode == 0, "ORIGIN_GIT_READ_FAILED")
+    return result.stdout
+
+
+def _consumer_inventory_from_git(
+    source_checkout: Path, origin_commit: str,
+) -> dict[str, bytes]:
+    """Read exact historical consumer bytes from local Git; never fetch/network."""
+    _require(_SHA.fullmatch(origin_commit) is not None, "ORIGIN_GIT_COMMIT_INVALID")
+    try:
+        commit_probe = subprocess.run(
+            ("git", "-C", str(source_checkout), "cat-file", "-t", origin_commit),
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise P90RealSourceCompatibilityUnverified(
+            "P90_REAL_SOURCE_COMPATIBILITY_ORIGIN_GIT_READ_FAILED"
+        ) from exc
+    _require(commit_probe.returncode == 0, "ORIGIN_GIT_COMMIT_MISSING")
+    _require(commit_probe.stdout.strip() == b"commit", "ORIGIN_GIT_COMMIT_INVALID")
+    package_prefix = "src/bybit_workbench/"
+    shared = {
+        "strategy_position.py",
+        "exchange_position_identity.py",
+        "domain/models.py",
+        "market_data/shared_closed_candles.py",
+    }
+    raw = _git_bytes(
+        source_checkout,
+        "ls-tree",
+        "-r",
+        "--name-only",
+        origin_commit,
+        "--",
+        package_prefix + "universal_entry",
+        package_prefix + "universal_exit",
+        *(package_prefix + name for name in sorted(shared)),
+    )
+    inventory: dict[str, bytes] = {}
+    for full in raw.decode("utf-8").splitlines():
+        if not full.startswith(package_prefix):
+            continue
+        relative = full[len(package_prefix):]
+        path = Path(relative)
+        include = (
+            (
+                path.parent.as_posix() in {"universal_entry", "universal_exit"}
+                and path.suffix == ".py"
+                and path.name not in _ADAPTERS
+            )
+            or relative in shared
+        )
+        if not include:
+            continue
+        _require(relative not in inventory, "CONSUMER_FILE_DUPLICATE")
+        inventory[relative] = _git_bytes(
+            source_checkout, "show", f"{origin_commit}:{full}"
+        )
+    _require(
+        any(name.startswith("universal_entry/") for name in inventory)
+        and any(name.startswith("universal_exit/") for name in inventory)
+        and shared.issubset(inventory),
+        "ORIGIN_GIT_CONSUMER_FILES_MISSING",
+    )
+    return inventory
+
+
+def verify_reviewed_bugfix_delta_from_git(
+    *, current_root: Path, source_checkout: Path, origin_commit: str,
+) -> None:
+    """Compare current consumer bytes to the exact active-epoch Git commit."""
+    _current_package, current = _consumer_inventory(current_root)
+    origin = _consumer_inventory_from_git(source_checkout, origin_commit)
+    changed = {
+        relative
+        for relative in set(current) | set(origin)
+        if relative not in current
+        or relative not in origin
+        or current[relative].read_bytes() != origin[relative]
+    }
+    _require(
+        changed == set(REVIEWED_BUGFIX_CONSUMER_SHA256),
+        "UNREVIEWED_CONSUMER_DELTA",
+    )
+    for relative, expected in REVIEWED_BUGFIX_CONSUMER_SHA256.items():
+        item = current.get(relative)
+        if item is None:
+            raise P90RealSourceCompatibilityUnverified(
+                "P90_REAL_SOURCE_COMPATIBILITY_REVIEWED_BUGFIX_FILE_MISSING"
+            )
+        _require(
+            hashlib.sha256(item.read_bytes()).hexdigest() == expected,
+            "REVIEWED_BUGFIX_CONTENT_DRIFT",
+        )
+
+
 def plan_pair_digest(bundles: tuple[object, ...]) -> str:
     rows = []
     for raw in bundles:
@@ -249,10 +359,16 @@ def inspect_real_source_identity(connection: Any, *, epoch_id: str,
     return P90RealSourceIdentity(epoch_id, origin, loaded_commit, frozenset(approved))
 
 
-def register_real_source_compatibility(connection: Any, *, epoch_id: str,
-                                       loaded_commit: str,
-                                       bundles: tuple[object, ...],
-                                       current_root: Path, origin_root: Path) -> None:
+def register_real_source_compatibility(
+    connection: Any,
+    *,
+    epoch_id: str,
+    loaded_commit: str,
+    bundles: tuple[object, ...],
+    current_root: Path,
+    origin_root: Path | None = None,
+    origin_git_checkout: Path | None = None,
+) -> None:
     """Explicit operator INSERT only; never called by the Observer/installer."""
     _require(_SHA.fullmatch(loaded_commit) is not None
              and _EPOCH.fullmatch(epoch_id) is not None, "IDENTITY_INVALID")
@@ -275,15 +391,35 @@ def register_real_source_compatibility(connection: Any, *, epoch_id: str,
              and isinstance(row[0], str) and _SHA.fullmatch(row[0]) is not None,
              "EPOCH_NOT_ACTIVE")
     origin = row[0]
-    _require(origin_root.resolve().name == origin, "ORIGIN_RELEASE_PATH_INVALID")
-    for path, sha in ((current_root, loaded_commit), (origin_root, origin)):
-        _require((path / "INSTALLED_COMMIT").read_text().strip() == sha,
-                 "RETAINED_RELEASE_MARKER_INVALID")
-    contract = consumer_contract_digest(current_root)
-    verify_reviewed_bugfix_delta(
-        current_root=current_root,
-        origin_root=origin_root,
+    _require(
+        (current_root / "INSTALLED_COMMIT").read_text().strip() == loaded_commit,
+        "RETAINED_RELEASE_MARKER_INVALID",
     )
+    _require(
+        (origin_root is None) != (origin_git_checkout is None),
+        "EXACT_ONE_ORIGIN_EVIDENCE_REQUIRED",
+    )
+    contract = consumer_contract_digest(current_root)
+    if origin_root is not None:
+        _require(
+            origin_root.resolve().name == origin,
+            "ORIGIN_RELEASE_PATH_INVALID",
+        )
+        _require(
+            (origin_root / "INSTALLED_COMMIT").read_text().strip() == origin,
+            "RETAINED_RELEASE_MARKER_INVALID",
+        )
+        verify_reviewed_bugfix_delta(
+            current_root=current_root,
+            origin_root=origin_root,
+        )
+    else:
+        assert origin_git_checkout is not None
+        verify_reviewed_bugfix_delta_from_git(
+            current_root=current_root,
+            source_checkout=origin_git_checkout,
+            origin_commit=origin,
+        )
     plans = plan_pair_digest(bundles)
     prior = connection.execute(
         f"SELECT loaded_commit FROM {_TABLE} WHERE epoch_id=%s", (epoch_id,),

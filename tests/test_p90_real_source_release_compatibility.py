@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import subprocess
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -256,3 +257,94 @@ def test_registration_refuses_without_explicit_actor_transaction_and_off_gate():
             current_root=__import__("pathlib").Path(LOADED),
             origin_root=__import__("pathlib").Path(ORIGIN),
         )
+
+def test_reviewed_delta_can_use_exact_local_git_origin_without_retained_release(
+    tmp_path, monkeypatch,
+):
+    repo = tmp_path / "source_checkout"
+    package = repo / "src/bybit_workbench"
+    for folder in ("universal_entry", "universal_exit"):
+        p = package / folder / "algorithm.py"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("original", encoding="utf-8")
+    for name in (
+        "strategy_position.py",
+        "exchange_position_identity.py",
+        "domain/models.py",
+        "market_data/shared_closed_candles.py",
+    ):
+        p = package / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("original", encoding="utf-8")
+
+    subprocess.run(("git", "-C", str(repo), "init"), check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(repo), "add", "."), check=True, capture_output=True)
+    subprocess.run(
+        (
+            "git", "-C", str(repo),
+            "-c", "user.name=Cripta Test",
+            "-c", "user.email=cripta-test@example.invalid",
+            "commit", "-m", "origin",
+        ),
+        check=True,
+        capture_output=True,
+    )
+    origin = subprocess.run(
+        ("git", "-C", str(repo), "rev-parse", "HEAD"),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    current = tmp_path / ("b" * 40)
+    for folder in ("universal_entry", "universal_exit"):
+        p = current / "src/bybit_workbench" / folder / "algorithm.py"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("original", encoding="utf-8")
+    for name in (
+        "strategy_position.py",
+        "exchange_position_identity.py",
+        "domain/models.py",
+        "market_data/shared_closed_candles.py",
+    ):
+        p = current / "src/bybit_workbench" / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("original", encoding="utf-8")
+    changed = current / "src/bybit_workbench/universal_exit/algorithm.py"
+    changed.write_text("reviewed-bugfix", encoding="utf-8")
+    monkeypatch.setattr(
+        compat,
+        "REVIEWED_BUGFIX_CONSUMER_SHA256",
+        {
+            "universal_exit/algorithm.py":
+                hashlib.sha256(b"reviewed-bugfix").hexdigest(),
+        },
+    )
+
+    compat.verify_reviewed_bugfix_delta_from_git(
+        current_root=current,
+        source_checkout=repo,
+        origin_commit=origin,
+    )
+
+    changed.write_text("unreviewed-content", encoding="utf-8")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="REVIEWED_BUGFIX_CONTENT_DRIFT",
+    ):
+        compat.verify_reviewed_bugfix_delta_from_git(
+            current_root=current,
+            source_checkout=repo,
+            origin_commit=origin,
+        )
+
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="ORIGIN_GIT_COMMIT",
+    ):
+        compat.verify_reviewed_bugfix_delta_from_git(
+            current_root=current,
+            source_checkout=repo,
+            origin_commit="f" * 40,
+        )
+
