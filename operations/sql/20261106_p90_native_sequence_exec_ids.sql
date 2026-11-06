@@ -25,6 +25,32 @@ CREATE TABLE IF NOT EXISTS strategy_entry.p90l90_native_sequence_exec_ids (
   PRIMARY KEY(mode,source_epoch_id,source_commit,symbol,exchange_sequence,exec_id)
 );
 
+-- New checkpoints may reference the exact current-seq ID journal instead of
+-- embedding an unbounded list. Old V1 JSON remains readable without rewriting
+-- historical checkpoints or their source identity. Both constraints retain
+-- strict object/schema/symbol enforcement.
+ALTER TABLE strategy_entry.p90l90_real_causal_checkpoints
+  DROP CONSTRAINT p90l90_real_causal_checkpoints_check;
+ALTER TABLE strategy_entry.p90l90_real_causal_checkpoints
+  ADD CONSTRAINT p90l90_real_causal_checkpoints_check CHECK (
+    jsonb_typeof(checkpoint_json)='object'
+    AND checkpoint_json->>'schema' IN (
+      'P90L90_CAUSAL_TRANSPORT_JOIN_V1',
+      'P90L90_CAUSAL_TRANSPORT_JOIN_V2'
+    )
+    AND checkpoint_json->>'symbol'=symbol
+  );
+ALTER TABLE strategy_entry.p90l90_causal_transport_checkpoints
+  DROP CONSTRAINT p90l90_causal_transport_checkpoints_checkpoint_json_check;
+ALTER TABLE strategy_entry.p90l90_causal_transport_checkpoints
+  ADD CONSTRAINT p90l90_causal_transport_checkpoints_checkpoint_json_check CHECK (
+    jsonb_typeof(checkpoint_json)='object'
+    AND checkpoint_json->>'schema' IN (
+      'P90L90_CAUSAL_TRANSPORT_JOIN_V1',
+      'P90L90_CAUSAL_TRANSPORT_JOIN_V2'
+    )
+  );
+
 REVOKE ALL ON strategy_entry.p90l90_native_sequence_exec_ids FROM PUBLIC;
 -- DELETE is scoped solely to this bounded rolling transport-state relation;
 -- current/immutable source epochs, checkpoints, original facts and audit retain
