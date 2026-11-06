@@ -7,8 +7,6 @@ No asset/account observation, PostgreSQL mutation, or Bybit order is used.
 """
 from __future__ import annotations
 
-from dataclasses import replace
-from datetime import timedelta
 from decimal import Decimal
 
 import pytest
