@@ -37,6 +37,7 @@ from bybit_workbench.universal_exit.p90l90_real_runtime_ports import (
 from .contracts import FrozenPolicy, MarketFactEnvelope
 from .fingerprint import fingerprint
 from .p90l90_causal_fact_codec import encode_p90l90_fact
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_causal_transport_join import (
     P90L90CausalTransportJoin,
     P90TransportEvent,
@@ -192,6 +193,15 @@ def _load_joins(
     for symbol, raw, _commit in rows:
         try:
             join = P90L90CausalTransportJoin.restore(raw)
+            journal = P90NativeSequenceIdJournal(
+                connection, mode="REAL", source_epoch_id=source_epoch_id,
+                source_commit=source_commit, symbol=symbol,
+            )
+            # REST native proof is separately bounded to 1000. Load the full
+            # exact current sequence only in this locked recovery transaction,
+            # never truncate the durable IDs into a 512-entry witness.
+            journal.verify(join)
+            join.last_emitted_exec_ids = set(journal.full_restart_ids(join))
         except Exception:
             raise P90RealOpenSourceRecoveryUnverified(
                 "P90_REAL_RESTART_SOURCE_DURABLE_CHECKPOINT_CORRUPT"
