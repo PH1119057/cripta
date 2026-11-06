@@ -23,20 +23,23 @@ def _namespace() -> dict[str, Any]:
         "OWNER_ARM_OPEN_GATE_REASON": "OPEN",
         "OWNER_FULL_CONTOUR_ENTRY_WINDOW_GATE_REASON": "DIAGNOSTIC",
         "REAL_ENTRY_RUNTIME_NOT_READY_REASON": "NOT_READY",
+        "PRIVATE_RECONNECT_GATE_REASON": "private WS reconnect: verification pending",
         "P90_REAL_VERSION": "v3", "P90_MAIN_ID": "MAIN", "P90_SUB_ID": "SUB",
     }
 
 
 class _DB:
-    def __init__(self, exposure: int, enabled: bool = False) -> None:
+    def __init__(self, exposure: int, enabled: bool = False,
+                 reason: str = "OWNER_DISARM") -> None:
         self.exposure = exposure
         self.enabled = enabled
+        self.reason = reason
         self.queries: list[str] = []
 
     def execute(self, sql: str, params: object = None) -> SimpleNamespace:
         self.queries.append(sql)
         if "execution_gates" in sql:
-            result = (self.enabled, "OWNER_DISARM")
+            result = (self.enabled, self.reason)
         elif "position_ownership" in sql:
             assert params == ("v3",)
             assert "RECONCILIATION_REQUIRED" in sql
@@ -46,7 +49,9 @@ class _DB:
         return SimpleNamespace(fetchone=lambda: result)
 
 
-def _select(exposure: int, monkeypatch: pytest.MonkeyPatch, *, forced: bool = False):
+def _select(exposure: int, monkeypatch: pytest.MonkeyPatch, *, forced: bool = False,
+            selected: frozenset[str] = frozenset(), reason: str = "OWNER_DISARM",
+            enabled: bool = False):
     monkeypatch.setenv("CRIPTA_P90_REAL_SOURCE_ONLY", "ENABLED" if forced else "DISABLED")
     epoch = next(n for n in _source().body if isinstance(n, ast.FunctionDef)
                  and n.name == "_run_observer_epoch")
@@ -55,13 +60,13 @@ def _select(exposure: int, monkeypatch: pytest.MonkeyPatch, *, forced: bool = Fa
                  and n.targets[0].id == "p90_real_force_source_only")
     end = next(i for i, n in enumerate(epoch.body) if isinstance(n, ast.Assign)
                and isinstance(n.targets[0], ast.Name) and n.targets[0].id == "p90_lineage")
-    db = _DB(exposure)
+    db = _DB(exposure, enabled=enabled, reason=reason)
     namespace = {
         **_namespace(), "connection": db,
         "observer_split": SimpleNamespace(p90_real=tuple(
             SimpleNamespace(activation=SimpleNamespace(activation_id=k)) for k in ("M", "S")
         )),
-        "_real_execution_selected_activation_ids": lambda *_: frozenset(),
+        "_real_execution_selected_activation_ids": lambda *_: selected,
         "_p90_source_only_gate_compatible": lambda **_: True,
     }
     exec(compile(ast.Module(body=epoch.body[start:end], type_ignores=[]), str(PATH), "exec"),

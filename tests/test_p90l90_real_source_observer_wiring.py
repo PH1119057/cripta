@@ -160,7 +160,8 @@ def test_runtime_entry_fail_closed_preserves_exit_only_real_owner() -> None:
     assert "REAL_ENTRY_RUNTIME_NOT_READY_REASON" in body
     assert "p90_real_degraded = False" in body
     assert "p90_real_degraded = True" in body
-    assert "gate_reason == REAL_ENTRY_RUNTIME_NOT_READY_REASON" in body
+    assert "gate_reason in {" in body
+    assert "REAL_ENTRY_RUNTIME_NOT_READY_REASON, PRIVATE_RECONNECT_GATE_REASON" in body
     assert "selected == expected" in body
     assert "P90_REAL_DEGRADED_ENTRY_GATE_DRIFT" in body
     assert "P90_REAL_DEGRADED_EXIT_ONLY" in body

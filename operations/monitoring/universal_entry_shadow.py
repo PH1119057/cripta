@@ -56,7 +56,10 @@ from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     active_live_arm_session,
 )
-from bybit_workbench.release_arm_safety import REAL_ENTRY_RUNTIME_NOT_READY_REASON
+from bybit_workbench.release_arm_safety import (
+    PRIVATE_RECONNECT_GATE_REASON,
+    REAL_ENTRY_RUNTIME_NOT_READY_REASON,
+)
 from bybit_workbench.universal_entry import (
     DataQuality,
     EntryDecisionCode,
@@ -2314,10 +2317,12 @@ def _run_observer_epoch(
             p90_real_staged = True
         elif (
             not gate_enabled
-            and gate_reason == REAL_ENTRY_RUNTIME_NOT_READY_REASON
+            and gate_reason in {
+                REAL_ENTRY_RUNTIME_NOT_READY_REASON, PRIVATE_RECONNECT_GATE_REASON,
+            }
             and selected == expected
         ):
-            # Runtime safety closed NEW Entry after owner-arm. Existing REAL
+            # Runtime safety/WS recovery closed NEW Entry after owner-arm. Existing REAL
             # exposure must keep exact source/Universal Exit/recovery owners.
             # Admission remains physically unavailable while this gate is OFF.
             p90_real_live = True

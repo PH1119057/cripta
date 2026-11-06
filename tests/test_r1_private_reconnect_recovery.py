@@ -10,7 +10,9 @@ def source() -> str:
 
 def test_private_reconnect_is_temporarily_fail_closed_not_permanent_owner_rearm() -> None:
     text = source()
-    assert 'PRIVATE_RECONNECT_GATE_REASON = "private WS reconnect: verification pending"' in text
+    assert "PRIVATE_RECONNECT_GATE_REASON," in text
+    from bybit_workbench.release_arm_safety import PRIVATE_RECONNECT_GATE_REASON
+    assert PRIVATE_RECONNECT_GATE_REASON == "private WS reconnect: verification pending"
     assert "private WS reconnect: owner re-arm required" not in text
     assert "def restore_r1_gate_after_verified_reconnect(" in text
     assert "gate_was_open=restore_gate_after_reconnect" in text
