@@ -11,6 +11,7 @@ import re
 import socket
 import sys
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -440,7 +441,7 @@ def serve_source_windows(
                     reason = str(exc)
                     if re.fullmatch(r"P90_REAL_MARKET_SOURCE_[A-Z0-9_]{1,96}", reason) is None:
                         reason = "P90_REAL_MARKET_SOURCE_UNVERIFIED"
-                    try:
+                    with suppress(OSError, ValueError):
                         stream.sendall(_frame({
                             "version": 1, "nonce": nonce,
                             "status": "BLOCKED", "reason_code": reason,
@@ -448,8 +449,6 @@ def serve_source_windows(
                             "position_id": position_id,
                             "trading_account_id": account,
                         }))
-                    except (OSError, ValueError):
-                        pass
                 except Exception:
                     # Unexpected/foreign errors remain private.
                     continue
