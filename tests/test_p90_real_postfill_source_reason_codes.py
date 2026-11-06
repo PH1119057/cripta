@@ -36,6 +36,9 @@ class FakeSocket:
 
 def call_client(monkeypatch, response):
     stream = FakeSocket()
+    # Windows CI lacks AF_UNIX: the fake socket must intercept this constant
+    # before constructing its in-process test transport (never real network).
+    monkeypatch.setattr(client.socket, "AF_UNIX", 1, raising=False)
     monkeypatch.setattr(client.socket, "socket", lambda *a, **kw: stream)
     monkeypatch.setattr(client, "peer_same_runtime_uid", lambda sock: sock is stream)
     monkeypatch.setattr(client.secrets, "token_hex", lambda size: NONCE)
