@@ -130,8 +130,8 @@ class P90RealExitNativePort:
                         first_fill_forward_coverage_proven=first,
                         native_continuity_proven=contiguous,
                         prove_same_timestamp_order=(
-                            lambda earlier=earlier: self._prove_same_time_order(
-                                position, earlier
+                            lambda earlier=earlier, position=position: (
+                                self._prove_same_time_order(position, earlier)
                             )
                         ),
                     )
@@ -147,7 +147,9 @@ class P90RealExitNativePort:
                 first_fill_forward_coverage_proven=first_contiguous,
                 native_continuity_proven=subsequent_contiguous,
                 prove_same_timestamp_order=(
-                    lambda: self._prove_same_time_order(position, cursor)
+                    lambda position=position, cursor=cursor: (
+                        self._prove_same_time_order(position, cursor)
+                    )
                 ),
             )
             if self._pending is not None and self._pending(position):
