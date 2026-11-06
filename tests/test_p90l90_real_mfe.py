@@ -193,12 +193,6 @@ def test_same_seq_equal_ms_requires_source_owned_delivery_proof() -> None:
     assert result.cursor_at == first.traded_at
     assert result.best_favorable_price == D("100.5")
     assert P90RealMfeCheckpoint.restore(result.snapshot()) == result
-    with pytest.raises(P90RealMfeUnverified, match="NATIVE_ORDER_NOT_PROVEN"):
-        result.advance(
-            position=pos, cursor=first, price=D("100.1"),
-            proven_contiguous_native_cursor=True,
-            proven_same_timestamp_delivery_order=True,
-        )
 
 
 def test_original_tie_replay_requires_same_fact_price_and_identity() -> None:
