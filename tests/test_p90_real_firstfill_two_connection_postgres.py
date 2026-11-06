@@ -53,7 +53,10 @@ class ScopedDB:
 
     def execute(self, sql, params=()):
         sql = str(sql).replace("strategy_exit.", self.schema + ".")
-        sql = sql.replace("runtime.account_entry_safety_blocks", self.schema + ".account_entry_safety_blocks")
+        sql = sql.replace(
+            "runtime.account_entry_safety_blocks",
+            self.schema + ".account_entry_safety_blocks",
+        )
         return self.connection.execute(sql, params)
 
 
@@ -116,16 +119,19 @@ def test_two_connections_keep_protected_fill_and_exit_across_mfe_rollback():
         try:
             ddl = (
                 f"CREATE TABLE {schema}.simulated_protected_fill("
-                "position_id text PRIMARY KEY,account_id text,protection_verified boolean NOT NULL)",
+                "position_id text PRIMARY KEY,account_id text,"
+                "protection_verified boolean NOT NULL)",
                 f"CREATE TABLE {schema}.exit_observations("
                 "observation_id text PRIMARY KEY,strategy_position_id text,"
                 "exit_plan_fingerprint text,symbol text,event_kind text,event_at timestamptz,"
-                "observed_at timestamptz,received_at timestamptz,attributes jsonb,source_refs jsonb)",
+                "observed_at timestamptz,received_at timestamptz,"
+                "attributes jsonb,source_refs jsonb)",
                 f"CREATE TABLE {schema}.exit_decisions("
                 "exit_decision_id text PRIMARY KEY,strategy_position_id text,strategy_id text,"
                 "strategy_version text,strategy_config_fingerprint text,exit_plan_fingerprint text,"
                 "observation_id text,rule_id text,rule_priority integer,repeat_policy text,"
-                "action_kind text,requested_mutation jsonb,source_refs jsonb,decided_at timestamptz)",
+                "action_kind text,requested_mutation jsonb,source_refs jsonb,"
+                "decided_at timestamptz)",
                 f"CREATE TABLE {schema}.shadow_evaluations("
                 "evaluation_id text PRIMARY KEY,observation_id text,strategy_position_id text,"
                 "exit_plan_fingerprint text,status text,reason text,matched_rule_ids jsonb,"
@@ -134,7 +140,8 @@ def test_two_connections_keep_protected_fill_and_exit_across_mfe_rollback():
                 "exit_decision_id text PRIMARY KEY,position_id text,action_kind text)",
                 f"CREATE TABLE {schema}.account_entry_safety_blocks("
                 "trading_account_id text,account_connector_id text,reason text,"
-                "blocked_at timestamptz DEFAULT now(),PRIMARY KEY(trading_account_id,account_connector_id))",
+                "blocked_at timestamptz DEFAULT now(),"
+                "PRIMARY KEY(trading_account_id,account_connector_id))",
             )
             for statement in ddl:
                 admin.execute(statement)
