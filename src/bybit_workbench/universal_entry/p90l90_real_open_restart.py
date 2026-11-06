@@ -42,6 +42,7 @@ from bybit_workbench.universal_exit.p90l90_real_row_connection import (
 )
 
 from .p90l90_causal_transport_join import P90L90CausalTransportJoin
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from .p90l90_real_account_routes import (
     P90RealAccountRoute,
@@ -190,6 +191,10 @@ def _active_epoch_with_open_positions(
     for symbol, snapshot, _commit in checkpoints:
         try:
             join = P90L90CausalTransportJoin.restore(snapshot)
+            P90NativeSequenceIdJournal(
+                connection, mode="REAL", source_epoch_id=epoch_id,
+                source_commit=origin_commit, symbol=symbol,
+            ).verify(join)
         except Exception:
             raise P90RealOpenRestartUnverified(
                 "P90_REAL_RESTART_SOURCE_CHECKPOINT_CORRUPT"
