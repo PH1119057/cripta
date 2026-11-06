@@ -23,6 +23,7 @@ from .p90l90_causal_transport_join import (
 from .p90l90_durable_paper_processor import P90L90DurablePaperProcessor
 from .p90l90_immutable_bar_ledger import P90L90ImmutableBarLedger
 from .p90l90_legacy_strategy import MAIN_ID, MAIN_SYMBOLS, SUB_ID, SUB_SYMBOLS
+from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_strategy_v2 import VERSION as PAPER_VERSION
 from .paper_runtime import PaperTradeRuntime
 from .registry import ActivePlanRegistry
@@ -277,6 +278,10 @@ class P90L90ObserverPaperConsumer:
                     ):
                         raise RuntimeError("P90_SHARED_RECOVERY_GENERATION_DRIFT")
                     before_join = P90L90CausalTransportJoin.restore(before[0])
+                    P90NativeSequenceIdJournal(
+                        self._connection, mode="PAPER", source_epoch_id="PAPER",
+                        source_commit=str(before[2]), symbol=symbol,
+                    ).verify(before_join)
                     target5, target15 = targets[symbol]
                     self._connection.execute(
                         """INSERT INTO strategy_entry.p90l90_candle_gap_recovery_audit
