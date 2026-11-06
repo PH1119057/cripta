@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from test_p90l90_real_mfe import SHA, _cursor, _position
 
+from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeUnverified
 from bybit_workbench.universal_exit.p90l90_real_mfe_ledger import P90RealMfeLedger
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -203,7 +204,8 @@ def test_same_seq_equal_ms_uses_durable_append_index_for_restart(runtime_db):
             assert refs == ("native:exact:same-seq-fact-B",)
 
             with pytest.raises(
-                Exception, match="P90_REAL_MFE_NATIVE_ORDER_NOT_PROVEN"
+                P90RealMfeUnverified,
+                match="P90_REAL_MFE_NATIVE_ORDER_NOT_PROVEN",
             ):
                 ledger.on_trade(
                     **native_args(first, "same-seq-fact-A-reversed", "100.2"),
