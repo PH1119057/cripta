@@ -132,7 +132,10 @@ def verify_reviewed_bugfix_delta(*, current_root: Path, origin_root: Path) -> No
     )
     for relative, expected in REVIEWED_BUGFIX_CONSUMER_SHA256.items():
         item = current.get(relative)
-        _require(item is not None, "REVIEWED_BUGFIX_FILE_MISSING")
+        if item is None:
+            raise P90RealSourceCompatibilityUnverified(
+                "P90_REAL_SOURCE_COMPATIBILITY_REVIEWED_BUGFIX_FILE_MISSING"
+            )
         actual = hashlib.sha256(item.read_bytes()).hexdigest()
         _require(actual == expected, "REVIEWED_BUGFIX_CONTENT_DRIFT")
 
