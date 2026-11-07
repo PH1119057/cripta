@@ -72,8 +72,13 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
         "d04dbd48d07f66bfd33d999886cba9a00a443903d7034c3ff8b25523447fefec",
     "universal_entry/p90l90_observer_paper_consumer.py":
         "788c4b964cbb88d114882f6ff9e55f1e32b7c3468352c36f824132d7fd155e53",
+    # Owner-reviewed source-only restart correction under ARCH §60.2.1:
+    # optional complete native evidence does not replace signed account,
+    # original epoch or open-position Exit/MFE verification.
     "universal_entry/p90l90_real_bounded_native_restart.py":
-        "ade34d3ec160b249286ec9946edb7c312ccc359a89f8a5f96efc05b630b735ad",
+        "872af9cd2419928bfc4ade170a41cb7d8eb8a99a4787d36fe6d20f0a6b6bb5ef",
+    "universal_entry/p90l90_real_restart_recovery.py":
+        "6ed2cd670e83dd429cb8b293843dc0c482fc823ca8636937db8bf62646af2431",
     "universal_entry/p90l90_real_observer_runtime.py":
         "8d93f93b29446dab448e172a36ea2d74260ec6526022d92785c42e70e762cee9",
     "universal_entry/p90l90_real_shared_candle_ledger.py":
