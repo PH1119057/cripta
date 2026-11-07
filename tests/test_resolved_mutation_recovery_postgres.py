@@ -442,7 +442,7 @@ def test_native_takeprofit_short_position_uses_opposite_buy_execution(recovery_d
         "history_wrong_idx", "history_wrong_qty", "history_wrong_side",
         "execution_unproven", "execution_wrong_origin", "execution_linked",
         "execution_partial", "execution_missing", "original_tp_missing",
-        "conflicting_bot_close",
+        "conflicting_bot_close", "conflicting_failed_bot_close",
     ],
 )
 def test_native_takeprofit_rejects_unknown_or_ambiguous_provenance(
@@ -533,11 +533,12 @@ def test_native_takeprofit_rejects_unknown_or_ambiguous_provenance(
             f"UPDATE {schema}.position_ownership "
             "SET initial_protection_evidence='{}'::jsonb"
         )
-    elif failure == "conflicting_bot_close":
+    elif failure in {"conflicting_bot_close", "conflicting_failed_bot_close"}:
+        state = "failed" if failure == "conflicting_failed_bot_close" else "completed"
         admin.execute(
             f"INSERT INTO {schema}.trade_commands VALUES "
-            "('conflict',%s,'PROVEN','completed','close',%s)",
-            (ACCOUNT, json.dumps({"strategy_position_id": "pos"})),
+            "('conflict',%s,'PROVEN',%s,'close',%s)",
+            (ACCOUNT, state, json.dumps({"strategy_position_id": "pos"})),
         )
     with pytest.raises(psycopg.errors.RaiseException, match="MUTATION_RECOVERY_NATIVE_TP_"):
         recover()
