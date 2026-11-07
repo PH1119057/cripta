@@ -342,7 +342,8 @@ def attest_bounded_native_restart(
             or not timedelta() <= server - live_at <= timedelta(seconds=10)
             or not isinstance(native_rows, (tuple, list))
             or not 1 <= len(native_rows) <= (
-                1000 if verified_native_source is None else 50_000
+                1000 if verified_native_source is None
+                else verified_native_source.max_required_records
             )
         ):
             raise P90RealNativeRestartUnverified(
