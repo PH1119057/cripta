@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import pwd
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -191,6 +190,10 @@ def collect_check(connection: Any, cutoff: datetime) -> Result:
 
 
 def run_apply(connection: Any, cutoff: datetime, limit: int) -> Result:
+    if sys.platform != "linux":
+        raise RuntimeError("RETENTION_LINUX_REQUIRED")
+    import pwd
+
     if os.geteuid() != pwd.getpwnam("postgres").pw_uid:
         raise RuntimeError("RETENTION_POSTGRES_UNIX_ACTOR_REQUIRED")
     result: dict[str, int] = {}
