@@ -84,11 +84,11 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
     "universal_entry/p90l90_shared_candle_bridge.py":
         "01bfb15924c9fcae07b70568e79327d5426e015f5879c8fc8bf7dd4431f0ba2f",
     "universal_exit/p90l90_real_exit_port.py":
-        "3a245cba87891a53b05c81ec86bc9caa11d7b93893743717a73aed40dc0ed506",
+        "f7809d96136ed6092c795d73e1b216cc5fe733be0462ffdafdd650f93628b696",
     "universal_exit/p90l90_real_mfe.py":
         "b5ea55aabc32a8860de421411b45990662c2a6b7111f53a18cae2c7603cac48f",
     "universal_exit/p90l90_real_mfe_ledger.py":
-        "e0d3341d195df3eecbe1f792bdec4633f53a65c5f1fcc69d2dd5b55d1ff5f4f9",
+        "c7410ac6838e8edff84f64b20aa451b60568ca54d98d9aae1e077d0d7b6d8e8d",
     # Reviewed WS reconnect diagnostic: gap counters are scoped to the
     # NEW transport session; the old durable native cursor is not recovered
     # or forgiven. This exact delta is tested independently in trade_mirror.
