@@ -171,7 +171,7 @@ def test_late_p90_recovery_error_restarts_only_pure_source_rail() -> None:
     assert "p90_real_force_source_only" in text
     assert "P90_SCOPED_SOURCE_REPAIR_FINANCIAL_SCOPE_INVALID" in text
     assert "if source_repair_only:" in text
-    assert "if p90_repair_ingest_only:" in text
+    assert "if p90_repair_ingest_only and not observer_split.ordinary:" in text
     assert "tuple(sorted(ordinary_symbols)) if p90_repair_ingest_only else symbols" in text
     assert "if not p90_repair_ingest_only or observer_split.ordinary:" in text
     assert "and not p90_repair_ingest_only" in text
