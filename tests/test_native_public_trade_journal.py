@@ -67,28 +67,27 @@ def test_same_seq_native_ids_atomic_rollback_exact_replay_and_conflict() -> None
     assert DSN is not None
     with psycopg.connect(DSN, autocommit=True) as conn:
         # Owner must commit journal + dependent effects/cursor as ONE transaction.
-        with pytest.raises(RuntimeError, match="SIMULATED_SOURCE_CRASH"):
-            with conn.transaction():
-                conn.execute(
-                    "CREATE TEMP TABLE native_470_effects(exec_id text) ON COMMIT DROP"
-                )
-                store = NativePublicTradeJournal(conn)
-                assert store.append(_event("synthetic-470-a"))
-                assert store.append(_event("synthetic-470-b"))
-                # Multiple exact IDs at the same sequence are independent.
-                assert not store.append(replace(
-                    _event("synthetic-470-a"),
-                    source_transport="APPROVED_ARCHIVE_REPLAY",
-                    producer_release_commit="b" * 40,
-                ))
-                conn.execute(
-                    "INSERT INTO pg_temp.native_470_effects VALUES('dependent-effect')"
-                )
-                with pytest.raises(
-                    NativeTradeEvidenceConflict, match="IDENTITY_CONFLICT"
-                ):
-                    store.append(replace(_event("synthetic-470-a"), price=Decimal("99")))
-                raise RuntimeError("SIMULATED_SOURCE_CRASH")
+        with pytest.raises(RuntimeError, match="SIMULATED_SOURCE_CRASH"), conn.transaction():
+            conn.execute(
+                "CREATE TEMP TABLE native_470_effects(exec_id text) ON COMMIT DROP"
+            )
+            store = NativePublicTradeJournal(conn)
+            assert store.append(_event("synthetic-470-a"))
+            assert store.append(_event("synthetic-470-b"))
+            # Multiple exact IDs at the same sequence are independent.
+            assert not store.append(replace(
+                _event("synthetic-470-a"),
+                source_transport="APPROVED_ARCHIVE_REPLAY",
+                producer_release_commit="b" * 40,
+            ))
+            conn.execute(
+                "INSERT INTO pg_temp.native_470_effects VALUES('dependent-effect')"
+            )
+            with pytest.raises(
+                NativeTradeEvidenceConflict, match="IDENTITY_CONFLICT"
+            ):
+                store.append(replace(_event("synthetic-470-a"), price=Decimal("99")))
+            raise RuntimeError("SIMULATED_SOURCE_CRASH")
 
         # The outer crash rolled back both exact native rows and effects.
         assert conn.execute(
