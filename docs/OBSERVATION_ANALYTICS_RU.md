@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 2.1
-**Дата:** 2026-10-16
+**Версия:** 2.2
+**Дата:** 2026-11-07
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -836,9 +836,10 @@ This section grants no trading command or Strategy policy.
 Канонический MarketSource-адаптер наблюдательного контура загружает, проверяет и
 материализует точные подтверждённые OHLCV 5m/15m и иные разрешённые интервалы
 в единственном `analytics.closed_candles`, независимо от StrategyActivation.
-Для startup/restart он по требованию потребителя дозагружает недостающие
-исторические closed candles из exact approved MarketSource, без принудительного
-ожидания формирования полного live-окна. Ключ `MarketSource +
+Для startup/restart он **сначала** проверяет уже доступную историю в
+production PostgreSQL по manifest exact потребителя, затем дозагружает только
+недостающие closed candles из exact approved MarketSource через bounded Bybit
+Public REST, без принудительного ожидания формирования полного live-окна. Ключ `MarketSource +
 InstrumentIdentity + timeframe + UTC close`. MAYAK/Dispatcher не создают
 отдельных физических копий тех же свечей; `analytics.market_minutes` остаётся
 самостоятельным **производным** compact-minute dataset и не выдаётся за OHLC.
@@ -857,8 +858,11 @@ Strategy/Entry/Exit отвечают только за свои вычислен
 Штатный этап не создаёт ERROR incident и не требует закрытия аварии владельцем.
 Это узкий типизированный preparation outcome, не blanket suppression exceptions.
 
-Все participating symbols должны иметь проверенный общий причинный конец
-5m/15m истории перед fresh WS attestation. Пересечение границы свечи требует
+Все символы, которые действительно участвуют в **одном exact атомарном
+Strategy/EntryPlan/consumer scope**, должны иметь проверенный общий причинный
+конец 5m/15m истории перед fresh WS attestation; независимые
+Strategy/account/instrument consumers не блокируются чужим недостающим symbol.
+Пересечение границы свечи требует
 дозагрузки хвоста и новой проверки, а не допуска по устаревшему окну. Source,
 UTC, closed-only, count/gap/immutability и signed proof lifetime не ослабляются.
 Historical candles не создают native trade cursor. Ожидание ограничено finite
@@ -937,3 +941,116 @@ release/scope may reset a terminal preparation budget. GET/status polling,
 old requests and passage of time alone cannot do so. This is in-process cold
 preparation, not expansion of the START-only Service Broker to RESTART.
 Existing positions/uncertain mutations retain separate strict recovery owners.
+
+## 7.10 PostgreSQL-first MarketSource/Observer contract — OWNER DECISION 2026-11-07
+
+**Роль:** Observer — техническая обслуживающая система: approved Bybit
+Public WebSocket (native `publicTrade`, kline), approved Bybit Public REST,
+проверка MarketSource/InstrumentIdentity, сбор и атомарное сохранение фактов
+в CRIPTA PostgreSQL, покрытие/свежесть/повторное подключение, read model
+исправности и доставка exact facts потребителям. Observer **не** является
+Strategy, Entry/Exit Decision, execution-admission owner, финансовым gate writer
+или самостоятельным issuer общего торгового запрета. Разделение owners —
+ARCH §60, допуск — TC §4.13/§4.18.
+
+### 7.10.1 Обязательная доступность данных и bounded repair
+
+На каждый участвующий EntryPlan, ExitPlan, MFE либо market/research consumer
+существует конкретный `required-data manifest`: physical writer/reader,
+canonical PostgreSQL table/effective immutable view, MarketSource/Instrument,
+symbol/timeframe/event type, точный lookback и ATR seed, UTC boundary,
+min/max evidence time, source contract, count/coverage/gaps/duplicates,
+freshness TTL, checkpoint identity, durable retention, repair owner и deadline.
+Manifest — **проверяемый контракт, не новый глобальный фильтр**; точные
+числа определяются действующими планами и существующим TC, не Observer.
+Слепое ожидание заполнения live окна при уже сохранённой истории запрещено.
+
+Порядок подготовки:
+1. прочитать PostgreSQL и вычислить exact needed slice/coverage;
+2. если он complete и current — передать его потребителю без ненужного REST;
+3. если есть gap — bounded approved Bybit REST fetch **только gap/tail**,
+   closed-only и immutable-identity check, затем один canonical physical write
+   с provenance и independent readback;
+4. если authentic provider не может дать нужные native `seq/execId` —
+   сохранить точный gap/repair evidence, не фабриковать факты и не выдавать
+   потерянную причинность за восстановленную;
+5. публиковать отдельные состояния `READY`, `PREPARING`,
+   `RECONNECTING`, `BLOCKED`, `ERROR` **по dependency/affected scope**:
+   expected preparation не durable runtime fault; source corruption —
+   явный typed incident. Новое реальное Entry не допускается без
+   необходимых ему mandatory facts, но unrelated consumers продолжаются.
+
+Исторические недостающие факты, доступные достоверно, восстанавливаются
+для анализа даже после истечения торгового сигнала; `EntryAttempt`/audit
+хранят original event time, source and replay provenance. Observer не выдаёт
+задним числом биржевые ордера, не меняет immutable Strategy/EntryPlan/ExitPlan.
+
+### 7.10.2 Exact native tape и PostgreSQL checkpoint
+
+Закрытые свечи `analytics.closed_candles`, `analytics.market_minutes`,
+снимки MAYAK/Dispatcher и агрегаты **не** являются эквивалентом
+отдельных `publicTrade` `seq/execId`. Для активных exact native
+Entry/Exit/MFE consumers MarketSource producer обязан обеспечивать
+**ограниченный обязательствами потребителей durable publicTrade journal**
+в production PostgreSQL с exact source identity, UTC event_time, price,
+qty, side, native sequence and execId, source/provenance, ingest time,
+dedup/ordering/QC и durable cursor. Физическая схема/индексы/retention и
+атомарная `journal-before-processing-checkpoint` фиксация вводятся
+проверенной migration. Не принимать лишь память WebSocket buffer за
+restart storage. Append-only native audit, pin открытых позиций и causal
+Exit не подпадают под простое 24h удаление рекомпьютируемых полных JSON
+контекстов. Но это **не** разрешение бесконтрольного raw market lake:
+горизонт и ёмкость обоснованы конкретными active consumers и
+оставшимися обязательствами.
+
+На disconnect/restart separate evidence фиксирует previous epoch,
+gap start/end, last `seq/execId` и все same-seq IDs, actual Bybit WS
+session/ACK и новый verified cursor. Исторический gap audit не уничтожается
+обнулением счётчиков; lifetime gaps не должны автоматически превращать
+каждую независимую доказанно новую session в неисправную.
+Если точная ретроспективная native последовательность недоступна через
+текущий recent-trade API, проверять другие approved authentic archives
+и не называть одно API доказательством «данные потеряны».
+Ни `closed_candles`, ни агрегаты не синтезируют native `seq`.
+
+### 7.10.3 Позиция прежде нового Entry; fault scope
+
+Существующая позиция/ее protection — отдельный приоритетный consumer:
+signed Bybit Private MAIN/SUB inventory и original
+StrategyPosition/ExitPlan/MFE/Execution ownership восстанавливаются
+соответствующими account/Position/Exit owners, **не** Observer.
+Observer обеспечивает требуемые market facts для сопровождения, но
+отказ нового Entry по account permission/capital/SECOND48 не прерывает
+market ingest, checkpoint и Exit handoff.
+
+Одна ошибка native восстановления OPEN-position не должна автоматически
+убивать общий transport/MarketSource worker, если независимая доставка
+текущих фактов и другие consumers доказанно исправны. Ошибка обязательного
+shared physical source integrity локализуется по доказанной shared
+dependency, а не маскируется обычным admission denial. Existing
+account latch/unknown exposure/required protection остаются у своих
+owners. Состояние `observer_ready=false` — health evidence, **не**
+самостоятельный blanket financial veto; конкретный admission verdict
+публикует общий scope-aware classifier (ARCH §55, TC §4.18).
+
+### 7.10.4 Read-model, errors, acceptance
+
+Dashboard/оператор видит per-symbol/source/consumer: actual SQL slice,
+required vs actual UTC bounds/count/coverage, native last cursor/epoch/gap
+и причина отсутствующего proof; per-account: актуальный signed snapshot,
+open position/SL/TP, Exit ownership и отдельный account safety blocker.
+Исторические incidents/notifications/audit не удаляются и не помечаются
+RESOLVED без фактического события. Бесконечный общий 2s retry
+после невосстановимого native anchor запрещён: конечная classified
+repair работа со статусом `WAIT_FOR_EVIDENCE`/BLOCKED и независимым
+продолжением не затронутых consumers.
+
+Обязательные tests: PG-first warmup PREV7D/SECOND48, gap REST ingest,
+original immutable store, native journal+checkpoint atomicity and
+same-seq, 21h gap with exact archive vs unavailable proof, signed
+protected position first, Exit on Entry refusal, per-account/per-symbol
+isolation, source disconnect, restart, release/provenance/TTL and UI
+scoped read-model parity. Owner LIVE-arm/permissions не выдаются.
+
+Статус: `OWNER_DECISION=YES`; `CANON=YES AFTER MERGE`;
+`IMPLEMENTED=NO`; `DEPLOYED=NO`; `LIVE_CHANGE=NO`.

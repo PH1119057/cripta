@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.48
-**Дата:** 2026-11-04
+**Версия:** 3.49
+**Дата:** 2026-11-07
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1690,3 +1690,53 @@ and original/closing execution IDs are the concrete motivating checkpoint.
 ## 68. P90L90 maker-entry/maker-exit research checkpoint — OWNER DECISION 2026-11-05
 
 `RESEARCH_COMPUTE_RULES_RU.md §22.3` preserves the 90-day evidence and explicit source/result SHA256 for P90L90 maker Entry 0.05% sensitivity (PR #453) and the 441 frozen TRAIL035 stop maker-touch/fallback sensitivity (PR #456). The best 5-second exit-only proxy gives `+1.450919986698 USDT` vs the historical `+14.087200729269 USDT` 5-coin shared SECOND48 control (+10.3% **optimistic model-only**). This is a positive research lead for future separate Strategy Candidate exploration of passive resting maker TP and self-managed 5m-candle trailing, **not an approved or tested 5m-trailing system**, not independently validated real maker fills, not a new immutable StrategyCard or a change to `TRADING_CONTOUR §7.6.3/§7.6.5`. History preserves actual source scripts, native-trade QC, limitations, and follow-up full causal replay/independent QC/OOS gates. Current Source bundle=11; paths, base/routed pre-read and root README/AGENTS/Project Instructions are unchanged. No service/runtime/DB/Exchange/LIVE mutation.
+
+## 69. PostgreSQL-first Observer / scoped Entry-Exit recovery — OWNER DECISION 2026-11-07 (Issue #470)
+
+- **ARCH §60 — canonical owner** структуры потребителей, физической
+  ответственности MarketSource, PostgreSQL-first источников, отдельной
+  existing-position-first reconciliation, scoped recovery и сохранения
+  финансовых gates. §48.4 (общие закрытые свечи) и §54–56
+  (current permissions/scoped admission) читаются совместно с §60;
+  старое требование монолитной `Observer READY` для OWNER ARM
+  заменяется доказательствами реально требуемых зависимостей.
+- **TC §4.18** — точное Entry/Exit/Execution поведение:
+  действующий EntryPlan/ExitPlan, actual market facts, подписанный
+  Bybit account proof, physical capital/slot/initial protection,
+  historical analysis/backfill без позднего исполнения сигнала,
+  account-specific negative admission и отдельный financial ARM.
+  §4.13–§4.17 не удаляются; гарантия current safety сохраняется.
+- **OBS §7.10** — operational MarketSource duty: сначала
+  canonical PostgreSQL, затем bounded approved Bybit Public REST
+  gaps; native `publicTrade` с durable exact journal при
+  подтверждённой необходимости, per-source/symbol/consumer status
+  и отказ только по affected dependency, сохранение Exit.
+- **GLOSSARY §44** — точные Provider и Required Data Manifest,
+  durable native journal, bounded source gap, position-first
+  reconciliation и scoped Observer readiness без «живого
+  источника» неопределённого происхождения.
+- **DEVELOPMENT_RELEASE §58** — проверенная migration/actor/backup,
+  RED/GREEN native/PG16/WS/Bybit reconciliation, shadow parity,
+  scope/consumer change, GitHub/source/loaded exact release,
+  staged runtime proof и отдельный OWNER ARM.
+- **CURRENT_PROJECT_MAP** dated 2026-11-07 — до implementation
+  отличает owner-approved canonical target от installed/loaded
+  прежнего Observer. GitHub Issue #470 — durable task checkpoint;
+  PR #484 — только typed IPC diagnosis, **не** вся замена.
+- `SECOND48` = точные HARD_STOP 2/48/48 применимой StrategyVersion;
+  `PREV7D` = required closed candle geometry, **не** 7-дневная
+  гарантия every raw `publicTrade` `execId/seq`.
+  История необходима локально до принятия решения и
+  при восстановлении для анализа, но не становится
+  запоздалым real order.
+
+Документы не переименовываются и не дробятся; current Project Source
+остаётся из **11 файлов**, обязательный base/routed pre-read, пути,
+README/AGENTS и текст ChatGPT Project Instructions не меняются,
+поэтому bootstrap/Source UI не требуют новой версии. Approval
+разрешает CANON change, но **не** автоматически включает LIVE,
+обходит PostgreSQL actor gates, объявляет код внедрённым или снимает
+текущие SUB source/Execution safety blockers.
+
+`OWNER_DECISION=YES`; `CANON=AFTER MERGE`;
+`IMPLEMENTED=NO`; `DEPLOYED=NO`; `RUNTIME_VERIFIED=NO`.
