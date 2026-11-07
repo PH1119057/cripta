@@ -84,6 +84,9 @@ FetchClosedCandles = Callable[[str, str, datetime], Sequence[Candle]]
 FetchVerifiedNativeSource = Callable[
     [str, TradeCursor, TradeCursor], P90VerifiedNativeSourceWindow | None
 ]
+VerifyNativeSourceCoverage = Callable[
+    [P90VerifiedNativeSourceWindow], bool
+]
 
 
 class P90RealOpenSourceRecoveryUnverified(RuntimeError):
@@ -364,6 +367,7 @@ def recover_p90_real_open_source(
     bind_restart_bridge: Callable[[str], None],
     loaded_release_commit: str | None = None,
     fetch_verified_native_source: FetchVerifiedNativeSource | None = None,
+    verify_native_source_coverage: VerifyNativeSourceCoverage | None = None,
 ) -> P90RealOpenSourceRecovery:
     """Recover old epoch through current live mirror with zero replay actions."""
     if (
@@ -474,6 +478,7 @@ def recover_p90_real_open_source(
                 latest_rest_rows=rows,
                 verified_native_source=verified_window,
                 live_anchor=live_cursors[symbol],
+                verify_coverage=verify_native_source_coverage,
             )
             recoveries[symbol] = attest_bounded_native_restart(
                 source_commit=source_commit,
@@ -486,6 +491,7 @@ def recover_p90_real_open_source(
                 checked_at=datetime.now(UTC),
                 durable_exec_ids=sorted(join.last_emitted_exec_ids),
                 verified_native_source=verified_window,
+                verify_coverage=verify_native_source_coverage,
             )
 
         for symbol, recovery in recoveries.items():
