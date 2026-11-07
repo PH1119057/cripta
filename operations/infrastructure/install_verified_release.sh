@@ -357,7 +357,7 @@ if [[ -d /etc/systemd/system/cripta-private-runtime.service.d ]]; then
   install -d -m 0700 "$backup/files/etc/systemd/system"
   cp -a /etc/systemd/system/cripta-private-runtime.service.d "$backup/files/etc/systemd/system/"
 fi
-for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /etc/cripta/release.env; do
+for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /usr/local/libexec/cripta-market-hot-retention.py /etc/cripta/release.env; do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
     install -d -m 0700 "$backup/files/$(dirname "$safe")"
@@ -633,6 +633,13 @@ printf '%s\n' "$RELEASE_COMMIT" > "$STATE_ROOT/DASHBOARD_UI_COMMIT"
 chown root:cripta "$STATE_ROOT/DASHBOARD_UI_COMMIT"
 chmod 0640 "$STATE_ROOT/DASHBOARD_UI_COMMIT"
 
+
+# The postgres migration actor cannot traverse the cripta-owned /srv/cripta/runtime
+# parent (0750). Install one exact root-owned, world-readable, immutable-source
+# script in the approved /usr/local/libexec path instead of expanding privileges.
+install -o root -g root -m 0644 "$runtime_release/operations/monitoring/market_hot_retention.py" /usr/local/libexec/cripta-market-hot-retention.py
+cmp -s "$runtime_release/operations/monitoring/market_hot_retention.py" /usr/local/libexec/cripta-market-hot-retention.py ||
+  die "retention actor path bytes differ from exact installed release"
 
 for spec in "${unit_specs[@]}"; do
   IFS='|' read -r src_rel unit scope <<<"$spec"
