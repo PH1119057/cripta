@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.6
-**Дата:** 2026-11-04
+**Версия:** 3.7
+**Дата:** 2026-11-07
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -1940,8 +1940,12 @@ DEPLOYED=NO; RUNTIME_VERIFIED=NO. Текущий runtime не считается
 обходятся вручную и OWNER ARM этим решением не выполняется.
 
 ## 4.14 OWNER ARM только из подтверждённой готовности — OWNER DECISION 2026-11-04
-Кнопка открытия шлюза недоступна, пока Observer NOT READY, его heartbeat/release
-не доказаны либо отсутствует свежая успешная техническая подготовка exact release.
+Кнопка открытия шлюза недоступна, пока **обязательная именно для выбранного
+account/Strategy/source scope** техническая готовность не доказана, либо
+отсутствует свежая успешная подготовка exact installed/loaded release.
+Монолитный Observer ERROR/NOT_READY не является самостоятельным global veto:
+отдельные proof/fault и минимальный scope классифицируются по §4.13/§4.18,
+ARCH §60; подтверждение heartbeat/release обязательного owner сохраняется.
 Отдельное действие «Проверить готовность» выполняет существующий bounded readiness
 coordinator без ARM. Оно сохраняет capability запуска/восстановления обязательных
 служб через прежний allowlisted broker. Успех подготовки не открывает шлюз:
@@ -2023,3 +2027,87 @@ serialized transaction as deletion. No grant of table-wide DELETE to cripta,
 no altered fault/history state, Strategy/SECOND48 change, Exchange mutation,
 permission or ARM. Financial reopening remains a separate explicit owner step.
 This does not widen diagnostic v3 §4.8 or the WS-only recovery contracts.
+
+## 4.18 PostgreSQL-first Entry/Exit и ответственность Observer — OWNER DECISION 2026-11-07
+
+**Exact owner:** Strategy Materializer создаёт неизменяемые `EntryPlan` и
+`ExitPlan`; Entry Engine проверяет утверждённые условия по причинным
+рыночным фактам и выдаёт StrategySignal/EntryDecision. Обслуживающий
+Observer/MarketSource adapter не принимает Strategy/Entry/Exit решений и
+не выдаёт TradingAccount permission/OWNER ARM. Control/admission/Execution
+проверяют финансовое разрешение и текущую возможность фактического
+входа/защиты согласно §4.13; Exit owner сопровождает открытые позиции
+независимо от разрешения новых Entry. Общий actor/consumer контракт —
+ARCH §60, OBS §7.10.
+
+1. **Данные перед решением:** каждому `EntryPlan`/`ExitPlan` соответствует
+   exact manifest необходимых PostgreSQL facts, MarketSource, timeframe/event,
+   UTC boundary, исторического периода, continuity/freshness и provenance.
+   Уже сохранённые `analytics.closed_candles`, независимые
+   `analytics.market_minutes` и `SECOND48` ledger читаются локально;
+   утверждённый Bybit Public REST применяется только для bounded догрузки
+   доказанных пробелов. `PREV7D` рассчитывается из требуемой закрытой
+   истории и ATR seed; `SECOND48` — только actual HARD_STOP exact
+   StrategyVersion в течение 48 часов. Нельзя смешивать эти периоды
+   с доступностью каждого raw `publicTrade`.
+2. **Native event causality:** если exact `publicTrade` `seq/execId` нужен
+   для пересечения Entry либо MFE/Exit, общий MarketSource producer обязан
+   сохранять необходимые native events и durable processing cursor прежде,
+   чем признавать их доставленными. Начало нового доказанного WS cursor после
+   рестарта — новая точка причинности, а не вымышленное восстановление
+   старой истории. Не разрешается заменять exact native tick агрегированной
+   свечой для принятия исхода уже открытого Exit.
+3. **Недостающая история:** подтверждённые факты за простой загружаются,
+   проверяются и сохраняются с оригинальным временем и provenance, если
+   доступны. Исторические StrategySignal/EntryAttempt, необходимые для
+   анализа, воспроизводятся отдельно как audit/research evidence без
+   произвольной переатрибуции или стирания старых событий. **Ни один**
+   исторически восстановленный сигнал после истечения validity/TTL
+   не создаёт запоздалую реальную биржевую заявку. Реальный новый Entry
+   оценивается по актуальному плану/цене/условиям и authorization.
+4. **Сначала открытая позиция:** при startup/restart account private owner
+   самостоятельно получает свежий signed Bybit Private inventory MAIN/SUB:
+   позиции и quantity/side, active/conditional SL/TP, pending orders и
+   исполнения; затем reconciles локальные StrategyPosition/ExitPlan/MFE,
+   source native anchor, Execution и Exit ownership. Реальная
+   Exchange protection сохраняется, даже когда новый Entry NOT READY.
+   Если точный Exit native/MFE доказать нельзя — это отдельный current
+   affected position/Exit blocker с repair; нельзя утверждать, что одних
+   биржевых стопов достаточно для полного Exit VERIFIED, либо ослаблять
+   protection/ambiguous mutation checks для новых входов.
+5. **Изоляция отказов:** нормальный отказ Entry по недостатку средств,
+   запрещённому physical slot, SECOND48, отсутствующему permission либо
+   account-specific safety — долговечный scoped negative admission result,
+   **не** исключение из общего Observer epoch. Историческая ошибка,
+   неподтверждённый unrelated report/старый source cursor, дефект
+   неучаствующего инструмента не останавливают доказанно независимые
+   MarketSource/Entry/Exit. Для truly shared mandatory source corruption
+   или current financial uncertainty сохраняется fail-closed только
+   доказанно affected scope (§4.13.4).
+6. **Техническая готовность против финансового решения:** OWNER ARM
+   из §4.14–4.16 проверяет один shared scoped readiness classifier
+   MarketSource + account/Execution/Exit, а не raw состояние Observer.
+   Нужные symbol/Strategy/account proofs свежие и atomically rechecked
+   перед dispatch. Отказ readiness не создаёт право на торговлю и
+   не снимает explicit DISARM, permission/StrategyVersion/release
+   restriction, capital, risk и protection. Ни диагностика, ни
+   автоматическая реабилитация транспорта не создают OWNER ARM.
+
+**BEFORE → AFTER / preservation:**
+`Observer global ERROR → whole gate veto` →
+`typed producer facts/repair → one shared scoped classifier →
+OWNER ARM/readiness and per-candidate Execution`.
+Сохраняются immutable Strategy/ExitPlan, старые native checkpoints и
+source identity, current safety barriers, signed account proof, Exit/MFE,
+lot/capital permissions, incident history и отдельный финансовый owner.
+Capability без доказанного replacement consumer пути не выключается.
+
+**Acceptance:** historical PG availability, bounded Bybit repair, exact
+source/native cursor, 2/48/48 embargo, live candidate without historical
+late execution, multi-account/symbol isolation, first-fill+restart,
+signed exposure/SL/TP and independently continuous Exit, transactional
+processing and failed-case audit; DEV §58. Экономика и финансовые границы
+P90L90 остаются прежними, новые Strategy и настройки не утверждаются.
+
+Статус: `OWNER_DECISION=YES`; `CANON=YES AFTER MERGE`;
+`IMPLEMENTED=NO`; `DEPLOYED=NO`; `LIVE_ARM=NO`.
