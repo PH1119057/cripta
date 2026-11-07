@@ -146,7 +146,6 @@ def test_only_exact_p90_recovery_failures_can_trigger_repair_source_restart() ->
         assert not _p90_native_recovery_failure(error)
 
 
-
 def test_exact_initial_cursor_wait_is_expected_only_for_source_preparation() -> None:
     from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
         P90RealOpenSourceRecoveryUnverified,
@@ -183,7 +182,7 @@ def test_expected_timeout_enters_guarded_preparation_before_fault_record() -> No
     guard = body.index("_p90_expected_initial_cursor_wait(exc)")
     fault = body.index("fault_id = _record_observer_runtime_fault(", guard)
     assert guard < fault
-    scope = body[guard:fault]
+    scope = body[body.rfind("if (", 0, guard):fault]
     for required in (
         "not force_p90_source_repair",
         "len(repair_split.p90_real) == 2",
@@ -198,7 +197,6 @@ def test_expected_timeout_enters_guarded_preparation_before_fault_record() -> No
     assert "P90_OPEN_EXIT_BLOCKED_EXPECTED_NATIVE_CURSOR_WAIT" in scope
     # Unknown/corrupt sources still call the existing durable fault owner.
     assert "_p90_native_recovery_failure(exc)" in body[fault:]
-
 
 
 def test_late_p90_recovery_error_restarts_only_pure_source_rail() -> None:
@@ -257,7 +255,6 @@ def test_scoped_p90_fault_keeps_unrelated_ordinary_consumer_ownership() -> None:
     assert "if p90_real_source_only or p90_real_live:" in body
     assert '"SOURCE_REPAIR_ONLY"' in body
     assert "active_bundles=active_source_consumers" in body
-
 
 
 def test_source_repair_oi_config_never_constructs_an_empty_symbol_set() -> None:
