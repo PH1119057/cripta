@@ -24,7 +24,6 @@ def test_disarmed_unambiguous_p90_open_repair_can_ingest_new_ws_facts() -> None:
         degraded=True,
         mainnet_gate_enabled=False,
         selected_real_activations=frozenset(),
-        ordinary_consumer_count=0,
         paper_consumer_count=0,
     )
 
@@ -33,7 +32,6 @@ def test_disarmed_unambiguous_p90_open_repair_can_ingest_new_ws_facts() -> None:
     {"degraded": False},
     {"mainnet_gate_enabled": True},
     {"selected_real_activations": frozenset({"p90-main"})},
-    {"ordinary_consumer_count": 1},
     {"paper_consumer_count": 1},
 ))
 def test_repair_source_only_refuses_financial_or_mixed_consumer_scope(
@@ -43,7 +41,6 @@ def test_repair_source_only_refuses_financial_or_mixed_consumer_scope(
         "degraded": True,
         "mainnet_gate_enabled": False,
         "selected_real_activations": frozenset(),
-        "ordinary_consumer_count": 0,
         "paper_consumer_count": 0,
     }
     args.update(changed)
@@ -63,7 +60,9 @@ def test_repair_ingest_is_after_journal_but_before_any_entry_exit_consumer() -> 
     )
     body = ast.get_source_segment(source, process)
     assert body is not None
-    assert body.index("if p90_repair_ingest_only:") < body.index(
+    assert body.index(
+        "if p90_repair_ingest_only and not observer_split.ordinary:"
+    ) < body.index(
         "refresh_inputs(fact.observed_at)"
     )
     # Native append belongs to the existing MarketSource source transaction,
@@ -97,9 +96,12 @@ def test_open_position_source_repair_cannot_be_reported_as_financial_ready() -> 
     )
     runtime = ast.get_source_segment(source, epoch)
     assert runtime is not None
-    assert '"SOURCE_REPAIR_ONLY" if p90_repair_ingest_only' in runtime
+    assert '"SOURCE_REPAIR_ONLY"' in runtime
+    assert "if p90_repair_ingest_only and not observer_split.ordinary" in runtime
     assert "P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY" in runtime
-    assert "active_bundles=() if p90_repair_ingest_only else bundles" in runtime
+    assert "active_bundles=active_source_consumers" in runtime
+    assert "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_ACTIVE" in runtime
+    assert "tuple(observer_split.ordinary) if p90_repair_ingest_only else bundles" in runtime
     # Recovery exception classification is intentionally centralized in
     # _p90_native_recovery_failure(), not duplicated inside this epoch.
     # Old-epoch P90 failure must escape to the one outer durable fault
@@ -170,5 +172,32 @@ def test_late_p90_recovery_error_restarts_only_pure_source_rail() -> None:
     assert "P90_SCOPED_SOURCE_REPAIR_FINANCIAL_SCOPE_INVALID" in text
     assert "if source_repair_only:" in text
     assert "if p90_repair_ingest_only:" in text
-    assert "for symbol in (() if p90_repair_ingest_only else symbols):" in text
-    assert "if not p90_repair_ingest_only:" in text
+    assert "tuple(sorted(ordinary_symbols)) if p90_repair_ingest_only else symbols" in text
+    assert "if not p90_repair_ingest_only or observer_split.ordinary:" in text
+    assert "and not p90_repair_ingest_only" in text
+    assert "for bundle in cast(Any, active_source_consumers)" in text
+
+
+def test_scoped_p90_fault_keeps_unrelated_ordinary_consumer_ownership() -> None:
+    # Ordinary strategy cardinality is intentionally NOT an exclusion gate.
+    # Its EntryPlan/geometry/OI remains owned by the original Engine. Only
+    # native P90 PAPER cannot be disconnected through this specific route.
+    assert _scoped_p90_repair_ingest_allowed(
+        degraded=True,
+        mainnet_gate_enabled=False,
+        selected_real_activations=frozenset(),
+        paper_consumer_count=0,
+    )
+    source = SOURCE.read_text(encoding="utf-8")
+    epoch = next(
+        n for n in ast.parse(source).body
+        if isinstance(n, ast.FunctionDef) and n.name == "_run_observer_epoch"
+    )
+    body = ast.get_source_segment(source, epoch)
+    assert body is not None
+    assert "if p90_repair_ingest_only and not observer_split.ordinary:" in body
+    assert "engine.process(" in body
+    assert "p90_consumer = runtime.consumer" in body  # normal REAL path only
+    assert "if p90_real_source_only or p90_real_live:" in body
+    assert '"SOURCE_REPAIR_ONLY"' in body
+    assert "active_bundles=active_source_consumers" in body
