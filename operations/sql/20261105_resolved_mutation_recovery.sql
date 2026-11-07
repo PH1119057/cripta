@@ -183,7 +183,7 @@ BEGIN
        OR v_position.position_idx IS NULL
        OR EXISTS (
          SELECT 1 FROM runtime.trade_commands c
-         WHERE c.trading_account_id=p_account AND c.state='completed'
+         WHERE c.trading_account_id=p_account
            AND c.command_type IN ('close','strategy_exit')
            AND c.payload_json::jsonb->>'strategy_position_id'=p_position
        )
