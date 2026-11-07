@@ -103,6 +103,16 @@ def test_open_position_source_repair_cannot_be_reported_as_financial_ready() -> 
     assert "P90RealSourceCompatibilityUnverified" in runtime
     assert "P90RealOpenRestartUnverified" in runtime
     assert "_record_observer_runtime_fault(" in runtime
+    # The handler must bind the original exception before persisting it;
+    # otherwise the first real P90 attestation fault raises NameError.
+    recovery_handlers = [
+        node for node in ast.walk(epoch)
+        if isinstance(node, ast.ExceptHandler)
+        and node.type is not None
+        and "P90RealSourceCompatibilityUnverified" in ast.unparse(node.type)
+    ]
+    assert len(recovery_handlers) == 1
+    assert recovery_handlers[0].name == "exc"
     assert "p90_real_live = False" in runtime
 
 
