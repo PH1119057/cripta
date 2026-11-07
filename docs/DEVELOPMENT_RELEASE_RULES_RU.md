@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.5 · 2026-11-04
+**Версия:** 2.6 · 2026-11-07
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2277,3 +2277,84 @@ Existing diagnostic/WS recovery paths and Strategy semantics remain untouched.
 Publish/install through verified release controller, then independently read
 back latch removal, preserved position/history and technical readiness. Do not
 claim a successful real Entry/trailing from this maintenance operation.
+
+## 58. Observer PostgreSQL-first / independent Entry-Exit cutover — OWNER DECISION 2026-11-07
+
+**CANON owners**: ARCH §60 — source/data/ownership and BEFORE→AFTER;
+TC §4.18 — actual trading/admission semantics;
+OBS §7.10 — physical observational duties; GLOSSARY §44 — exact
+terms; INDEX §69 — routing. Эта секция управляет **процессом
+внедрения**, не создаёт вторую архитектуру и не выдаёт LIVE rights.
+
+Последовательные гейты (каноническое изменение утверждено владельцем,
+но не даёт разрешение пропускать testing/release):
+1. **Exact task discovery (§50.4)**: действующие Issue #470/#466/#469,
+   PR #484 (scoped private IPC diagnostics), другие открытые ветки и
+   server worktrees/dirty/lock/job; зафиксировать owner/consumer
+   матрицу, exact GitHub main/base и исторические source epochs.
+   Не продолжать через force/reset/нечётко совпадающую ветку.
+2. **Manifest / read-only forensic**: по каждому active EntryPlan/
+   ExitPlan/MFE и текущей открытой позиции проверить SQL real
+   source row/count/UTC start/end, 5m/15m closed bars, PREV7D
+   warmup/ATR seed, SECOND48 HARD_STOP, per-symbol native
+   checkpoint, market publicTrade coverage, signed Bybit MAIN/SUB
+   positions/SL/TP/orders. Отличать unknown/missing source
+   evidence от реальной потери всех рыночных данных.
+3. **Data producer/migration**: при необходимости только approved
+   PostgreSQL actor; exact durable native journal schema, source
+   ID/InstrumentIdentity, native seq/execId, unique key, raw
+   amount bounds, retention by current consumer/open Exit and
+   audit obligations, append-only lineage/QC. Перед изменением
+   server-side writer проверить DEV §5.1/§19.1–19.4 и MAP §1.4:
+   exact Unix actor/path/owner/group/mode/ACL/systemd sandbox,
+   FS READ/WRITE/CREATE/RENAME/DELETE permissions, PG role/schema,
+   resource/space/backup/rollback; source commit ≠ deploy.
+4. **Bounded PG-first market preparation**: existing canonical
+   `analytics.closed_candles`/effective correction view,
+   `analytics.market_minutes`, actual SECOND48 ledger; REST
+   only exact gaps with original timestamps/provenance.
+   No duplicate MarketSource owner, per-Strategy candle copy,
+   fabricated native seq, historical late real Entry order.
+5. **Position-first protected runtime**: before admitting new
+   Entry, prove signed private account/position/SL/TP/fills,
+   ownership, MFE/Exit continuity and independent protected
+   execution. Historical repairs run independently; OPEN
+   source/Exit ambiguity stays blocked only in truly affected
+   required dependency. Do not stop Exit to fix Entry.
+6. **Scoped readiness parity**: old Observer/global gate →
+   one canonical TC §4.13/§4.18 classifier with identical
+   evidence for Dashboard, OWNER ARM and per-candidate
+   Execution. Preserve financial issuer, mainnet DISARM,
+   exact release/Strategy permission and account/slot/margin
+   constraints. Only after full positive/negative parity
+   may legacy global status-only veto be retired; never
+   replace it with `True` default.
+7. **RED tests before fix → GREEN**: disposable PostgreSQL
+   exact native journal/checkpoint atomicity, restart and
+   dedup of same-seq execIds, 21h gap with actual archive
+   vs no authentic archive; closed candle and REST missing
+   tail; deterministic no backdated execution; one account
+   or instrument ordinary Entry denial does not kill
+   global market transport/other consumers/Exit; first-fill
+   partial fills and Bybit protection; source integrity/
+   mutation ambiguity still fail-closed; exact release drift/
+   lack of OWNER ARM blocks. Linux+Windows CI, static
+   scope/capability review, shadow comparison, RUNTIME
+   BEHAVIOR independent of systemd liveness.
+8. **GitHub-first staged deploy**: CANON merge first →
+   code/migrations reviewed & CI → exact installed release →
+   observed source+DB+loaded+account/Exit evidence →
+   scoped readiness canary → explicit owner financial ARM
+   separately, never automatically. A draft PR or docs
+   merge is not production behavior verification.
+9. **Repair monitoring**: per source/symbol/account
+   required/actual rows, freshness, REST attempts, bounded
+   retry, source gaps, native journal/retention and storage
+   growth, on-disk bytes and required Exit status; no
+   runaway automatic 2s ERROR restart for permanent
+   missing provenance, no auto-clear of durable faults.
+
+`OWNER_DECISION=YES`; `CANON=AFTER MERGE`;
+`IMPLEMENTATION_ACCEPTANCE=NOT YET VERIFIED`;
+`DEPLOYED=NO`; `RUNTIME_BEHAVIOR_VERIFIED=NO`;
+`LIVE_ARM=NO`.
