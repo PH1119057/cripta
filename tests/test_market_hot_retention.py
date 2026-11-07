@@ -6,13 +6,15 @@ release and causal equivalence tests. These checks alone don't authorize deploy.
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'operations/monitoring/market_hot_retention.py'
 SPEC = importlib.util.spec_from_file_location('market_hot_retention', SOURCE)
 assert SPEC and SPEC.loader
-import sys
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
@@ -73,7 +75,6 @@ def test_journal_compaction_preserves_scalar_and_reasons():
 
 
 def test_unsupported_table_fail_closed():
-    import pytest
     with pytest.raises(ValueError, match='NOT_ALLOWLISTED'):
         MODULE.delete_sql('runtime.hot_positions', 'TRUE')
 
