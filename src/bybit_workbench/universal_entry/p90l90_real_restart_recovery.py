@@ -116,13 +116,14 @@ def _verify_saved_rest_overlap(
     """
     if saved is None:
         return
-    rest = {(trade.seq, trade.exec_id): trade for trade in replay}
+    rest = {trade.exec_id: trade for trade in replay}
     for event in saved.events:
-        other = rest.get((event.exchange_sequence, event.exec_id))
+        other = rest.get(event.exec_id)
         if other is None:
             continue
         if (
-            event.event_at != other.traded_at
+            event.exchange_sequence != other.seq
+            or event.event_at != other.traded_at
             or event.price != Decimal(str(other.price))
             or event.quantity != Decimal(str(other.size))
             or event.taker_side != other.side
