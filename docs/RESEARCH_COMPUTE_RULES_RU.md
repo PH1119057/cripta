@@ -8,6 +8,18 @@
 
 ### Tool refusals и сохранение прогресса
 
+**OWNER DECISION 2026-11-05 — permission pre-read before research retry:** если инструмент, Unix, PostgreSQL или service сообщает об отсутствии прав, немедленно перечитать `DEVELOPMENT_RELEASE §5.1, §§19.1–19.5`, `CURRENT_PROJECT_MAP §1.4` и соответствующий research actor/path contract. Сверить actual UID/GID, group, path traverse/read/write/create, ACL, sandbox, DB role, exact allowlisted command и наличие результата/job перед дальнейшим действием. Не подменять ошибку подготовки мнением, что надо просить владельца изменить права; только уже approved route. Запрещённую защитой операцию не повторять автоматически и не обходить сменой actor или транспортом.
+
+**OWNER DECISION 2026-11-05:** технические transient ошибки в пределах
+разрешённого research rail самостоятельно обрабатывать до пяти попыток с
+интервалами не менее 60 секунд по `DEVELOPMENT_RELEASE §19.6.1`.
+Предварительно проверять exact actor/path/source/job и отсутствие уже
+запущенной задачи. Повтор статуса job, повтор команды и повтор запуска
+расчёта — разные действия; неизвестный исход job никогда не разрешает
+создать дубль. Явные security-denial не переводить в автоматический цикл.
+Владельцу передавать итог допустимого восстановления, а не каждый
+промежуточный transient отказ.
+
 Обязательный маршрут: `DEVELOPMENT_RELEASE §19.5–19.6`, `CURRENT_PROJECT_MAP §1.4`. При OpenAI tool-security block фиксировать `BLOCKED_UPSTREAM_OPENAI`; не считать его Unix EACCES, не просить рестарт SentinelX без evidence. При `command_not_allowed` — `BLOCKED_SENTINELX_POLICY`; при Unix `EACCES` — `BLOCKED_UNIX_PERMISSION`; при job timeout — `JOB_OUTCOME_UNKNOWN` до отдельной проверки. Один и тот же отклонённый вызов не повторять циклом и не пытаться обойти защиту.
 
 Для воспроизводимых исследований: в GitHub хранить версионированный исходник/reader и exact source paths; начинать с ограниченного smoke, далее coin/day bounded jobs; проверенные численные результаты, coverage, hashes, failures и next action сразу сохранять в research journal/manifest. Исследование в памяти без подтверждённого stdout/manifest = `NOT VERIFIED`; GitHub source commit сам по себе не означает executed/QC pass. Не объявлять расчёт завершённым из-за подготовленного кода.
