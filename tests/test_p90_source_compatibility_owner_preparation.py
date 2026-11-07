@@ -14,12 +14,16 @@ from bybit_workbench.universal_entry import runtime_loader
 APP = Path("operations/dashboard/app.py")
 
 
-@pytest.mark.parametrize("epoch,exposure,registrations", [
-    ([], 1, 0), ([(EPOCH, LOADED)], 1, 0),
-    ([(EPOCH, ORIGIN)], 0, 0), ([(EPOCH, ORIGIN)], 1, 1),
+@pytest.mark.parametrize("epoch,exposure,inspection,retained,registrations", [
+    ([], 1, "missing", False, 0), ([(EPOCH, LOADED)], 1, "missing", False, 0),
+    ([(EPOCH, ORIGIN)], 0, "missing", False, 0),
+    ([(EPOCH, ORIGIN)], 1, "missing", False, 1),
+    ([(EPOCH, ORIGIN)], 1, "missing", True, 1),
+    ([(EPOCH, ORIGIN)], 1, "valid", False, 0),
+    ([(EPOCH, ORIGIN)], 1, "corrupt", False, 0),
 ])
 def test_preparation_registers_only_prior_origin_with_current_exposure(
-    monkeypatch, tmp_path, epoch, exposure, registrations,
+    monkeypatch, tmp_path, epoch, exposure, inspection, retained, registrations,
 ):
     tree = ast.parse(APP.read_text(encoding="utf-8"))
     fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
@@ -28,6 +32,19 @@ def test_preparation_registers_only_prior_origin_with_current_exposure(
     monkeypatch.setattr(compat, "register_real_source_compatibility",
                         lambda db, **kw: calls.append(kw))
     monkeypatch.setattr(runtime_loader, "load_active_strategy_bundles", lambda db: bundles())
+    def inspect(*args, **kwargs):
+        if inspection != "valid":
+            raise compat.P90RealSourceCompatibilityUnverified(
+                "P90_REAL_SOURCE_COMPATIBILITY_" + (
+                    "RELEASE_NOT_REGISTERED" if inspection == "missing"
+                    else "ATTESTATION_CORRUPT_OR_INCOMPATIBLE"
+                )
+            )
+    monkeypatch.setattr(compat, "inspect_real_source_identity", inspect)
+    if retained:
+        origin_dir = tmp_path / ORIGIN
+        origin_dir.mkdir()
+        (origin_dir / "INSTALLED_COMMIT").write_text(ORIGIN, encoding="utf-8")
 
     class DB:
         def __enter__(self):
@@ -47,14 +64,26 @@ def test_preparation_registers_only_prior_origin_with_current_exposure(
     ns = {"psycopg": SimpleNamespace(connect=lambda _: DB()),
           "LOADED_RELEASE_COMMIT": LOADED,
           "P90_REAL_V3_VERSION": bundles()[0].card.strategy_version,
-          "Path": lambda _: tmp_path / LOADED}
+          "Path": lambda path: (
+              tmp_path / LOADED if path == "/srv/cripta/runtime/current"
+              else tmp_path / "source_checkout"
+          )}
     exec(compile(ast.Module(body=[fn], type_ignores=[]), str(APP), "exec"), ns)
-    ns[fn.name]()
+    if inspection == "corrupt":
+        with pytest.raises(compat.P90RealSourceCompatibilityUnverified, match="CORRUPT"):
+            ns[fn.name]()
+    else:
+        ns[fn.name]()
     assert len(calls) == registrations
     if calls:
         assert calls[0]["epoch_id"] == EPOCH
         assert calls[0]["loaded_commit"] == LOADED
-        assert calls[0]["origin_root"].name == ORIGIN
+        if retained:
+            assert calls[0]["origin_root"].name == ORIGIN
+            assert "origin_git_checkout" not in calls[0]
+        else:
+            assert calls[0]["origin_git_checkout"] == tmp_path / "source_checkout"
+            assert "origin_root" not in calls[0]
 
 
 def test_registration_is_only_in_explicit_owner_request_after_disarmed_control_check():
