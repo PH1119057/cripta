@@ -68,6 +68,9 @@ def _select(exposure: int, monkeypatch: pytest.MonkeyPatch, *, forced: bool = Fa
         )),
         "_real_execution_selected_activation_ids": lambda *_: selected,
         "_p90_source_only_gate_compatible": lambda **_: True,
+        # The AST composition harness executes only the selector body, not
+        # _run_observer_epoch's new optional keyword argument binding.
+        "source_repair_only": False,
     }
     exec(compile(ast.Module(body=epoch.body[start:end], type_ignores=[]), str(PATH), "exec"),
          namespace)
