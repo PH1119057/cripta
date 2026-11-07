@@ -9,6 +9,10 @@ from typing import Any, cast
 
 import pytest
 
+from operations.monitoring.universal_entry_shadow import (
+    _scoped_p90_repair_ingest_allowed,
+)
+
 PATH = Path("operations/monitoring/universal_entry_shadow.py")
 
 
@@ -73,12 +77,7 @@ def _select(exposure: int, monkeypatch: pytest.MonkeyPatch, *, forced: bool = Fa
         ),
         "_real_execution_selected_activation_ids": lambda *_: selected,
         "_p90_source_only_gate_compatible": lambda **_: True,
-        "_scoped_p90_repair_ingest_allowed": (
-            __import__(
-                "operations.monitoring.universal_entry_shadow",
-                fromlist=["_scoped_p90_repair_ingest_allowed"],
-            )._scoped_p90_repair_ingest_allowed
-        ),
+        "_scoped_p90_repair_ingest_allowed": _scoped_p90_repair_ingest_allowed,
         # AST harness omits the outer function keyword binding.
         "source_repair_only": source_repair_only,
     }
