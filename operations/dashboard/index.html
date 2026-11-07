@@ -242,6 +242,10 @@
               <div id="observerFaultSummary" class="durable-fault-summary">—</div>
               <div id="observerFaultItems"></div>
             </section>
+            <details id="observerFaultArchive" class="console-event" hidden>
+              <summary id="observerFaultArchiveSummary">История ошибок до сброса</summary>
+              <div id="observerFaultArchiveItems" class="console-event-detail"></div>
+            </details>
             <span id="tradeCommandStatus" hidden></span>
             <div id="liveCriticalEventList" aria-live="polite"></div><div id="liveSystemEventFeed"></div>
             <div id="gateEventMessage" class="console-event-note muted">Состояние шлюза загружается…</div>
@@ -1468,12 +1472,19 @@ function renderReleaseArmCritical(lt){
   details.innerHTML='<b>REAL Entry требует проверки.</b> Загружен release '+loaded+
     '. Причина не классифицирована как release mismatch.';
 }
+const OPERATOR_ERROR_ATTENTION_RESET_MS=Date.parse('2026-11-07T19:18:25Z');
+function isNewErrorNotice(item){
+  const observed=item?.payload?.last_seen_at||item?.last_seen_at||item?.detected_at;
+  const stamp=Date.parse(String(observed||''));
+  // Missing or malformed evidence must not silently hide an active incident.
+  return !Number.isFinite(stamp)||stamp>=OPERATOR_ERROR_ATTENTION_RESET_MS;
+}
 function renderMiniLogFeed(lt){
   // This is an operational attention queue, NOT a trade/decision/command log.
   // Historical denials, terminal orders and closed positions belong to Log Bybit.
   const host=document.getElementById('liveSystemEventFeed');
   if(!host)return;
-  const incidents=Array.isArray(lt.release_arm_incidents)?lt.release_arm_incidents:[];
+  const incidents=(Array.isArray(lt.release_arm_incidents)?lt.release_arm_incidents:[]).filter(isNewErrorNotice);
   host.innerHTML=incidents.length?incidents.map(x=>
     '<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>Открытая проблема релиза · '+safe(x.reason||'проверка LIVE')+'</b></summary><div class="console-event-detail">'+safe(x.detected_at||'')+' · '+safe(x.incident_id||'—')+'</div></details>'
   ).join(''):'<div class="console-event-note muted">Нет открытых событий, требующих вмешательства</div>';
@@ -1483,6 +1494,7 @@ function renderMiniLogFeed(lt){
 function renderLiveCriticalEvents(lt){
   const area=document.getElementById('liveCriticalEventList');
   const faults=Array.isArray(lt.critical_faults)?lt.critical_faults:[];
+  const newNotices=faults.filter(isNewErrorNotice);
   const gate=lt.gate||{},gateReason=String(gate.reason||'');
   const emergencyClosed=!gate.enabled&&/EXCHANGE_MUTATION_BARRIER|RELEASE_BOUND_LIVE_ARM_NOT_READY|OPERATIONAL_SAFETY|SAFETY_|CRITICAL/i.test(gateReason);
   const ownerFaults=faults.filter(x=>x.fault_code==='POSITION_WITHOUT_EXIT_OWNER');
@@ -1504,7 +1516,7 @@ function renderLiveCriticalEvents(lt){
     gatewayEmergency.hidden=!emergencyClosed;
     gatewayEmergency.textContent=emergencyClosed?'⛔ АВАРИЙНО ЗАКРЫТ ТОРГОВЫЙ ШЛЮЗ · Новые входы запрещены · '+gateReason:'';
   }
-  area.innerHTML=faults.map(x=>'<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>'+safe(x.fault_code||'CRITICAL')+'</b></summary><div class="console-event-detail">'+safe(x.message||x.reason||'Критическое событие lifecycle')+'<div class="muted">ID: '+safe(x.fault_id||'—')+'</div></div></details>').join('');
+  area.innerHTML=newNotices.map(x=>'<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>'+safe(x.fault_code||'CRITICAL')+'</b></summary><div class="console-event-detail">'+safe(x.message||x.reason||'Критическое событие lifecycle')+'<div class="muted">ID: '+safe(x.fault_id||'—')+'</div></div></details>').join('');
   const release=lt.release_arm_health||{};
   const mismatches=Array.isArray(release.mismatched_sessions)?release.mismatched_sessions:[];
   const note=document.getElementById('gatewayReleaseStatus');
@@ -1515,7 +1527,7 @@ function renderLiveState(d){
   renderClockSafetyAlert(d.live_trading||{});
   for(const p of d.live_trading?.positions||[]){p.exchange_mark_price=p.mark_price;p.exchange_unrealised_pnl=p.unrealised_pnl;p.mark_price=p.executable_close_price||p.mark_price}
   if(d.trade_strategy_monitor)tradeStrategyMonitorData=d.trade_strategy_monitor;const lt=d.live_trading||{wallet:null,positions:[]},wallet=lt.wallet,positions=lt.positions||[],num=v=>v==null||v===''?'—':Number(v).toFixed(2)+' USDT';window.currentPositions=positions;renderTradeStrategyControl();
-  const currentGateOpen=!!lt.gate?.enabled,previousGate=localStorage.getItem('cripta-last-mainnet-gate'),criticalFaults=lt.critical_faults||[];let operationalAlarms=[];if(previousGate==='1'&&!currentGateOpen)operationalAlarms.push('торговый шлюз закрыт'+(lt.gate?.reason?' · '+String(lt.gate.reason):''));localStorage.setItem('cripta-last-mainnet-gate',currentGateOpen?'1':'0');let seenFaultIds=[];try{seenFaultIds=JSON.parse(localStorage.getItem('cripta-seen-critical-faults')||'[]')}catch(_e){seenFaultIds=[]}const seenFaultSet=new Set(seenFaultIds),newCritical=criticalFaults.filter(x=>!seenFaultSet.has(x.fault_id));if(newCritical.length)operationalAlarms.push('CRITICAL '+newCritical.map(x=>x.fault_code).join(', '));localStorage.setItem('cripta-seen-critical-faults',JSON.stringify(criticalFaults.map(x=>x.fault_id)));if(operationalAlarms.length){document.getElementById('gateEventMessage').textContent=operationalAlarms.join(' · ')}
+  const currentGateOpen=!!lt.gate?.enabled,previousGate=localStorage.getItem('cripta-last-mainnet-gate'),criticalFaults=(lt.critical_faults||[]).filter(isNewErrorNotice);let operationalAlarms=[];if(previousGate==='1'&&!currentGateOpen)operationalAlarms.push('торговый шлюз закрыт'+(lt.gate?.reason?' · '+String(lt.gate.reason):''));localStorage.setItem('cripta-last-mainnet-gate',currentGateOpen?'1':'0');let seenFaultIds=[];try{seenFaultIds=JSON.parse(localStorage.getItem('cripta-seen-critical-faults-current-v2')||'[]')}catch(_e){seenFaultIds=[]}const seenFaultSet=new Set(seenFaultIds),newCritical=criticalFaults.filter(x=>!seenFaultSet.has(x.fault_id));if(newCritical.length)operationalAlarms.push('CRITICAL '+newCritical.map(x=>x.fault_code).join(', '));localStorage.setItem('cripta-seen-critical-faults-current-v2',JSON.stringify(criticalFaults.map(x=>x.fault_id)));if(operationalAlarms.length){document.getElementById('gateEventMessage').textContent=operationalAlarms.join(' · ')}
   liveGateOpen=currentGateOpen;rearmReady=!!lt.rearm_ready;liveStateLoaded=true;lastWalletRefreshMs=wallet?Number(wallet.refreshed_at_epoch_ms||0):0;window.p90ArmStatus=lt.p90_arm_status||null;refreshP90RealV3ArmControl();
   if(!gateChanging&&!exactP90RealV3Cohort()&&!p90RealV3OwnerArmPresent()){tradeGateButton.textContent=liveGateOpen?'Запретить новые входы':'Разрешить новые входы';tradeGateButton.classList.toggle('danger',!liveGateOpen);tradeGateButton.disabled=!liveGateOpen&&!rearmReady;setOperationStatus(tradeOperationStatus,liveGateOpen?'success':rearmReady?'warn':'error',liveGateOpen?'Глобальный допуск новых реальных входов открыт':rearmReady?'Новые реальные входы запрещены · hard stop отсутствует':'Новые реальные входы запрещены · действует operational hard stop')}
   document.getElementById('gateEventMessage').textContent=liveGateOpen?'Mainnet gate OPEN · разрешения определяет exact P90 arm-state':'Mainnet gate CLOSED · реальные Entry сейчас запрещены';renderLiveCriticalEvents(lt);renderMiniLogFeed(lt);tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
@@ -1611,6 +1623,19 @@ function renderObserverFaults(model){
   const body=document.getElementById('observerFaultItems');
   const value=model||{state:'unavailable',items:[],error:'read-model отсутствует'};
   const items=Array.isArray(value.items)?value.items:[];
+  const historical=Array.isArray(value.archived_items)?value.archived_items:[];
+  const archive=document.getElementById('observerFaultArchive');
+  if(archive){
+    archive.hidden=value.state==='unavailable'||historical.length===0;
+    if(historical.length){
+      document.getElementById('observerFaultArchiveSummary').textContent=
+        'История до 8 ноября 2026 · '+historical.length+' незакрытых записей (не новые уведомления)';
+      document.getElementById('observerFaultArchiveItems').innerHTML=historical.map(x=>{
+        const error=[x.error_type,x.error_message].filter(Boolean).join(': ')||x.fault_code||'ошибка Observer';
+        return '<div class="durable-fault-item"><details><summary><b>RED · архив</b> · '+safe(observerFaultFriendlyText(x))+'</summary><div>'+safe(error)+'</div><div class="muted">'+safe(x.fault_id||'—')+' · '+safe(x.last_seen_at||x.detected_at||'—')+'</div></details></div>';
+      }).join('');
+    }else document.getElementById('observerFaultArchiveItems').innerHTML='';
+  }
   if(value.state==='unavailable'){
     banner.hidden=false;
     summary.textContent='Durable fault journal недоступен — состояние observer нельзя считать зелёным.';
@@ -1625,7 +1650,7 @@ function renderObserverFaults(model){
   }
   banner.hidden=false;
   const totalOccurrences=items.reduce((n,x)=>n+Math.max(1,Number(x.occurrence_count)||1),0);
-  summary.textContent=`Открытых проблем: ${items.length} · зарегистрировано срабатываний: ${totalOccurrences}. Это отдельный durable-журнал, а не статус текущей кнопки OWNER ARM; старые записи остаются видимыми до явного закрытия.`;
+  summary.textContent=`Открытых проблем: ${items.length} · зарегистрировано срабатываний: ${totalOccurrences}. Это новая лента после 8 ноября 2026, отдельно от журнала истории; старые записи доступны в свёрнутом архиве и сохраняют исходный статус.`;
   body.innerHTML=items.map(x=>{
     const first=x.first_seen_at?new Date(x.first_seen_at).toLocaleString('ru-RU'):'—';
     const last=x.last_seen_at?new Date(x.last_seen_at).toLocaleString('ru-RU'):'—';
