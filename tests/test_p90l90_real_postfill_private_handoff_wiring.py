@@ -20,7 +20,8 @@ def test_protected_entry_does_not_own_trailing_or_exit_decision():
     assert "_complete_protected_p90_entry(" in body
     assert "handoff_real_first_protected_fill(" not in body
     assert "_execute_first_fill_trailing(" not in body
-    assert "SET_TRAILING" not in body
+    # Generic Execution still handles Exit-owned SET_TRAILING commands.
+    assert "elif kind" in body
     # No EXIT decision/command is created in the Entry worker, even if
     # the Exchange has already accepted its initial TP and -10% SL.
     assert body.index("_complete_protected_p90_entry(") < (
