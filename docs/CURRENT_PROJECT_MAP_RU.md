@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.38
-**Дата:** 2026-11-04
+**Версия:** 12.39
+**Дата:** 2026-11-07
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -4939,3 +4939,67 @@ original Entry order/execution IDs and initial SL/TP evidence retained. No
 trailing was installed for that trade; its closure is not proof of fixed Exit.
 Existing WS and diagnostic-only latch recovery do not cover this actual fill.
 TC §4.17/ARCH §59/DEV §57 define the bounded implementation still required.
+
+## Observer PostgreSQL-first / scoped recovery — OWNER DECISION 2026-11-07, CHECKED HERE 2026-11-07
+
+Новый owner-approved target: ARCH §60, TC §4.18, OBS §7.10,
+GLOSSARY §44, DEV §58, INDEX §69. Observer становится техническим
+MarketSource/transport/data-repair provider, **не** самостоятельным
+global trading authority; read canonical PostgreSQL first, bounded
+Bybit Public REST only proven gaps, native exact event journal
+for demonstrated Strategy/Exit requirements, signed Bybit Private
+position/SL/TP reconciliation first and independent Universal Exit.
+No new per-Strategy candle writer, Strategy rule or Exchange writer.
+
+### Exact current evidence, 2026-11-07 06:07 UTC (read-only)
+
+```text
+REMOTE_HEAD_PRE_PUBLICATION=ef2ac6460bf5bd75f56fe7b6a112b3852fec271d
+SOURCE_HEAD_PRE_PUBLICATION=ef2ac6460bf5bd75f56fe7b6a112b3852fec271d
+INSTALLED_COMMIT=ef2ac6460bf5bd75f56fe7b6a112b3852fec271d
+LOADED_OBSERVER_COMMIT=ef2ac6460bf5bd75f56fe7b6a112b3852fec271d
+OBSERVER_LIVENESS=YES (status file renewed)
+OBSERVER_STATE=ERROR
+OBSERVER_READY=false
+OBSERVER_REASON=P90_REAL_RESTART_SOURCE_LIVE_MIRROR_FIVE_SYMBOL_CURSORS_MISSING
+CLOSED_CANDLES_MAX_CLOSED_AT=2026-11-07T06:05:00Z
+MAINNET_GATE_ENABLED=0
+ACCOUNT_ENTRY_SAFETY_LATCH_COUNT=1
+CANON_PR_ONLY=YES
+POSTGRESQL_OR_EXCHANGE_MUTATED_BY_CANON_TASK=NO
+```
+
+Показанный `REMOTE_HEAD` — датированный снимок ДО
+публикации изменений документации, а не claim самоссылочного
+SHA итогового changeset. Наличие свежих закрытых свечей
+доказывает closed-bar producer liveness, **но не** восстановление
+native P90 open-position causal `seq/execId`; состояние
+Observer ERROR не означает, что PostgreSQL потерял рыночную историю.
+Существующая блокировка TradingAccount и раздельный
+Execution/Exit proof остаются видимыми; ничего не очищалось.
+
+### BEFORE / AFTER implementation checkpoint
+
+| Capability | BEFORE установленный release | AFTER owner target | CHECKED HERE |
+|---|---|---|---|
+| Required market history | Observer warmup, closed bars PostgreSQL, native mirror in memory | manifest → PG-first exact slice → only missing approved Bybit repair → verified common store | Canon target, NOT IMPLEMENTED |
+| Native recovery | Old exact seq/execIds checked via newest REST <=1000 + old checkpoints | bounded durable PostgreSQL native event journal, causal atomic checkpoint, authentic gap validation and audit | Native store migration NOT IMPLEMENTED |
+| Existing position | Open-P90 restart failure poisons Observer epoch | signed Bybit Private MAIN/SUB reconciliation, StrategyPosition/ExitPlan/MFE/Exit ownership independent of new Entry | NOT IMPLEMENTED |
+| Entry admission | General Observer ERROR can close old global gate | only exact mandatory source/account/Execution/Exit proofs, minimal affected scope, existing owner ARM | NOT IMPLEMENTED |
+| Runtime observability | Generic ERROR and repeated 2s epoch retries | typed per-data/per-symbol/per-account prepare/blocked/incident, failed scope isolated; durable fault retained | NOT IMPLEMENTED |
+| Existing work | Scoped old PRs #471–#483, open PR #484 IPC diagnostics | continue Issue #470/#466/#469 with reviewed compatible branches and tests | #484 NOT MERGED/NOT INSTALLED as of this checkpoint |
+
+**Implementation order:** CANON UPDATE → native/PG migration and
+consumer parity → CI/shadow → GitHub exact release → observed runtime
+behavior; independent OWNER financial ARM **not requested**. The
+source writer, old checkpoint and account safety-capability cannot
+be removed until proof of equivalent new consumer path.
+```text
+OWNER_DECISION=YES
+CANON=AFTER MERGE
+IMPLEMENTED=NO
+DEPLOYED=NO
+RUNTIME_LIVENESS_VERIFIED=YES (Observer process/status only)
+RUNTIME_BEHAVIOR_VERIFIED=NO (P90 source recovery)
+LIVE_CHANGE=NO
+```
