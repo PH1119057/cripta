@@ -129,7 +129,14 @@ def assemble_p90_real_exit_runtime(
             "AND trading_account_id=%s AND identity_status='PROVEN'",
             (position.entry_command_id, position.trading_account_id),
         ).fetchone()
-        state = row.get("state") if isinstance(row, Mapping) else None
+        # Observer uses psycopg's default tuple rows; account workers may use
+        # dict_row. Both represent the same proven, account-scoped Entry.
+        if isinstance(row, Mapping):
+            state = row.get("state")
+        elif isinstance(row, (tuple, list)) and len(row) == 1:
+            state = row[0]
+        else:
+            state = None
         return state != "completed" or not p90_real_exit_no_pending(
             connection, position=position, trading_account_id=position.trading_account_id or "",
         )
