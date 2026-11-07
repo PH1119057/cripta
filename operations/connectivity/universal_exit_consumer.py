@@ -205,6 +205,16 @@ def run_once(
     now: datetime | None = None,
 ) -> str:
     current = (now or datetime.now(UTC)).astimezone(UTC)
+    # A protected OPEN position is an Exit obligation even when new Entry is
+    # disarmed. P90 now has an independent owner; Entry does not queue TRAIL035.
+    # Runtime direct script and package-imported tests have different paths.
+    if __package__:
+        from .p90_real_independent_exit import run_p90_exit_once
+    else:
+        from p90_real_independent_exit import run_p90_exit_once
+    p90 = run_p90_exit_once(connection, now=current)
+    if p90 == "P90_EXIT_TRAIL035_REQUEST_PUBLISHED":
+        return p90
     materialized = materialize_once(connection, now=current)
     if materialized.startswith("REQUEST_CREATED:"):
         return materialized

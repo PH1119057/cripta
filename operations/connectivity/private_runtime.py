@@ -3817,78 +3817,14 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             result["actualProtection"] = actual_protection_result
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
-    postfill_evaluation = None
     if p90_real_postfill is not None:
+        # Entry owns only the filled position and initial Exchange TP/SL.
+        # The independent Universal Exit consumer discovers this exact OPEN
+        # protected position and decides/publishes native TRAIL035. Never
+        # generate an ExitDecision or submit an Exit mutation from Entry.
         _complete_protected_p90_entry(
             connection, entry_command_id=command_id,
             position_id=p90_real_postfill[0], entry_result=result,
-        )
-        # Signed Exit evidence requires a COMPLETE account generation newer
-        # than both fill and protection. Publish it BEFORE requesting that
-        # evidence, then obtain a NEW <=5s source window (never reuse an old
-        # window across account reconciliation). Exchange TP+SL stay resident.
-        try:
-            reconcile(
-                connection, key, secret, "after_protected_first_fill",
-                verified_first_fill_position_id=p90_real_postfill[0],
-            )
-        except Exception as exc:
-            raise P90RealExitHandoffBlocked(
-                p90_real_postfill[0], "P90_REAL_POSTFILL_ACCOUNT_RECONCILIATION_UNVERIFIED"
-            ) from exc
-        from p90l90_real_postfill_handoff import (
-            handoff_real_first_protected_fill,
-        )
-
-        first_position_id, first_order_id, first_execution_ids = p90_real_postfill
-        try:
-            with connection.transaction():
-                postfill_evaluation = handoff_real_first_protected_fill(
-                    connection,
-                    position_id=first_position_id,
-                    trading_account_id=TRADING_ACCOUNT_ID,
-                    account_connector_id=ACCOUNT_CONNECTOR_ID,
-                    exchange_entry_order_id=first_order_id,
-                    signed_execution_ids=first_execution_ids,
-                    loaded_release_commit=os.environ.get(
-                        "CRIPTA_RELEASE_COMMIT", "",
-                    ).strip().lower(),
-                    signed_position_reader=(
-                        lambda db: own_p90_real_signed_position_reader(
-                            db, key, secret
-                        )
-                    ),
-                    current_private_ws=current_p90_real_private_ws_epoch,
-                    no_pending_exit_command=(
-                        lambda subject: current_p90_real_no_pending_exit(
-                            connection, subject,
-                        )
-                    ),
-                )
-        except Exception as exc:
-            connection.rollback()
-            postfill_reason = "P90_REAL_POSTFILL_INTERNAL_ERROR"
-            candidate = str(exc).strip()
-            safe_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:")
-            if (
-                candidate.startswith("P90_REAL_")
-                and 0 < len(candidate) <= 180
-                and set(candidate) <= safe_chars
-            ):
-                postfill_reason = candidate
-            raise P90RealExitHandoffBlocked(
-                first_position_id,
-                "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:" + postfill_reason,
-            ) from None
-    if postfill_evaluation is not None and postfill_evaluation.decision is not None:
-        # Execute the already-approved, durable first-fill trailing command
-        # BEFORE a full-account REST reconciliation can consume its 5s budget.
-        # This uses the same account-local command executor and safety checks;
-        # it never synthesizes a new Exit decision or repeats order/create.
-        _execute_first_fill_trailing(
-            connection, key, secret, entry_command_id=command_id,
-            exit_decision_id=postfill_evaluation.decision.exit_decision_id,
-            position_id=p90_real_postfill[0],
         )
     try:
         if p90_real_postfill is None:
