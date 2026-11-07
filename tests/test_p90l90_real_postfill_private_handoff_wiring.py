@@ -5,7 +5,7 @@ import ast
 from pathlib import Path
 
 
-def test_private_worker_handoffs_proven_first_fill_before_command_completion():
+def test_protected_entry_does_not_own_trailing_or_exit_decision():
     runtime = Path("operations/connectivity/private_runtime.py").read_text(
         encoding="utf-8"
     )
@@ -17,33 +17,27 @@ def test_private_worker_handoffs_proven_first_fill_before_command_completion():
     assert body is not None
     assert "p90_real_postfill: tuple[str, str, tuple[str, ...]] | None = None" in body
     assert "p90_real_postfill = (" in body
-    assert "handoff_real_first_protected_fill(" in body
-    assert 'if p90_real_postfill is not None:' in body
-    # A fresh post-protection generation must exist before the signed reader
-    # can accept the first-fill handoff. Source evidence is collected AFTER it.
-    assert body.index('connection, key, secret, "after_protected_first_fill",') < (
-        body.index("handoff_real_first_protected_fill(")
-    )
-    assert body.index("handoff_real_first_protected_fill(") < (
+    assert "_complete_protected_p90_entry(" in body
+    assert "handoff_real_first_protected_fill(" not in body
+    assert "_execute_first_fill_trailing(" not in body
+    assert "SET_TRAILING" not in body
+    # No EXIT decision/command is created in the Entry worker, even if
+    # the Exchange has already accepted its initial TP and -10% SL.
+    assert body.index("_complete_protected_p90_entry(") < (
         body.index('reconcile(connection, key, secret, "after_command")')
     )
-    assert body.index("handoff_real_first_protected_fill(") < (
-        body.index("record_protection_or_owner_event(")
-    )
-    assert body.index("handoff_real_first_protected_fill(") < (
-        body.index("SET state='completed',finished_at_epoch_ms")
-    )
-    assert "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED" in body
-    assert "P90_REAL_POSTFILL_INTERNAL_ERROR" in body
-    assert "candidate.startswith(\"P90_REAL_\")" in body
-    assert "signed_position_reader=(" in body
-    assert "current_private_ws=current_p90_real_private_ws_epoch" in body
-    assert "no_pending_exit_command=(" in body
-    helper = Path("operations/connectivity/p90l90_real_postfill_handoff.py").read_text(
-        encoding="utf-8"
-    )
-    assert "publishing_exit_decision_id=decision.exit_decision_id" in helper
-    assert "reader.for_exit_publication(" in helper
+    consumer = Path(
+        "operations/connectivity/universal_exit_consumer.py"
+    ).read_text(encoding="utf-8")
+    assert "run_p90_exit_once(connection, now=current)" in consumer
+    exit_owner = Path(
+        "operations/connectivity/p90_real_independent_exit.py"
+    ).read_text(encoding="utf-8")
+    assert "P90RealPostfillExitPort(" in exit_owner
+    assert "P90RealExitExecutionPort(" in exit_owner
+    assert "read_real_postfill_source_window(" in exit_owner
+    assert "P90PrivateProofClient(" in exit_owner
+
 
 
 def test_source_broker_is_bound_to_live_observer_not_private_credentials():
@@ -138,8 +132,11 @@ def test_private_worker_postfill_modules_import_under_exact_service_path() -> No
     unit = Path("operations/systemd/cripta-private-runtime@.service").read_text(
         encoding="utf-8"
     )
-    assert "from p90l90_real_postfill_handoff import (" in runtime
-    assert "from operations.connectivity.p90l90_real_postfill_handoff" not in runtime
+    assert "from p90l90_real_postfill_handoff import (" not in runtime
+    consumer = Path(
+        "operations/connectivity/universal_exit_consumer.py"
+    ).read_text(encoding="utf-8")
+    assert "from p90_real_independent_exit import run_p90_exit_once" in consumer
     assert "from p90l90_real_postfill_source_client import (" in handoff
     assert "from operations.connectivity.p90l90_real_postfill_source_client" not in handoff
     assert (
