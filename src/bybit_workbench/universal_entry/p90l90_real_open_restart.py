@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_FLOOR, Decimal, InvalidOperation
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import ExitPlan, TradeDirection
@@ -70,6 +70,29 @@ _RECOVERY_IPC_TRANSIENT_CODES = frozenset({
     "P90_PRIVATE_IPC_INCOMPLETE_FRAME",
     "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE",
 })
+# The private IPC owns these static tokens; only explicitly reviewed codes
+# may reach the durable Observer fault. Never propagate arbitrary exception
+# messages, signed payloads, paths, credentials or account identifiers.
+_POSITION_SIGNED_SAFE_IPC_FAILURES = frozenset({
+    "P90_PRIVATE_IPC_CLIENT_INVALID",
+    "P90_PRIVATE_IPC_EVIDENCE_IDENTITY_INVALID",
+    "P90_PRIVATE_IPC_EVIDENCE_MISSING",
+    "P90_PRIVATE_IPC_EVIDENCE_STALE",
+    "P90_PRIVATE_IPC_EVENT_STALE",
+    "P90_PRIVATE_IPC_FRAME_INVALID",
+    "P90_PRIVATE_IPC_FRAME_TOO_LARGE",
+    "P90_PRIVATE_IPC_INCOMPLETE_FRAME",
+    "P90_PRIVATE_IPC_JSON_INVALID",
+    "P90_PRIVATE_IPC_LINUX_REQUIRED",
+    "P90_PRIVATE_IPC_PAYLOAD_INVALID",
+    "P90_PRIVATE_IPC_PEER_NOT_VERIFIED",
+    "P90_PRIVATE_IPC_RECOVERY_POSITION_INVALID",
+    "P90_PRIVATE_IPC_RECOVERY_POSITION_TIME_INVALID",
+    "P90_PRIVATE_IPC_REQUEST_IDENTITY_INVALID",
+    "P90_PRIVATE_IPC_RESPONSE_UNVERIFIED",
+    "P90_PRIVATE_IPC_TIMESTAMP_INVALID",
+    "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE",
+})
 
 
 class P90RealOpenRestartUnverified(RuntimeError):
@@ -102,6 +125,29 @@ class P90RealOpenRestartInventory:
 def _require(condition: bool, reason: str) -> None:
     if not condition:
         raise P90RealOpenRestartUnverified("P90_REAL_RESTART_" + reason)
+
+
+def _raise_position_signed_evidence_failure(exc: Exception) -> NoReturn:
+    """Keep typed producer reasons, but never expose an untrusted IPC payload.
+
+    This diagnostic has no success/fallback path and never relaxes any
+    signed private, native source, freshness or account identity requirement.
+    """
+    if isinstance(exc, P90PrivateRecoveryBlocked):
+        # Constructor already normalizes its code via an exact safe allowlist.
+        raise P90RealOpenRestartUnverified(
+            "P90_REAL_RESTART_POSITION_SIGNED_RECOVERY:" + exc.recovery_code
+        ) from None
+    if (
+        isinstance(exc, P90PrivateIpcUnverified)
+        and str(exc) in _POSITION_SIGNED_SAFE_IPC_FAILURES
+    ):
+        raise P90RealOpenRestartUnverified(
+            "P90_REAL_RESTART_POSITION_SIGNED_IPC:" + str(exc)
+        ) from None
+    raise P90RealOpenRestartUnverified(
+        "P90_REAL_RESTART_POSITION_SIGNED_EVIDENCE_MISSING"
+    ) from None
 
 
 def _active_epoch_with_open_positions(
@@ -515,10 +561,8 @@ def prove_p90_real_open_restart_inventory(
                 connector=route.account_connector_id,
                 timeout_seconds=3.0,
             ).for_restart_recovery(position, datetime.now(UTC))
-        except Exception:
-            raise P90RealOpenRestartUnverified(
-                "P90_REAL_RESTART_POSITION_SIGNED_EVIDENCE_MISSING"
-            ) from None
+        except Exception as exc:
+            _raise_position_signed_evidence_failure(exc)
         account_rows = [
             row for row in account_proof.positions
             if row.get("symbol") == position.symbol
