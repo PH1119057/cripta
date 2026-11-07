@@ -445,3 +445,27 @@ def test_reviewed_current_ws_reconnect_delta_is_hash_bound():
     assert hashlib.sha256(source_bytes).hexdigest() == (
         compat.REVIEWED_BUGFIX_CONSUMER_SHA256["universal_entry/trade_mirror.py"]
     )
+
+
+@pytest.mark.parametrize(("relative", "expected"), [
+    ("universal_entry/p90l90_real_bounded_native_restart.py",
+     "b989475fbe499c5eb139ea19998b3a3ad5c2cdb3451bc8b9dab3d3f23a18726c"),
+    ("universal_entry/p90l90_real_restart_recovery.py",
+     "6c36fce66726f8aa2cd19bcef67bd2539c83f7a7684483d0a6b7301cae616298"),
+])
+def test_owner_reviewed_recovery_delta_is_immutable_git_blob(
+    relative, expected,
+):
+    # Git source bytes, not Windows CRLF-transformed checkout bytes.
+    blob = subprocess.check_output(
+        ["git", "show", f"HEAD:src/bybit_workbench/{relative}"],
+    )
+    assert hashlib.sha256(blob).hexdigest() == expected
+    if relative.endswith("/p90l90_real_restart_recovery.py"):
+        # This original source-recovery adapter was explicitly excluded from
+        # the causal consumer contract inventory BEFORE this owner change.
+        # Keep that ownership boundary; the release still pins its Git bytes.
+        assert "p90l90_real_restart_recovery.py" in compat._ADAPTERS
+        assert relative not in compat.REVIEWED_BUGFIX_CONSUMER_SHA256
+    else:
+        assert compat.REVIEWED_BUGFIX_CONSUMER_SHA256[relative] == expected

@@ -119,7 +119,7 @@ def test_broken_exchange_protection_and_cross_account_are_rejected() -> None:
         )
 
 
-def test_after_fill_replay_never_rewinds_sequence_or_uses_same_time_ambiguity() -> None:
+def test_after_fill_replay_never_rewinds_sequence_or_time() -> None:
     pos = _position()
     state = P90RealMfeCheckpoint.begin(
         position=pos, source_commit=SHA, first_cursor=_cursor(pos),
@@ -127,7 +127,6 @@ def test_after_fill_replay_never_rewinds_sequence_or_uses_same_time_ambiguity() 
     )
     for cursor in (
         _cursor(pos, seq=99, exec_id="old", millis=4),
-        _cursor(pos, seq=100, exec_id="parallel", millis=3),
         _cursor(pos, seq=100, exec_id="late", millis=2),
     ):
         with pytest.raises(P90RealMfeUnverified, match="ORDER_NOT_PROVEN"):
@@ -165,7 +164,7 @@ def test_tampered_restored_checkpoint_and_wrong_account_fail_closed() -> None:
         )
 
 
-def test_same_seq_equal_ms_requires_source_owned_delivery_proof() -> None:
+def test_same_seq_equal_ms_uses_verified_native_identity_not_extra_mfe_order() -> None:
     pos = _position()
     first = _cursor(pos, seq=101, exec_id="original-A", millis=3)
     tied = _cursor(pos, seq=101, exec_id="original-B", millis=3)
@@ -173,11 +172,13 @@ def test_same_seq_equal_ms_requires_source_owned_delivery_proof() -> None:
         position=pos, source_commit=SHA, first_cursor=first,
         first_price=D("100.1"), verified_fill_to_first_trade_coverage=True,
     )
-    with pytest.raises(P90RealMfeUnverified, match="NATIVE_ORDER_NOT_PROVEN"):
-        prior.advance(
-            position=pos, cursor=tied, price=D("100.5"),
-            proven_contiguous_native_cursor=True,
-        )
+    # Max/min is commutative for distinct identities with tied native time.
+    without_order_proof = prior.advance(
+        position=pos, cursor=tied, price=D("100.5"),
+        proven_contiguous_native_cursor=True,
+    )
+    assert without_order_proof.cursor_exec_id == tied.exec_id
+    assert without_order_proof.best_favorable_price == D("100.5")
     with pytest.raises(P90RealMfeUnverified, match="NATIVE_CURSOR_GAP"):
         prior.advance(
             position=pos, cursor=tied, price=D("100.5"),
@@ -259,6 +260,7 @@ class _MfeDB:
             if not matching:
                 return _Row()
             latest = max(matching, key=lambda row: (
+                row["attributes"].get("native_order_index", 0),
                 row["attributes"]["checkpoint"]["cursor_seq"],
                 row["event_at"],
             ))
@@ -417,3 +419,68 @@ def test_real_5m_exit_rejects_missing_or_drifted_mfe_ledger() -> None:
         ledger.load_latest(position=pos, source_commit="b" * 40)
     with pytest.raises(P90RealMfeUnverified, match="ACCOUNT_DRIFT"):
         ledger.load_latest(position=_position(sub=True), source_commit=SHA)
+
+
+def test_verified_mfe_tie_does_not_call_unnecessary_ws_order_attestor() -> None:
+    """Only MFE is order-invariant; source continuity and facts stay verified."""
+    pos = _position()
+    db = _MfeDB()
+    ledger = P90RealMfeLedger(db)
+    first = _cursor(pos, seq=100, exec_id="native-A", millis=3)
+    tied = _cursor(pos, seq=100, exec_id="native-B", millis=3)
+
+    def forbidden_order_probe() -> bool:
+        raise AssertionError("price-extremum MFE must not require WS tie order")
+
+    for cursor, price in ((first, D("100.2")), (tied, D("100.8"))):
+        state = ledger.on_trade(
+            position=pos,
+            source_commit=SHA,
+            fact_id="trade-" + cursor.exec_id,
+            cursor=cursor,
+            price=price,
+            received_at=cursor.traded_at + timedelta(milliseconds=1),
+            source_refs=(f"bybit:publicTrade:{pos.symbol}:{cursor.exec_id}",),
+            first_fill_forward_coverage_proven=True,
+            native_continuity_proven=True,
+            prove_same_timestamp_order=forbidden_order_probe,
+        )
+    assert state.best_favorable_price == D("100.8")
+    assert state.cursor_exec_id == "native-B"
+    assert len(db.saved) == 2
+    latest, fact_id, refs = ledger.load_latest(position=pos, source_commit=SHA)
+    assert latest == state
+    assert fact_id == "trade-native-B"
+    assert refs == (f"bybit:publicTrade:{pos.symbol}:native-B",)
+
+
+def test_real_exit_tick_still_requires_source_owned_order_for_tied_trades() -> None:
+    """The relaxed MFE-only path cannot silently weaken tick-by-tick Exit."""
+    pos = _position()
+    db = _MfeDB()
+    ledger = P90RealMfeLedger(db)
+    first = _cursor(pos, seq=500, exec_id="exit-A", millis=3)
+    tied = _cursor(pos, seq=500, exec_id="exit-B", millis=3)
+
+    def on_trade(cursor: TradeCursor, *, proven_order: bool):
+        return ledger.on_trade(
+            position=pos,
+            source_commit=SHA,
+            fact_id="trade-" + cursor.exec_id,
+            cursor=cursor,
+            price=D("100.6") if cursor is tied else D("100.2"),
+            received_at=cursor.traded_at + timedelta(milliseconds=1),
+            source_refs=(f"bybit:publicTrade:{pos.symbol}:{cursor.exec_id}",),
+            first_fill_forward_coverage_proven=True,
+            native_continuity_proven=True,
+            require_same_timestamp_order_for_exit=True,
+            prove_same_timestamp_order=lambda: proven_order,
+        )
+
+    on_trade(first, proven_order=False)  # No tie on initial trade.
+    with pytest.raises(P90RealMfeUnverified, match="EXIT_NATIVE_ORDER_NOT_PROVEN"):
+        on_trade(tied, proven_order=False)
+    assert len(db.saved) == 1
+    recovered = on_trade(tied, proven_order=True)
+    assert recovered.best_favorable_price == D("100.6")
+    assert len(db.saved) == 2

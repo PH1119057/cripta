@@ -53,6 +53,7 @@ from .p90l90_causal_transport_join import (
 from .p90l90_native_sequence_id_journal import P90NativeSequenceIdJournal
 from .p90l90_observer_real_consumer import P90L90ObserverRealConsumer
 from .p90l90_real_bounded_native_restart import (
+    P90VerifiedNativeSourceWindow,
     attest_bounded_native_restart,
     resolve_durable_restart_anchor,
 )
@@ -78,6 +79,14 @@ FetchRecentTrades = Callable[
     [str], tuple[Sequence[Mapping[str, object]], datetime]
 ]
 FetchClosedCandles = Callable[[str, str, datetime], Sequence[Candle]]
+# Optional vetted native source port, separate from recent-trade and from
+# original unproven PostgreSQL row samples. None keeps the REST fast-path.
+FetchVerifiedNativeSource = Callable[
+    [str, TradeCursor, TradeCursor], P90VerifiedNativeSourceWindow | None
+]
+VerifyNativeSourceCoverage = Callable[
+    [P90VerifiedNativeSourceWindow], bool
+]
 
 
 class P90RealOpenSourceRecoveryUnverified(RuntimeError):
@@ -357,6 +366,8 @@ def recover_p90_real_open_source(
     fetch_closed_candles: FetchClosedCandles,
     bind_restart_bridge: Callable[[str], None],
     loaded_release_commit: str | None = None,
+    fetch_verified_native_source: FetchVerifiedNativeSource | None = None,
+    verify_native_source_coverage: VerifyNativeSourceCoverage | None = None,
 ) -> P90RealOpenSourceRecovery:
     """Recover old epoch through current live mirror with zero replay actions."""
     if (
@@ -430,14 +441,44 @@ def recover_p90_real_open_source(
         replayed_fact_ids: set[str] = set()
         received_at = datetime.now(UTC)
         for symbol in sorted(_SYMBOLS):
-            rows, server_at = fetch_recent_trades(symbol)
             join = joins[symbol]
+            # Only an independent reviewed MarketSource coverage port may
+            # provide original seq/execId for a long native replay. Ordinary
+            # saved PostgreSQL rows and Bybit CSV cannot self-certify this.
+            # The existing recent-trade page remains a bounded fast path,
+            # never the globally mandated historical retrieval contract.
+            old_sequence = join.last_emitted_trade_sequence
+            old_time = join.last_emitted_trade_at
+            _require(
+                type(old_sequence) is int and old_time is not None
+                and bool(join.last_emitted_exec_ids),
+                "DURABLE_NATIVE_CURSOR_INCOMPLETE",
+            )
+            assert isinstance(old_sequence, int) and old_time is not None
+            old_cursor = TradeCursor(
+                symbol, sorted(join.last_emitted_exec_ids)[0],
+                old_sequence, old_time,
+            )
+            verified_window = (
+                fetch_verified_native_source(
+                    symbol, old_cursor, live_cursors[symbol],
+                )
+                if fetch_verified_native_source is not None else None
+            )
+            # The current public REST call also supplies an independently
+            # checked fresh venue timestamp. When a complete native archive
+            # is vetted, this REST sample is NOT asked to contain the old
+            # anchor or the interval itself.
+            rows, server_at = fetch_recent_trades(symbol)
             durable = resolve_durable_restart_anchor(
                 symbol=symbol,
-                last_sequence=join.last_emitted_trade_sequence,
-                last_event_at=join.last_emitted_trade_at,
+                last_sequence=old_sequence,
+                last_event_at=old_time,
                 last_exec_ids=sorted(join.last_emitted_exec_ids),
                 latest_rest_rows=rows,
+                verified_native_source=verified_window,
+                live_anchor=live_cursors[symbol],
+                verify_coverage=verify_native_source_coverage,
             )
             recoveries[symbol] = attest_bounded_native_restart(
                 source_commit=source_commit,
@@ -449,6 +490,8 @@ def recover_p90_real_open_source(
                 rest_server_at=server_at,
                 checked_at=datetime.now(UTC),
                 durable_exec_ids=sorted(join.last_emitted_exec_ids),
+                verified_native_source=verified_window,
+                verify_coverage=verify_native_source_coverage,
             )
 
         for symbol, recovery in recoveries.items():

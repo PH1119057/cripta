@@ -148,9 +148,12 @@ class P90RealMfeCheckpoint:
     ) -> P90RealMfeCheckpoint:
         """Return a new state, or the identical checkpoint for an exact replay.
 
-        Same-sequence equal-timestamp executions require a separate proof
-        of exact original WS delivery order, not merely gap-free coverage.
-        Never infer ordering from a UUID, price or fabricated timestamp.
+        An MFE extremum is independent of delivery order among different
+        execIds at the same native sequence and timestamp. A verified source
+        still must prove contiguous delivery, original identities and valid
+        prices. The order flag remains accepted for caller compatibility,
+        but an extra tie-order attestation is not an MFE-only requirement.
+        This does not certify ordering for a price-sensitive Exit decision.
         """
         _proof(position, self.source_commit)
         if (
@@ -188,14 +191,6 @@ class P90RealMfeCheckpoint:
         if (
             cursor.seq < self.cursor_seq
             or at < self.cursor_at
-            or (
-                cursor.seq == self.cursor_seq
-                and at <= self.cursor_at
-                and not (
-                    at == self.cursor_at
-                    and proven_same_timestamp_delivery_order is True
-                )
-            )
             or cursor.exec_id == self.cursor_exec_id
         ):
             raise P90RealMfeUnverified("P90_REAL_MFE_NATIVE_ORDER_NOT_PROVEN")

@@ -1,9 +1,7 @@
-"""Document the current P90 publicTrade sequence/MFE contract mismatch.
+"""Verify that MFE extrema do not depend on equal-time trade delivery order.
 
-This test intentionally keeps the source and REAL MFE invariants unchanged.
-A green characterization is NOT a fix. The strict XFAIL is a release blocker:
-source-owned ordering proof for equal-seq/equal-ms distinct exec IDs is absent.
-No asset/account observation, PostgreSQL mutation, or Bybit order is used.
+Original native identities, verified source continuity, and deduplication
+remain mandatory; no asset/account observation, DB mutation, or Bybit order.
 """
 from __future__ import annotations
 
@@ -16,10 +14,7 @@ from bybit_workbench.universal_entry.p90l90_causal_transport_join import (
     P90L90CausalTransportJoin,
     P90TransportEvent,
 )
-from bybit_workbench.universal_exit.p90l90_real_mfe import (
-    P90RealMfeCheckpoint,
-    P90RealMfeUnverified,
-)
+from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeCheckpoint
 
 
 def _two_source_trades(*, second_price: str = "100.2"):
@@ -59,7 +54,7 @@ def test_native_join_preserves_two_distinct_ids_at_identical_seq_and_time():
 
 
 @pytest.mark.parametrize("second_price", ["100.1", "100.2"])
-def test_current_mfe_explicitly_rejects_unproven_tied_native_order(second_price):
+def test_verified_native_mfe_accepts_tied_exec_ids_without_order_proof(second_price):
     position, join, events, first, second = _two_source_trades(
         second_price=second_price,
     )
@@ -69,13 +64,15 @@ def test_current_mfe_explicitly_rejects_unproven_tied_native_order(second_price)
         first_price=Decimal("100.1"),
         verified_fill_to_first_trade_coverage=True,
     )
-    with pytest.raises(P90RealMfeUnverified, match="NATIVE_ORDER_NOT_PROVEN"):
-        state.advance(
-            position=position, cursor=second, price=Decimal(second_price),
-            proven_contiguous_native_cursor=True,
-        )
-    assert state.cursor_exec_id == first.exec_id
-    assert state.best_favorable_price == Decimal("100.1")
+    recovered = state.advance(
+        position=position, cursor=second, price=Decimal(second_price),
+        proven_contiguous_native_cursor=True,
+    )
+    assert recovered.cursor_exec_id == second.exec_id
+    assert recovered.best_favorable_price == max(
+        Decimal("100.1"), Decimal(second_price),
+    )
+    assert state.cursor_exec_id == first.exec_id  # immutable predecessor
 
 
 def test_strictly_later_timestamp_within_same_seq_remains_supported():

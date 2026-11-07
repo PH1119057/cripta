@@ -1,10 +1,13 @@
 """Bounded read-only native recovery certificate for a P90 REAL restart.
 
 Bybit /v5/market/recent-trade returns at most 1000 *latest* public trades and
-has no pagination cursor. Recovery from a durable old native cursor is only
-possible if the exact old and the new live WS execId/seq are BOTH present in
-one independently fetched complete latest-trade slice. Otherwise fail closed:
-neither OHLC nor the new live WS can prove an earlier excursion.
+has no pagination cursor. The <=1000 recent-trade response is an optional *fast-path* proof of a
+short native interval, NOT the only possible historical source. A separately
+verified complete original-native interval can be supplied by an approved
+MarketSource coverage reader. Source data without native seq (e.g. Bybit daily
+trade CSV) may establish prices for a compatible Exit/MFE consumer but cannot
+be silently passed as an exact native sequence replay. Unknown coverage blocks
+only the affected causal consumer; the caller owns scoped readiness.
 
 This is one native coverage gate, NOT an open-position restart engine, an
 account-specific signed REST proof, an execution permission or an Exit action.
@@ -12,10 +15,11 @@ account-specific signed REST proof, an execution permission or an Exit action.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from hashlib import sha256
 
 from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
 from bybit_workbench.universal_entry.transport_continuity import (
@@ -31,7 +35,136 @@ _SYMBOLS = frozenset(("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"))
 
 
 class P90RealNativeRestartUnverified(RuntimeError):
-    """No complete exact public-trade interval across process restart."""
+    """A required original-native interval has not been proved."""
+
+
+@dataclass(frozen=True, slots=True)
+class P90VerifiedNativeSourceWindow:
+    """Full exact native coverage attested by an approved source *outside* P90.
+
+    This is not a CSV-to-seq adapter, a self-certified PostgreSQL row slice
+    or a financial admission proof. The producer/coverage owner must
+    independently verify completeness, session boundaries and original
+    provider identity before constructing this value. max_required_records
+    is the exact consumer-specific resource budget in the verified manifest,
+    never a universal 1000/50000-row retrieval policy. The issuing adapter
+    MUST independently verify source/artifact authenticity and coverage.
+    Here source_sha256 authenticates the normalized rows received from that
+    adapter, NOT the original archive file and NOT coverage by itself.
+    A separate independently reviewed source-coverage verifier is mandatory
+    even if all fields and hashes match.
+    An absent window always retains the REST-only fail-closed path.
+    """
+
+    symbol: str
+    instrument_id: str
+    market_source_id: str
+    coverage_start: datetime
+    coverage_end: datetime
+    event_count: int
+    max_required_records: int
+    source_sha256: str
+    source_reference: str
+    coverage_witness: str
+    complete_coverage_verified: bool
+    rows: tuple[Mapping[str, object], ...]
+
+
+def _source_rows_digest(rows: Sequence[Mapping[str, object]]) -> str:
+    """Deterministic exact record checksum; never a completeness proof."""
+    import json
+
+    return sha256(
+        json.dumps(
+            [dict(item) for item in rows], sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _require_complete_original_native_source(
+    proof: P90VerifiedNativeSourceWindow,
+    *,
+    old: TradeCursor,
+    new: TradeCursor,
+    verify_coverage: Callable[[P90VerifiedNativeSourceWindow], bool] | None,
+) -> tuple[Mapping[str, object], ...]:
+    # A source attestation must come from an independent approved native
+    # producer; the existence of saved PostgreSQL rows is not one.
+    from bybit_workbench.market_identity import (
+        BYBIT_PUBLIC_MARKET_SOURCE_ID,
+        bybit_instrument_id,
+    )
+
+    if (
+        not isinstance(proof, P90VerifiedNativeSourceWindow)
+        or proof.symbol != old.symbol or new.symbol != old.symbol
+        or proof.market_source_id != BYBIT_PUBLIC_MARKET_SOURCE_ID
+        or proof.instrument_id != bybit_instrument_id("linear", old.symbol)
+        or proof.coverage_witness not in {
+            "APPROVED_FULL_NATIVE_SOURCE_ARCHIVE_V1",
+            "VERIFIED_ATOMIC_PUBLIC_WS_SESSION_CHAIN_V1",
+        }
+        or proof.complete_coverage_verified is not True
+        or not isinstance(proof.source_reference, str)
+        or not proof.source_reference
+        or not isinstance(proof.source_sha256, str)
+        or len(proof.source_sha256) != 64
+        or not isinstance(proof.rows, tuple)
+        or type(proof.max_required_records) is not int
+        or proof.max_required_records < 1
+        or not 1 <= len(proof.rows) <= proof.max_required_records
+        or type(proof.event_count) is not int
+        or proof.event_count != len(proof.rows)
+        or not isinstance(proof.coverage_start, datetime)
+        or not isinstance(proof.coverage_end, datetime)
+        or proof.coverage_start.tzinfo is None
+        or proof.coverage_end.tzinfo is None
+        or proof.coverage_start.utcoffset() != timedelta()
+        or proof.coverage_end.utcoffset() != timedelta()
+        or proof.coverage_start > old.traded_at
+        or proof.coverage_end < new.traded_at
+        or proof.coverage_end < proof.coverage_start
+    ):
+        raise P90RealNativeRestartUnverified(
+            "P90_RESTART_VERIFIED_NATIVE_COVERAGE_PROOF_MISSING"
+        )
+    try:
+        digest_matches = _source_rows_digest(proof.rows) == proof.source_sha256
+    except (TypeError, ValueError, OverflowError):
+        digest_matches = False
+    if not digest_matches:
+        raise P90RealNativeRestartUnverified(
+            "P90_RESTART_VERIFIED_NATIVE_EVIDENCE_DIGEST_MISMATCH"
+        )
+    # Source payload/issuer labels alone are NOT a continuity certificate.
+    # The independently reviewed MarketSource evidence owner must provide
+    # a separate scoped verification/readback function. Without it, reject
+    # even syntactically perfect attacker-constructed source metadata.
+    if not callable(verify_coverage):
+        raise P90RealNativeRestartUnverified(
+            "P90_RESTART_INDEPENDENT_COVERAGE_VERIFIER_MISSING"
+        )
+    try:
+        verified = verify_coverage(proof) is True
+    except Exception:  # noqa: BLE001 - external source evidence fail closed
+        verified = False
+    if not verified:
+        raise P90RealNativeRestartUnverified(
+            "P90_RESTART_INDEPENDENT_COVERAGE_NOT_VERIFIED"
+        )
+    # Every row must be an original native trade with exact seq+execId.
+    # Archived price/time/trdMatchID alone is intentionally rejected.
+    if any(
+        not isinstance(row, Mapping)
+        or any(key not in row for key in (
+            "symbol", "execId", "seq", "time", "price", "size", "side",
+        ))
+        for row in proof.rows
+    ):
+        raise P90RealNativeRestartUnverified(
+            "P90_RESTART_NATIVE_ARCHIVE_ORIGINAL_SEQUENCE_MISSING"
+        )
+    return proof.rows
 
 
 def resolve_durable_restart_anchor(
@@ -41,28 +174,58 @@ def resolve_durable_restart_anchor(
     last_event_at: datetime | None,
     last_exec_ids: Sequence[str],
     latest_rest_rows: Sequence[Mapping[str, object]],
+    verified_native_source: P90VerifiedNativeSourceWindow | None = None,
+    live_anchor: TradeCursor | None = None,
+    verify_coverage: Callable[[P90VerifiedNativeSourceWindow], bool] | None = None,
 ) -> TradeCursor:
     """Recover one exact persisted cursor without forgetting same-seq peers.
 
     The checkpoint stores every execId emitted at its last sequence.  One of
     those IDs whose timestamp equals the persisted last-emitted timestamp is
-    sufficient as the physical anchor only when *all* persisted IDs are still
-    present in the same bounded recent-trade page.  The caller passes the full
-    ID set back to :func:`attest_bounded_native_restart` so none is replayed
-    a second time.
+    sufficient as the physical anchor only when *all* persisted IDs occur
+    in one independently validated source window: recent-trade for the
+    short-gap fast path, or an approved original-native coverage interval
+    for a long gap. The latter must cover the separately verified new live
+    cursor. The full original ID set is passed onward unchanged so none is
+    replayed twice.
     """
     try:
         at = _utc(last_event_at) if isinstance(last_event_at, datetime) else None
         ids = tuple(last_exec_ids)
+        if verified_native_source is None:
+            native_rows = latest_rest_rows
+        else:
+            if (
+                at is None or not ids or type(last_sequence) is not int
+                or live_anchor is None
+            ):
+                raise P90RealNativeRestartUnverified(
+                    "P90_RESTART_VERIFIED_NATIVE_LIVE_BOUNDARY_MISSING"
+                )
+            # Type-narrow inside the only branch that constructs the
+            # independent full-source anchor; REST never receives one.
+            assert at is not None and ids
+            assert isinstance(last_sequence, int)
+            assert live_anchor is not None
+            native_rows = _require_complete_original_native_source(
+                verified_native_source,
+                old=TradeCursor(symbol, ids[0], last_sequence, at),
+                new=live_anchor,
+                verify_coverage=verify_coverage,
+            )
         if (
             symbol not in _SYMBOLS
             or type(last_sequence) is not int or last_sequence < 0
             or at is None
-            or not isinstance(latest_rest_rows, (tuple, list))
-            or not 1 <= len(latest_rest_rows) <= 1000
-            # The REST page itself (max 1000) is the verified physical bound.
+            or not isinstance(native_rows, (tuple, list))
+            or not 1 <= len(native_rows) <= (
+                1000 if verified_native_source is None
+                else verified_native_source.max_required_records
+            )
+            # REST page is bounded at 1000. Independently certified exact
+            # native windows may be larger; neither implies one another.
             # Reject missing or truncated proof, not a smaller invented ID cap.
-            or not ids or len(ids) > len(latest_rest_rows)
+            or not ids or len(ids) > len(native_rows)
             or any(not isinstance(item, str) or not item for item in ids)
             or len(set(ids)) != len(ids)
         ):
@@ -70,7 +233,7 @@ def resolve_durable_restart_anchor(
                 "P90_RESTART_DURABLE_CHECKPOINT_CURSOR_MISSING"
             )
         present: dict[str, datetime] = {}
-        for row in latest_rest_rows:
+        for row in native_rows:
             if not isinstance(row, Mapping) or row.get("symbol") != symbol:
                 continue
             name = row.get("execId")
@@ -87,7 +250,7 @@ def resolve_durable_restart_anchor(
         candidates = sorted(name for name, when in present.items() if when == at)
         if not candidates:
             raise P90RealNativeRestartUnverified(
-                "P90_RESTART_DURABLE_LAST_TIMESTAMP_NOT_IN_REST"
+                "P90_RESTART_DURABLE_LAST_TIMESTAMP_NOT_IN_SOURCE"
             )
         return TradeCursor(
             symbol=symbol,
@@ -133,8 +296,16 @@ def attest_bounded_native_restart(
     rest_server_at: datetime,
     checked_at: datetime,
     durable_exec_ids: Sequence[str] | None = None,
+    verified_native_source: P90VerifiedNativeSourceWindow | None = None,
+    verify_coverage: Callable[[P90VerifiedNativeSourceWindow], bool] | None = None,
 ) -> P90RealBoundedNativeRecovery:
-    """Require exact persisted+new WS anchors in one bounded Bybit REST slice.
+    """Prove required native causality via optional REST or full source.
+
+    This function is NOT a global Observer gate, a required old-epoch
+    replay for every flat Strategy, or a source for MFE price-only results.
+    Its strict seq/execId checks apply only to consumers needing exact
+    native causal replay. Independently authenticated Exit price evidence
+    follows the separate position/Exit recovery contract.
 
     The caller MUST load the durable anchor from the original source
     checkpoint, independently authenticate Exchange position/protection,
@@ -147,6 +318,14 @@ def attest_bounded_native_restart(
         server = _utc(rest_server_at)
         old_at = _utc(durable_anchor.traded_at)
         live_at = _utc(live_anchor.traded_at)
+        native_rows = (
+            latest_rest_rows
+            if verified_native_source is None
+            else _require_complete_original_native_source(
+                verified_native_source, old=durable_anchor,
+                new=live_anchor, verify_coverage=verify_coverage,
+            )
+        )
         if (
             not _SHA.fullmatch(source_commit)
             or not _EPOCH.fullmatch(source_epoch_id)
@@ -161,8 +340,11 @@ def attest_bounded_native_restart(
             or old_at > live_at
             or not timedelta() <= at - server <= timedelta(seconds=10)
             or not timedelta() <= server - live_at <= timedelta(seconds=10)
-            or not isinstance(latest_rest_rows, (tuple, list))
-            or not 1 <= len(latest_rest_rows) <= 1000
+            or not isinstance(native_rows, (tuple, list))
+            or not 1 <= len(native_rows) <= (
+                1000 if verified_native_source is None
+                else verified_native_source.max_required_records
+            )
         ):
             raise P90RealNativeRestartUnverified(
                 "P90_RESTART_EXACT_REST_WINDOW_OR_ANCHOR_MISSING"
@@ -195,14 +377,15 @@ def attest_bounded_native_restart(
             raise P90RealNativeRestartUnverified(
                 "P90_RESTART_LIVE_ANCHOR_NOT_IN_ORIGINAL_WS"
             )
-        # The REST endpoint is recent-N, newest-first. All rows between
-        # the two exact anchors must belong to this one page. Sorting an
-        # arbitrary untrusted subset would falsely certify a missing tick.
+        # Both accepted native sources are newest-first. For REST every
+        # trade in the replay must be inside the single verified page.
+        # For a full archive the *independent* coverage witness must attest
+        # the complete interval before these rows are accepted.
         seen: set[str] = set()
         prev_seq: int | None = None
         prev_at: datetime | None = None
         parsed: list[tuple[str, int, datetime]] = []
-        for row in latest_rest_rows:
+        for row in native_rows:
             if not isinstance(row, Mapping) or row.get("symbol") != live_anchor.symbol:
                 raise P90RealNativeRestartUnverified(
                     "P90_RESTART_REST_FOREIGN_OR_INVALID_TRADE"
@@ -239,8 +422,8 @@ def attest_bounded_native_restart(
         )
         if (
             not known_old_ids
-            # Every original ID must be independently present in this exact
-            # already-validated bounded (<=1000) native REST proof window.
+            # Every original ID must be present in the source's complete
+            # exact native interval; REST's 1000 rows are only a fast path.
             or len(known_old_ids) > len(parsed)
             or durable_anchor.exec_id not in known_old_ids
             or any(not isinstance(item, str) or not item for item in known_old_ids)
@@ -264,7 +447,7 @@ def attest_bounded_native_restart(
                 "P90_RESTART_ANCHOR_EVICTED_OR_OUT_OF_ORDER"
             )
         replay = build_exact_trade_replay(
-            latest_rest_rows,
+            native_rows,
             anchor=durable_anchor,
             cutoff_at=live_at,
             known_exec_ids=set(known_old_ids),

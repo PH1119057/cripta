@@ -72,8 +72,11 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
         "d04dbd48d07f66bfd33d999886cba9a00a443903d7034c3ff8b25523447fefec",
     "universal_entry/p90l90_observer_paper_consumer.py":
         "788c4b964cbb88d114882f6ff9e55f1e32b7c3468352c36f824132d7fd155e53",
+    # Owner-reviewed native attestor correction under ARCH §60.2.1:
+    # optional complete native evidence does not replace signed account,
+    # original epoch or open-position Exit/MFE verification.
     "universal_entry/p90l90_real_bounded_native_restart.py":
-        "ade34d3ec160b249286ec9946edb7c312ccc359a89f8a5f96efc05b630b735ad",
+        "b989475fbe499c5eb139ea19998b3a3ad5c2cdb3451bc8b9dab3d3f23a18726c",
     "universal_entry/p90l90_real_observer_runtime.py":
         "8d93f93b29446dab448e172a36ea2d74260ec6526022d92785c42e70e762cee9",
     "universal_entry/p90l90_real_shared_candle_ledger.py":
@@ -81,11 +84,11 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
     "universal_entry/p90l90_shared_candle_bridge.py":
         "01bfb15924c9fcae07b70568e79327d5426e015f5879c8fc8bf7dd4431f0ba2f",
     "universal_exit/p90l90_real_exit_port.py":
-        "3a245cba87891a53b05c81ec86bc9caa11d7b93893743717a73aed40dc0ed506",
+        "f7809d96136ed6092c795d73e1b216cc5fe733be0462ffdafdd650f93628b696",
     "universal_exit/p90l90_real_mfe.py":
-        "53bd13487b70c632a724caeebd257fcd04dd9c92a993f9e0072f5dd2750be4ed",
+        "b5ea55aabc32a8860de421411b45990662c2a6b7111f53a18cae2c7603cac48f",
     "universal_exit/p90l90_real_mfe_ledger.py":
-        "e85fb4c788ffa1a178a4b887e3e06593871e267573fc87b4ad221424bad26fab",
+        "c7410ac6838e8edff84f64b20aa451b60568ca54d98d9aae1e077d0d7b6d8e8d",
     # Reviewed WS reconnect diagnostic: gap counters are scoped to the
     # NEW transport session; the old durable native cursor is not recovered
     # or forgiven. This exact delta is tested independently in trade_mirror.

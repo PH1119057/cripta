@@ -140,6 +140,7 @@ class P90RealExitNativePort:
                         prove_same_timestamp_order=self._tie_order_proof(
                             position, earlier,
                         ),
+                        require_same_timestamp_order_for_exit=True,
                     )
             first_contiguous, subsequent_contiguous = self._coverage(position, cursor)
             mfe = self._mfe.on_trade(
@@ -155,6 +156,7 @@ class P90RealExitNativePort:
                 prove_same_timestamp_order=self._tie_order_proof(
                     position, cursor,
                 ),
+                require_same_timestamp_order_for_exit=True,
             )
             if self._pending is not None and self._pending(position):
                 evaluation = pending_private_evaluation(position, fact)

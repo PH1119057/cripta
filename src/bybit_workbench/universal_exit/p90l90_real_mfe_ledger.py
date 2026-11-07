@@ -64,6 +64,7 @@ class P90RealMfeLedger:
         first_fill_forward_coverage_proven: bool,
         native_continuity_proven: bool,
         prove_same_timestamp_order: Callable[[], bool] | None = None,
+        require_same_timestamp_order_for_exit: bool = False,
     ) -> P90RealMfeCheckpoint:
         if (
             not fact_id
@@ -122,21 +123,28 @@ class P90RealMfeLedger:
                 native_order_index = stored_index + 1
             if prior.source_commit != source_commit:
                 raise P90RealMfeUnverified("P90_REAL_MFE_SOURCE_RELEASE_DRIFT")
-            tied = (
-                prior.cursor_seq == cursor.seq
+            # The price extremum alone is commutative across distinct
+            # execIds at the same exchange seq/time. Only an actual live
+            # Exit tick consumer requires the original delivery order, since
+            # evaluating exits one tick at a time may not commute.
+            if (
+                require_same_timestamp_order_for_exit
+                and prior.cursor_seq == cursor.seq
                 and prior.cursor_at == cursor.traded_at.astimezone(UTC)
                 and prior.cursor_exec_id != cursor.exec_id
-            )
-            order_verified = (
-                prove_same_timestamp_order() is True
-                if tied and prove_same_timestamp_order is not None else False
-            )
+                and (
+                    prove_same_timestamp_order is None
+                    or prove_same_timestamp_order() is not True
+                )
+            ):
+                raise P90RealMfeUnverified(
+                    "P90_REAL_EXIT_NATIVE_ORDER_NOT_PROVEN"
+                )
             checkpoint = prior.advance(
                 position=position,
                 cursor=cursor,
                 price=price,
                 proven_contiguous_native_cursor=native_continuity_proven,
-                proven_same_timestamp_delivery_order=order_verified,
             )
             if checkpoint is prior:
                 if (
