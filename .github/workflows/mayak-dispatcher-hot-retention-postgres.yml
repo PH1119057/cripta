@@ -22,16 +22,16 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_PASSWORD: disposable_retention_ci_only
-          POSTGRES_DB: retention_ci
+          POSTGRES_DB: cripta
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d retention_ci"
+          --health-cmd "pg_isready -U postgres -d cripta"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
     env:
-      CRIPTA_RETENTION_INTEGRATION_DSN: "dbname=retention_ci user=postgres host=127.0.0.1 port=5432 password=disposable_retention_ci_only"
+      CRIPTA_RETENTION_INTEGRATION_DSN: "dbname=cripta user=postgres host=127.0.0.1 port=5432 password=disposable_retention_ci_only"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
