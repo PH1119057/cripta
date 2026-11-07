@@ -1,0 +1,91 @@
+{
+  "title": "Issue #158 #23 first-month strict OI source audit",
+  "checked_date_utc": "2026-10-30",
+  "authority_main_checked": "db50682d372c382ed77da9635a21d5e3a39da549",
+  "issue": 158,
+  "pr": 223,
+  "status": "RESEARCH_EVIDENCE_SOURCE_GATE_NOT_CANON",
+  "canonical_contract": "docs/RESEARCH_COMPUTE_RULES_RU.md §21.8 #23: original actually published/observed OI change sequence, exact instrument/native units, previous real observation, publisher and local receiver clocks",
+  "period_utc": "[2026-05-18T00:00:00Z,2026-06-17T00:00:00Z)",
+  "findings": [
+    {
+      "evidence": "current first-month raw root",
+      "path": "/data/cripta/datasets/raw/20260518_20260816/<SYMBOL>",
+      "result": "target cohort directories currently expose orderbook and public_trades only; no first-month OI family under this approved raw root"
+    },
+    {
+      "evidence": "historical May19 official REST probe",
+      "result": "5 symbols × 288 grid points were returned historically but payload values/bytes were not archived; source is 5m snapshot API and publication/local receiver semantics were not preserved"
+    },
+    {
+      "evidence": "preserved historical OI backfill",
+      "path": "/data/cripta/research/runs/_legacy_system_offload_research_runs_20260911/mayak_component_oos_new15_v1_20260906_7b366ea/full_aux/oi_source/MANIFEST.json",
+      "result": "Bybit V5 intervalTime=5min snapshots with per-file SHA exist only from 2026-05-25T06:00Z onward for the target cohort; wrong source semantics for §21.8 and incomplete first month"
+    },
+    {
+      "evidence": "recent OI research",
+      "path": "/data/cripta/research/runs/r10_utility_validation_v1_20261003/results_oi/result_manifest.json",
+      "result": "RECENT_ONLY_EVIDENCE, 2026-09-18..2026-10-01; not first-month evidence"
+    },
+    {
+      "evidence": "current source code",
+      "result": "current code can observe OI prospectively via tickers.* WebSocket/current REST slots and can retain receiver timestamps prospectively, but no immutable first-month capture with those clocks was located; future capture cannot reconstruct historical availability"
+    }
+  ],
+  "bounded_search_note": "This is a bounded audit of canonical/current source families and preserved research evidence, not a metaphysical claim that no other byte can exist anywhere. No approved first-month source satisfying the §21.8 physical contract was established.",
+  "disposition": "NO_DATA_FOR_APPROVED_FIRSTMONTH_STRICT_CONTRACT",
+  "prohibited_substitutions": [
+    "5m snapshot differencing",
+    "last-value carry-forward",
+    "current live OI backfill",
+    "synthetic receiver timestamps"
+  ],
+  "pairs": [
+    {
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "instrument_id": "APTUSDT",
+      "source_status": "NO_DATA_FOR_APPROVED_FIRSTMONTH_STRICT_CONTRACT",
+      "calculation_status": "NOT_APPLICABLE_WITHOUT_REQUIRED_SOURCE",
+      "research_ready": false,
+      "trading_use": false
+    },
+    {
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "instrument_id": "INJUSDT",
+      "source_status": "NO_DATA_FOR_APPROVED_FIRSTMONTH_STRICT_CONTRACT",
+      "calculation_status": "NOT_APPLICABLE_WITHOUT_REQUIRED_SOURCE",
+      "research_ready": false,
+      "trading_use": false
+    },
+    {
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "instrument_id": "DOTUSDT",
+      "source_status": "NO_DATA_FOR_APPROVED_FIRSTMONTH_STRICT_CONTRACT",
+      "calculation_status": "NOT_APPLICABLE_WITHOUT_REQUIRED_SOURCE",
+      "research_ready": false,
+      "trading_use": false
+    },
+    {
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "instrument_id": "LTCUSDT",
+      "source_status": "NO_DATA_FOR_APPROVED_FIRSTMONTH_STRICT_CONTRACT",
+      "calculation_status": "NOT_APPLICABLE_WITHOUT_REQUIRED_SOURCE",
+      "research_ready": false,
+      "trading_use": false
+    },
+    {
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "instrument_id": "ARBUSDT",
+      "source_status": "NO_DATA_FOR_APPROVED_FIRSTMONTH_STRICT_CONTRACT",
+      "calculation_status": "NOT_APPLICABLE_WITHOUT_REQUIRED_SOURCE",
+      "research_ready": false,
+      "trading_use": false
+    }
+  ],
+  "next_action": "Do not keep rerunning #23. Re-open only if an immutable first-month source satisfying §21.8 is physically produced, or if the owner explicitly changes the measurement contract via canon/new formula version."
+}
