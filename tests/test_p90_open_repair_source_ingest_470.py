@@ -101,18 +101,10 @@ def test_open_position_source_repair_cannot_be_reported_as_financial_ready() -> 
     assert "P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY" in runtime
     assert "active_bundles=() if p90_repair_ingest_only else bundles" in runtime
     assert "P90RealSourceCompatibilityUnverified" in runtime
-    assert "P90RealOpenRestartUnverified" in runtime
-    assert "_record_observer_runtime_fault(" in runtime
-    # The handler must bind the original exception before persisting it;
-    # otherwise the first real P90 attestation fault raises NameError.
-    recovery_handlers = [
-        node for node in ast.walk(epoch)
-        if isinstance(node, ast.ExceptHandler)
-        and node.type is not None
-        and "P90RealSourceCompatibilityUnverified" in ast.unparse(node.type)
-    ]
-    assert len(recovery_handlers) == 1
-    assert recovery_handlers[0].name == "exc"
+    # Old-epoch P90 failure must escape to the one outer durable fault
+    # handler, which restarts a *fresh* source-only WS session.
+    assert "preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(" in runtime
+    assert "_record_observer_runtime_fault(" not in runtime
     assert "p90_real_live = False" in runtime
 
 
