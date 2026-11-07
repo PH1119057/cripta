@@ -1689,6 +1689,18 @@ approved retrieval; если native continuity не доказана, affected d
 восстанавливает** пропущенную историю и сама по себе не доказывает старый
 OPEN-position Exit cursor.
 
+### 60.2.1 Минимально достаточные native facts вместо универсального 1000-trade replay — OWNER CLARIFICATION 2026-11-07 (Issue #470)
+
+Требование native seq/execId **условное**: только действительный потребитель EntryPlan/ExitPlan/MFE устанавливает, какие exact события и идентификаторы нужны его причинному решению. Ни один общий Observer, новая сессия WS или unrelated Strategy не обязаны восстановить все publicTrade за весь простой из-за ограничений одного legacy P90 adapter. Восстановление цены, native identity, native continuity и Exit readiness — **разные доказательства**, не взаимозаменяемые.
+
+- **Новый Entry:** после проверки fresh WS subscribe/ACK и original MarketSource/InstrumentIdentity разрешён явно зафиксированный новый source/Entry epoch с новой причинной точкой, если нет OPEN/pending обязательства этого exact scope. Действующие EntryPlan/geometry/warmup/freshness и финансовые gates обязательны; старые сигналы не исполняются задним числом. Старые checkpoints остаются неизменяемым audit evidence.
+- **Открытая позиция / Exit/MFE:** сначала независимый signed Bybit Private inventory конкретного аккаунта (actual position, SL/TP, pending orders, fills) плюс immutable ExitPlan и исходный MFE checkpoint. Затем определить минимально необходимый исторический период и типы фактов для восстановления исходов. Проверенные аутентичные price-time/trade-ID события допускаются для вычисления ценового экстремума, если полное покрытие нужного интервала и соответствие Exit/MFE consumer доказаны. Отдельный exact seq обязателен только там, где конкретный causal consumer требует seq; отсутствие такого доказательства оставляет его BLOCKED и не даёт обхода защит.
+- **Coverage:** required-data manifest содержит source/instrument/UTC boundaries, event types, required consumer, original durable anchor, unique execIds, time/order/duplicates, provider issuer/URL/file checksum, exact interval coverage, persisted proof и TTL. Bybit daily CSV с trdMatchID/time/price без seq может подтверждать исторические цены, но не восстанавливает native WebSocket seq самостоятельно. Отдельно фиксировать PRICE_HISTORY_VERIFIED, NATIVE_IDENTITY_VERIFIED, NATIVE_CONTINUITY_VERIFIED, EXIT_READY.
+- **Recovery:** PostgreSQL-first, затем verified provider archive/approved retrieval для доказанного gap. Bybit recent-trade max 1000 — **один optional fast path**, не постоянное требование для всех пяти P90 монет и не основание объявлять потерю данных. Source gaps с неизвестным покрытием фиксируются явно; никаких fabricated seq, переписывания прежней epoch или позднего Entry.
+- **Safety:** если необходимый Exit observation, MFE, signed exposure либо protection не доказан, соответствующий position/Exit остаётся BLOCKED и Exchange protection сохраняется; независимые consumers продолжают работать только со своими проверенными фактами. Consumer cutover не удаляет старую capability до parity.
+
+**BEFORE ошибочный физический критерий:** старый и новый cursor обязаны находиться в одном REST recent-trade окне <=1000 для всех P90 symbols. **AFTER:** выбор минимально достаточного evidence и coverage для каждого фактического Entry/Exit consumer; окно последних 1000 — optional fast path. Уточнение не открывает gate, не меняет Strategy/ExitPlan и не выдаёт LIVE permission.
+
 ### 60.3 Existing-position-first и ограничения глобального veto
 
 При рестарте независимо от намерений нового Entry сперва подтверждается
