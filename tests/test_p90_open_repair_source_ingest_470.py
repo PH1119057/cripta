@@ -166,3 +166,5 @@ def test_late_p90_recovery_error_restarts_only_pure_source_rail() -> None:
     assert "P90_SCOPED_SOURCE_REPAIR_FINANCIAL_SCOPE_INVALID" in text
     assert "if source_repair_only:" in text
     assert "if p90_repair_ingest_only:" in text
+    assert "for symbol in (() if p90_repair_ingest_only else symbols):" in text
+    assert "if not p90_repair_ingest_only:" in text
