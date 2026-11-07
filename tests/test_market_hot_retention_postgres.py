@@ -64,12 +64,14 @@ def database():
             observed_at timestamptz NOT NULL)""",
         """CREATE TABLE dispatcher_v2.global_market_contexts(
             global_context_id text PRIMARY KEY,
-            source_market_context_id text REFERENCES mayak_v2.shared_market_contexts(market_context_id),
+            source_market_context_id text
+                REFERENCES mayak_v2.shared_market_contexts(market_context_id),
             source_mayak_snapshot_id bigint REFERENCES mayak_v2.snapshots(id),
             observed_at timestamptz NOT NULL)""",
         """CREATE TABLE dispatcher_v2.coin_market_contexts(
             coin_context_id text PRIMARY KEY,
-            global_context_id text REFERENCES dispatcher_v2.global_market_contexts(global_context_id),
+            global_context_id text
+                REFERENCES dispatcher_v2.global_market_contexts(global_context_id),
             source_coin_context_id text REFERENCES mayak_v2.coin_market_contexts(coin_context_id),
             source_mayak_snapshot_id bigint REFERENCES mayak_v2.snapshots(id),
             observed_at timestamptz NOT NULL)""",
@@ -79,7 +81,8 @@ def database():
         """CREATE TABLE research_context.dispatcher_v2_event_links(
             reference_id text PRIMARY KEY,
             coin_context_id text REFERENCES dispatcher_v2.coin_market_contexts(coin_context_id),
-            global_context_id text REFERENCES dispatcher_v2.global_market_contexts(global_context_id))""",
+            global_context_id text
+                REFERENCES dispatcher_v2.global_market_contexts(global_context_id))""",
         """CREATE FUNCTION mayak_v2.reject_mutation() RETURNS trigger
            LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'IMMUTABLE_TEST'; END $$""",
         """CREATE FUNCTION dispatcher_v2.reject_mutation() RETURNS trigger
@@ -133,7 +136,8 @@ def database():
             ("dc-" + prefix, "dg-" + prefix, "mc-" + prefix, id_, at),
         )
     conn.execute(
-        "INSERT INTO research_context.dispatcher_v2_event_links VALUES('real-event','dc-pinned','dg-pinned')"
+        "INSERT INTO research_context.dispatcher_v2_event_links "
+        "VALUES('real-event','dc-pinned','dg-pinned')"
     )
     conn.execute("INSERT INTO research_context.event_links VALUES('decision',2)")
     try:
@@ -177,12 +181,18 @@ def test_postgres_fk_audit_pin_fresh_and_compaction(database, monkeypatch):
     assert payloads[1] == {"_cripta_hot_telemetry": "EXPIRED_24H"}
     assert payloads[2] == {"money": "full"}
     assert payloads[3] == {"money": "full"}
-    journal = dict(connection.execute("SELECT snapshot_id,price_breadth FROM mayak_v2.observation_journal"))
+    journal = dict(connection.execute(
+        "SELECT snapshot_id,price_breadth FROM mayak_v2.observation_journal"
+    ))
     assert journal[1] == {}
     assert journal[2] == {"price": 12}
     assert journal[3] == {"price": 12}
-    assert connection.execute("SELECT count(*) FROM research_context.event_links").fetchone()[0] == 1
-    assert connection.execute("SELECT count(*) FROM research_context.dispatcher_v2_event_links").fetchone()[0] == 1
+    assert connection.execute(
+        "SELECT count(*) FROM research_context.event_links"
+    ).fetchone()[0] == 1
+    assert connection.execute(
+        "SELECT count(*) FROM research_context.dispatcher_v2_event_links"
+    ).fetchone()[0] == 1
     MODULE.check_triggers(connection)
     second = MODULE.run_apply(connection, now - timedelta(hours=24), limit=100)
     assert not any(second.rows.values())  # Idempotent expiration.
