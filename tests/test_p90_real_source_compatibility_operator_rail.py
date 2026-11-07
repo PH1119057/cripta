@@ -28,15 +28,19 @@ def test_registration_cli_derives_only_exact_current_release_and_one_active_epoc
     assert "P90_REAL_COMPATIBILITY_ACTIVE_EPOCH_UNVERIFIED" in source
 
 
-def test_installer_only_installs_operator_unit_and_does_not_manage_start_it():
+def test_installer_prepares_compatibility_before_resuming_managed_consumers():
     source = INSTALLER.read_text(encoding="utf-8")
     spec = (
         '"operations/systemd/cripta-p90-source-compatibility-register.service|'
         'cripta-p90-source-compatibility-register.service|runtime"'
     )
     assert source.count(spec) == 1
-    managed = source[source.index("managed_services=("):]
-    assert "cripta-p90-source-compatibility-register.service" not in managed
+    preparation = source.index("--register --release-preparation")
+    resume = source.index('if [[ "${was_active[$service]}" == "1" ]]; then systemctl start')
+    assert preparation < resume
+    assert "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=BLOCKED_OBSERVER_NOT_READY" in source
+    # The bounded operator unit remains inert; installer invokes its CLI as cripta.
+    assert "systemctl start cripta-p90-source-compatibility-register.service" not in source
 
 def test_pruned_origin_fallback_is_local_read_only_git_only():
     source = SCRIPT.read_text(encoding="utf-8")

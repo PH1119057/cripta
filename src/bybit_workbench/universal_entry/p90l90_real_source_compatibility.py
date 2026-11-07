@@ -369,7 +369,7 @@ def register_real_source_compatibility(
     origin_root: Path | None = None,
     origin_git_checkout: Path | None = None,
 ) -> None:
-    """Explicit operator INSERT only; never called by the Observer/installer."""
+    """Bounded preparation INSERT; Observer remains a read-only consumer."""
     _require(_SHA.fullmatch(loaded_commit) is not None
              and _EPOCH.fullmatch(epoch_id) is not None, "IDENTITY_INVALID")
     _require(getattr(getattr(getattr(connection, "info", None),
