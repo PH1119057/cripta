@@ -81,13 +81,18 @@ class PublicTradeMirrorBuffer:
         self._last_error: str | None = None
         self._duplicates = 0
         self._ordinal = 0
-        self._gaps = 0
+        self._gaps = 0  # Integrity failures in the current WS epoch only.
+        self._lifetime_gaps = 0  # Diagnostic count across this mirror instance.
 
     def start_epoch(self, started_at: datetime) -> int:
         if started_at.tzinfo is None:
             raise ValueError("mirror epoch timestamp must be timezone-aware")
         with self._lock:
             self._epoch += 1
+            # A new independently subscribed WS session starts with no
+            # *session-local* gaps. It does not claim to recover or replay
+            # any event/cursor from a previous epoch: those are cleared.
+            self._gaps = 0
             self._events.clear()
             self._exec_ids.clear()
             self._epoch_started_at = started_at.astimezone(UTC)
@@ -104,6 +109,7 @@ class PublicTradeMirrorBuffer:
             self._state = "GAP"
             self._last_error = reason
             self._gaps += 1
+            self._lifetime_gaps += 1
 
     def _purge(self, now: datetime) -> None:
         cutoff = now.astimezone(UTC) - timedelta(seconds=self.retention_seconds)
@@ -320,7 +326,8 @@ class PublicTradeMirrorBuffer:
                 ),
                 "events": len(self._events),
                 "duplicates": self._duplicates,
-                "gaps": self._gaps,
+                "gaps": self._gaps,  # Current epoch; used by native proof.
+                "lifetime_gaps": self._lifetime_gaps,  # Observability only.
                 "last_error": self._last_error,
                 "retention_seconds": self.retention_seconds,
             }

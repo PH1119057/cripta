@@ -428,3 +428,56 @@ def test_exact_coverage_rejects_empty_expected_ids() -> None:
         )
 
 
+
+
+def test_mirror_gap_is_scoped_to_current_epoch_without_forgiving_old_native_cursor() -> None:
+    """A fresh ACK/session may start, but old source/position proof is not recovered."""
+    mirror = PublicTradeMirrorBuffer(("UNIUSDT",), retention_seconds=600)
+    original_epoch = mirror.start_epoch(NOW)
+    mirror.record_message(
+        _message("UNIUSDT", [
+            _trade("UNIUSDT", "old-native-id", 100, NOW,
+                   price="10", size="1", side="Buy"),
+        ]),
+        received_at=NOW,
+    )
+    mirror.mark_gap("network connection interrupted")
+    first = mirror.snapshot()
+    assert first["state"] == "GAP"
+    assert first["gaps"] == 1
+    assert first["lifetime_gaps"] == 1
+
+    after_restart = NOW + timedelta(seconds=10)
+    new_epoch = mirror.start_epoch(after_restart)
+    fresh = mirror.snapshot()
+    assert new_epoch == original_epoch + 1
+    assert fresh["state"] == "ACTIVE"
+    assert fresh["epoch"] == new_epoch
+    assert fresh["gaps"] == 0  # Only this session's integrity condition.
+    assert fresh["lifetime_gaps"] == 1  # Never conceal historical faults.
+    assert fresh["last_error"] is None
+    assert mirror.current_cursors() == ({}, {})
+
+    mirror.record_message(
+        _message("UNIUSDT", [
+            _trade("UNIUSDT", "new-native-id", 150,
+                   after_restart + timedelta(seconds=1),
+                   price="10.2", size="2", side="Sell"),
+        ]),
+        received_at=after_restart + timedelta(seconds=1),
+    )
+    cursors, same_seq = mirror.current_cursors()
+    assert cursors["UNIUSDT"].exec_id == "new-native-id"
+    assert same_seq["UNIUSDT"] == {"new-native-id"}
+
+    # A fresh cursor must NOT provide the past position's missing source window.
+    with pytest.raises(ContinuityNotProvable, match="exact anchor missing"):
+        mirror.recover_after(
+            {"UNIUSDT": TradeCursor("UNIUSDT", "old-native-id", 100, NOW)},
+            cutoff_at=after_restart + timedelta(seconds=2),
+        )
+    with pytest.raises(ContinuityNotProvable, match="EPOCH_OR_RETENTION_UNVERIFIED"):
+        mirror.verified_fill_forward_events(
+            symbol="UNIUSDT", fill_at=NOW,
+            at=after_restart + timedelta(seconds=2), allow_empty=True,
+        )
