@@ -385,3 +385,63 @@ def test_reviewed_delta_can_use_exact_local_git_origin_without_retained_release(
             origin_commit="f" * 40,
         )
 
+
+
+# Regression for the exact 2026-11-07 production fault:
+# old valid attestation rows from two executable release families were
+# incorrectly compared to the currently loaded consumer digest.
+@pytest.mark.parametrize(("release", "digest"), [
+    ("3682292450a6f6e2f49f67e30e473ab035a0e27d",
+     "e455220878f19f5d1fd530abdb98b7d379a67fbe5a911f378747b8d1301979a9"),
+    ("aa65991b7e704fdbd87b8f3ca158add94cb76d53",
+     "e455220878f19f5d1fd530abdb98b7d379a67fbe5a911f378747b8d1301979a9"),
+    ("1fc88f96f110337bfe575c4caaba48b5cdbaa134",
+     "e455220878f19f5d1fd530abdb98b7d379a67fbe5a911f378747b8d1301979a9"),
+    ("0044d4eabd89b762641e7468e56161d707b07ea5",
+     "e455220878f19f5d1fd530abdb98b7d379a67fbe5a911f378747b8d1301979a9"),
+    ("741984632f5b613fcc2df84a21dbd1ac5e4fd3f9",
+     "71458d52d543ff91350d51999bbefcfa0b8e7fd1a8b7feee4e9c9edbb6367c8e"),
+    ("ef2ac6460bf5bd75f56fe7b6a112b3852fec271d",
+     "71458d52d543ff91350d51999bbefcfa0b8e7fd1a8b7feee4e9c9edbb6367c8e"),
+])
+def test_exact_historical_compatibility_rows_not_relabelled_as_loaded(
+    release, digest,
+):
+    assert compat._REVIEWED_HISTORICAL_CONSUMERS[release] == digest
+    db = SourceDB()
+    attest(db)  # Explicitly registered current release, no inferred permission.
+    historic = list(copy.deepcopy(db.attestations[0]))
+    historic[0], historic[3] = release, digest
+    db.attestations.insert(0, tuple(historic))
+    saved = copy.deepcopy(db.attestations)
+    verified = compat.inspect_real_source_identity(
+        db, epoch_id=EPOCH, loaded_commit=LOADED, bundles=bundles(),
+    )
+    assert release in verified.approved_producers
+    assert db.attestations == saved
+    # Unregistered executable must not become compatible merely because a
+    # genuine historical row exists.
+    with pytest.raises(compat.P90RealSourceCompatibilityUnverified,
+                       match="RELEASE_NOT_REGISTERED"):
+        compat.inspect_real_source_identity(
+            db, epoch_id=EPOCH, loaded_commit="9" * 40, bundles=bundles(),
+        )
+    historic[3] = "0" * 64
+    db.attestations[0] = tuple(historic)
+    with pytest.raises(compat.P90RealSourceCompatibilityUnverified,
+                       match="ATTESTATION_CORRUPT_OR_INCOMPATIBLE"):
+        compat.inspect_real_source_identity(
+            db, epoch_id=EPOCH, loaded_commit=LOADED, bundles=bundles(),
+        )
+
+
+def test_reviewed_current_ws_reconnect_delta_is_hash_bound():
+    # The historical origin is immutable; this one extra source module was
+    # separately reviewed. Its current exact bytes must remain pinned.
+    relative = "src/bybit_workbench/universal_entry/trade_mirror.py"
+    # Runtime releases use immutable Git blob bytes. Windows checkout may
+    # convert LF to CRLF and therefore cannot be used for content attestation.
+    source_bytes = subprocess.check_output(["git", "show", f"HEAD:{relative}"])
+    assert hashlib.sha256(source_bytes).hexdigest() == (
+        compat.REVIEWED_BUGFIX_CONSUMER_SHA256["universal_entry/trade_mirror.py"]
+    )
