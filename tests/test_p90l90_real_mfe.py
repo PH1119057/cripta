@@ -452,3 +452,35 @@ def test_verified_mfe_tie_does_not_call_unnecessary_ws_order_attestor() -> None:
     assert latest == state
     assert fact_id == "trade-native-B"
     assert refs == (f"bybit:publicTrade:{pos.symbol}:native-B",)
+
+
+def test_real_exit_tick_still_requires_source_owned_order_for_tied_trades() -> None:
+    """The relaxed MFE-only path cannot silently weaken tick-by-tick Exit."""
+    pos = _position()
+    db = _MfeDB()
+    ledger = P90RealMfeLedger(db)
+    first = _cursor(pos, seq=500, exec_id="exit-A", millis=3)
+    tied = _cursor(pos, seq=500, exec_id="exit-B", millis=3)
+
+    def on_trade(cursor: TradeCursor, *, proven_order: bool):
+        return ledger.on_trade(
+            position=pos,
+            source_commit=SHA,
+            fact_id="trade-" + cursor.exec_id,
+            cursor=cursor,
+            price=D("100.6") if cursor is tied else D("100.2"),
+            received_at=cursor.traded_at + timedelta(milliseconds=1),
+            source_refs=(f"bybit:publicTrade:{pos.symbol}:{cursor.exec_id}",),
+            first_fill_forward_coverage_proven=True,
+            native_continuity_proven=True,
+            require_same_timestamp_order_for_exit=True,
+            prove_same_timestamp_order=lambda: proven_order,
+        )
+
+    on_trade(first, proven_order=False)  # No tie on initial trade.
+    with pytest.raises(P90RealMfeUnverified, match="EXIT_NATIVE_ORDER_NOT_PROVEN"):
+        on_trade(tied, proven_order=False)
+    assert len(db.saved) == 1
+    recovered = on_trade(tied, proven_order=True)
+    assert recovered.best_favorable_price == D("100.6")
+    assert len(db.saved) == 2
