@@ -94,9 +94,7 @@ class NativePublicTradeJournal:
         # journal COMMIT independently from causal processing/Exit.
         info = getattr(self._connection, "info", None)
         status = getattr(info, "transaction_status", None)
-        if getattr(self._connection, "autocommit", False) and str(
-            getattr(status, "name", status)
-        ) != "INTRANS":
+        if str(getattr(status, "name", status)) != "INTRANS":
             raise RuntimeError("NATIVE_TRADE_EVIDENCE_ATOMIC_SOURCE_TX_REQUIRED")
 
         key = (
