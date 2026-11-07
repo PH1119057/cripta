@@ -41,10 +41,14 @@ from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
 )
 from bybit_workbench.universal_exit.storage import PostgresExitShadowStore
 
-if __package__:
-    from .p90l90_real_postfill_source_client import read_real_postfill_source_window
-else:
-    from p90l90_real_postfill_source_client import read_real_postfill_source_window
+# One credential-free import, independent of whether the consumer was
+# launched as an installed script or imported as a package in CI.
+from importlib import import_module
+
+read_real_postfill_source_window = import_module(
+    (str(__package__) + "." if __package__ else "")
+    + "p90l90_real_postfill_source_client"
+).read_real_postfill_source_window
 
 # A first-fill arm is intentionally not a historical repair operation.
 # Source broker has its own stricter protection/clock/coverage deadlines.
