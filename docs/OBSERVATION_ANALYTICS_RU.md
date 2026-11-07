@@ -858,8 +858,11 @@ Strategy/Entry/Exit отвечают только за свои вычислен
 Штатный этап не создаёт ERROR incident и не требует закрытия аварии владельцем.
 Это узкий типизированный preparation outcome, не blanket suppression exceptions.
 
-Все participating symbols должны иметь проверенный общий причинный конец
-5m/15m истории перед fresh WS attestation. Пересечение границы свечи требует
+Все символы, которые действительно участвуют в **одном exact атомарном
+Strategy/EntryPlan/consumer scope**, должны иметь проверенный общий причинный
+конец 5m/15m истории перед fresh WS attestation; независимые
+Strategy/account/instrument consumers не блокируются чужим недостающим symbol.
+Пересечение границы свечи требует
 дозагрузки хвоста и новой проверки, а не допуска по устаревшему окну. Source,
 UTC, closed-only, count/gap/immutability и signed proof lifetime не ослабляются.
 Historical candles не создают native trade cursor. Ожидание ограничено finite
