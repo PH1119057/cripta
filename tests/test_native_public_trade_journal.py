@@ -235,3 +235,52 @@ def test_pg_first_read_has_bounded_exact_ids_but_never_certifies_gap() -> None:
         read_native_candidates(ReadOnlySource(rows + [rows[0]]), **{
             **params, "limit": 2,
         })
+
+
+def test_p90_restart_reads_pg_first_but_rest_remains_continuity_owner() -> None:
+    import ast
+    from pathlib import Path
+
+    from bybit_workbench.market_data.native_public_trade_journal import (
+        NativeTradeCandidateSlice,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
+        P90RealOpenSourceRecoveryUnverified,
+        _verify_saved_rest_overlap,
+    )
+
+    source = Path(
+        "src/bybit_workbench/universal_entry/p90l90_real_restart_recovery.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    fn = next(
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef)
+        and item.name == "recover_p90_real_open_source"
+    )
+    body = ast.get_source_segment(source, fn)
+    assert body is not None
+    assert body.index("read_native_candidates(") < body.index("fetch_recent_trades(symbol)")
+    assert "attest_bounded_native_restart(" in body
+    assert "saved_native[symbol] = None" in body
+
+    saved = NativeTradeCandidateSlice(
+        (_event("synthetic-470-a"),), 470, 470,
+    )
+    real = SimpleNamespace(
+        seq=470, exec_id="synthetic-470-a",
+        traded_at=_event().event_at,
+        price="100.25", size="1.2", side="Buy",
+    )
+    _verify_saved_rest_overlap(saved, (real,))
+    # A stored-only event MUST NOT be interpreted as verified coverage.
+    assert saved.coverage_proven is False
+    _verify_saved_rest_overlap(saved, ())
+    with pytest.raises(P90RealOpenSourceRecoveryUnverified, match="REST_CONFLICT"):
+        _verify_saved_rest_overlap(
+            saved, (SimpleNamespace(
+                seq=470, exec_id="synthetic-470-a",
+                traded_at=_event().event_at,
+                price="100.24", size="1.2", side="Buy",
+            ),),
+        )
