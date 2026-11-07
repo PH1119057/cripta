@@ -5682,6 +5682,8 @@ def _recover_p90_real_ws_safety_if_needed(
 def _prepare_p90_source_compatibility_for_owner_request() -> None:
     """Technical QC in explicit preparation only, never a polling/ARM writer."""
     from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+        P90RealSourceCompatibilityUnverified,
+        inspect_real_source_identity,
         register_real_source_compatibility,
     )
     from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
@@ -5708,11 +5710,29 @@ def _prepare_p90_source_compatibility_for_owner_request() -> None:
             # unnecessarily or race that existing source owner's retirement.
             return
         root = Path("/srv/cripta/runtime/current").resolve()
+        bundles = tuple(b for b in load_active_strategy_bundles(connection)
+                        if b.card.strategy_version == P90_REAL_V3_VERSION)
+        try:
+            inspect_real_source_identity(
+                connection, epoch_id=str(epoch_id), loaded_commit=LOADED_RELEASE_COMMIT,
+                bundles=bundles,
+            )
+        except P90RealSourceCompatibilityUnverified as exc:
+            if str(exc) != "P90_REAL_SOURCE_COMPATIBILITY_RELEASE_NOT_REGISTERED":
+                raise
+        else:
+            # Installation already registered this exact release. Do not rerun
+            # historical reconstruction or depend on a pruned runtime folder.
+            return
+        retained_origin = root.parent / str(origin)
+        origin_evidence = (
+            {"origin_root": retained_origin}
+            if (retained_origin / "INSTALLED_COMMIT").is_file()
+            else {"origin_git_checkout": Path("/srv/cripta/source_checkout")}
+        )
         register_real_source_compatibility(
             connection, epoch_id=str(epoch_id), loaded_commit=LOADED_RELEASE_COMMIT,
-            bundles=tuple(b for b in load_active_strategy_bundles(connection)
-                          if b.card.strategy_version == P90_REAL_V3_VERSION),
-            current_root=root, origin_root=root.parent / str(origin),
+            bundles=bundles, current_root=root, **origin_evidence,
         )
 
 
