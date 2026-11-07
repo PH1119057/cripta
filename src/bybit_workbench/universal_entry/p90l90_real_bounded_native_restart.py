@@ -15,7 +15,7 @@ account-specific signed REST proof, an execution permission or an Exit action.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -51,6 +51,8 @@ class P90VerifiedNativeSourceWindow:
     MUST independently verify source/artifact authenticity and coverage.
     Here source_sha256 authenticates the normalized rows received from that
     adapter, NOT the original archive file and NOT coverage by itself.
+    A separate independently reviewed source-coverage verifier is mandatory
+    even if all fields and hashes match.
     An absent window always retains the REST-only fail-closed path.
     """
 
@@ -84,6 +86,7 @@ def _require_complete_original_native_source(
     *,
     old: TradeCursor,
     new: TradeCursor,
+    verify_coverage: Callable[[P90VerifiedNativeSourceWindow], bool] | None,
 ) -> tuple[Mapping[str, object], ...]:
     # A source attestation must come from an independent approved native
     # producer; the existence of saved PostgreSQL rows is not one.
@@ -133,6 +136,22 @@ def _require_complete_original_native_source(
         raise P90RealNativeRestartUnverified(
             "P90_RESTART_VERIFIED_NATIVE_EVIDENCE_DIGEST_MISMATCH"
         )
+    # Source payload/issuer labels alone are NOT a continuity certificate.
+    # The independently reviewed MarketSource evidence owner must provide
+    # a separate scoped verification/readback function. Without it, reject
+    # even syntactically perfect attacker-constructed source metadata.
+    if not callable(verify_coverage):
+        raise P90RealNativeRestartUnverified(
+            "P90_RESTART_INDEPENDENT_COVERAGE_VERIFIER_MISSING"
+        )
+    try:
+        verified = verify_coverage(proof) is True
+    except Exception:  # noqa: BLE001 - external source evidence fail closed
+        verified = False
+    if not verified:
+        raise P90RealNativeRestartUnverified(
+            "P90_RESTART_INDEPENDENT_COVERAGE_NOT_VERIFIED"
+        )
     # Every row must be an original native trade with exact seq+execId.
     # Archived price/time/trdMatchID alone is intentionally rejected.
     if any(
@@ -157,6 +176,7 @@ def resolve_durable_restart_anchor(
     latest_rest_rows: Sequence[Mapping[str, object]],
     verified_native_source: P90VerifiedNativeSourceWindow | None = None,
     live_anchor: TradeCursor | None = None,
+    verify_coverage: Callable[[P90VerifiedNativeSourceWindow], bool] | None = None,
 ) -> TradeCursor:
     """Recover one exact persisted cursor without forgetting same-seq peers.
 
@@ -191,6 +211,7 @@ def resolve_durable_restart_anchor(
                 verified_native_source,
                 old=TradeCursor(symbol, ids[0], last_sequence, at),
                 new=live_anchor,
+                verify_coverage=verify_coverage,
             )
         if (
             symbol not in _SYMBOLS
@@ -276,6 +297,7 @@ def attest_bounded_native_restart(
     checked_at: datetime,
     durable_exec_ids: Sequence[str] | None = None,
     verified_native_source: P90VerifiedNativeSourceWindow | None = None,
+    verify_coverage: Callable[[P90VerifiedNativeSourceWindow], bool] | None = None,
 ) -> P90RealBoundedNativeRecovery:
     """Prove required native causality via optional REST or full source.
 
@@ -300,7 +322,8 @@ def attest_bounded_native_restart(
             latest_rest_rows
             if verified_native_source is None
             else _require_complete_original_native_source(
-                verified_native_source, old=durable_anchor, new=live_anchor,
+                verified_native_source, old=durable_anchor,
+                new=live_anchor, verify_coverage=verify_coverage,
             )
         )
         if (
