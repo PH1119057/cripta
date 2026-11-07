@@ -134,3 +134,105 @@ class NativePublicTradeJournal:
         if previous != immutable:
             raise NativeTradeEvidenceConflict("NATIVE_PUBLIC_TRADE_IDENTITY_CONFLICT")
         return False
+
+
+class NativeTradeEvidenceUnavailable(RuntimeError):
+    """No exact saved-native range: never replace with candle approximation."""
+
+
+@dataclass(frozen=True, slots=True)
+class NativeTradeCandidateSlice:
+    """Authentic persisted rows, NOT a certificate of uninterrupted coverage.
+
+    The producer's independently attested WS-session or approved archive
+    coverage is required before any caller may replay these rows as a
+    complete causal interval for an OPEN position. In particular, this
+    result does not authorize Entry, Exit, MFE or checkpoint advancement.
+    """
+
+    events: tuple[NativeTradeEvidence, ...]
+    first_sequence: int
+    last_sequence: int
+
+    @property
+    def coverage_proven(self) -> bool:
+        # This object cannot be constructed with a spoofed 'verified' bit.
+        # Only an independent original-WS / exact archive certificate can
+        # prove all intervening native ticks, never this row sample alone.
+        return False
+
+
+def read_native_candidates(
+    connection: Any,
+    *,
+    market_source_id: str,
+    instrument_id: str,
+    first_sequence: int,
+    first_exec_ids: frozenset[str],
+    last_sequence: int,
+    last_exec_id: str,
+    limit: int = 25_000,
+) -> NativeTradeCandidateSlice:
+    """Read exact saved IDs inside a bounded native sequence interval.
+
+    This is a PostgreSQL-first *evidence reader*, not a replay attestation.
+    Native sequence numbers need not be contiguous. Neither a sequence
+    range nor presence of both endpoints proves that all intervening
+    WebSocket trades were captured while the process was offline.
+    """
+    if (
+        not isinstance(market_source_id, str) or not market_source_id
+        or not isinstance(instrument_id, str) or not instrument_id
+        or type(first_sequence) is not int or first_sequence < 0
+        or type(last_sequence) is not int or last_sequence < first_sequence
+        or not isinstance(first_exec_ids, frozenset) or not first_exec_ids
+        or any(not isinstance(x, str) or not x for x in first_exec_ids)
+        or not isinstance(last_exec_id, str) or not last_exec_id
+        or type(limit) is not int or not 2 <= limit <= 25_000
+    ):
+        raise ValueError("NATIVE_PUBLIC_TRADE_READ_BOUNDARY_INVALID")
+
+    rows = connection.execute(
+        """SELECT market_source_id,instrument_id,external_symbol,
+                  exchange_sequence,exec_id,event_at,price,quantity,
+                  taker_side,source_transport,producer_release_commit
+             FROM analytics.native_public_trade_events
+            WHERE market_source_id=%s AND instrument_id=%s
+              AND exchange_sequence BETWEEN %s AND %s
+            ORDER BY exchange_sequence,event_at,exec_id
+            LIMIT %s""",
+        (market_source_id, instrument_id, first_sequence, last_sequence, limit + 1),
+    ).fetchall()
+    if len(rows) > limit:
+        raise NativeTradeEvidenceUnavailable(
+            "NATIVE_PUBLIC_TRADE_RANGE_EXCEEDS_BOUNDED_READ"
+        )
+    if not rows:
+        raise NativeTradeEvidenceUnavailable(
+            "NATIVE_PUBLIC_TRADE_PERSISTED_RANGE_EMPTY"
+        )
+    events = tuple(NativeTradeEvidence(*row) for row in rows)
+    if not first_exec_ids.issubset(
+        {e.exec_id for e in events if e.exchange_sequence == first_sequence}
+    ):
+        raise NativeTradeEvidenceUnavailable(
+            "NATIVE_PUBLIC_TRADE_FIRST_SAME_SEQUENCE_IDS_MISSING"
+        )
+    if last_exec_id not in {
+        e.exec_id for e in events if e.exchange_sequence == last_sequence
+    }:
+        raise NativeTradeEvidenceUnavailable(
+            "NATIVE_PUBLIC_TRADE_LAST_CURSOR_MISSING"
+        )
+    if any(
+        previous.event_at > current.event_at
+        for previous, current in zip(events, events[1:], strict=False)
+    ):
+        raise NativeTradeEvidenceConflict(
+            "NATIVE_PUBLIC_TRADE_SAVED_ORDER_CONFLICT"
+        )
+    return NativeTradeCandidateSlice(
+        events=events,
+        first_sequence=first_sequence,
+        last_sequence=last_sequence,
+    )

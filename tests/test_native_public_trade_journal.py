@@ -17,6 +17,8 @@ from bybit_workbench.market_data.native_public_trade_journal import (
     NativePublicTradeJournal,
     NativeTradeEvidence,
     NativeTradeEvidenceConflict,
+    NativeTradeEvidenceUnavailable,
+    read_native_candidates,
 )
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -80,6 +82,17 @@ def test_same_seq_native_ids_atomic_rollback_exact_replay_and_conflict() -> None
                 source_transport="APPROVED_ARCHIVE_REPLAY",
                 producer_release_commit="b" * 40,
             ))
+            snapshot = read_native_candidates(
+                conn,
+                market_source_id="ms-bybit-mainnet-public-v1",
+                instrument_id="instrument-synthetic-470",
+                first_sequence=470,
+                first_exec_ids=frozenset({"synthetic-470-a", "synthetic-470-b"}),
+                last_sequence=470,
+                last_exec_id="synthetic-470-b",
+            )
+            assert len(snapshot.events) == 2
+            assert snapshot.coverage_proven is False
             conn.execute(
                 "INSERT INTO pg_temp.native_470_effects VALUES('dependent-effect')"
             )
@@ -165,3 +178,151 @@ def test_observer_routes_native_write_before_causal_consumer_in_one_transaction(
     )
     assert "dispatch_observer_fact_atomically(" in body
     assert 'native_transport="BYBIT_WS_MIRROR_REPLAY"' in source
+
+
+def test_pg_first_read_has_bounded_exact_ids_but_never_certifies_gap() -> None:
+    from types import SimpleNamespace
+
+    first = _event("synthetic-470-a")
+    second = _event("synthetic-470-b")
+    rows = [
+        (
+            e.market_source_id, e.instrument_id, e.external_symbol,
+            e.exchange_sequence, e.exec_id, e.event_at, e.price, e.quantity,
+            e.taker_side, e.source_transport, e.producer_release_commit,
+        )
+        for e in (first, second)
+    ]
+
+    class ReadOnlySource:
+        def __init__(self, data):
+            self.data = data
+            self.queries = []
+
+        def execute(self, query, params):
+            self.queries.append((query, params))
+            return SimpleNamespace(fetchall=lambda: self.data)
+
+    source = ReadOnlySource(rows)
+    params = dict(
+        market_source_id=first.market_source_id,
+        instrument_id=first.instrument_id,
+        first_sequence=470,
+        first_exec_ids=frozenset({first.exec_id, second.exec_id}),
+        last_sequence=470,
+        last_exec_id=second.exec_id,
+    )
+    result = read_native_candidates(source, **params)
+    assert [e.exec_id for e in result.events] == [
+        "synthetic-470-a", "synthetic-470-b",
+    ]
+    assert result.coverage_proven is False
+    with pytest.raises(TypeError):
+        type(result)(result.events, 470, 470, True)
+    assert len(source.queries) == 1
+    assert source.queries[0][0].lstrip().startswith("SELECT ")
+    with pytest.raises(NativeTradeEvidenceUnavailable, match="FIRST_SAME_SEQUENCE"):
+        read_native_candidates(source, **{
+            **params, "first_exec_ids": frozenset({first.exec_id, "evicted"}),
+        })
+    with pytest.raises(NativeTradeEvidenceUnavailable, match="LAST_CURSOR"):
+        read_native_candidates(source, **{
+            **params, "last_exec_id": "unknown",
+        })
+    with pytest.raises(NativeTradeEvidenceUnavailable, match="PERSISTED_RANGE_EMPTY"):
+        read_native_candidates(ReadOnlySource([]), **params)
+    with pytest.raises(ValueError, match="BOUNDARY_INVALID"):
+        read_native_candidates(source, **{**params, "limit": 1})
+    with pytest.raises(NativeTradeEvidenceUnavailable, match="EXCEEDS_BOUNDED_READ"):
+        read_native_candidates(ReadOnlySource(rows + [rows[0]]), **{
+            **params, "limit": 2,
+        })
+
+
+def test_p90_restart_reads_pg_first_but_rest_remains_continuity_owner() -> None:
+    import ast
+    from pathlib import Path
+
+    from bybit_workbench.market_data.native_public_trade_journal import (
+        NativeTradeCandidateSlice,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
+        P90RealOpenSourceRecoveryUnverified,
+        _verify_saved_rest_overlap,
+    )
+
+    source = Path(
+        "src/bybit_workbench/universal_entry/p90l90_real_restart_recovery.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    fn = next(
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef)
+        and item.name == "recover_p90_real_open_source"
+    )
+    body = ast.get_source_segment(source, fn)
+    assert body is not None
+    assert body.index("read_native_candidates(") < body.index("fetch_recent_trades(symbol)")
+    assert "attest_bounded_native_restart(" in body
+    assert "saved_native[symbol] = None" in body
+
+    saved = NativeTradeCandidateSlice(
+        (_event("synthetic-470-a"),), 470, 470,
+    )
+    real = SimpleNamespace(
+        seq=470, exec_id="synthetic-470-a",
+        traded_at=_event().event_at,
+        price="100.25", size="1.2", side="Buy",
+    )
+    _verify_saved_rest_overlap(saved, (real,))
+    # A stored-only event MUST NOT be interpreted as verified coverage.
+    assert saved.coverage_proven is False
+    _verify_saved_rest_overlap(saved, ())
+    with pytest.raises(P90RealOpenSourceRecoveryUnverified, match="REST_CONFLICT"):
+        _verify_saved_rest_overlap(
+            saved, (SimpleNamespace(
+                seq=470, exec_id="synthetic-470-a",
+                traded_at=_event().event_at,
+                price="100.24", size="1.2", side="Buy",
+            ),),
+        )
+    with pytest.raises(P90RealOpenSourceRecoveryUnverified, match="REST_CONFLICT"):
+        _verify_saved_rest_overlap(
+            saved, (SimpleNamespace(
+                seq=471, exec_id="synthetic-470-a",
+                traded_at=_event().event_at,
+                price="100.25", size="1.2", side="Buy",
+            ),),
+        )
+
+
+def test_persisted_native_order_corruption_is_not_silent_missing_evidence() -> None:
+    from types import SimpleNamespace
+
+    before = _event("synthetic-470-a")
+    later = replace(
+        _event("synthetic-470-b"),
+        exchange_sequence=471,
+        event_at=before.event_at.replace(year=2025),
+    )
+    def sql_row(e):
+        return (
+            e.market_source_id, e.instrument_id, e.external_symbol,
+            e.exchange_sequence, e.exec_id, e.event_at, e.price, e.quantity,
+            e.taker_side, e.source_transport, e.producer_release_commit,
+        )
+    conn = SimpleNamespace(
+        execute=lambda *_: SimpleNamespace(
+            fetchall=lambda: [sql_row(before), sql_row(later)]
+        )
+    )
+    with pytest.raises(NativeTradeEvidenceConflict, match="SAVED_ORDER_CONFLICT"):
+        read_native_candidates(
+            conn,
+            market_source_id=before.market_source_id,
+            instrument_id=before.instrument_id,
+            first_sequence=470,
+            first_exec_ids=frozenset({before.exec_id}),
+            last_sequence=471,
+            last_exec_id=later.exec_id,
+        )
