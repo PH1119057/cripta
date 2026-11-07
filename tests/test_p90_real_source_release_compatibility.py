@@ -456,11 +456,6 @@ def test_reviewed_current_ws_reconnect_delta_is_hash_bound():
 def test_owner_reviewed_recovery_delta_is_immutable_git_blob(
     relative, expected,
 ):
-    from pathlib import Path
-
-    import hashlib
-    import subprocess
-
     # Git source bytes, not Windows CRLF-transformed checkout bytes.
     blob = subprocess.check_output(
         ["git", "show", f"HEAD:src/bybit_workbench/{relative}"],
