@@ -136,19 +136,31 @@ def test_exit_child_dispatch_does_not_complete_or_depend_on_entry_command_state(
     assert len([e for e in db.events if isinstance(e, tuple)]) == 1
 
 
-def test_actual_entry_handler_commits_fill_before_any_exit_preparation():
+def test_actual_entry_handler_finishes_initial_protection_without_exit_decision():
     import inspect
     body = inspect.getsource(runtime.execute_command)
-    start = body.index('_complete_protected_p90_entry(')
-    assert start < body.index('"after_protected_first_fill"')
-    assert start < body.index('handoff_real_first_protected_fill(')
-    assert 'raise P90RealExitHandoffBlocked(' in body
-    worker = inspect.getsource(runtime.command_worker_loop)
-    assert worker.index('except P90RealExitHandoffBlocked') < worker.index(
-        'except ExchangeMutationBarrier', worker.index('execute_command(connection')
+    start = body.index("_complete_protected_p90_entry(")
+    assert start < body.index("reconcile(connection, key, secret, \"after_command\")")
+    assert "handoff_real_first_protected_fill(" not in body
+    assert "_execute_first_fill_trailing(" not in body
+    # The independent Exit owner discovers the durable OPEN position; Entry
+    # neither evaluates an ExitPlan nor sends a Bybit trailing command.
+    consumer = Path("operations/connectivity/universal_exit_consumer.py").read_text(
+        encoding="utf-8",
     )
-    failure_path = worker[worker.index('except Exception as exc:'):]
-    assert "WHERE command_id=%s AND state='running'" in failure_path
+    assert "run_p90_exit_once(connection, now=current)" in consumer
+    owner = Path("operations/connectivity/p90_real_independent_exit.py").read_text(
+        encoding="utf-8",
+    )
+    assert "P90RealPostfillExitPort(" in owner
+    assert "P90RealExitExecutionPort(" in owner
+    assert "read_real_postfill_source_window(" in owner
+    # Existing private worker remains the only Exchange mutation executor.
+    worker = inspect.getsource(runtime.command_worker_loop)
+    assert worker.index("except P90RealExitHandoffBlocked") < worker.index(
+        "except ExchangeMutationBarrier", worker.index("execute_command(connection")
+    )
+
 
 
 def test_exit_incident_logging_failure_cannot_leave_new_entries_enabled():
