@@ -28,7 +28,11 @@ from bybit_workbench.universal_exit.execution_store import (
 )
 from bybit_workbench.universal_exit.loader import load_exit_binding
 
-from p90_real_independent_exit import run_p90_exit_once
+# Compatible with both installed script entrypoint and package imports in CI.
+if __package__:
+    from .p90_real_independent_exit import run_p90_exit_once
+else:
+    from p90_real_independent_exit import run_p90_exit_once
 
 DB_DSN = os.environ.get(
     "CRIPTA_DATABASE_DSN",
