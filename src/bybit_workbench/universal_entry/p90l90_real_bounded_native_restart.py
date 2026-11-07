@@ -172,7 +172,9 @@ def resolve_durable_restart_anchor(
     try:
         at = _utc(last_event_at) if isinstance(last_event_at, datetime) else None
         ids = tuple(last_exec_ids)
-        if verified_native_source is not None:
+        if verified_native_source is None:
+            native_rows = latest_rest_rows
+        else:
             if (
                 at is None or not ids or type(last_sequence) is not int
                 or live_anchor is None
@@ -180,18 +182,16 @@ def resolve_durable_restart_anchor(
                 raise P90RealNativeRestartUnverified(
                     "P90_RESTART_VERIFIED_NATIVE_LIVE_BOUNDARY_MISSING"
                 )
+            # Type-narrow inside the only branch that constructs the
+            # independent full-source anchor; REST never receives one.
             assert at is not None and ids
             assert isinstance(last_sequence, int)
             assert live_anchor is not None
-        native_rows = (
-            latest_rest_rows
-            if verified_native_source is None
-            else _require_complete_original_native_source(
+            native_rows = _require_complete_original_native_source(
                 verified_native_source,
                 old=TradeCursor(symbol, ids[0], last_sequence, at),
                 new=live_anchor,
             )
-        )
         if (
             symbol not in _SYMBOLS
             or type(last_sequence) is not int or last_sequence < 0
