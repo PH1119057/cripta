@@ -21,10 +21,56 @@ def runtime(monkeypatch: pytest.MonkeyPatch):
     # Provide that path only in this isolated, no-order test fixture.
     service_root = Path(__file__).resolve().parents[1] / "operations/connectivity"
     monkeypatch.syspath_prepend(str(service_root))
+    monkeypatch.syspath_prepend(str(
+        Path(__file__).resolve().parents[1] / "research/server/connectivity"
+    ))
     return importlib.import_module("operations.connectivity.private_runtime")
 
 
 ACCOUNT = "ta-" + "1" * 32
+
+
+@pytest.mark.parametrize("short,activation", [(False, "100.5"), (True, "99.5")])
+def test_actual_postfill_exit_decision_reaches_native_bybit_parameters(
+    monkeypatch, runtime, short, activation,
+):
+    from test_p90l90_real_postfill_port import _setup
+
+    port, _, _, decisions, proof = _setup(short=short)
+    evaluation = port(**proof)
+    assert decisions[0][0] is evaluation
+    position = proof["position"]
+    raw = dict(proof["private"].position)
+    payload = {
+        **_payload(), "strategy_id": position.strategy_id,
+        "strategy_version": position.strategy_version,
+        "trading_account_id": position.trading_account_id,
+        "strategy_execution_binding_id": position.strategy_execution_binding_id,
+        "exchange_position_key": position.exchange_position_key,
+        "direction": position.direction.value,
+        "action_kind": evaluation.decision.action_kind.value,
+        "requested_mutation": evaluation.decision.requested_mutation.to_dict(),
+    }
+    monkeypatch.setattr(runtime, "TRADING_ACCOUNT_ID", position.trading_account_id)
+    monkeypatch.setattr(runtime, "_universal_exit_position", lambda *a, **kw: raw)
+    posts = []
+    def post(endpoint, params, *a):
+        posts.append((endpoint, params))
+        assert endpoint == "/v5/position/trading-stop"
+        assert Decimal(params["activePrice"]) == Decimal(activation)
+        assert Decimal(params["trailingStop"]) == Decimal("0.35")
+        assert "stopLoss" not in params and "takeProfit" not in params
+        return {"retCode": 0, "result": {}}
+    monkeypatch.setattr(runtime, "api_post", post)
+    monkeypatch.setattr(runtime, "api_get", lambda *a: (
+        {"retCode": 0, "result": {"list": [{**raw, "trailingStop": "0.35"}]}}, {},
+    ))
+    result = runtime._execute_universal_exit_command(
+        None, "fake", "fake", command_id="test", symbol=position.symbol,
+        payload=payload, positions_payload={"retCode": 0, "result": {"list": [raw]}},
+        tick=Decimal("0.01"), qty_step=Decimal("0.001"),
+    )
+    assert result["retCode"] == 0 and len(posts) == 1
 
 
 def _position():
