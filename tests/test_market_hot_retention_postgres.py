@@ -32,7 +32,8 @@ def database():
     import psycopg
 
     conn = psycopg.connect(dsn, autocommit=True, connect_timeout=4)
-    assert conn.execute("SELECT current_database()").fetchone()[0] == "retention_ci"
+    assert os.environ.get("GITHUB_ACTIONS") == "true"
+    assert conn.execute("SELECT current_database()").fetchone()[0] == "cripta"
     for schema in ("research_context", "dispatcher_v2", "mayak_v2"):
         conn.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
         conn.execute(f"CREATE SCHEMA {schema}")
