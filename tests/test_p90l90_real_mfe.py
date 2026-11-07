@@ -260,6 +260,7 @@ class _MfeDB:
             if not matching:
                 return _Row()
             latest = max(matching, key=lambda row: (
+                row["attributes"].get("native_order_index", 0),
                 row["attributes"]["checkpoint"]["cursor_seq"],
                 row["event_at"],
             ))
@@ -418,3 +419,36 @@ def test_real_5m_exit_rejects_missing_or_drifted_mfe_ledger() -> None:
         ledger.load_latest(position=pos, source_commit="b" * 40)
     with pytest.raises(P90RealMfeUnverified, match="ACCOUNT_DRIFT"):
         ledger.load_latest(position=_position(sub=True), source_commit=SHA)
+
+
+def test_verified_mfe_tie_does_not_call_unnecessary_ws_order_attestor() -> None:
+    """Only MFE is order-invariant; source continuity and facts stay verified."""
+    pos = _position()
+    db = _MfeDB()
+    ledger = P90RealMfeLedger(db)
+    first = _cursor(pos, seq=100, exec_id="native-A", millis=3)
+    tied = _cursor(pos, seq=100, exec_id="native-B", millis=3)
+
+    def forbidden_order_probe() -> bool:
+        raise AssertionError("price-extremum MFE must not require WS tie order")
+
+    for cursor, price in ((first, D("100.2")), (tied, D("100.8"))):
+        state = ledger.on_trade(
+            position=pos,
+            source_commit=SHA,
+            fact_id="trade-" + cursor.exec_id,
+            cursor=cursor,
+            price=price,
+            received_at=cursor.traded_at + timedelta(milliseconds=1),
+            source_refs=(f"bybit:publicTrade:{pos.symbol}:{cursor.exec_id}",),
+            first_fill_forward_coverage_proven=True,
+            native_continuity_proven=True,
+            prove_same_timestamp_order=forbidden_order_probe,
+        )
+    assert state.best_favorable_price == D("100.8")
+    assert state.cursor_exec_id == "native-B"
+    assert len(db.saved) == 2
+    latest, fact_id, refs = ledger.load_latest(position=pos, source_commit=SHA)
+    assert latest == state
+    assert fact_id == "trade-native-B"
+    assert refs == (f"bybit:publicTrade:{pos.symbol}:native-B",)
