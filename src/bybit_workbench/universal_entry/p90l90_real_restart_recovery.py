@@ -22,6 +22,15 @@ from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.candle_warmup import (
     cache_approved_bybit_history,
 )
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    bybit_instrument_id,
+)
+from bybit_workbench.market_data.native_public_trade_journal import (
+    NativeTradeCandidateSlice,
+    NativeTradeEvidenceUnavailable,
+    read_native_candidates,
+)
 from bybit_workbench.universal_exit.contracts import (
     ExitActionKind,
     ExitEvaluationStatus,
@@ -94,6 +103,33 @@ def _require(condition: bool, reason: str) -> None:
         raise P90RealOpenSourceRecoveryUnverified(
             "P90_REAL_RESTART_SOURCE_" + reason
         )
+
+
+def _verify_saved_rest_overlap(
+    saved: NativeTradeCandidateSlice | None,
+    replay: Sequence[ReplayTrade],
+) -> None:
+    """Saved native rows corroborate the REST proof, never substitute for it.
+
+    A PostgreSQL range with both cursors is NOT a continuity certificate;
+    an unobserved WS outage can still hide arbitrarily many native events.
+    """
+    if saved is None:
+        return
+    rest = {(trade.seq, trade.exec_id): trade for trade in replay}
+    for event in saved.events:
+        other = rest.get((event.exchange_sequence, event.exec_id))
+        if other is None:
+            continue
+        if (
+            event.event_at != other.traded_at
+            or event.price != Decimal(str(other.price))
+            or event.quantity != Decimal(str(other.size))
+            or event.taker_side != other.side
+        ):
+            raise P90RealOpenSourceRecoveryUnverified(
+                "P90_REAL_RESTART_SOURCE_PERSISTED_NATIVE_REST_CONFLICT"
+            )
 
 
 def _wait_for_live_mirror_cursors(
@@ -362,6 +398,27 @@ def recover_p90_real_open_source(
             "LIVE_MIRROR_FIVE_SYMBOL_CURSORS_MISSING",
         )
 
+        # PostgreSQL is consulted BEFORE bounded REST. It may contain exact
+        # historical native rows, but presence of two cursor IDs does not
+        # prove coverage during a disconnected WS session. Missing evidence
+        # remains explicitly unknown and the existing REST/source proof gates
+        # are retained unchanged for current REAL recovery.
+        saved_native: dict[str, NativeTradeCandidateSlice | None] = {}
+        for symbol in sorted(_SYMBOLS):
+            join = joins[symbol]
+            try:
+                saved_native[symbol] = read_native_candidates(
+                    connection,
+                    market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                    instrument_id=bybit_instrument_id("linear", symbol),
+                    first_sequence=join.last_emitted_trade_sequence,
+                    first_exec_ids=frozenset(join.last_emitted_exec_ids),
+                    last_sequence=live_cursors[symbol].seq,
+                    last_exec_id=live_cursors[symbol].exec_id,
+                )
+            except NativeTradeEvidenceUnavailable:
+                saved_native[symbol] = None
+
         recoveries = {}
         replayed_fact_ids: set[str] = set()
         received_at = datetime.now(UTC)
@@ -386,6 +443,9 @@ def recover_p90_real_open_source(
                 checked_at=datetime.now(UTC),
                 durable_exec_ids=sorted(join.last_emitted_exec_ids),
             )
+
+        for symbol, recovery in recoveries.items():
+            _verify_saved_rest_overlap(saved_native[symbol], recovery.trades)
 
         position_by_symbol = inventory.by_symbol
         mfe_state: dict[str, P90RealMfeCheckpoint | None] = {}
