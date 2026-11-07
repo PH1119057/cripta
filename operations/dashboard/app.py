@@ -3572,6 +3572,25 @@ def _p90_fault_operation_relation(
     )
 
 
+OPERATOR_ERROR_ATTENTION_RESET_AT = datetime(2026, 11, 7, 19, 18, 25, tzinfo=UTC)
+
+
+def _current_operator_error_notice(last_seen: object, detected_at: datetime) -> bool:
+    """Hide old notifications in active attention, never change durable faults."""
+    if last_seen:
+        try:
+            occurred = datetime.fromisoformat(
+                str(last_seen).replace("Z", "+00:00")
+            )
+        except (ValueError, TypeError):
+            return True  # Unparseable evidence cannot be silently hidden.
+    else:
+        occurred = detected_at
+    if occurred.tzinfo is None:
+        return True
+    return occurred.astimezone(UTC) >= OPERATOR_ERROR_ATTENTION_RESET_AT
+
+
 def observer_runtime_fault_state() -> dict[str, object]:
     try:
         with psycopg.connect(
@@ -3610,60 +3629,68 @@ def observer_runtime_fault_state() -> dict[str, object]:
         )
 
         items: list[dict[str, object]] = []
+        archived_items: list[dict[str, object]] = []
         for fault_id, severity, detected_at, exact_ids, payload in rows:
             exact = dict(exact_ids or {})
             details = dict(payload or {})
             detected = detected_at.astimezone(UTC).isoformat()
-            items.append(
-                {
-                    "fault_id": str(fault_id),
-                    "fault_code": OBSERVER_RUNTIME_FAULT_CODE,
-                    "severity": str(severity),
-                    "detected_at": detected,
-                    "first_seen_at": str(details.get("first_seen_at") or detected),
-                    "last_seen_at": str(details.get("last_seen_at") or detected),
-                    "occurrence_count": int(details.get("occurrence_count") or 1),
-                    "error_type": str(details.get("error_type") or ""),
-                    "error_message": str(details.get("error_message") or ""),
-                    "service": str(
-                        details.get("service")
-                        or exact.get("service")
-                        or "cripta-universal-entry-observer.service"
-                    ),
-                    "source_commit": str(
-                        details.get("source_commit")
-                        or exact.get("source_commit")
-                        or ""
-                    ),
-                    "last_observer_epoch_id": details.get("last_observer_epoch_id"),
-                    "owner_resolution_required": bool(
-                        details.get("owner_resolution_required", True)
-                    ),
-                    "last_resolution_reason": details.get("last_resolution_reason"),
-                    "last_resolved_by": details.get("last_resolved_by"),
-                    "last_resolved_at": details.get("last_resolved_at"),
-                    "p90_operation_relation": _p90_fault_operation_relation(
-                        details.get("last_seen_at") or detected,
-                        operation_started_at,
-                    ),
-                    "p90_operation_request_id": operation_request_id,
-                }
-            )
+            item = {
+                "fault_id": str(fault_id),
+                "fault_code": OBSERVER_RUNTIME_FAULT_CODE,
+                "severity": str(severity),
+                "detected_at": detected,
+                "first_seen_at": str(details.get("first_seen_at") or detected),
+                "last_seen_at": str(details.get("last_seen_at") or detected),
+                "occurrence_count": int(details.get("occurrence_count") or 1),
+                "error_type": str(details.get("error_type") or ""),
+                "error_message": str(details.get("error_message") or ""),
+                "service": str(
+                    details.get("service")
+                    or exact.get("service")
+                    or "cripta-universal-entry-observer.service"
+                ),
+                "source_commit": str(
+                    details.get("source_commit")
+                    or exact.get("source_commit")
+                    or ""
+                ),
+                "last_observer_epoch_id": details.get("last_observer_epoch_id"),
+                "owner_resolution_required": bool(
+                    details.get("owner_resolution_required", True)
+                ),
+                "last_resolution_reason": details.get("last_resolution_reason"),
+                "last_resolved_by": details.get("last_resolved_by"),
+                "last_resolved_at": details.get("last_resolved_at"),
+                "p90_operation_relation": _p90_fault_operation_relation(
+                    details.get("last_seen_at") or detected,
+                    operation_started_at,
+                ),
+                "p90_operation_request_id": operation_request_id,
+            }
+            if _current_operator_error_notice(
+                details.get("last_seen_at") or detected, detected_at,
+            ):
+                items.append(item)
+            else:
+                archived_items.append(item)
     except (psycopg.Error, TypeError, ValueError) as exc:
         return {
             "state": "unavailable",
             "count": 0,
             "items": [],
+            "archived_items": [],
             "historical_open_count": 0,
             "superseded_count": 0,
             "error": f"{type(exc).__name__}: {exc}",
         }
 
-    historical_open_count = len(items)
+    historical_open_count = len(items) + len(archived_items)
     return {
         "state": "red" if items else "clear",
         "count": len(items),
         "items": items,
+        "archived_items": archived_items,
+        "attention_reset_at": OPERATOR_ERROR_ATTENTION_RESET_AT.isoformat(),
         "historical_open_count": historical_open_count,
         "superseded_count": 0,
         "p90_operation_request_id": operation_request_id,
