@@ -86,7 +86,6 @@ def test_observer_fault_read_model_exposes_unresolved_durable_evidence(monkeypat
     assert connection.calls[0][1] == (app.OBSERVER_RUNTIME_FAULT_CODE,)
 
 
-
 def test_legacy_observer_errors_are_archived_without_resolution(monkeypatch) -> None:
     old = (
         "observer-fault-old", "ERROR", NOW,
@@ -148,11 +147,10 @@ def test_dashboard_attention_reset_never_masks_current_safety_banners() -> None:
     assert "function isNewErrorNotice(item)" in html
     assert "newNotices=faults.filter(isNewErrorNotice)" in html
     assert "const ownerFaults=faults.filter(" in html
-    assert "const criticalFaults=" in html
+    assert "criticalFaults=(lt.critical_faults||[]).filter(isNewErrorNotice)" in html
     assert "const historical=Array.isArray(value.archived_items)" in html
     assert "faultIds=items.map(" in html  # Receipt excludes archived unseen rows.
     assert "fetch('/api/observer-faults/displayed'" in html
-
 
 
 def test_observer_fault_escalates_dashboard_health_to_red() -> None:
