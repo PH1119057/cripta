@@ -3244,7 +3244,7 @@ def _run_observer_epoch(
             except (
                 P90RealOpenRestartUnverified,
                 P90RealSourceCompatibilityUnverified,
-            ):
+            ) as exc:
                 # Read the current financial gate again. The original
                 # snapshot was taken before history warmup and WS connect;
                 # stale DISARM evidence must not authorize this fallback.
