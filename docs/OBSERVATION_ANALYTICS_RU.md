@@ -1013,6 +1013,8 @@ session/ACK и новый verified cursor. Исторический gap audit н
 и не называть одно API доказательством «данные потеряны».
 Ни `closed_candles`, ни агрегаты не синтезируют native `seq`.
 
+**Owner clarification 2026-11-07 к §7.10.2 (Issue #470).** Observer публикует отдельно PRICE_HISTORY_VERIFIED (аутентичная price-time/trade-ID история и полное покрытие exact необходимого интервала), NATIVE_IDENTITY_VERIFIED (проверенные seq/execId для нужных causal points), NATIVE_CONTINUITY_VERIFIED (только если полный native replay требуется конкретному consumer), EXIT_READY (только независимый Position/Exit owner). Ни один из этих статусов не следует автоматически из другого. Bounded Bybit recent-trade <=1000 — optional fast path, а не универсальное условие восстановления после долгого простоя. PostgreSQL-first, затем проверенные issuer/hash/interval/dedup/provenance внешние архивы и approved retrieval; архивные trdMatchID/time/price без seq достаточны только для доказанных price-history задач, не для выдуманного native seq. Исторический gap не разрушает новую подтверждённую WS epoch unrelated scopes; при OPEN недоказанный обязательный Exit/MFE факт остаётся BLOCKED только в affected scope, Exchange protection сохраняется.
+
 ### 7.10.3 Позиция прежде нового Entry; fault scope
 
 Существующая позиция/ее protection — отдельный приоритетный consumer:
