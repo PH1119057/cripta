@@ -260,21 +260,24 @@ def test_two_connections_keep_protected_fill_and_exit_across_mfe_rollback():
                     assert count(source, "exit_decisions") == 1
                     assert count(source, "simulated_exit_requests") == 1
 
-                # Observer transaction C: immutable source MFE, then a
-                # rejected same-sequence duplicate in another transaction.
+                # Observer transaction C: distinct same-time native IDs
+                # commute for MFE. A forged later reuse of an old native ID
+                # still rolls back independently of the protected Fill/Exit.
                 with source.transaction():
                     first = append_native(source, p, "first", 17, 3)
+                    second = append_native(source, p, "second", 17, 3)
                 assert first.cursor_exec_id == "first"
+                assert second.cursor_exec_id == "second"
                 with (
                     pytest.raises(P90RealMfeUnverified, match="NATIVE_ORDER_NOT_PROVEN"),
                     source.transaction(),
                 ):
-                    append_native(source, p, "second", 17, 3)
+                    append_native(source, p, "second", 17, 4)
                 with owner.transaction():
                     assert count(owner, "simulated_protected_fill") == 1
                     assert count(owner, "exit_decisions") == 1
                     assert count(owner, "simulated_exit_requests") == 1
-                    assert count(owner, "exit_observations") == 2
+                    assert count(owner, "exit_observations") == 3
 
                 # Scoped Entry latch does not delete protected Exit records.
                 with owner.transaction():
