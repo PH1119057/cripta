@@ -47,9 +47,11 @@ class P90VerifiedNativeSourceWindow:
     independently verify completeness, session boundaries and original
     provider identity before constructing this value. max_required_records
     is the exact consumer-specific resource budget in the verified manifest,
-    never a universal 1000/50000-row retrieval policy. The consumer checks
-    the issuer/interval/raw-byte content checksum against the supplied
-    evidence. An absent window always retains the REST-only fail-closed path.
+    never a universal 1000/50000-row retrieval policy. The issuing adapter
+    MUST independently verify source/artifact authenticity and coverage.
+    Here source_sha256 authenticates the normalized rows received from that
+    adapter, NOT the original archive file and NOT coverage by itself.
+    An absent window always retains the REST-only fail-closed path.
     """
 
     symbol: str
@@ -110,6 +112,8 @@ def _require_complete_original_native_source(
         or not 1 <= len(proof.rows) <= proof.max_required_records
         or type(proof.event_count) is not int
         or proof.event_count != len(proof.rows)
+        or not isinstance(proof.coverage_start, datetime)
+        or not isinstance(proof.coverage_end, datetime)
         or proof.coverage_start.tzinfo is None
         or proof.coverage_end.tzinfo is None
         or proof.coverage_start.utcoffset() != timedelta()
@@ -117,10 +121,17 @@ def _require_complete_original_native_source(
         or proof.coverage_start > old.traded_at
         or proof.coverage_end < new.traded_at
         or proof.coverage_end < proof.coverage_start
-        or _source_rows_digest(proof.rows) != proof.source_sha256
     ):
         raise P90RealNativeRestartUnverified(
             "P90_RESTART_VERIFIED_NATIVE_COVERAGE_PROOF_MISSING"
+        )
+    try:
+        digest_matches = _source_rows_digest(proof.rows) == proof.source_sha256
+    except (TypeError, ValueError, OverflowError):
+        digest_matches = False
+    if not digest_matches:
+        raise P90RealNativeRestartUnverified(
+            "P90_RESTART_VERIFIED_NATIVE_EVIDENCE_DIGEST_MISMATCH"
         )
     # Every row must be an original native trade with exact seq+execId.
     # Archived price/time/trdMatchID alone is intentionally rejected.
