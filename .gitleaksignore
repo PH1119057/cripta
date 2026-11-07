@@ -1,0 +1,9 @@
+# Exact Gitleaks fingerprints for two inspected public test-only false positives.
+# They are not account credentials, API tokens or production secret material.
+# SHA512-crypt verifier's intentionally malformed hash test vector (test line 21).
+770a38008d09455433d18746e0447c9560d6e1b7:tests/test_dashboard_password_hash.py:generic-api-key:21
+tests/test_dashboard_password_hash.py:generic-api-key:21
+# MAYAK's deterministic CSV field-name fixture (test line 74; names only).
+7b366ea24037a9f58ac4fc5fd3913a9e45f6ea2c:tests/test_mayak_component_resource_smoke.py:generic-api-key:74
+tests/test_mayak_component_resource_smoke.py:generic-api-key:74
+# Do not ignore whole paths, rules, other commits or other lines.
