@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.16
-**Дата:** 2026-11-04
+**Версия:** 3.17
+**Дата:** 2026-11-07
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -1145,8 +1145,10 @@ SECOND48 exact StrategyVersion. Другие причины закрытия, UN
 **RECONNECTING (Observer transport)** — временная недоступность обязательного
 публичного транспорта/REST audit с конечной политикой повторов, ready=false.
 Это не proof continuity и не financial authorization. После budget exhaustion
-публикуется реальная durable ошибка (OBS §7.7). Кнопка OWNER ARM недоступна;
-отдельная техническая подготовка не имеет права открывать gate (TC §4.14).
+публикуется реальная durable ошибка (OBS §7.7). OWNER ARM для affected required MarketSource/Strategy/TradingAccount scope
+не допускается без обязательного доказательства; неисправность unrelated
+Observer scope не является глобальным veto (TC §4.14/§4.18). Техническая
+подготовка сама gate не открывает.
 
 ## 43. ClosedCandleCorrection — OWNER DECISION 2026-11-05
 
@@ -1156,3 +1158,69 @@ values/provider evidence. Only an approved migration actor writes it. All shared
 candle consumers read the same effective view; runtime neither edits originals
 nor creates corrections automatically. It grants no trading permission and
 never relabels or replays historical causal checkpoints. Owner: ARCH §58.
+
+## 44. PostgreSQL-first Observer and source recovery — OWNER DECISION 2026-11-07
+
+**Required Data Manifest (обязательный контракт данных потребителя)** —
+точно перечисленные факты, которые необходимы текущему
+`EntryPlan`/`ExitPlan`/MFE/аналитическому consumer: owner/reader,
+физический PostgreSQL store/effective view, approved MarketSource/
+InstrumentIdentity, symbol/timeframe либо native event type, UTC
+boundary, lookback/seed, required count/continuity/TTL, provenance,
+retention и способ bounded repair. Не является фильтром Strategy,
+финансовым разрешением либо самостоятельным решением Observer.
+Owner: ARCH §60.1; OBS §7.10.1; TC §4.18.
+
+**PostgreSQL-first market readiness** — проверка и потребление уже
+сохранённого canonical slice из production PostgreSQL **до**
+необходимой догрузки по approved Bybit Public REST; результат
+`READY/PREPARING/BLOCKED` относится к конкретной зависимости.
+Не означает, что любая старая запись считается свежей или что
+`analytics.market_minutes` может заменить exact `publicTrade`.
+
+**Bybit Public WebSocket** — реальный approved transport получения
+новых `publicTrade` и kline (с native identity и временем);
+**Bybit Public REST** — API верификации и bounded gap fetch
+(у recent-trade ограниченное последнее окно, не универсальный
+исторический архив); **Bybit Private signed API** — независимый
+current inventory конкретного TradingAccount (positions, resting/
+conditional orders, actual fills/protection). Это exact физические
+источники. Термин «живой источник» без указания конкретного
+MarketSource, транспорта и instrument **не является каноническим**.
+
+**Durable Native PublicTrade Journal** — будущий общий bounded
+append-only PostgreSQL source-evidence store для подтверждённых
+exact `seq/execId/event_time` и provenance, необходимых активным
+native Entry/Exit/MFE/restart consumers. Не равен OHLCV,
+`market_minutes`, native sequence-id witness table или
+in-memory mirror; actual таблица/retention вводятся отдельно
+reviewed migration, `IMPLEMENTED=NO`. Нельзя удалять
+необходимый Exit/position evidence по общей 24h HOT JSON policy.
+
+**Source Gap / scoped source recovery** — доказанная недостающая
+часть exact required facts, с оригинальной границей, affected
+MarketSource/Instrument/consumer и точной причиной. Восстановленные
+аутентичные события годятся для исторического анализа, но не
+создают права на поздний Execution. Если native `seq` отсутствует,
+не восстанавливать его из свечей или суммарных цен.
+
+**Existing-position-first reconciliation** — при startup/restart
+account/Execution/Position/Exit owners сначала сверяют signed Bybit
+Private positions + SL/TP + fills с PostgreSQL StrategyPosition/
+ExitPlan/MFE/command ledger; продолжают Exchange protection и
+восстанавливают обязательный Exit независимо от нового Entry.
+Не означает автоматический flat, bypass ambiguous mutation или
+полностью VERIFIED Exit по одним биржевым SL/TP.
+
+**Scoped Observer readiness** — typed per-required-dataset,
+symbol/source/Strategy/account dependency proof, потребляемый
+единственным TC §4.13/§4.18 admission classifier. Общий
+`Observer ERROR` сохраняется как monitoring incident, **но не
+самостоятельный глобальный запрет**. Mandatory actual source,
+current exposure, ambiguous command, capital/slot, Exit protection,
+OWNER ARM и release identity остаются строгими. Owner:
+ARCH §55/§60, OBS §7.10, TC §4.18.
+
+Статус изменений: OWNER DECISION; CANON AFTER MERGE;
+новый durable native store / новый scoped adapter NOT IMPLEMENTED;
+финансовый LIVE state не изменяется документацией.
