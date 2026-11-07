@@ -48,6 +48,9 @@ def recovery_db():
             "exit_order_ids jsonb,symbol text,side text",
             "executions": "exec_id text,order_id text,order_link_id text,trading_account_id text,"
             "account_connector_id text,identity_status text,symbol text,side text,exec_qty text",
+            "exchange_order_history": "order_id text,order_link_id text,symbol text,"
+            "side text,order_status text,payload_json text,trading_account_id text,"
+            "account_connector_id text,identity_status text",
         }
         try:
             for table, columns in definitions.items():
@@ -335,3 +338,197 @@ def test_publisher_can_exclude_only_its_exact_unmaterialized_decision(recovery_d
     admin.execute(f"DELETE FROM {schema}.execution_requests")
     admin.execute(f"UPDATE {schema}.exit_decisions SET exit_plan_fingerprint='foreign'")
     assert not ready("own")
+
+
+def _prepare_native_tp(recovery_db):
+    """Original protected TP is fulfilled by Bybit, without a bot close command."""
+    admin, _worker, schema, _recover = recovery_db
+    admin.execute(f"ALTER TABLE {schema}.position_ownership ADD COLUMN position_idx integer")
+    admin.execute(
+        f"ALTER TABLE {schema}.position_ownership "
+        "ADD COLUMN initial_protection_evidence jsonb"
+    )
+    admin.execute(f"ALTER TABLE {schema}.executions ADD COLUMN payload_json text")
+    admin.execute(
+        f"UPDATE {schema}.position_ownership SET side='Sell',actual_qty=16.51,"
+        "position_idx=0,initial_protection_evidence=%s::jsonb,"
+        "exit_order_ids=%s::jsonb,exit_execution_ids=%s::jsonb WHERE position_id='pos'",
+        (
+            json.dumps({"takeProfit": "0.5958", "stopLoss": "0.6661"}),
+            json.dumps(["tp-order"]),
+            json.dumps(["tp-exec"]),
+        ),
+    )
+    admin.execute(
+        f"UPDATE {schema}.executions SET side='Sell',exec_qty='16.51' "
+        "WHERE exec_id='entry-exec'"
+    )
+    admin.execute(
+        f"DELETE FROM {schema}.executions WHERE exec_id IN ('close-a','close-b')"
+    )
+    admin.execute(f"DELETE FROM {schema}.trade_commands WHERE command_id='owner-close'")
+    history = {
+        "stopOrderType": "TakeProfit", "createType": "CreateByTakeProfit",
+        "orderType": "Market", "reduceOnly": "true", "closeOnTrigger": "true",
+        "positionIdx": "0", "triggerPrice": "0.5958",
+        "qty": "16.51", "cumExecQty": "16.51",
+    }
+    execution = {
+        "execType": "Trade", "stopOrderType": "TakeProfit",
+        "createType": "CreateByTakeProfit", "orderId": "tp-order",
+        "orderLinkId": "",
+    }
+    admin.execute(
+        f"INSERT INTO {schema}.exchange_order_history "
+        "(order_id,order_link_id,symbol,side,order_status,payload_json,"
+        "trading_account_id,account_connector_id,identity_status) "
+        "VALUES('tp-order','','DOTUSDT','Sell','Filled',%s,%s,%s,'PROVEN')",
+        (json.dumps(history), ACCOUNT, CONNECTOR),
+    )
+    # The original positive fixture is DOTUSDT LONG. Native TP has opposite Sell
+    # execution; the actual producer has no orderLinkId for exchange-created TP.
+    admin.execute(
+        f"INSERT INTO {schema}.executions "
+        "(exec_id,order_id,order_link_id,trading_account_id,"
+        "account_connector_id,identity_status,symbol,side,exec_qty,payload_json) "
+        "VALUES('tp-exec','tp-order','',%s,%s,'PROVEN','DOTUSDT',"
+        "'Sell','16.51',%s)",
+        (ACCOUNT, CONNECTOR, json.dumps(execution)),
+    )
+
+
+def test_native_takeprofit_recovery_records_original_exchange_provenance(recovery_db):
+    admin, _worker, schema, recover = recovery_db
+    _prepare_native_tp(recovery_db)
+    result = recover()
+    assert result["status"] == "RECOVERED"
+    assert admin.execute(
+        f"SELECT count(*) FROM {schema}.account_entry_safety_blocks"
+    ).fetchone() == (0,)
+    row = admin.execute(
+        f"SELECT evidence FROM {schema}.account_mutation_recovery_events"
+    ).fetchone()[0]
+    assert row["close_proof_mode"] == "EXCHANGE_NATIVE_TAKE_PROFIT"
+    assert row["native_tp_order_id"] == "tp-order"
+    assert row["exit_order_ids"] == ["tp-order"]
+    assert row["exit_execution_ids"] == ["tp-exec"]
+    assert admin.execute(
+        f"SELECT count(*) FROM {schema}.trade_commands "
+        "WHERE command_type IN ('close','strategy_exit')"
+    ).fetchone() == (0,)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "history_missing", "history_unproven", "history_foreign",
+        "history_not_filled", "history_stoploss", "history_wrong_origin",
+        "history_wrong_price", "history_not_reduce", "history_not_close_trigger",
+        "history_wrong_idx", "history_wrong_qty", "history_wrong_side",
+        "execution_unproven", "execution_wrong_origin", "execution_linked",
+        "execution_partial", "execution_missing", "original_tp_missing",
+        "conflicting_bot_close",
+    ],
+)
+def test_native_takeprofit_rejects_unknown_or_ambiguous_provenance(
+    recovery_db, failure
+):
+    import psycopg
+
+    admin, _worker, schema, recover = recovery_db
+    _prepare_native_tp(recovery_db)
+    order = f"{schema}.exchange_order_history"
+    execution = f"{schema}.executions"
+    if failure == "history_missing":
+        admin.execute(f"DELETE FROM {order}")
+    elif failure == "history_unproven":
+        admin.execute(f"UPDATE {order} SET identity_status='UNPROVEN'")
+    elif failure == "history_foreign":
+        admin.execute(f"UPDATE {order} SET account_connector_id='foreign'")
+    elif failure == "history_not_filled":
+        admin.execute(f"UPDATE {order} SET order_status='New'")
+    elif failure == "history_stoploss":
+        admin.execute(
+            f"UPDATE {order} SET payload_json=jsonb_set("
+            "payload_json::jsonb,'{stopOrderType}',"
+            "to_jsonb('StopLoss'::text))::text"
+        )
+    elif failure == "history_wrong_origin":
+        admin.execute(
+            f"UPDATE {order} SET payload_json=jsonb_set("
+            "payload_json::jsonb,'{createType}',"
+            "to_jsonb('CreateByUser'::text))::text"
+        )
+    elif failure == "history_wrong_price":
+        admin.execute(
+            f"UPDATE {order} SET payload_json=jsonb_set("
+            "payload_json::jsonb,'{triggerPrice}',"
+            "to_jsonb('0.5959'::text))::text"
+        )
+    elif failure == "history_not_reduce":
+        admin.execute(
+            f"UPDATE {order} SET payload_json=jsonb_set("
+            "payload_json::jsonb,'{reduceOnly}',"
+            "to_jsonb('false'::text))::text"
+        )
+    elif failure == "history_not_close_trigger":
+        admin.execute(
+            f"UPDATE {order} SET payload_json=jsonb_set("
+            "payload_json::jsonb,'{closeOnTrigger}',"
+            "to_jsonb('false'::text))::text"
+        )
+    elif failure == "history_wrong_idx":
+        admin.execute(
+            f"UPDATE {order} SET payload_json=jsonb_set("
+            "payload_json::jsonb,'{positionIdx}',"
+            "to_jsonb('1'::text))::text"
+        )
+    elif failure == "history_wrong_qty":
+        admin.execute(
+            f"UPDATE {order} SET payload_json=jsonb_set("
+            "payload_json::jsonb,'{cumExecQty}',"
+            "to_jsonb('15.5'::text))::text"
+        )
+    elif failure == "history_wrong_side":
+        admin.execute(f"UPDATE {order} SET side='Buy'")
+    elif failure == "execution_unproven":
+        admin.execute(
+            f"UPDATE {execution} SET identity_status='UNPROVEN' "
+            "WHERE exec_id='tp-exec'"
+        )
+    elif failure == "execution_wrong_origin":
+        admin.execute(
+            f"UPDATE {execution} SET payload_json=jsonb_set("
+            "payload_json::jsonb,'{stopOrderType}',"
+            "to_jsonb('StopLoss'::text))::text WHERE exec_id='tp-exec'"
+        )
+    elif failure == "execution_linked":
+        admin.execute(
+            f"UPDATE {execution} SET order_link_id='forged-bot-command' "
+            "WHERE exec_id='tp-exec'"
+        )
+    elif failure == "execution_partial":
+        admin.execute(
+            f"UPDATE {execution} SET exec_qty='12' WHERE exec_id='tp-exec'"
+        )
+    elif failure == "execution_missing":
+        admin.execute(f"DELETE FROM {execution} WHERE exec_id='tp-exec'")
+    elif failure == "original_tp_missing":
+        admin.execute(
+            f"UPDATE {schema}.position_ownership "
+            "SET initial_protection_evidence='{}'::jsonb"
+        )
+    elif failure == "conflicting_bot_close":
+        admin.execute(
+            f"INSERT INTO {schema}.trade_commands VALUES "
+            "('conflict',%s,'PROVEN','completed','close',%s)",
+            (ACCOUNT, json.dumps({"strategy_position_id": "pos"})),
+        )
+    with pytest.raises(psycopg.errors.RaiseException, match="MUTATION_RECOVERY_NATIVE_TP_"):
+        recover()
+    assert admin.execute(
+        f"SELECT count(*) FROM {schema}.account_entry_safety_blocks"
+    ).fetchone() == (1,)
+    assert admin.execute(
+        f"SELECT count(*) FROM {schema}.account_mutation_recovery_events"
+    ).fetchone() == (0,)
