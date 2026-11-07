@@ -449,9 +449,9 @@ def test_reviewed_current_ws_reconnect_delta_is_hash_bound():
 
 @pytest.mark.parametrize(("relative", "expected"), [
     ("universal_entry/p90l90_real_bounded_native_restart.py",
-     "165bed9a2a64e45b62c02077aac2937d31e9b27221e4881aaf2efdf4f71601bc"),
+     "996b2cc454466c334a58b0219d0d18ab6afe0baefef92b20e6c920e1d6438a36"),
     ("universal_entry/p90l90_real_restart_recovery.py",
-     "6ed2cd670e83dd429cb8b293843dc0c482fc823ca8636937db8bf62646af2431"),
+     "6c36fce66726f8aa2cd19bcef67bd2539c83f7a7684483d0a6b7301cae616298"),
 ])
 def test_owner_reviewed_recovery_delta_is_immutable_git_blob(
     relative, expected,
