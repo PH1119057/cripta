@@ -2626,7 +2626,10 @@ def _run_observer_epoch(
 
     if p90_real_source_only or p90_real_staged:
         preparation_progress({"stage": "HISTORY_SEED"})
-    for symbol in symbols:
+    # A new no-order native market epoch must NOT wait for historical
+    # PREV7D geometry or P90 Exit warmup. Those belong to their consumers.
+    # Source gaps remain in audit; no historical Entry/Exit is reconstructed.
+    for symbol in (() if p90_repair_ingest_only else symbols):
         observed = datetime.now(UTC)
         if p90_real_source_only or p90_real_staged:
             preparation_progress({"stage": "HISTORY_SEED", "symbol": symbol})
@@ -3216,7 +3219,10 @@ def _run_observer_epoch(
             )
         if trade_mirror.snapshot()["state"] != "ACTIVE":
             raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
-        oi_thread.start()
+        if not p90_repair_ingest_only:
+            # No Entry plan or OI consumer exists in source-repair-only mode.
+            # A current publicTrade source must not fail on missing OI samples.
+            oi_thread.start()
         preflight_restart_epoch_id: str | None = None
         if p90_real_live:
             from bybit_workbench.universal_entry.p90l90_real_open_restart import (
