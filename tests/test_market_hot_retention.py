@@ -101,3 +101,40 @@ def test_triggers_must_remain_enabled_after_apply_codepath():
                    'analytics.market_minutes', 'control.execution_gates'):
         assert f'DELETE FROM {target}' not in text
         assert f'UPDATE {target}' not in text
+
+
+def test_immutable_trigger_schema_drift_fails_closed():
+    class ChangedSchema:
+        def execute(self, _sql, _params):
+            return self
+
+        def fetchall(self):
+            return []
+
+    with pytest.raises(RuntimeError, match="TRIGGER_CONTRACT_CHANGED"):
+        MODULE.check_triggers(ChangedSchema())
+
+
+def test_non_postgres_actor_cannot_apply_without_db_writes(monkeypatch):
+    if sys.platform == "linux":
+        monkeypatch.setattr(MODULE.os, "geteuid", lambda: -1)
+        message = "RETENTION_POSTGRES_UNIX_ACTOR_REQUIRED"
+    else:
+        message = "RETENTION_LINUX_REQUIRED"
+    with pytest.raises(RuntimeError, match=message):
+        MODULE.run_apply(None, None, 1)
+
+
+def test_historical_report_distinguishes_policy_expiration():
+    report = (ROOT / "operations/monitoring/mayak_v2_report.py").read_text()
+    assert "EXPIRED_HOT_TELEMETRY" in report
+    assert "payload->>'_cripta_hot_telemetry'='EXPIRED_24H'" in report
+
+
+def test_release_installs_inert_units_and_preserves_activation_state():
+    installer = (ROOT / "operations/infrastructure/install_verified_release.sh").read_text()
+    assert "operations/systemd/cripta-market-hot-retention.service|" in installer
+    assert "operations/systemd/cripta-market-hot-retention.timer|" in installer
+    assert "cripta-market-hot-retention.service" in installer
+    assert "cripta-market-hot-retention.timer" in installer
+    assert "systemctl enable cripta-market-hot-retention.timer" not in installer
