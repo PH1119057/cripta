@@ -355,6 +355,22 @@ def test_21_hour_outage_can_use_complete_original_native_source_not_rest_page() 
         )
 
 
+def test_long_native_window_budget_is_consumer_specific_not_50000() -> None:
+    case = _case()
+    case["latest_rest_rows"] = [_row(NEW)]
+    proof = replace(_long_native_source_window(), max_required_records=50001)
+    # The exact issuer/consumer budget is allowed to be above the old 50k
+    # placeholder; only the physically supplied attested records are replayed.
+    result = attest_bounded_native_restart(
+        **{
+            **case,
+            "verified_native_source": proof,
+            "verify_coverage": lambda candidate: candidate is proof,
+        },
+    )
+    assert len(result.trades) == 1201
+
+
 def test_source_metadata_cannot_self_certify_native_continuity() -> None:
     case = _case()
     case["latest_rest_rows"] = [_row(NEW)]
