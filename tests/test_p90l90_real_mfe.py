@@ -119,7 +119,7 @@ def test_broken_exchange_protection_and_cross_account_are_rejected() -> None:
         )
 
 
-def test_after_fill_replay_never_rewinds_sequence_or_uses_same_time_ambiguity() -> None:
+def test_after_fill_replay_never_rewinds_sequence_or_time() -> None:
     pos = _position()
     state = P90RealMfeCheckpoint.begin(
         position=pos, source_commit=SHA, first_cursor=_cursor(pos),
@@ -127,7 +127,6 @@ def test_after_fill_replay_never_rewinds_sequence_or_uses_same_time_ambiguity() 
     )
     for cursor in (
         _cursor(pos, seq=99, exec_id="old", millis=4),
-        _cursor(pos, seq=100, exec_id="parallel", millis=3),
         _cursor(pos, seq=100, exec_id="late", millis=2),
     ):
         with pytest.raises(P90RealMfeUnverified, match="ORDER_NOT_PROVEN"):
@@ -165,7 +164,7 @@ def test_tampered_restored_checkpoint_and_wrong_account_fail_closed() -> None:
         )
 
 
-def test_same_seq_equal_ms_requires_source_owned_delivery_proof() -> None:
+def test_same_seq_equal_ms_uses_verified_native_identity_not_extra_mfe_order() -> None:
     pos = _position()
     first = _cursor(pos, seq=101, exec_id="original-A", millis=3)
     tied = _cursor(pos, seq=101, exec_id="original-B", millis=3)
@@ -173,11 +172,13 @@ def test_same_seq_equal_ms_requires_source_owned_delivery_proof() -> None:
         position=pos, source_commit=SHA, first_cursor=first,
         first_price=D("100.1"), verified_fill_to_first_trade_coverage=True,
     )
-    with pytest.raises(P90RealMfeUnverified, match="NATIVE_ORDER_NOT_PROVEN"):
-        prior.advance(
-            position=pos, cursor=tied, price=D("100.5"),
-            proven_contiguous_native_cursor=True,
-        )
+    # Max/min is commutative for distinct identities with tied native time.
+    without_order_proof = prior.advance(
+        position=pos, cursor=tied, price=D("100.5"),
+        proven_contiguous_native_cursor=True,
+    )
+    assert without_order_proof.cursor_exec_id == tied.exec_id
+    assert without_order_proof.best_favorable_price == D("100.5")
     with pytest.raises(P90RealMfeUnverified, match="NATIVE_CURSOR_GAP"):
         prior.advance(
             position=pos, cursor=tied, price=D("100.5"),
