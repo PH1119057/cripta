@@ -2293,12 +2293,41 @@ def _scoped_p90_repair_ingest_allowed(
     )
 
 
+def _p90_native_recovery_failure(exc: Exception) -> bool:
+    """Only an exact P90 recovery/certification failure can isolate ingress."""
+    from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+        P90RealOpenRestartUnverified,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
+        P90RealOpenSourceRecoveryUnverified,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_bounded_native_restart import (
+        P90RealNativeRestartUnverified,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+        P90RealSourceCompatibilityUnverified,
+    )
+    from bybit_workbench.universal_exit.p90l90_real_mfe import (
+        P90RealMfeUnverified,
+    )
+
+    return isinstance(exc, (
+        P90RealOpenRestartUnverified,
+        P90RealOpenSourceRecoveryUnverified,
+        P90RealNativeRestartUnverified,
+        P90RealSourceCompatibilityUnverified,
+        P90RealMfeUnverified,
+    ))
+
+
 def _run_observer_epoch(
     connection: Any,
     bundles: tuple[object, ...],
     stopping: Callable[[], bool],
     service_started_at: datetime,
     preparation_budget: PreparationBudget | None = None,
+    *,
+    source_repair_only: bool = False,
 ) -> str:
     epoch_started = datetime.now(UTC)
     signature = _observer_light_signature(connection)
@@ -2339,7 +2368,30 @@ def _run_observer_epoch(
         ).fetchone()
         gate_enabled = bool(gate and gate[0])
         gate_reason = str(gate[1] or "") if gate else ""
-        if p90_real_force_source_only:
+        if source_repair_only:
+            # This flag can only come from an already recorded P90 recovery
+            # failure in THIS process, never an environment variable/owner
+            # permission. Recheck the current private admission boundary.
+            row = connection.execute(
+                "SELECT count(*) FROM runtime.position_ownership "
+                "WHERE strategy_version=%s "
+                "AND state IN ('OPEN','RECONCILIATION_REQUIRED')",
+                (P90_REAL_VERSION,),
+            ).fetchone()
+            if (
+                p90_real_force_source_only
+                or row is None or row[0] <= 0
+                or not _scoped_p90_repair_ingest_allowed(
+                    degraded=True,
+                    mainnet_gate_enabled=gate_enabled,
+                    selected_real_activations=selected,
+                    ordinary_consumer_count=len(observer_split.ordinary),
+                    paper_consumer_count=len(observer_split.p90_paper),
+                )
+            ):
+                raise RuntimeError("P90_SCOPED_SOURCE_REPAIR_FINANCIAL_SCOPE_INVALID")
+            p90_repair_ingest_only = True
+        elif p90_real_force_source_only:
             if not _p90_source_only_gate_compatible(
                 gate_enabled=gate_enabled,
                 gate_reason=gate_reason,
@@ -3989,6 +4041,9 @@ def _run_multi_strategy_observer() -> None:
     disconnect_count = 0
     disconnect_window_started = 0.0
     preparation_budget = PreparationBudget()
+    # Set only following an exact P90 restart failure plus durable fault.
+    # This does NOT repair the open position or authorize Entry/Exit.
+    force_p90_source_repair = False
 
     def stop(_signum: int, _frame: object) -> None:
         nonlocal stopping_flag
@@ -4042,6 +4097,7 @@ def _run_multi_strategy_observer() -> None:
                     lambda: stopping_flag,
                     service_started_at,
                     preparation_budget=preparation_budget,
+                    source_repair_only=force_p90_source_repair,
                 )
                 if outcome == "STOP":
                     break
@@ -4129,6 +4185,52 @@ def _run_multi_strategy_observer() -> None:
                     raise RuntimeError(
                         "Universal Entry observer durable fault persistence failed"
                     ) from persist_exc
+                # P90's protected OPEN Exit remains fail-closed, but a
+                # previously failed P90 native cursor is not a reason to
+                # terminate the *same* public MarketSource ingest forever.
+                # Exact eligibility is independently rechecked by the next
+                # epoch before constructing any consumer.
+                source_repair_requested = False
+                if _p90_native_recovery_failure(exc):
+                    split = partition_observer_strategies(bundles)
+                    if split.p90_real:
+                        selected = _real_execution_selected_activation_ids(
+                            connection, split.p90_real,
+                        )
+                        gate = connection.execute(
+                            "SELECT enabled FROM control.execution_gates "
+                            "WHERE mode='mainnet'"
+                        ).fetchone()
+                        exposure = connection.execute(
+                            "SELECT count(*) FROM runtime.position_ownership "
+                            "WHERE strategy_version=%s AND state IN "
+                            "('OPEN','RECONCILIATION_REQUIRED')",
+                            (P90_REAL_VERSION,),
+                        ).fetchone()
+                        source_repair_requested = (
+                            gate == (False,)
+                            and exposure is not None and exposure[0] > 0
+                            and _scoped_p90_repair_ingest_allowed(
+                                degraded=True,
+                                mainnet_gate_enabled=False,
+                                selected_real_activations=selected,
+                                ordinary_consumer_count=len(split.ordinary),
+                                paper_consumer_count=len(split.p90_paper),
+                            )
+                        )
+                if source_repair_requested and not force_p90_source_repair:
+                    force_p90_source_repair = True
+                    _observer_status(
+                        state="SOURCE_REPAIR_PREPARING", epoch_id=None,
+                        active_bundles=(), symbols=(),
+                        reason=(
+                            "P90_OPEN_EXIT_BLOCKED_PREPARING_NATIVE_INGEST "
+                            f"[fault_id={fault_id}]"
+                        ),
+                    )
+                    # Last old WS/mirror workers already joined in finally.
+                    # One next invocation creates a new verified WS epoch.
+                    continue
                 _observer_status(
                     state="ERROR",
                     epoch_id=None,
