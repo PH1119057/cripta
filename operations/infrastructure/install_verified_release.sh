@@ -238,6 +238,9 @@ unit_specs=(
   "operations/systemd/cripta-lifecycle-supervisor.service|cripta-lifecycle-supervisor.service|runtime"
   "operations/systemd/cripta-m3-trade-analyst.service|cripta-m3-trade-analyst.service|runtime"
   "operations/systemd/cripta-mayak-v2.service|cripta-mayak-v2.service|runtime"
+  # Installed for reviewed retention cutover, but never enabled automatically.
+  "operations/systemd/cripta-market-hot-retention.service|cripta-market-hot-retention.service|runtime"
+  "operations/systemd/cripta-market-hot-retention.timer|cripta-market-hot-retention.timer|runtime"
   "operations/systemd/cripta-mayak-v2-report.service|cripta-mayak-v2-report.service|runtime"
   "operations/systemd/cripta-mayak-v2-weekly-report.service|cripta-mayak-v2-weekly-report.service|runtime"
   "research/server/monitoring/cripta-opportunity-tracker.service|cripta-opportunity-tracker.service|runtime"
@@ -387,6 +390,9 @@ managed_services=(
   cripta-lifecycle-supervisor.service
   cripta-m3-trade-analyst.service
   cripta-mayak-v2.service
+  # Preserve exact active/inactive state across releases; new timer defaults OFF.
+  cripta-market-hot-retention.service
+  cripta-market-hot-retention.timer
   cripta-opportunity-tracker.service
   cripta-position-supervisor.service
   cripta-private-runtime.service
