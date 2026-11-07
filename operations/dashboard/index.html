@@ -1658,7 +1658,7 @@ function renderObserverFaults(model){
   }
   banner.hidden=false;
   const totalOccurrences=items.reduce((n,x)=>n+Math.max(1,Number(x.occurrence_count)||1),0);
-  summary.textContent=`Открытых проблем: ${items.length} · зарегистрировано срабатываний: ${totalOccurrences}. Это новая лента после 8 ноября 2026, отдельно от журнала истории; старые записи доступны в свёрнутом архиве и сохраняют исходный статус.`;
+  summary.textContent=`Открытых проблем: ${items.length} · зарегистрировано срабатываний: ${totalOccurrences}. Это отдельный durable-журнал, а не статус текущей кнопки OWNER ARM. Текущая лента после 8 ноября 2026 показывает только новые ошибки; прежние записи доступны в свёрнутом архиве без изменения их статуса.`;
   body.innerHTML=items.map(x=>{
     const first=x.first_seen_at?new Date(x.first_seen_at).toLocaleString('ru-RU'):'—';
     const last=x.last_seen_at?new Date(x.last_seen_at).toLocaleString('ru-RU'):'—';
