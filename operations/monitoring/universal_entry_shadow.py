@@ -2274,6 +2274,25 @@ def _observer_unknown_prestart_warmup_seconds(
     return max(horizons, default=0)
 
 
+def _scoped_p90_repair_ingest_allowed(
+    *, degraded: bool, mainnet_gate_enabled: bool,
+    selected_real_activations: frozenset[str],
+    ordinary_consumer_count: int, paper_consumer_count: int,
+) -> bool:
+    """A disarmed single-owner native ingest, never an Exit or Entry repair.
+
+    Preserve other active consumers; do not detach their owners to enable this
+    narrow source-only exception. A signed OPEN Exit must still recover alone.
+    """
+    return (
+        degraded is True
+        and mainnet_gate_enabled is False
+        and not selected_real_activations
+        and ordinary_consumer_count == 0
+        and paper_consumer_count == 0
+    )
+
+
 def _run_observer_epoch(
     connection: Any,
     bundles: tuple[object, ...],
@@ -2303,6 +2322,8 @@ def _run_observer_epoch(
     p90_real_live = False
     p90_real_staged = False
     p90_real_degraded = False
+    # Never conflate a new verified WS source with the blocked OPEN P90 Exit.
+    p90_repair_ingest_only = False
     if observer_split.p90_real:
         if len(observer_split.p90_real) != 2 or len(LOADED_COMMIT) != 40:
             raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
@@ -2960,6 +2981,12 @@ def _run_observer_epoch(
                         is_closed=True,
                     )
                 )
+        if p90_repair_ingest_only:
+            # Source-owned native journal/closed bars have already been
+            # appended in the original MarketSource transaction. Never
+            # evaluate Entry, MFE or Exit on this blocked P90 epoch.
+            facts_received += 1
+            return
         refresh_inputs(fact.observed_at)
         contexts: dict[str, ObjectiveContext] = {}
         if global_context is not None and global_context.observed_at <= fact.observed_at:
@@ -3142,10 +3169,36 @@ def _run_observer_epoch(
                 inspect_p90_real_open_restart_epoch,
             )
 
-            preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(
-                connection, source_commit=LOADED_COMMIT,
-                bundles=tuple(observer_split.p90_real),
+            from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+                P90RealOpenRestartUnverified,
             )
+            from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+                P90RealSourceCompatibilityUnverified,
+            )
+
+            try:
+                preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(
+                    connection, source_commit=LOADED_COMMIT,
+                    bundles=tuple(observer_split.p90_real),
+                )
+            except (
+                P90RealOpenRestartUnverified,
+                P90RealSourceCompatibilityUnverified,
+            ):
+                if not _scoped_p90_repair_ingest_allowed(
+                    degraded=p90_real_degraded,
+                    mainnet_gate_enabled=gate_enabled,
+                    selected_real_activations=selected,
+                    ordinary_consumer_count=len(observer_split.ordinary),
+                    paper_consumer_count=len(observer_split.p90_paper),
+                ):
+                    raise
+                # Only a fresh WS/publicTrade MarketSource may continue.
+                # The original P90 source epoch, signed private state and
+                # protected OPEN Exit remain unverified and untouched.
+                p90_repair_ingest_only = True
+                p90_real_live = False
+                p90_real_degraded = False
         if p90_real_source_only or (
             p90_real_staged and preflight_restart_epoch_id is None
         ):
@@ -3591,18 +3644,24 @@ def _run_observer_epoch(
         next_signature = 0.0
         initial_running = sensor_ready(datetime.now(UTC))
         _observer_status(
-            state="RUNNING" if initial_running else "WARMUP",
+            state=(
+                "SOURCE_REPAIR_ONLY" if p90_repair_ingest_only
+                else ("RUNNING" if initial_running else "WARMUP")
+            ),
             epoch_id=epoch_id,
-            active_bundles=bundles,
+            active_bundles=() if p90_repair_ingest_only else bundles,
             symbols=symbols,
             warmup_until=warmup_until,
             reason=(
-                "P90_REAL_OWNER_ARM_STAGE_READY"
-                if p90_real_staged and initial_running
-                else (
-                    "P90_REAL_DEGRADED_EXIT_ONLY"
-                    if p90_real_degraded and initial_running
-                    else "causal seed complete"
+                "P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY"
+                if p90_repair_ingest_only else (
+                    "P90_REAL_OWNER_ARM_STAGE_READY"
+                    if p90_real_staged and initial_running
+                    else (
+                        "P90_REAL_DEGRADED_EXIT_ONLY"
+                        if p90_real_degraded and initial_running
+                        else "causal seed complete"
+                    )
                 )
             ),
             sensor_status=sensor_status(datetime.now(UTC)),
@@ -3842,22 +3901,28 @@ def _run_observer_epoch(
             if now_mono >= next_status:
                 running = sensor_ready(datetime.now(UTC))
                 _observer_status(
-                    state="RUNNING" if running else "WARMUP",
+                    state=(
+                        "SOURCE_REPAIR_ONLY" if p90_repair_ingest_only
+                        else ("RUNNING" if running else "WARMUP")
+                    ),
                     epoch_id=epoch_id,
-                    active_bundles=bundles,
+                    active_bundles=() if p90_repair_ingest_only else bundles,
                     symbols=symbols,
                     facts_received=facts_received,
                     evaluations=evaluations_count,
                     signals=signals_count,
                     warmup_until=warmup_until,
                     reason=(
-                        (
-                            "P90_REAL_DEGRADED_EXIT_ONLY"
-                            if p90_real_degraded
-                            else "all active StrategyPlans consume one causal fact stream"
+                        "P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY"
+                        if p90_repair_ingest_only else (
+                            (
+                                "P90_REAL_DEGRADED_EXIT_ONLY"
+                                if p90_real_degraded
+                                else "all active StrategyPlans consume one causal fact stream"
+                            )
+                            if running
+                            else "waiting for plan-owned pre-start influence/sensor completeness"
                         )
-                        if running
-                        else "waiting for plan-owned pre-start influence/sensor completeness"
                     ),
                     sensor_status=sensor_status(datetime.now(UTC)),
                     strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
