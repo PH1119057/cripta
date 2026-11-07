@@ -2702,7 +2702,9 @@ def _run_observer_epoch(
     oi_config = Oi30sConfig(
         fact_source_id=FACT_SOURCE_ID,
         required_symbols=(
-            tuple(sorted(ordinary_symbols)) if p90_repair_ingest_only else symbols
+            tuple(sorted(ordinary_symbols))
+            if p90_repair_ingest_only and ordinary_symbols
+            else symbols
         ),
         slot_seconds=30,
         request_timeout_seconds=5.0,
