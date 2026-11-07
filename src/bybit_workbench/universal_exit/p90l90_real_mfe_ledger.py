@@ -122,21 +122,17 @@ class P90RealMfeLedger:
                 native_order_index = stored_index + 1
             if prior.source_commit != source_commit:
                 raise P90RealMfeUnverified("P90_REAL_MFE_SOURCE_RELEASE_DRIFT")
-            tied = (
-                prior.cursor_seq == cursor.seq
-                and prior.cursor_at == cursor.traded_at.astimezone(UTC)
-                and prior.cursor_exec_id != cursor.exec_id
-            )
-            order_verified = (
-                prove_same_timestamp_order() is True
-                if tied and prove_same_timestamp_order is not None else False
-            )
+            # Verified native identities and contiguous source coverage still
+            # gate MFE. Distinct trades with equal seq/time are commutative
+            # for the price extremum, so do not invoke the optional original
+            # WS delivery-order attestor just to update the MFE ledger.
+            # Keep its argument for existing source-owner call compatibility;
+            # live Exit decisions retain their separate causal source checks.
             checkpoint = prior.advance(
                 position=position,
                 cursor=cursor,
                 price=price,
                 proven_contiguous_native_cursor=native_continuity_proven,
-                proven_same_timestamp_delivery_order=order_verified,
             )
             if checkpoint is prior:
                 if (
