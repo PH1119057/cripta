@@ -2339,6 +2339,8 @@ def _run_observer_epoch(
     # gated on exact durable restart and 90-day code/ledger parity.
     observer_split = partition_observer_strategies(bundles)
     require_p90_policy_before_registry(observer_split)
+    if source_repair_only and not observer_split.p90_real:
+        raise RuntimeError("P90_SOURCE_REPAIR_STRATEGY_TOPOLOGY_DRIFT")
     # REAL v3 is NEVER allowed through the ordinary Strategy registry.
     # The opt-in SOURCE_ONLY diagnostic below may construct a true native
     # REAL consumer, but it is hard-disabled for every Exchange/order path.
