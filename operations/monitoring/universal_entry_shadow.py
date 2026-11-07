@@ -2277,18 +2277,16 @@ def _observer_unknown_prestart_warmup_seconds(
 def _scoped_p90_repair_ingest_allowed(
     *, degraded: bool, mainnet_gate_enabled: bool,
     selected_real_activations: frozenset[str],
-    ordinary_consumer_count: int, paper_consumer_count: int,
+    paper_consumer_count: int,
 ) -> bool:
-    """A disarmed single-owner native ingest, never an Exit or Entry repair.
+    """Scope failed P90 REAL Exit without evicting independent ordinary Plans.
 
-    Preserve other active consumers; do not detach their owners to enable this
-    narrow source-only exception. A signed OPEN Exit must still recover alone.
+    P90 PAPER has its own native recovery and must not be detached here.
     """
     return (
         degraded is True
         and mainnet_gate_enabled is False
         and not selected_real_activations
-        and ordinary_consumer_count == 0
         and paper_consumer_count == 0
     )
 
@@ -2387,7 +2385,6 @@ def _run_observer_epoch(
                     degraded=True,
                     mainnet_gate_enabled=gate_enabled,
                     selected_real_activations=selected,
-                    ordinary_consumer_count=len(observer_split.ordinary),
                     paper_consumer_count=len(observer_split.p90_paper),
                 )
             ):
@@ -2586,17 +2583,23 @@ def _run_observer_epoch(
             }
         )[:32]
     )
-    warmup_seconds = _observer_unknown_prestart_warmup_seconds(bundles, service_started_at)
+    # Blocked P90 Exit cannot extend warmup for independent Entry consumers.
+    active_source_consumers = (
+        tuple(observer_split.ordinary) if p90_repair_ingest_only else bundles
+    )
+    warmup_seconds = _observer_unknown_prestart_warmup_seconds(
+        active_source_consumers, service_started_at,
+    )
     warmup_until = epoch_started + timedelta(seconds=warmup_seconds)
     required_flow_symbols = {
         symbol
-        for bundle in cast(Any, bundles)
+        for bundle in cast(Any, active_source_consumers)
         if bool(bundle.entry_plan.watch_policy.to_dict().get("flow", {}).get("enabled", False))
         for symbol in bundle.entry_plan.symbols
     }
     required_oi_symbols = {
         symbol
-        for bundle in cast(Any, bundles)
+        for bundle in cast(Any, active_source_consumers)
         if bool(bundle.entry_plan.watch_policy.to_dict().get("oi", {}).get("enabled", False))
         for symbol in bundle.entry_plan.symbols
     }
@@ -2629,7 +2632,9 @@ def _run_observer_epoch(
     # A new no-order native market epoch must NOT wait for historical
     # PREV7D geometry or P90 Exit warmup. Those belong to their consumers.
     # Source gaps remain in audit; no historical Entry/Exit is reconstructed.
-    for symbol in (() if p90_repair_ingest_only else symbols):
+    for symbol in (
+        tuple(sorted(ordinary_symbols)) if p90_repair_ingest_only else symbols
+    ):
         observed = datetime.now(UTC)
         if p90_real_source_only or p90_real_staged:
             preparation_progress({"stage": "HISTORY_SEED", "symbol": symbol})
@@ -2640,7 +2645,9 @@ def _run_observer_epoch(
         )
         history = _fetch_history(
             symbol, observed, intervals,
-            p90l90_full_prev7d=symbol in p90l90_symbols,
+            p90l90_full_prev7d=(
+                symbol in p90l90_symbols and not p90_repair_ingest_only
+            ),
             p90_gap_from=recovery_from,
         )
         # One MarketSource OHLC repository, never per-Strategy/per-account
@@ -2694,7 +2701,9 @@ def _run_observer_epoch(
     deduper = ExactFactDeduper()
     oi_config = Oi30sConfig(
         fact_source_id=FACT_SOURCE_ID,
-        required_symbols=symbols,
+        required_symbols=(
+            tuple(sorted(ordinary_symbols)) if p90_repair_ingest_only else symbols
+        ),
         slot_seconds=30,
         request_timeout_seconds=5.0,
         retry_interval_seconds=0.25,
@@ -3038,10 +3047,9 @@ def _run_observer_epoch(
                         is_closed=True,
                     )
                 )
-        if p90_repair_ingest_only:
-            # Source-owned native journal/closed bars have already been
-            # appended in the original MarketSource transaction. Never
-            # evaluate Entry, MFE or Exit on this blocked P90 epoch.
+        if p90_repair_ingest_only and not observer_split.ordinary:
+            # Pure source ingest bypasses all consumers. In a mixed epoch
+            # independent ordinary Plans remain active and own their effects.
             facts_received += 1
             return
         refresh_inputs(fact.observed_at)
@@ -3219,9 +3227,9 @@ def _run_observer_epoch(
             )
         if trade_mirror.snapshot()["state"] != "ACTIVE":
             raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
-        if not p90_repair_ingest_only:
-            # No Entry plan or OI consumer exists in source-repair-only mode.
-            # A current publicTrade source must not fail on missing OI samples.
+        if not p90_repair_ingest_only or observer_split.ordinary:
+            # Keep original OI worker for ordinary consumers. Pure native
+            # source-only ingest has no OI dependency.
             oi_thread.start()
         preflight_restart_epoch_id: str | None = None
         if p90_real_live:
@@ -3684,15 +3692,20 @@ def _run_observer_epoch(
         initial_running = sensor_ready(datetime.now(UTC))
         _observer_status(
             state=(
-                "SOURCE_REPAIR_ONLY" if p90_repair_ingest_only
+                "SOURCE_REPAIR_ONLY"
+                if p90_repair_ingest_only and not observer_split.ordinary
                 else ("RUNNING" if initial_running else "WARMUP")
             ),
             epoch_id=epoch_id,
-            active_bundles=() if p90_repair_ingest_only else bundles,
+            active_bundles=active_source_consumers,
             symbols=symbols,
             warmup_until=warmup_until,
             reason=(
-                "P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY"
+                (
+                    "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_ACTIVE"
+                    if observer_split.ordinary
+                    else "P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY"
+                )
                 if p90_repair_ingest_only else (
                     "P90_REAL_OWNER_ARM_STAGE_READY"
                     if p90_real_staged and initial_running
@@ -3941,18 +3954,23 @@ def _run_observer_epoch(
                 running = sensor_ready(datetime.now(UTC))
                 _observer_status(
                     state=(
-                        "SOURCE_REPAIR_ONLY" if p90_repair_ingest_only
+                        "SOURCE_REPAIR_ONLY"
+                        if p90_repair_ingest_only and not observer_split.ordinary
                         else ("RUNNING" if running else "WARMUP")
                     ),
                     epoch_id=epoch_id,
-                    active_bundles=() if p90_repair_ingest_only else bundles,
+                    active_bundles=active_source_consumers,
                     symbols=symbols,
                     facts_received=facts_received,
                     evaluations=evaluations_count,
                     signals=signals_count,
                     warmup_until=warmup_until,
                     reason=(
-                        "P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY"
+                        (
+                            "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_ACTIVE"
+                            if observer_split.ordinary
+                            else "P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY"
+                        )
                         if p90_repair_ingest_only else (
                             (
                                 "P90_REAL_DEGRADED_EXIT_ONLY"
@@ -4188,7 +4206,6 @@ def _run_multi_strategy_observer() -> None:
                                 degraded=True,
                                 mainnet_gate_enabled=False,
                                 selected_real_activations=selected,
-                                ordinary_consumer_count=len(split.ordinary),
                                 paper_consumer_count=len(split.p90_paper),
                             )
                         )
