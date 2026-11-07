@@ -181,9 +181,10 @@ def test_same_seq_equal_ms_uses_durable_append_index_for_restart(runtime_db):
             first_state = ledger.on_trade(
                 **native_args(first, "same-seq-fact-A", "100.2")
             )
+            # Authenticated native coverage is enough for the MFE extremum;
+            # original same-time delivery order is not an extra dependency.
             second_state = ledger.on_trade(
                 **native_args(second, "same-seq-fact-B", "100.4"),
-                prove_same_timestamp_order=lambda: True,
             )
             assert first_state.cursor_exec_id == "same-seq-A"
             assert second_state.cursor_exec_id == "same-seq-B"
@@ -203,13 +204,14 @@ def test_same_seq_equal_ms_uses_durable_append_index_for_restart(runtime_db):
             assert fact_id == "same-seq-fact-B"
             assert refs == ("native:exact:same-seq-fact-B",)
 
+            # A historical event must still be idempotent under its
+            # ORIGINAL fact identity, even without a tie-order attestor.
             with pytest.raises(
                 P90RealMfeUnverified,
-                match="P90_REAL_MFE_NATIVE_ORDER_NOT_PROVEN",
+                match="P90_REAL_MFE_DURABLE_IDEMPOTENCY_MISMATCH",
             ):
                 ledger.on_trade(
                     **native_args(first, "same-seq-fact-A-reversed", "100.2"),
-                    prove_same_timestamp_order=lambda: False,
                 )
     finally:
         db.connection.close()
