@@ -3229,57 +3229,15 @@ def _run_observer_epoch(
                 inspect_p90_real_open_restart_epoch,
             )
 
-            from bybit_workbench.universal_entry.p90l90_real_open_restart import (
-                P90RealOpenRestartUnverified,
+            # On failure the outer runner durably records the typed P90
+            # recovery fault, joins the old WS workers, and starts a fresh
+            # source-only epoch after a CURRENT disarm/consumer-scope check.
+            # Never use an already warmed/partly restored P90 epoch to
+            # pretend that a new current MarketSource has proven Exit.
+            preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(
+                connection, source_commit=LOADED_COMMIT,
+                bundles=tuple(observer_split.p90_real),
             )
-            from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
-                P90RealSourceCompatibilityUnverified,
-            )
-
-            try:
-                preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(
-                    connection, source_commit=LOADED_COMMIT,
-                    bundles=tuple(observer_split.p90_real),
-                )
-            except (
-                P90RealOpenRestartUnverified,
-                P90RealSourceCompatibilityUnverified,
-            ) as exc:
-                # Read the current financial gate again. The original
-                # snapshot was taken before history warmup and WS connect;
-                # stale DISARM evidence must not authorize this fallback.
-                current_gate = connection.execute(
-                    "SELECT enabled FROM control.execution_gates "
-                    "WHERE mode='mainnet'"
-                ).fetchone()
-                current_selected = _real_execution_selected_activation_ids(
-                    connection, observer_split.p90_real,
-                )
-                if (
-                    current_gate != (False,)
-                    or not _scoped_p90_repair_ingest_allowed(
-                        degraded=p90_real_degraded,
-                        mainnet_gate_enabled=bool(current_gate[0]),
-                        selected_real_activations=current_selected,
-                        ordinary_consumer_count=len(observer_split.ordinary),
-                        paper_consumer_count=len(observer_split.p90_paper),
-                    )
-                ):
-                    raise
-                # Keep the original failure durable and visible. A
-                # source-only session may never silently mark the affected
-                # P90 OPEN-position Exit as repaired or clear its fault.
-                with connection.transaction():
-                    _record_observer_runtime_fault(
-                        connection, exc, observed_at=datetime.now(UTC),
-                        observer_epoch_id=None,
-                    )
-                # Only a fresh WS/publicTrade MarketSource may continue.
-                # The original P90 source epoch, signed private state and
-                # protected OPEN Exit remain unverified and untouched.
-                p90_repair_ingest_only = True
-                p90_real_live = False
-                p90_real_degraded = False
         if p90_real_source_only or (
             p90_real_staged and preflight_restart_epoch_id is None
         ):
