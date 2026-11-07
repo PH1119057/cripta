@@ -3266,6 +3266,14 @@ def _run_observer_epoch(
                     )
                 ):
                     raise
+                # Keep the original failure durable and visible. A
+                # source-only session may never silently mark the affected
+                # P90 OPEN-position Exit as repaired or clear its fault.
+                with connection.transaction():
+                    _record_observer_runtime_fault(
+                        connection, exc, observed_at=datetime.now(UTC),
+                        observer_epoch_id=None,
+                    )
                 # Only a fresh WS/publicTrade MarketSource may continue.
                 # The original P90 source epoch, signed private state and
                 # protected OPEN Exit remain unverified and untouched.
