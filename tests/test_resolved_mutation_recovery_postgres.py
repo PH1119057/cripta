@@ -45,7 +45,8 @@ def recovery_db():
             "state text,close_link_status text,bot_instance_id text,strategy_version text,"
             "fill_at timestamptz,closed_at timestamptz,actual_qty numeric,entry_command_id text,"
             "execution_ids jsonb,exit_execution_ids jsonb,exchange_order_ids jsonb,"
-            "exit_order_ids jsonb,symbol text,side text",
+            "exit_order_ids jsonb,symbol text,side text,"
+            "position_idx integer,initial_protection_evidence jsonb",
             "executions": "exec_id text,order_id text,order_link_id text,trading_account_id text,"
             "account_connector_id text,identity_status text,symbol text,side text,exec_qty text",
             "exchange_order_history": "order_id text,order_link_id text,symbol text,"
@@ -101,7 +102,7 @@ def recovery_db():
                 "('pos',%s,'PROVEN','CLOSED','EXACT','universal-entry',"
                 "'2.0-p90l90-real-main-sub-20261028',%s,%s,10.5,'entry-command',"
                 '\'["entry-exec"]\',\'["close-a","close-b"]\','
-                "'[\"entry-order\"]','[\"close-order\"]','DOTUSDT','Buy')",
+                "'[\"entry-order\"]','[\"close-order\"]','DOTUSDT','Buy',NULL,NULL)",
                 (ACCOUNT, now - timedelta(minutes=3), now - timedelta(minutes=1)),
             )
             for identity, order, link, side, qty in (
@@ -260,7 +261,6 @@ def test_publisher_can_exclude_only_its_exact_unmaterialized_decision(recovery_d
         "strategy_config_fingerprint text",
         "strategy_execution_binding_id text",
         "exchange_position_key text",
-        "position_idx integer",
     ):
         admin.execute(f"ALTER TABLE {schema}.position_ownership ADD COLUMN {column}")
     admin.execute(
@@ -343,11 +343,6 @@ def test_publisher_can_exclude_only_its_exact_unmaterialized_decision(recovery_d
 def _prepare_native_tp(recovery_db):
     """Original protected TP is fulfilled by Bybit, without a bot close command."""
     admin, _worker, schema, _recover = recovery_db
-    admin.execute(f"ALTER TABLE {schema}.position_ownership ADD COLUMN position_idx integer")
-    admin.execute(
-        f"ALTER TABLE {schema}.position_ownership "
-        "ADD COLUMN initial_protection_evidence jsonb"
-    )
     admin.execute(f"ALTER TABLE {schema}.executions ADD COLUMN payload_json text")
     admin.execute(
         f"UPDATE {schema}.position_ownership SET actual_qty=16.51,"
