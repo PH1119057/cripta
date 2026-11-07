@@ -1204,6 +1204,34 @@ MarketSource/Instrument/consumer и точной причиной. Восста�
 создают права на поздний Execution. Если native `seq` отсутствует,
 не восстанавливать его из свечей или суммарных цен.
 
+**PRICE_HISTORY_VERIFIED** — proof ровно требуемого consumer-ом price-time/trade-ID
+интервала с approved source, UTC bounds, source artifact issuer/hash,
+original IDs/duplicates/ordering, покрытием и provenance. Полные исторические
+цены не восстанавливают WS native seq; этот proof сам по себе не является
+доказательством актуального Exit/MFE или торговым разрешением.
+
+**NATIVE_IDENTITY_VERIFIED** — original native seq/execId в тех точках, где
+конкретный causal consumer требует эту пару, с immutable MarketSource/
+InstrumentIdentity и same-seq siblings. Нельзя выводить seq из CSV trdMatchID.
+
+**NATIVE_CONTINUITY_VERIFIED** — доказательство полного original native
+event interval через independent approved source/WS-chain coverage witness;
+наличие start/end в PG либо последнее окно <=1000 recent-trade **не**
+доказывает большой недостающий интервал. Требуется только для реально
+зависимого от exact native replay consumer, не глобально для MarketSource.
+Технические witness kind идентификаторы
+`APPROVED_FULL_NATIVE_SOURCE_ARCHIVE_V1` и
+`VERIFIED_ATOMIC_PUBLIC_WS_SESSION_CHAIN_V1` обозначают тип источника
+доказательства, **не** утверждают, что такой producer уже реализован
+или что произвольный объект с этим полем может быть принят как proof.
+
+**EXIT_READY (source/position scoped)** — независимый итог Position/Exit
+owner после signed Bybit inventory/protection, immutable ExitPlan,
+durable MFE and necessary market facts. Ни один одиночный proof
+PRICE_HISTORY_VERIFIED/NATIVE_IDENTITY_VERIFIED/NATIVE_CONTINUITY_VERIFIED
+не создаёт EXIT_READY, не выдаёт permission и не снимает OWNER DISARM.
+Owner: ARCH §60.2.1 / §60.3, OBS §7.10.2, TC §4.18.
+
 **Existing-position-first reconciliation** — при startup/restart
 account/Execution/Position/Exit owners сначала сверяют signed Bybit
 Private positions + SL/TP + fills с PostgreSQL StrategyPosition/
