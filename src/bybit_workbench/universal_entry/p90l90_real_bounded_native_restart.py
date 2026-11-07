@@ -45,7 +45,9 @@ class P90VerifiedNativeSourceWindow:
     This is not a CSV-to-seq adapter, a self-certified PostgreSQL row slice
     or a financial admission proof. The producer/coverage owner must
     independently verify completeness, session boundaries and original
-    provider identity before constructing this value. The consumer checks
+    provider identity before constructing this value. max_required_records
+    is the exact consumer-specific resource budget in the verified manifest,
+    never a universal 1000/50000-row retrieval policy. The consumer checks
     the issuer/interval/raw-byte content checksum against the supplied
     evidence. An absent window always retains the REST-only fail-closed path.
     """
@@ -56,6 +58,7 @@ class P90VerifiedNativeSourceWindow:
     coverage_start: datetime
     coverage_end: datetime
     event_count: int
+    max_required_records: int
     source_sha256: str
     source_reference: str
     coverage_witness: str
@@ -102,7 +105,9 @@ def _require_complete_original_native_source(
         or not isinstance(proof.source_sha256, str)
         or len(proof.source_sha256) != 64
         or not isinstance(proof.rows, tuple)
-        or not 1 <= len(proof.rows) <= 50_000
+        or type(proof.max_required_records) is not int
+        or proof.max_required_records < 1
+        or not 1 <= len(proof.rows) <= proof.max_required_records
         or type(proof.event_count) is not int
         or proof.event_count != len(proof.rows)
         or proof.coverage_start.tzinfo is None
@@ -180,7 +185,8 @@ def resolve_durable_restart_anchor(
             or at is None
             or not isinstance(native_rows, (tuple, list))
             or not 1 <= len(native_rows) <= (
-                1000 if verified_native_source is None else 50_000
+                1000 if verified_native_source is None
+                else verified_native_source.max_required_records
             )
             # REST page is bounded at 1000. Independently certified exact
             # native windows may be larger; neither implies one another.
