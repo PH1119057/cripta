@@ -100,7 +100,8 @@ def test_open_position_source_repair_cannot_be_reported_as_financial_ready() -> 
     assert '"SOURCE_REPAIR_ONLY" if p90_repair_ingest_only' in runtime
     assert "P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY" in runtime
     assert "active_bundles=() if p90_repair_ingest_only else bundles" in runtime
-    assert "P90RealSourceCompatibilityUnverified" in runtime
+    # Recovery exception classification is intentionally centralized in
+    # _p90_native_recovery_failure(), not duplicated inside this epoch.
     # Old-epoch P90 failure must escape to the one outer durable fault
     # handler, which restarts a *fresh* source-only WS session.
     assert "preflight_restart_epoch_id = inspect_p90_real_open_restart_epoch(" in runtime
