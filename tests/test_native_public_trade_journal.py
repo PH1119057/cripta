@@ -217,6 +217,8 @@ def test_pg_first_read_has_bounded_exact_ids_but_never_certifies_gap() -> None:
         "synthetic-470-a", "synthetic-470-b",
     ]
     assert result.coverage_proven is False
+    with pytest.raises(TypeError):
+        type(result)(result.events, 470, 470, True)
     assert len(source.queries) == 1
     assert source.queries[0][0].lstrip().startswith("SELECT ")
     with pytest.raises(NativeTradeEvidenceUnavailable, match="FIRST_SAME_SEQUENCE"):
@@ -283,4 +285,36 @@ def test_p90_restart_reads_pg_first_but_rest_remains_continuity_owner() -> None:
                 traded_at=_event().event_at,
                 price="100.24", size="1.2", side="Buy",
             ),),
+        )
+
+
+def test_persisted_native_order_corruption_is_not_silent_missing_evidence() -> None:
+    from types import SimpleNamespace
+
+    before = _event("synthetic-470-a")
+    later = replace(
+        _event("synthetic-470-b"),
+        exchange_sequence=471,
+        event_at=before.event_at.replace(year=2025),
+    )
+    def sql_row(e):
+        return (
+            e.market_source_id, e.instrument_id, e.external_symbol,
+            e.exchange_sequence, e.exec_id, e.event_at, e.price, e.quantity,
+            e.taker_side, e.source_transport, e.producer_release_commit,
+        )
+    conn = SimpleNamespace(
+        execute=lambda *_: SimpleNamespace(
+            fetchall=lambda: [sql_row(before), sql_row(later)]
+        )
+    )
+    with pytest.raises(NativeTradeEvidenceConflict, match="SAVED_ORDER_CONFLICT"):
+        read_native_candidates(
+            conn,
+            market_source_id=before.market_source_id,
+            instrument_id=before.instrument_id,
+            first_sequence=470,
+            first_exec_ids=frozenset({before.exec_id}),
+            last_sequence=471,
+            last_exec_id=later.exec_id,
         )
