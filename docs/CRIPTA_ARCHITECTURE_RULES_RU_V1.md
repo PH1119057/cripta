@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.8
-**Дата:** 2026-11-04
+**Версия:** 3.9
+**Дата:** 2026-11-07
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -1567,7 +1567,7 @@ SECOND48 exact StrategyVersion. Другие причины закрытия, UN
 | Capability | BEFORE | AFTER owner/consumer | Сохранение |
 |---|---|---|---|
 | Technical preparation | ARM click -> existing coordinator | Separate authenticated prepare action -> same coordinator/broker/evidence owners -> readonly status and ARM | finite service start/recovery, exact scope, no financial permission |
-| OWNER ARM | combined prepare+ARM on unready click | explicit ARM only after fresh preparation and current Observer readiness | fresh final evidence, staged gate-closed transition, exact financial auth |
+| OWNER ARM | combined prepare+ARM on unready click | explicit ARM only after fresh preparation and **scoped proofs фактически обязательных MarketSource, account/Execution/Exit dependencies** (см. §60, TC §4.18), а не по общему ERROR/NOT_READY Observer | fresh final evidence, staged gate-closed transition, exact financial auth |
 | DISARM | same ARM endpoint enabled=false | same owner; always available independent of NOT READY | no automatic rearm |
 | Public REST audit | 2 network attempts then runtime ERROR | same bounded fetch -> typed network-unavailable -> existing bounded reconnect policy | no accepted missing continuity, new epoch/proof before Entry; repeated failures ERROR |
 | UI progress | 1s timer + 750ms poll + live refresh | single operation renderer consumes exact request | actual phase/detail, persistent final outcome, no false READY |
@@ -1623,3 +1623,124 @@ TC §4.17 implements the owner's requested repair and existing normal recovery.
 The existing NOLOGIN recovery role owns the narrowly scoped function and audit
 writes; the application role receives function EXECUTE and audit SELECT only.
 This is recovery of resolved current state, not a fault ACK or trading waiver.
+
+## 60. PostgreSQL-first Observer и scoped восстановление Entry/Exit — OWNER DECISION 2026-11-07 (Issue #470)
+
+**Решение владельца / приоритет:** Observer является обслуживающим
+MarketSource/transport/health-компонентом, **не** владельцем Strategy,
+EntryDecision, ExitDecision, финансовых разрешений или глобального veto.
+Требуемые для решений факты обязаны быть заранее доступны в CRIPTA production
+PostgreSQL в соответствующей точности. Техническая неисправность, не затрагивающая
+обязательную зависимость данного решения, сохраняется как incident/repair,
+но не может останавливать другие доказанно работоспособные scope.
+Действующий authoritative trading admission — TC §4.13, уточнение §4.18;
+наблюдательная реализация — OBS §7.10; термины — GLOSSARY §44.
+
+### 60.1 Canonical dataset/producer/consumer ownership
+
+| Capability / факт | BEFORE current physical path | AFTER canonical owner → consumer | Неизменяемая обязанность |
+|---|---|---|---|
+| Закрытые 5m/15m и другие необходимые свечи | Observer WS + on-demand REST; часть P90 legacy checkpoint | Общий approved MarketSource adapter → одна `analytics.closed_candles`/effective reviewed correction view → Geometry/Entry/Exit | Exact Venue/InstrumentIdentity/UTC, closed-only, coverage, source lineage, immutable original; no per-Strategy duplicate |
+| 7-дневная история, ATR seeds и иные окна | Cold preparation внутри Observer | Тот же MarketSource producer → PostgreSQL-first manifest каждого EntryPlan/ExitPlan → Strategy consumers | Полная требуемая история доступна перед оценкой; REST заполняет только доказанные пробелы; 7d относится к утверждённому PREV7D, не ко всем raw trades |
+| `SECOND48` | Ledger закрытий/Hard Stop → gate readers | Exact StrategyVersion HARD_STOP ledger owner → shared scoped admission reader | Фактические 2 HARD_STOP / 48h → пауза 48h; неполная посторонняя история не становится global veto |
+| Native `publicTrade` | Текущий WS stream, in-memory mirror и несколько causal checkpoints; REST recent-trade до 1000 | Тот же MarketSource/observational producer → **новый общий долговечный журнал точных необходимых native events в PostgreSQL** → native Entry/Exit/MFE и recovery | `market_source_id/instrument_id/seq/execId/event_time`, unique/ordered identity, replay bounds, audit, no synthetic ticks; physical schema/retention/atomic checkpoint требуют implementation |
+| Открытая StrategyPosition | Реальная позиция, IPC, source restart в одном Observer epoch | Signed Bybit Private MAIN/SUB adapter + account/Execution/Lifecycle owners → independent Position/Exit reconciliation → Universal Exit | Actual position/size/side, SL/TP, pending orders, filled quantities, saved ExitPlan/MFE/protection ownership; preserve Exchange-resident protection |
+| Новый Entry | Engine + broad Observer readiness / shared gate | Strategy Materializer → exact EntryPlan; MarketSource → facts; Entry Engine → signal; scoped admission/Execution owners → permission/order | Strategy policy, signed account inventory, capital/slot, source causality, authorization, initial protection/Exit; no Observer financial authority |
+| Health/readiness и Dashboard | General Observer ERROR sometimes poisons whole epoch | Existing monitoring/incident owners → typed per-source/per-symbol/per-account proofs → one §55 classifier → Dashboard, OWNER ARM, Entry/Execution consumers | Exact scope, evidence time/TTL, repair action; no competing boolean/writer, no silent fault resolution |
+
+**Manifest обязателен до физического cutover** для каждого active consumer:
+dataset/table/effective view, MarketSource/InstrumentIdentity, symbols, timeframe
+или native event type, exact historical horizon (включая ATR seed/сессии),
+UTC cutoff, required count/continuity/freshness/TTL, writer/reader, original
+lineage и correction view, checkpoint identity, retention requirement, physical
+capacity, bounded repair API/attempt/deadline, affected scope. Он не выдаёт
+Stage/PAPER/REAL permission и не создаёт новый торговый filter.
+
+### 60.2 Startup, historical repair и native continuity
+
+На startup/restart проверяется **сначала существующая PostgreSQL**:
+required `analytics.closed_candles`, compact market facts, exact
+`SECOND48` ledger и необходимые native causal records. Нормальный доступный
+исторический slice не запрашивается снова с Bybit. MarketSource adapter
+дозагружает **только доказанный gap** через соответствующий approved Bybit Public
+REST, сверяет provenance и atomic persistence; общий store доступен всем
+совпадающим потребителям. Ошибка ожидаемой догрузки даёт scoped
+`ENTRY_PREPARATION_WAIT`/PREPARING с прогрессом и конечным deadline, затем
+BLOCKED; source integrity conflict — typed ERROR только в затронутом scope.
+Market-candle facts не выдаются за native `publicTrade` `seq/execId`.
+
+Если raw native события нужны для уже открытой позиции/Exit или причинной
+идентичности нового Entry, producer обязан **до потребления** надёжно
+сохранить exact event/identity и checkpoint в атомарном причинном порядке
+(journal-before-ack/checkpoint); retention рассчитывается от обязательств
+активных source epochs, текущих позиций, Exit и audit, а не от универсальных
+24h полных JSON снимков MAYAK/Dispatcher. Не создавать неограниченный
+raw trade/orderbook lake. Пропущенные исторические рыночные факты, которые
+достоверно доступны, восстанавливаются в PostgreSQL **для анализа и причинной
+сверки** с маркировкой происхождения; нельзя подделывать отсутствующие
+`seq/execId` или задним числом отправлять истёкший StrategySignal на биржу.
+
+Ограничение Bybit REST recent-trade (последние <=1000) — ограничение одного
+конкретного API, **не доказательство потери всего рынка или PostgreSQL**.
+При длительном пробеле проверяется available exact native archive/другой
+approved retrieval; если native continuity не доказана, affected dependency
+остаётся явно BLOCKED, original checkpoint/epoch/audit не переписываются.
+Новая свежая публичная WS epoch после verified source boundary **не
+восстанавливает** пропущенную историю и сама по себе не доказывает старый
+OPEN-position Exit cursor.
+
+### 60.3 Existing-position-first и ограничения глобального veto
+
+При рестарте независимо от намерений нового Entry сперва подтверждается
+актуальный signed Bybit Private inventory **каждого TradingAccount**:
+фактические позиции, conditional/resting SL/TP, частичные исполнения и
+pending commands. Сопоставляются с локальными StrategyPosition,
+Execution, ExitPlan, MFE, source sequence/ownership и состоянием защитных
+ордеров. Priority recovery: текущая position/protection/Exit → необходимые
+исторические/source данные → новые Entry. Биржевые SL/TP остаются
+самостоятельной защитой, **но не заменяют** доказанную работоспособность
+обязательного Universal Exit owner. При неполном exact native replay
+не объявлять Exit VERIFIED, не заменять MFE свечным приближением; сохранить
+Exchange protection и открыть отдельный bounded repair для affected
+position/source. Открытый unrelated repair не останавливает рабочие
+независимые источники/аккаунты.
+
+`Observer state=ERROR`, отложенное сообщение, fault старой закрытой
+позиции или отсутствие native cursor *неучаствующего* инструмента **не
+является отдельным самостоятельным глобальным financial veto**.
+OWNER ARM и каждый dispatch используют один canonical classifier TC §4.13/§4.18
+по **действительно обязательным зависимостям** exact
+MarketSource/symbol/StrategyVersion/TradingAccount/Execution/Exit. Общий
+hard block допустим только при недоказанной действительно общей обязательной
+зависимости, явно снятом OWNER authorization либо текущем нелокализуемом
+financial risk. Истинная source integrity loss, UNKNOWN exposure,
+unresolved Exchange mutation, неверная identity, невозможность поставить
+initial protection или недоступный требуемый Exit **не обходятся**.
+Финансовый OWNER ARM остаётся отдельным, explicit и release-bound (§54);
+это решение не включает LIVE.
+
+**Supersession:** старую строку §56 и прежнее выражение «current Observer
+readiness» в TC §4.14 читать как **scoped mandatory source+execution readiness**,
+а не монолитный статус процесса. Старые runtime checks разрешено заменить
+только после доказанного нового consumer/writer пути, без удаления capability.
+Historical fault/notification owners сохраняются; UI отображает конкретные
+blocker/owner/evidence и repair без фиктивного READY.
+
+### 60.4 Acceptance / current status
+
+Обязательно: (1) PG-first 7d candle warmup + SECOND48 без лишнего Bybit fetch;
+(2) missing tail verified REST fill + original immutable provenance;
+(3) long-outage exact native archive/gap audit + no fake continuity;
+(4) signed MAIN/SUB actual position/SL/TP after restart + independent Exit/MFE;
+(5) rejection of one account/symbol preserves unrelated source, Entry evaluations
+и Exit; (6) first REAL fill, WS disconnect, partial fill, 5m boundary, crash/restart,
+atomic native journal/checkpoint parity; (7) bounded backoff versus terminal
+recovery, source/processor fault taxonomy and P&L/Hard Stop independent history;
+(8) scoped OWNER ARM checks versus mandatory negative cases, no late Entry
+execution; (9) release/loaded commit, PostgreSQL migration, read/write Unix
+actors, backout plan, shadow parity, CI and runtime behavior verified.
+
+`OWNER_DECISION=YES`; `CANON=YES AFTER MERGE`;
+`IMPLEMENTED=NO`; `DEPLOYED=NO`; `RUNTIME_BEHAVIOR_VERIFIED=NO`;
+`LIVE_CHANGE=NO`. Existing physical global veto may remain until tested
+replacement; documentation alone does not repair Observer or clear SUB latch.
