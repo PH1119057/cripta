@@ -33,6 +33,19 @@ _REVIEWED_HISTORICAL_CONSUMERS = dict.fromkeys((
     "1fc88f96f110337bfe575c4caaba48b5cdbaa134",
     "0044d4eabd89b762641e7468e56161d707b07ea5",
 ), "e455220878f19f5d1fd530abdb98b7d379a67fbe5a911f378747b8d1301979a9")
+
+# Exact Git-verified consumer inventories from the subsequent deployed releases.
+# The durable compatibility rows are evidence about THOSE historical releases;
+# they must not be compared against the newly loaded release's consumer digest.
+# Verified using all 93 inventory files at the immutable Git SHAs, not copied
+# from PostgreSQL or inferred from ancestry. Existing rows are never rewritten.
+_REVIEWED_HISTORICAL_CONSUMERS.update({
+    "741984632f5b613fcc2df84a21dbd1ac5e4fd3f9":
+        "71458d52d543ff91350d51999bbefcfa0b8e7fd1a8b7feee4e9c9edbb6367c8e",
+    "ef2ac6460bf5bd75f56fe7b6a112b3852fec271d":
+        "71458d52d543ff91350d51999bbefcfa0b8e7fd1a8b7feee4e9c9edbb6367c8e",
+})
+
 # These wiring adapters are reviewed in the release diff. All Strategy,
 # Entry/Exit algorithms, codecs, contracts, account and private-proof modules
 # below remain byte-identical to the retained origin release.
@@ -73,6 +86,11 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
         "53bd13487b70c632a724caeebd257fcd04dd9c92a993f9e0072f5dd2750be4ed",
     "universal_exit/p90l90_real_mfe_ledger.py":
         "e85fb4c788ffa1a178a4b887e3e06593871e267573fc87b4ad221424bad26fab",
+    # Reviewed WS reconnect diagnostic: gap counters are scoped to the
+    # NEW transport session; the old durable native cursor is not recovered
+    # or forgiven. This exact delta is tested independently in trade_mirror.
+    "universal_entry/trade_mirror.py":
+        "228a92991c4ab3bd31506bd40bfc55e9a30a237cdda4f23921005586808d4c1a",
     "universal_exit/p90l90_real_runtime_ports.py":
         "e471b82d1e6e84e105cb13c7094974799dfae145e9af1b68f389d08f93a57970",
 }
