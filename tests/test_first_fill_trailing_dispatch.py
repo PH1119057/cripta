@@ -41,7 +41,7 @@ class DB:
 def run(db):
     runtime._execute_first_fill_trailing(
         db, 'fake', 'fake', entry_command_id='entry', exit_decision_id='decision',
-        entry_result={'actualProtection': {'verifiedFromExchange': True}},
+        position_id='position',
     )
 
 
@@ -62,17 +62,108 @@ def test_exact_durable_trailing_uses_normal_executor_after_parent_commit():
     assert db.events[-1] == 'execute-native-trailing'
 
 
-@pytest.mark.parametrize('child,parent', [(False, True), (True, False)])
-def test_missing_or_racing_ownership_sends_no_exchange_command(child, parent):
-    db = DB(child=child, parent=parent)
+def test_missing_exit_ownership_sends_no_exchange_command():
+    db = DB(child=False)
     with (
         patch.object(runtime, 'TRADING_ACCOUNT_ID', 'ta-test'),
         patch.object(runtime, 'execute_command') as executor,
-        pytest.raises(runtime.ExchangeMutationBarrier),
+        pytest.raises(runtime.P90RealExitHandoffBlocked),
     ):
         run(db)
     executor.assert_not_called()
     assert db.events[-1] == 'rollback'
+
+
+@pytest.mark.parametrize('confirmed', [False, True])
+def test_confirmed_protected_entry_is_committed_before_exit_work(confirmed):
+    db = DB(parent=confirmed)
+    def complete():
+        runtime._complete_protected_p90_entry(
+            db, entry_command_id='entry', position_id='position',
+            entry_result={'actualProtection': {'verifiedFromExchange': True}},
+        )
+    with patch.object(runtime, 'TRADING_ACCOUNT_ID', 'ta-test'):
+        if confirmed:
+            complete()
+            assert db.events[-1] == 'commit'
+        else:
+            with pytest.raises(runtime.ExchangeMutationBarrier, match='COMPLETION_DRIFT'):
+                complete()
+            assert db.events[-1] == 'rollback'
+    sql, params = db.events[0]
+    assert "p.initial_protection_confirmed_at IS NOT NULL" in sql
+    assert "ep.exit_plan_fingerprint=p.exit_plan_fingerprint" in sql
+    assert "p.trading_account_id=c.trading_account_id" in sql
+    assert "c.state='running'" in sql and "SET state='completed'" in sql
+    assert params[2:] == ('entry', 'ta-test', 'position')
+
+
+def test_unconfirmed_fill_protection_never_completes_entry():
+    db = DB()
+    with pytest.raises(runtime.ExchangeMutationBarrier, match='PROTECTION_UNVERIFIED'):
+        runtime._complete_protected_p90_entry(
+            db, entry_command_id='entry', position_id='position', entry_result={},
+        )
+    assert db.events == []
+
+
+def test_exit_preparation_fault_keeps_private_execution_alive_and_entry_unchanged():
+    db = DB()
+    error = runtime.P90RealExitHandoffBlocked('position', 'P90_REAL_POSTFILL_INTERNAL_ERROR')
+    with (
+        patch.object(runtime, 'TRADING_ACCOUNT_ID', 'ta-test'),
+        patch.object(runtime, 'disarm_new_entries') as disarm,
+        patch.object(runtime, 'handle_exchange_mutation_barrier') as barrier,
+        patch.object(runtime.os, '_exit') as terminate,
+    ):
+        runtime.handle_p90_real_exit_handoff_block(db, 'entry', error)
+    disarm.assert_called_once_with(db, runtime.REAL_ENTRY_RUNTIME_NOT_READY_REASON)
+    barrier.assert_not_called()
+    terminate.assert_not_called()
+    sqls = [e[0] for e in db.events if isinstance(e, tuple)]
+    assert len(sqls) == 1 and 'INSERT INTO runtime.connection_events' in sqls[0]
+    assert all('UPDATE runtime.trade_commands' not in sql for sql in sqls)
+
+
+def test_exit_child_dispatch_does_not_complete_or_depend_on_entry_command_state():
+    db = DB(parent=False)
+    with (
+        patch.object(runtime, 'TRADING_ACCOUNT_ID', 'ta-test'),
+        patch.object(runtime, 'execute_command') as execute,
+    ):
+        run(db)
+    execute.assert_called_once()
+    assert len([e for e in db.events if isinstance(e, tuple)]) == 1
+
+
+def test_actual_entry_handler_commits_fill_before_any_exit_preparation():
+    import inspect
+    body = inspect.getsource(runtime.execute_command)
+    start = body.index('_complete_protected_p90_entry(')
+    assert start < body.index('"after_protected_first_fill"')
+    assert start < body.index('handoff_real_first_protected_fill(')
+    assert 'raise P90RealExitHandoffBlocked(' in body
+    worker = inspect.getsource(runtime.command_worker_loop)
+    assert worker.index('except P90RealExitHandoffBlocked') < worker.index(
+        'except ExchangeMutationBarrier', worker.index('execute_command(connection')
+    )
+    failure_path = worker[worker.index('except Exception as exc:'):]
+    assert "WHERE command_id=%s AND state='running'" in failure_path
+
+
+def test_exit_incident_logging_failure_cannot_leave_new_entries_enabled():
+    db = DB()
+    order = []
+    with (
+        patch.object(runtime, 'disarm_new_entries',
+                     side_effect=lambda *a: order.append('gate-off')),
+        patch.object(runtime, 'connection_event', side_effect=RuntimeError('audit unavailable')),
+        pytest.raises(RuntimeError, match='audit unavailable'),
+    ):
+        runtime.handle_p90_real_exit_handoff_block(
+            db, 'entry', runtime.P90RealExitHandoffBlocked('position', 'BLOCKED'),
+        )
+    assert order == ['gate-off']
 
 
 def test_ambiguous_child_failure_is_attributed_to_exit_not_confirmed_entry():

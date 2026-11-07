@@ -65,7 +65,7 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
     "universal_exit/p90l90_real_mfe_ledger.py":
         "e85fb4c788ffa1a178a4b887e3e06593871e267573fc87b4ad221424bad26fab",
     "universal_exit/p90l90_real_runtime_ports.py":
-        "0c55153263c3f780e04096a46312053525c5e788524c508464521b4fe5a0dcc2",
+        "e471b82d1e6e84e105cb13c7094974799dfae145e9af1b68f389d08f93a57970",
 }
 
 

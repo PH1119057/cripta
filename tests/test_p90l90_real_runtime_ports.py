@@ -83,44 +83,25 @@ def test_both_real_exit_event_types_share_exact_one_postgres_account_owner() -> 
     assert db.calls == 0
 
 
-@pytest.mark.parametrize("row", [("completed",), ["completed"], {"state": "completed"}])
 @pytest.mark.parametrize("pending_exit", [False, True])
-def test_completed_entry_releases_exit_for_both_cursor_row_formats(
-    monkeypatch, row, pending_exit,
-):
-    db = _DB()
-    reads = []
-    def execute(sql, params):
-        reads.append((sql, params))
-        return SimpleNamespace(fetchone=lambda: row)
-    db.execute = execute
-    monkeypatch.setattr(runtime_mod, "p90_real_exit_no_pending",
-                        lambda *a, **kw: not pending_exit)
+def test_exit_ownership_does_not_query_historical_entry_status(monkeypatch, pending_exit):
+    db = _DB()  # Any Entry SQL query fails: only the independent Exit guard is used.
+    checked = []
+    def no_pending(connection, **kw):
+        checked.append((connection, kw))
+        return not pending_exit
+    monkeypatch.setattr(runtime_mod, "p90_real_exit_no_pending", no_pending)
     ports = _ports(db)
     position = SimpleNamespace(entry_command_id="entry", trading_account_id=MAIN)
     assert ports.on_native_trade._pending(position) is pending_exit
     assert ports.on_closed_5m._pending(position) is pending_exit
-    assert all(params == ("entry", MAIN) for _, params in reads)
-    assert all("identity_status='PROVEN'" in sql for sql, _ in reads)
-
-
-@pytest.mark.parametrize("row", [
-    None, (), ("completed", "extra"), "completed", {}, {"state": "running"},
-    ("queued",), ("running",), ("failed",), (None,),
-])
-def test_missing_malformed_or_unfinished_entry_keeps_exit_pending(monkeypatch, row):
-    db = _DB()
-    db.execute = lambda *a: SimpleNamespace(fetchone=lambda: row)
-    monkeypatch.setattr(runtime_mod, "p90_real_exit_no_pending",
-                        lambda *a, **kw: pytest.fail("unfinished Entry must remain blocked"))
-    ports = _ports(db)
-    position = SimpleNamespace(entry_command_id="entry", trading_account_id=MAIN)
-    assert ports.on_native_trade._pending(position) is True
-    assert ports.on_closed_5m._pending(position) is True
+    assert len(checked) == 2 and db.calls == 0
+    assert all(conn is db and kw == {"position": position, "trading_account_id": MAIN}
+               for conn, kw in checked)
 
 
 @pytest.mark.parametrize("short,sub", [(False, False), (True, True)])
-def test_tuple_entry_completion_reaches_native_trailing_decision(monkeypatch, short, sub):
+def test_proven_position_reaches_trailing_without_entry_completion(monkeypatch, short, sub):
     from test_p90l90_real_observation import _scope
 
     from bybit_workbench.universal_entry.contracts import FrozenPolicy, MarketFactEnvelope
@@ -128,7 +109,6 @@ def test_tuple_entry_completion_reaches_native_trailing_decision(monkeypatch, sh
 
     position, plan, state, cursor, private, price = _scope(short=short, sub=sub)
     db = _DB()
-    db.execute = lambda *a: SimpleNamespace(fetchone=lambda: ("completed",))
     monkeypatch.setattr(runtime_mod, "p90_real_exit_no_pending", lambda *a, **kw: True)
     ports = _ports(db)
     port = ports.on_native_trade

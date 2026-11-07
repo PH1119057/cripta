@@ -257,6 +257,14 @@ class ExchangeMutationBarrier(RuntimeError):
     """Mutation outcome or immediate post-mutation truth is uncertain."""
 
 
+class P90RealExitHandoffBlocked(RuntimeError):
+    """Confirmed Entry, but Exit preparation failed before an Exchange POST."""
+
+    def __init__(self, position_id: str, reason: str) -> None:
+        self.position_id = position_id
+        super().__init__(reason)
+
+
 class UnsafeBybitClock(PreMutationSafetyBlock):
     """Fresh Bybit-time calibration could not be established safely."""
 
@@ -3811,6 +3819,10 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     before_position = None if position is None else dict(position)
     postfill_evaluation = None
     if p90_real_postfill is not None:
+        _complete_protected_p90_entry(
+            connection, entry_command_id=command_id,
+            position_id=p90_real_postfill[0], entry_result=result,
+        )
         # Signed Exit evidence requires a COMPLETE account generation newer
         # than both fill and protection. Publish it BEFORE requesting that
         # evidence, then obtain a NEW <=5s source window (never reuse an old
@@ -3821,8 +3833,8 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 verified_first_fill_position_id=p90_real_postfill[0],
             )
         except Exception as exc:
-            raise ExchangeMutationBarrier(
-                "P90_REAL_POSTFILL_ACCOUNT_RECONCILIATION_UNVERIFIED"
+            raise P90RealExitHandoffBlocked(
+                p90_real_postfill[0], "P90_REAL_POSTFILL_ACCOUNT_RECONCILIATION_UNVERIFIED"
             ) from exc
         from p90l90_real_postfill_handoff import (
             handoff_real_first_protected_fill,
@@ -3864,9 +3876,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 and set(candidate) <= safe_chars
             ):
                 postfill_reason = candidate
-            raise ExchangeMutationBarrier(
-                "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:"
-                + postfill_reason
+            raise P90RealExitHandoffBlocked(
+                first_position_id,
+                "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:" + postfill_reason,
             ) from None
     if postfill_evaluation is not None and postfill_evaluation.decision is not None:
         # Execute the already-approved, durable first-fill trailing command
@@ -3876,7 +3888,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         _execute_first_fill_trailing(
             connection, key, secret, entry_command_id=command_id,
             exit_decision_id=postfill_evaluation.decision.exit_decision_id,
-            entry_result=result,
+            position_id=p90_real_postfill[0],
         )
     try:
         if p90_real_postfill is None:
@@ -3896,7 +3908,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     connection.execute(
         """UPDATE runtime.trade_commands
            SET state='completed',finished_at_epoch_ms=%s,result_json=%s
-           WHERE command_id=%s""",
+           WHERE command_id=%s AND state='running'""",
         (
             int(time.time() * 1000),
             json.dumps(result, ensure_ascii=False),
@@ -3930,16 +3942,61 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             # Missing evidence stays UNKNOWN until independent reconciliation.
 
 
+def _complete_protected_p90_entry(
+    connection: psycopg.Connection, *, entry_command_id: str,
+    position_id: str, entry_result: dict[str, object],
+) -> None:
+    """Commit confirmed Entry before any Exit preparation or command dispatch."""
+    protection = entry_result.get("actualProtection")
+    if not isinstance(protection, dict) or protection.get("verifiedFromExchange") is not True:
+        raise ExchangeMutationBarrier("P90_REAL_FIRST_FILL_PROTECTION_UNVERIFIED")
+    completed = connection.execute(
+        """UPDATE runtime.trade_commands c SET state='completed',
+                  finished_at_epoch_ms=%s,result_json=%s
+             FROM runtime.position_ownership p, strategy_entry.exit_plans ep
+            WHERE c.command_id=%s AND c.command_type='entry' AND c.state='running'
+              AND c.trading_account_id=%s AND c.identity_status='PROVEN'
+              AND p.position_id=%s AND p.entry_command_id=c.command_id
+              AND p.state='OPEN' AND p.identity_status='PROVEN'
+              AND p.trading_account_id=c.trading_account_id
+              AND p.strategy_execution_binding_id=c.strategy_execution_binding_id
+              AND p.actual_avg_fill>0 AND p.actual_qty>0 AND p.fill_at IS NOT NULL
+              AND p.initial_protection_confirmed_at IS NOT NULL
+              AND ep.exit_plan_fingerprint=p.exit_plan_fingerprint
+              AND ep.strategy_id=p.strategy_id AND ep.strategy_version=p.strategy_version
+              AND ep.strategy_config_fingerprint=p.strategy_config_fingerprint""",
+        (int(time.time()*1000), json.dumps(entry_result), entry_command_id,
+         TRADING_ACCOUNT_ID, position_id),
+    )
+    if completed.rowcount != 1:
+        connection.rollback()
+        raise ExchangeMutationBarrier("P90_REAL_POSTFILL_ENTRY_COMPLETION_DRIFT")
+    connection.commit()
+
+
+def handle_p90_real_exit_handoff_block(
+    connection: psycopg.Connection, command_id: str, exc: P90RealExitHandoffBlocked,
+) -> None:
+    """Record Exit preparation failure without relabelling/replaying the Entry."""
+    connection.rollback()
+    # This preparation path only reads Exchange state and publishes DB requests.
+    # Actual child Exchange failures retain ExchangeMutationBarrier handling.
+    disarm_new_entries(connection, REAL_ENTRY_RUNTIME_NOT_READY_REASON)
+    connection_event(
+        connection, "exit", "postfill_handoff_unverified",
+        position_id=exc.position_id, entry_command_id=command_id, reason=str(exc),
+    )
+
+
 def _execute_first_fill_trailing(
     connection: psycopg.Connection, key: str, secret: str, *,
     entry_command_id: str, exit_decision_id: str,
-    entry_result: dict[str, object],
+    position_id: str,
 ) -> None:
     """Claim only the exact queued child of this proven protected Entry.
 
-    Both command transitions commit together. A crash cannot turn a confirmed
-    Entry back into a new order; an uncertain child remains a running command
-    for the existing startup reconciliation, never a blind POST retry.
+    Entry is already durably completed. Claim only the Exit command here;
+    an uncertain child remains running for reconciliation, never a blind retry.
     """
     row = connection.execute(
         """UPDATE runtime.trade_commands c
@@ -3965,18 +4022,9 @@ def _execute_first_fill_trailing(
     ).fetchone()
     if row is None:
         connection.rollback()
-        raise ExchangeMutationBarrier("P90_REAL_POSTFILL_TRAILING_COMMAND_NOT_QUEUED")
-    parent = connection.execute(
-        """UPDATE runtime.trade_commands SET state='completed',
-                  finished_at_epoch_ms=%s,result_json=%s
-            WHERE command_id=%s AND state='running'
-              AND trading_account_id=%s AND identity_status='PROVEN'""",
-        (int(time.time()*1000), json.dumps(entry_result),
-         entry_command_id, TRADING_ACCOUNT_ID),
-    )
-    if parent.rowcount != 1:
-        connection.rollback()
-        raise ExchangeMutationBarrier("P90_REAL_POSTFILL_ENTRY_COMPLETION_DRIFT")
+        raise P90RealExitHandoffBlocked(
+            position_id, "P90_REAL_POSTFILL_TRAILING_COMMAND_NOT_QUEUED",
+        )
     connection.commit()
     child_id = str(row[0])
     try:
@@ -4478,6 +4526,8 @@ def command_worker_loop(key: str, secret: str) -> None:
         connection.commit()
         try:
             execute_command(connection, key, secret, row)
+        except P90RealExitHandoffBlocked as exc:
+            handle_p90_real_exit_handoff_block(connection, command_id, exc)
         except PreMutationSafetyBlock as exc:
             handle_pre_mutation_safety_block(connection, command_id, exc)
         except ExchangeMutationBarrier as exc:
@@ -4495,7 +4545,7 @@ def command_worker_loop(key: str, secret: str) -> None:
             connection.execute(
                 """UPDATE runtime.trade_commands
                    SET state='failed',finished_at_epoch_ms=%s,error=%s
-                   WHERE command_id=%s""",
+                   WHERE command_id=%s AND state='running'""",
                 (
                     int(time.time() * 1000),
                     _private_worker_safe_error(exc),

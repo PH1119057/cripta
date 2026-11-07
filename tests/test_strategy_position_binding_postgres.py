@@ -749,10 +749,11 @@ def test_first_fill_survives_unlinked_flat_inventory_in_postgres(monkeypatch) ->
         with (
             patch.object(private_runtime, "TRADING_ACCOUNT_ID", ids["trading_account_id"]),
             patch.object(private_runtime, "execute_command") as executor,
-            pytest.raises(private_runtime.ExchangeMutationBarrier, match="NOT_QUEUED"),
+            pytest.raises(private_runtime.P90RealExitHandoffBlocked, match="NOT_QUEUED"),
         ):
             private_runtime._execute_first_fill_trailing(
                 connection, "fake", "fake", entry_command_id=ids["command_id"],
-                exit_decision_id=f"{prefix}-missing-decision", entry_result={},
+                exit_decision_id=f"{prefix}-missing-decision",
+                position_id=position.strategy_position_id,
             )
         executor.assert_not_called()
