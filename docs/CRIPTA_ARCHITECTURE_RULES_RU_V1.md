@@ -1624,6 +1624,14 @@ The existing NOLOGIN recovery role owns the narrowly scoped function and audit
 writes; the application role receives function EXECUTE and audit SELECT only.
 This is recovery of resolved current state, not a fault ACK or trading waiver.
 
+**Owner clarification 2026-11-08:** the same dedicated owner Control and
+original signed account/execution proof producers may recognize independently
+proven Bybit **initial TakeProfit** closure with no bot `close` command.
+Exact TP provenance, original protection/price, filled reduce-only exchange
+order, entire account-local execution quantity and fresh FLAT proof are
+mandatory; TC §4.17 exclusively owns admissibility. No new Exchange writer,
+owner/consumer transfer, StopLoss/unknown waiver, safety bypass or ARM.
+
 ## 60. PostgreSQL-first Observer и scoped восстановление Entry/Exit — OWNER DECISION 2026-11-07 (Issue #470)
 
 **Решение владельца / приоритет:** Observer является обслуживающим

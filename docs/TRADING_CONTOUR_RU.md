@@ -2014,9 +2014,26 @@ connector, while all gates/permissions/generic and account arms are OFF.
 Require a fresh independently signed FLAT account/UID proof, matching COMPLETE
 account generation <=15s, zero current positions/orders/pending commands, exact
 CLOSED StrategyPosition, original signed Entry IDs and all confirmed close
-executions whose quantities cover the actual position. Its Entry command and
-exact close command must be completed and linked to those executions. Prove
-absence of current account/unknown-scope critical faults with the shared
+executions whose quantities cover the actual position. Its Entry command must be completed with exact account-local signed
+execution lineage. The closing proof may follow **exactly one** path:
+(a) a completed bot `close`/`strategy_exit` command whose exact
+`orderLinkId`, position ID and proven close executions match, OR
+(b) independently proven Exchange-native initial **TakeProfit**, with
+no fabricated bot close command. Path (b) requires a `PROVEN`,
+`Filled`, account/connector-local `runtime.exchange_order_history`
+order, `stopOrderType=TakeProfit`, `createType=CreateByTakeProfit`,
+`reduceOnly=true`, `closeOnTrigger=true`, the exact original
+`initial_protection_evidence.takeProfit` trigger price,
+matching original `positionIdx`, original recorded `exit_order_ids`,
+and a complete distinct `PROVEN` execution set with identical orderId,
+account/connector, symbol, opposite side, TakeProfit origin markers,
+no bot orderLinkId, total quantity equal to the actual position and
+order-history executed quantity. Any competing bot command, partial/extra
+fill, unknown historical price/identity or mismatched origin blocks.
+Path (b) does NOT admit StopLoss, liquidation, manual or generic close.
+Both paths require exact `CLOSED` linkage, current signed-FLAT/COMPLETE
+account proof, no pending mutations and no active financial permission.
+Prove absence of current account/unknown-scope critical faults with the shared
 current-vs-CLOSED predicate; historical faults remain visible and unchanged.
 Unknown outcome, unmatched IDs/quantity, changed latch epoch, stale/wrong account
 proof or any non-flat/unresolved current state must fail closed.

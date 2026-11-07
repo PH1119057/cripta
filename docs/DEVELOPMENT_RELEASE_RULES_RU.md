@@ -2278,6 +2278,18 @@ Publish/install through verified release controller, then independently read
 back latch removal, preserved position/history and technical readiness. Do not
 claim a successful real Entry/trailing from this maintenance operation.
 
+**Owner-approved 2026-11-08 native TakeProfit extension:** merge TC §4.17
+and ARCH §59 canonical change first, then executable SQL/tests on a separate
+`core/` branch. Preserve bot-command close path unchanged. For an exchange
+native TP, require original protected trigger and proven `Filled` Bybit order
+with exact account/connector, `positionIdx`, TP source markers,
+reduce-only/close-on-trigger, distinct proven opposite-side executions and
+full position quantity; reject ambiguous/foreign/partial/extra history,
+StopLoss, manual or synthetic command. Same serializable SECURITY DEFINER
+function and immutable audit. Mandatory disposable PostgreSQL positive and
+negative tests, complete CI, owner-authorized reviewed migration/deploy,
+postrelease runtime readback; no LIVE permission or Exchange mutation.
+
 ## 58. Observer PostgreSQL-first / independent Entry-Exit cutover — OWNER DECISION 2026-11-07
 
 **CANON owners**: ARCH §60 — source/data/ownership and BEFORE→AFTER;
