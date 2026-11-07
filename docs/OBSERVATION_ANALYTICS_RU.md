@@ -412,8 +412,9 @@ Deployment contract presentation/read-model layer:
   Strategy evaluation, обязан до retry зафиксировать durable operational fault,
   canonical token которого определён в CRIPTA_GLOSSARY_RU*.md;
 - следующий успешный status refresh/restart не имеет права молча удалить или
-  resolve такой fault; Dashboard обязан показывать unresolved fault красным до
-  explicit operator/owner resolution;
+  resolve такой fault; Dashboard обязан показывать unresolved fault красным
+  в текущей ленте и в журнале истории до explicit operator/owner resolution;
+  для reset текущей ленты действует узкое уточнение §7.6;
 - OWNER DECISION 2026-10-15: каждый `UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR`,
   включая severity `ERROR`, показывать в существующей центральной панели
   Dashboard «События системы»; повторы одной exact signature агрегируются
@@ -902,6 +903,43 @@ affected account/symbol/dependency и условие восстановлени�
 имеет одного presentation owner; timer и poll не перебивают друг друга.
 Исторический RED может оставаться RED в журнале, но не должен выдаваться за
 доказательство текущего global execution block.
+
+**OWNER DECISION 2026-11-07 — очистка активной ленты старых уведомлений
+после архитектурного перехода (Issue #470).** По прямому распоряжению владельца
+операторский *текущий* список ошибок и его звуковые сигналы начинаются с
+`2026-11-07T19:18:25Z` (UTC). Старые Observer runtime faults, historical
+lifecycle critical, старые release incidents и старые неподтверждённые
+delivery rows не должны появляться как **новое** событие, даже если у них
+сохраняется старый `OPEN`/pending/escalation. Точный повтор той же fault
+signature **после** порога считается новым проявлением и снова требует
+операторского внимания. Отсутствие фактического browser display/ACK нельзя
+выдавать за доставку.
+
+Это **сброс представления, а не DELETE/AUTO-ACK/AUTO-RESOLVE**: оригинальные
+`runtime.lifecycle_faults`, `runtime.lifecycle_fault_deliveries`,
+owner escalation, идентификаторы, причины, счётчики и события остаются в
+долговечном журнале и доступны в отдельном режиме истории/аудита, где
+незакрытые faults сохраняют собственный красный статус. Исторический OPEN
+не становится RESOLVED от наступления порога. Текущие независимо доказанные
+риски position/protection/Exit/exposure/identity/ambiguous mutation и
+основные safety/readiness banners отображаются **вне** фильтра уведомлений
+даже при старом fault ID: фильтрация уведомлений не обходит финансовый gate
+и не объявляет старую P90 позицию EXIT_READY. Любая ошибка после порога
+не может быть автоматически скрыта из-за происхождения в старой epoch.
+
+**Startup классификация:** ожидаемое ограниченное ожидание первых публичных
+native cursors при восстановлении старой OPEN позиции — отдельное
+`PREPARING/BLOCKED` affected-source состояние, если доказан source-only
+fallback с mainnet OFF и отсутствием реальных Entry permissions.
+Оно не должно превращаться в новое общее `UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR`
+исключительно из-за истечения допустимого ожидания для *старой* позиции.
+Ошибки настоящей source integrity, смены epoch, неизвестной экспозиции,
+несовпадения прав/аккаунтов, отсутствия безопасного fallback либо иные
+неожиданные exceptions сохраняют старый fail-closed и durable ERROR.
+Это правило **не** восстанавливает пробел ~34 часа, MFE или Universal Exit,
+не меняет ожидание 10 секунд, не создаёт trade permission. Implementation
+и проверка фактического поведения обязательны отдельно; изменение
+документа не очищает UI и не запускает сервисы.
 
 Статус: CANON target; implementation/cutover обязательны по DEV §54.
 
