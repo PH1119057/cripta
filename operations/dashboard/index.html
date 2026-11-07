@@ -1630,11 +1630,19 @@ function renderObserverFaults(model){
     if(historical.length){
       document.getElementById('observerFaultArchiveSummary').textContent=
         'История до 8 ноября 2026 · '+historical.length+' незакрытых записей (не новые уведомления)';
-      document.getElementById('observerFaultArchiveItems').innerHTML=historical.map(x=>{
-        const error=[x.error_type,x.error_message].filter(Boolean).join(': ')||x.fault_code||'ошибка Observer';
-        return '<div class="durable-fault-item"><details><summary><b>RED · архив</b> · '+safe(observerFaultFriendlyText(x))+'</summary><div>'+safe(error)+'</div><div class="muted">'+safe(x.fault_id||'—')+' · '+safe(x.last_seen_at||x.detected_at||'—')+'</div></details></div>';
-      }).join('');
-    }else document.getElementById('observerFaultArchiveItems').innerHTML='';
+      const archiveKey=historical.map(x=>String(x.fault_id)+':'+String(x.last_seen_at)+':'+String(x.occurrence_count)).join('|');
+      if(archive.dataset.renderKey!==archiveKey){
+        // Keep the operator's expanded archive/details stable across polling.
+        archive.dataset.renderKey=archiveKey;
+        document.getElementById('observerFaultArchiveItems').innerHTML=historical.map(x=>{
+          const error=[x.error_type,x.error_message].filter(Boolean).join(': ')||x.fault_code||'ошибка Observer';
+          return '<div class="durable-fault-item"><details><summary><b>RED · архив</b> · '+safe(observerFaultFriendlyText(x))+'</summary><div>'+safe(error)+'</div><div class="muted">'+safe(x.fault_id||'—')+' · '+safe(x.last_seen_at||x.detected_at||'—')+'</div></details></div>';
+        }).join('');
+      }
+    }else if(archive.dataset.renderKey!==''){
+      archive.dataset.renderKey='';
+      document.getElementById('observerFaultArchiveItems').innerHTML='';
+    }
   }
   if(value.state==='unavailable'){
     banner.hidden=false;
