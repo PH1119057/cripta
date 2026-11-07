@@ -51,7 +51,7 @@ class _DB:
 
 def _select(exposure: int, monkeypatch: pytest.MonkeyPatch, *, forced: bool = False,
             selected: frozenset[str] = frozenset(), reason: str = "OWNER_DISARM",
-            enabled: bool = False):
+            enabled: bool = False, source_repair_only: bool = False):
     monkeypatch.setenv("CRIPTA_P90_REAL_SOURCE_ONLY", "ENABLED" if forced else "DISABLED")
     epoch = next(n for n in _source().body if isinstance(n, ast.FunctionDef)
                  and n.name == "_run_observer_epoch")
@@ -63,14 +63,24 @@ def _select(exposure: int, monkeypatch: pytest.MonkeyPatch, *, forced: bool = Fa
     db = _DB(exposure, enabled=enabled, reason=reason)
     namespace = {
         **_namespace(), "connection": db,
-        "observer_split": SimpleNamespace(p90_real=tuple(
-            SimpleNamespace(activation=SimpleNamespace(activation_id=k)) for k in ("M", "S")
-        )),
+        "observer_split": SimpleNamespace(
+            p90_real=tuple(
+                SimpleNamespace(activation=SimpleNamespace(activation_id=k))
+                for k in ("M", "S")
+            ),
+            ordinary=(),
+            p90_paper=(),
+        ),
         "_real_execution_selected_activation_ids": lambda *_: selected,
         "_p90_source_only_gate_compatible": lambda **_: True,
-        # The AST composition harness executes only the selector body, not
-        # _run_observer_epoch's new optional keyword argument binding.
-        "source_repair_only": False,
+        "_scoped_p90_repair_ingest_allowed": (
+            __import__(
+                "operations.monitoring.universal_entry_shadow",
+                fromlist=["_scoped_p90_repair_ingest_allowed"],
+            )._scoped_p90_repair_ingest_allowed
+        ),
+        # AST harness omits the outer function keyword binding.
+        "source_repair_only": source_repair_only,
     }
     exec(compile(ast.Module(body=epoch.body[start:end], type_ignores=[]), str(PATH), "exec"),
          namespace)
@@ -174,3 +184,33 @@ def test_disarm_does_not_ignore_ordinary_permission_changes_or_missing_p90_owner
     latest = (*_signature(False, "False"), (*ordinary[:-2], "False", "new-at"))
     assert not _transition(current, latest)
     assert not _transition(current[:2], latest[:2])
+
+
+def test_source_repair_selector_consumes_only_fresh_disarmed_open_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state, db = _select(1, monkeypatch, source_repair_only=True)
+    assert state["p90_repair_ingest_only"] is True
+    assert state["p90_real_live"] is False
+    assert state["p90_real_source_only"] is False
+    assert state["p90_real_staged"] is False
+    assert not db.enabled
+
+
+@pytest.mark.parametrize("failure", (
+    {"exposure": 0},
+    {"enabled": True},
+    {"selected": frozenset({"M"})},
+    {"forced": True},
+))
+def test_source_repair_selector_rejects_absent_open_or_financial_permission(
+    monkeypatch: pytest.MonkeyPatch, failure: dict[str, object],
+) -> None:
+    settings: dict[str, object] = {
+        "exposure": 1, "enabled": False,
+        "selected": frozenset(), "forced": False,
+        "source_repair_only": True,
+    }
+    settings.update(failure)
+    with pytest.raises(RuntimeError, match="P90_SCOPED_SOURCE_REPAIR_FINANCIAL_SCOPE_INVALID"):
+        _select(**settings, monkeypatch=monkeypatch)  # type: ignore[arg-type]
