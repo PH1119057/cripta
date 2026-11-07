@@ -286,6 +286,14 @@ def test_p90_restart_reads_pg_first_but_rest_remains_continuity_owner() -> None:
                 price="100.24", size="1.2", side="Buy",
             ),),
         )
+    with pytest.raises(P90RealOpenSourceRecoveryUnverified, match="REST_CONFLICT"):
+        _verify_saved_rest_overlap(
+            saved, (SimpleNamespace(
+                seq=471, exec_id="synthetic-470-a",
+                traded_at=_event().event_at,
+                price="100.25", size="1.2", side="Buy",
+            ),),
+        )
 
 
 def test_persisted_native_order_corruption_is_not_silent_missing_evidence() -> None:
