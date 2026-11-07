@@ -445,3 +445,25 @@ def test_reviewed_current_ws_reconnect_delta_is_hash_bound():
     assert hashlib.sha256(source_bytes).hexdigest() == (
         compat.REVIEWED_BUGFIX_CONSUMER_SHA256["universal_entry/trade_mirror.py"]
     )
+
+
+@pytest.mark.parametrize(("relative", "expected"), [
+    ("universal_entry/p90l90_real_bounded_native_restart.py",
+     "872af9cd2419928bfc4ade170a41cb7d8eb8a99a4787d36fe6d20f0a6b6bb5ef"),
+    ("universal_entry/p90l90_real_restart_recovery.py",
+     "6ed2cd670e83dd429cb8b293843dc0c482fc823ca8636937db8bf62646af2431"),
+])
+def test_owner_reviewed_recovery_delta_is_immutable_git_blob(
+    relative, expected,
+):
+    from pathlib import Path
+
+    import hashlib
+    import subprocess
+
+    # Git source bytes, not Windows CRLF-transformed checkout bytes.
+    blob = subprocess.check_output(
+        ["git", "show", f"HEAD:src/bybit_workbench/{relative}"],
+    )
+    assert hashlib.sha256(blob).hexdigest() == expected
+    assert compat.REVIEWED_BUGFIX_CONSUMER_SHA256[relative] == expected
