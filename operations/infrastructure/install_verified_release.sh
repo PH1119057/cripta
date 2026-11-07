@@ -693,6 +693,19 @@ systemctl is-active --quiet cripta-runtime-recovery-supervisor.service ||
   die "SUB WS technical recovery supervisor failed after deploy"
 echo "SUB_WS_TECHNICAL_RECOVERY_SUPERVISOR=ACTIVE"
 
+# The approved release explicitly prepares data/code compatibility before the
+# Observer starts. This only appends independently verified evidence as cripta;
+# it never relabels history or opens financial controls. Failure must not strand
+# existing positions with their managed Exit services stopped.
+if runuser -u cripta -- env PYTHONDONTWRITEBYTECODE=1 \
+  "$runtime_release/.venv/bin/python" \
+  "$runtime_release/operations/implementation/register_p90_real_source_compatibility.py" \
+  --current-release --active-epoch --register --release-preparation; then
+  echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=COMPLETED"
+else
+  echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=BLOCKED_OBSERVER_NOT_READY" >&2
+fi
+
 for service in "${managed_services[@]}"; do
   if [[ "$service" == "cripta-real-service-broker.service" ||
         "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
