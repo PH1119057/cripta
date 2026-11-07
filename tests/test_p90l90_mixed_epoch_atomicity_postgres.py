@@ -53,7 +53,15 @@ def test_real_observer_dispatches_inside_exact_mixed_atomic_boundary():
     tail = epoch[wrapper:epoch.index("    try:\n        trade_mirror_thread.start()",wrapper)]
     assert "dispatch_observer_fact_atomically(" in tail
     assert "p90_enabled=p90_consumer is not None" in tail
-    assert "dispatch=lambda: _process_fact_body(fact, cursor)" in tail
+    # Source journal now wraps the existing P90 and ordinary dispatch; it
+    # cannot commit independently of either consumer.
+    assert "with connection.transaction():" in tail
+    assert "NativePublicTradeJournal(connection).append(" in tail
+    assert "_process_fact_body(fact, cursor)" in tail
+    assert "dispatch=dispatch" in tail
+    assert tail.index("NativePublicTradeJournal(connection).append(") < (
+        tail.index("_process_fact_body(fact, cursor)")
+    )
     assert "paper.route_p90l90_native_trade(" not in epoch
     assert "paper.create_p90l90_native_paper_entry(" not in epoch
 
