@@ -154,13 +154,17 @@ def resolve_durable_restart_anchor(
     try:
         at = _utc(last_event_at) if isinstance(last_event_at, datetime) else None
         ids = tuple(last_exec_ids)
-        if verified_native_source is not None and (
-            at is None or not ids or type(last_sequence) is not int
-            or live_anchor is None
-        ):
-            raise P90RealNativeRestartUnverified(
-                "P90_RESTART_VERIFIED_NATIVE_LIVE_BOUNDARY_MISSING"
-            )
+        if verified_native_source is not None:
+            if (
+                at is None or not ids or type(last_sequence) is not int
+                or live_anchor is None
+            ):
+                raise P90RealNativeRestartUnverified(
+                    "P90_RESTART_VERIFIED_NATIVE_LIVE_BOUNDARY_MISSING"
+                )
+            assert at is not None and ids
+            assert isinstance(last_sequence, int)
+            assert live_anchor is not None
         native_rows = (
             latest_rest_rows
             if verified_native_source is None
