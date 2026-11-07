@@ -86,7 +86,7 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
     "universal_exit/p90l90_real_exit_port.py":
         "3a245cba87891a53b05c81ec86bc9caa11d7b93893743717a73aed40dc0ed506",
     "universal_exit/p90l90_real_mfe.py":
-        "53bd13487b70c632a724caeebd257fcd04dd9c92a993f9e0072f5dd2750be4ed",
+        "b5ea55aabc32a8860de421411b45990662c2a6b7111f53a18cae2c7603cac48f",
     "universal_exit/p90l90_real_mfe_ledger.py":
         "e85fb4c788ffa1a178a4b887e3e06593871e267573fc87b4ad221424bad26fab",
     # Reviewed WS reconnect diagnostic: gap counters are scoped to the
