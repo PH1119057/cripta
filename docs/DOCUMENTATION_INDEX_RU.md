@@ -1740,3 +1740,17 @@ README/AGENTS и текст ChatGPT Project Instructions не меняются,
 
 `OWNER_DECISION=YES`; `CANON=AFTER MERGE`;
 `IMPLEMENTED=NO`; `DEPLOYED=NO`; `RUNTIME_VERIFIED=NO`.
+
+## 70. Exact P90 SUB native TakeProfit closed recovery — OWNER DECISION 2026-11-08
+
+Owner approved the narrow extension of the **existing** resolved-mutation
+recovery for independently verified Exchange-resident initial TakeProfit.
+Current APT P90 SHORT closed with a proven filled TP order/execution, but its
+Bybit-native `orderLinkId` is empty and there is no bot-issued close command.
+Do not invent or alter a command; TC §4.17 is the canonical acceptance owner,
+ARCH §59 preserves owner/consumer/account authority, DEV §57 owns docs-first
+SQL/tests/release, and Issue #470 tracks dated runtime blockers. No StopLoss,
+manual or unknown close is admitted; no change of Strategy policy, financial
+authorization, source routing, Project Source or bootstrap.
+`OWNER_DECISION=YES`; `CANON=AFTER MERGE`;
+`IMPLEMENTED=NO`; `DEPLOYED=NO`; `OWNER_ARM=OFF`.
