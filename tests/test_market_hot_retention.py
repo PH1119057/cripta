@@ -86,7 +86,10 @@ def test_systemd_unit_is_nontrading_postgres_only_and_bounded():
     assert 'Group=postgres' in service
     assert '--apply --batch-limit 1000' in service
     assert 'ProtectSystem=strict' in service
-    assert 'ExecStart=/usr/bin/python3 -B /usr/local/libexec/cripta-market-hot-retention.py' in service
+    assert (
+        "ExecStart=/usr/bin/python3 -B /usr/local/libexec/cripta-market-hot-retention.py"
+        in service
+    )
     assert 'OnCalendar=*:0/10' in timer
     assert 'Unit=cripta-market-hot-retention.service' in timer
 
@@ -138,5 +141,9 @@ def test_release_installs_inert_units_and_preserves_activation_state():
     assert "cripta-market-hot-retention.service" in installer
     assert "cripta-market-hot-retention.timer" in installer
     assert "systemctl enable cripta-market-hot-retention.timer" not in installer
-    assert 'install -o root -g root -m 0644 "$runtime_release/operations/monitoring/market_hot_retention.py" /usr/local/libexec/cripta-market-hot-retention.py' in installer
+    assert (
+        'install -o root -g root -m 0644 '
+        '"$runtime_release/operations/monitoring/market_hot_retention.py" '
+        '/usr/local/libexec/cripta-market-hot-retention.py' in installer
+    )
     assert "/usr/local/libexec/cripta-market-hot-retention.py /etc/cripta/release.env" in installer
