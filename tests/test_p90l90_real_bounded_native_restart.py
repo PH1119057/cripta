@@ -194,6 +194,7 @@ def _long_native_source_window() -> P90VerifiedNativeSourceWindow:
         coverage_start=OLD.traded_at,
         coverage_end=NEW.traded_at,
         event_count=len(native),
+        max_required_records=len(native),
         source_sha256=_source_rows_digest(native),
         source_reference="approved-original-native-source-test-470",
         coverage_witness="APPROVED_FULL_NATIVE_SOURCE_ARCHIVE_V1",
@@ -237,6 +238,7 @@ def test_unproved_archives_never_bypass_original_native_requirement() -> None:
     proof = _long_native_source_window()
     invalids = [
         replace(proof, complete_coverage_verified=False),
+        replace(proof, max_required_records=len(proof.rows) - 1),
         replace(proof, source_sha256="0" * 64),
         replace(proof, coverage_start=OLD.traded_at + timedelta(milliseconds=1)),
         replace(proof, coverage_end=NEW.traded_at - timedelta(milliseconds=1)),
