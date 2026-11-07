@@ -66,8 +66,10 @@ def test_p90_owner_arm_status_uses_current_runtime_truth():
     assert "Данные подготавливаются · при открытии дождёмся полной готовности" in INDEX
 
 
-def test_unresolved_observer_faults_stay_visible_until_explicit_resolution():
-    assert "historical_open_count = len(items)" in APP
+def test_unresolved_observer_faults_remain_in_history_after_attention_reset():
+    assert "historical_open_count = len(items) + len(archived_items)" in APP
+    assert '"archived_items": archived_items' in APP
+    assert "_current_operator_error_notice(" in APP
     assert "superseded_count += 1" not in APP
     assert '"state": "red" if items else "clear"' in APP
     assert '"historical_open_count": historical_open_count' in APP

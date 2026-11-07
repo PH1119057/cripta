@@ -2318,6 +2318,18 @@ def _p90_native_recovery_failure(exc: Exception) -> bool:
     ))
 
 
+def _p90_expected_initial_cursor_wait(exc: Exception) -> bool:
+    """Exact bounded first-tick absence is source preparation, not corruption."""
+    from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
+        P90RealOpenSourceRecoveryUnverified,
+    )
+    return (
+        isinstance(exc, P90RealOpenSourceRecoveryUnverified)
+        and str(exc)
+        == "P90_REAL_RESTART_SOURCE_LIVE_MIRROR_FIVE_SYMBOL_CURSORS_MISSING"
+    )
+
+
 def _run_observer_epoch(
     connection: Any,
     bundles: tuple[object, ...],
@@ -4158,6 +4170,59 @@ def _run_multi_strategy_observer() -> None:
                     break
                 time.sleep(2.0)
             except Exception as exc:
+                # A quiet native symbol can legitimately miss the bounded
+                # first-cursor deadline.  Only the exact P90 OPEN, DISARMED
+                # source-repair scope may treat that known wait as PREPARING.
+                # Every unknown/unsafe failure still uses the durable ERROR path.
+                if (
+                    not force_p90_source_repair
+                    and _p90_expected_initial_cursor_wait(exc)
+                ):
+                    expected_repair_allowed = False
+                    try:
+                        repair_split = partition_observer_strategies(bundles)
+                        if len(repair_split.p90_real) == 2:
+                            selected = _real_execution_selected_activation_ids(
+                                connection, repair_split.p90_real,
+                            )
+                            gate = connection.execute(
+                                "SELECT enabled FROM control.execution_gates "
+                                "WHERE mode='mainnet'"
+                            ).fetchone()
+                            exposure = connection.execute(
+                                "SELECT count(*) FROM runtime.position_ownership "
+                                "WHERE strategy_version=%s AND state IN "
+                                "('OPEN','RECONCILIATION_REQUIRED')",
+                                (P90_REAL_VERSION,),
+                            ).fetchone()
+                            expected_repair_allowed = (
+                                gate == (False,)
+                                and exposure is not None and exposure[0] > 0
+                                and _scoped_p90_repair_ingest_allowed(
+                                    degraded=True,
+                                    mainnet_gate_enabled=False,
+                                    selected_real_activations=selected,
+                                    paper_consumer_count=len(repair_split.p90_paper),
+                                )
+                            )
+                    except Exception:  # noqa: BLE001 - revert to durable ERROR
+                        expected_repair_allowed = False
+                    if expected_repair_allowed:
+                        force_p90_source_repair = True
+                        _observer_status(
+                            state="SOURCE_REPAIR_PREPARING",
+                            epoch_id=None,
+                            active_bundles=(),
+                            symbols=(),
+                            reason=(
+                                "P90_OPEN_EXIT_BLOCKED_EXPECTED_NATIVE_CURSOR_WAIT "
+                                "P90_REAL_RESTART_SOURCE_LIVE_MIRROR_"
+                                "FIVE_SYMBOL_CURSORS_MISSING"
+                            ),
+                        )
+                        # The next epoch independently rechecks gate/exposure
+                        # before source-only ingest; no Entry or Exit is armed.
+                        continue
                 try:
                     fault_id = _record_observer_runtime_fault(
                         connection,
