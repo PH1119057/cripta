@@ -124,20 +124,10 @@ def assemble_p90_real_exit_runtime(
         account_by_strategy=account_by_strategy,
     )
     def private_state_pending(position: StrategyPosition) -> bool:
-        row = connection.execute(
-            "SELECT state FROM runtime.trade_commands WHERE command_id=%s "
-            "AND trading_account_id=%s AND identity_status='PROVEN'",
-            (position.entry_command_id, position.trading_account_id),
-        ).fetchone()
-        # The normal Observer adapter uses dict_row. Also accept the default
-        # psycopg row shape when this composition receives a raw connection.
-        if isinstance(row, Mapping):
-            state = row.get("state")
-        elif isinstance(row, (tuple, list)) and len(row) == 1:
-            state = row[0]
-        else:
-            state = None
-        return state != "completed" or not p90_real_exit_no_pending(
+        # PositionProvider already proves the exact OPEN position, ExitPlan
+        # and initial protection. Entry command bookkeeping is historical;
+        # only unresolved Exit mutations may hold this position's next action.
+        return not p90_real_exit_no_pending(
             connection, position=position, trading_account_id=position.trading_account_id or "",
         )
 

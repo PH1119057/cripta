@@ -8,7 +8,7 @@ boundary regression, NOT full signed Exchange/restart acceptance.
 from __future__ import annotations
 
 import os
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -104,6 +104,81 @@ def append_native(db, position, exec_id, seq, millis):
         first_fill_forward_coverage_proven=True,
         native_continuity_proven=True,
     )
+
+
+@pytest.mark.parametrize("defect", [None, "protection", "account", "plan", "quantity"])
+def test_real_entry_completion_sql_requires_protected_exact_exit_owner(monkeypatch, defect):
+    if not DSN:
+        if REQUIRED:
+            pytest.fail("Required disposable PG16 missing")
+        pytest.skip("Requires explicitly configured disposable PG16")
+    from test_first_fill_trailing_dispatch import runtime
+
+    schema = "p90entryexit_" + uuid4().hex
+    with psycopg.connect(DSN, autocommit=True) as admin:
+        require_disposable(admin)
+        admin.execute(f"CREATE SCHEMA {schema}")
+        try:
+            admin.execute(f"CREATE TABLE {schema}.trade_commands("
+                          "command_id text PRIMARY KEY,command_type text,state text,"
+                          "trading_account_id text,identity_status text,"
+                          "strategy_execution_binding_id text,finished_at_epoch_ms bigint,"
+                          "result_json text)")
+            admin.execute(f"CREATE TABLE {schema}.position_ownership("
+                          "position_id text PRIMARY KEY,entry_command_id text,state text,"
+                          "identity_status text,trading_account_id text,"
+                          "strategy_execution_binding_id text,actual_avg_fill numeric,"
+                          "actual_qty numeric,fill_at timestamptz,"
+                          "initial_protection_confirmed_at timestamptz,"
+                          "exit_plan_fingerprint text,strategy_id text,strategy_version text,"
+                          "strategy_config_fingerprint text)")
+            admin.execute(f"CREATE TABLE {schema}.exit_plans("
+                          "exit_plan_fingerprint text PRIMARY KEY,strategy_id text,"
+                          "strategy_version text,strategy_config_fingerprint text)")
+            admin.execute(f"INSERT INTO {schema}.trade_commands VALUES "
+                          "('entry','entry','running','account','PROVEN','binding',NULL,NULL)")
+            admin.execute(f"INSERT INTO {schema}.exit_plans VALUES "
+                          "('plan','strategy','version','config')")
+            admin.execute(f"INSERT INTO {schema}.position_ownership VALUES "
+                          "('position','entry','OPEN','PROVEN',%s,'binding',100,%s,now(),%s,"
+                          "'plan','strategy','version',%s)",
+                          ("foreign" if defect == "account" else "account",
+                           0 if defect == "quantity" else 1,
+                           None if defect == "protection" else datetime.now(UTC),
+                           "wrong" if defect == "plan" else "config"))
+            admin.execute(f"GRANT USAGE ON SCHEMA {schema} TO cripta")
+            admin.execute(f"GRANT SELECT,UPDATE ON ALL TABLES IN SCHEMA {schema} TO cripta")
+            with psycopg.connect(DSN) as c:
+                require_disposable(c)
+                c.execute("SET ROLE cripta")
+                c.commit()
+                class DB:
+                    def execute(self, sql, params):
+                        for table in ("trade_commands", "position_ownership", "exit_plans"):
+                            sql = sql.replace("runtime." + table, schema + "." + table)
+                            sql = sql.replace("strategy_entry." + table, schema + "." + table)
+                        return c.execute(sql, params)
+                    def commit(self):
+                        c.commit()
+                    def rollback(self):
+                        c.rollback()
+                monkeypatch.setattr(runtime, "TRADING_ACCOUNT_ID", "account")
+                def complete():
+                    runtime._complete_protected_p90_entry(
+                        DB(), entry_command_id="entry", position_id="position",
+                        entry_result={"actualProtection": {"verifiedFromExchange": True}},
+                    )
+                if defect:
+                    with pytest.raises(runtime.ExchangeMutationBarrier):
+                        complete()
+                else:
+                    complete()
+                # Independent connection proves commit/rollback before Exit runs.
+                assert admin.execute(f"SELECT state FROM {schema}.trade_commands").fetchone() == (
+                    "running" if defect else "completed",
+                )
+        finally:
+            admin.execute(f"DROP SCHEMA {schema} CASCADE")
 
 
 def test_two_connections_keep_protected_fill_and_exit_across_mfe_rollback():
