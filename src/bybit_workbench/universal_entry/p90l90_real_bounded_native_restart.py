@@ -17,9 +17,9 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from hashlib import sha256
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from hashlib import sha256
 
 from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
 from bybit_workbench.universal_entry.transport_continuity import (
@@ -140,6 +140,7 @@ def resolve_durable_restart_anchor(
     last_exec_ids: Sequence[str],
     latest_rest_rows: Sequence[Mapping[str, object]],
     verified_native_source: P90VerifiedNativeSourceWindow | None = None,
+    live_anchor: TradeCursor | None = None,
 ) -> TradeCursor:
     """Recover one exact persisted cursor without forgetting same-seq peers.
 
@@ -153,17 +154,20 @@ def resolve_durable_restart_anchor(
     try:
         at = _utc(last_event_at) if isinstance(last_event_at, datetime) else None
         ids = tuple(last_exec_ids)
+        if verified_native_source is not None and (
+            at is None or not ids or type(last_sequence) is not int
+            or live_anchor is None
+        ):
+            raise P90RealNativeRestartUnverified(
+                "P90_RESTART_VERIFIED_NATIVE_LIVE_BOUNDARY_MISSING"
+            )
         native_rows = (
             latest_rest_rows
             if verified_native_source is None
             else _require_complete_original_native_source(
                 verified_native_source,
-                old=TradeCursor(
-                    symbol, ids[0] if ids else "", last_sequence or 0, at or datetime.now(UTC),
-                ),
-                new=TradeCursor(
-                    symbol, ids[0] if ids else "", last_sequence or 0, at or datetime.now(UTC),
-                ),
+                old=TradeCursor(symbol, ids[0], last_sequence, at),
+                new=live_anchor,
             )
         )
         if (
@@ -202,7 +206,7 @@ def resolve_durable_restart_anchor(
         candidates = sorted(name for name, when in present.items() if when == at)
         if not candidates:
             raise P90RealNativeRestartUnverified(
-                "P90_RESTART_DURABLE_LAST_TIMESTAMP_NOT_IN_REST"
+                "P90_RESTART_DURABLE_LAST_TIMESTAMP_NOT_IN_SOURCE"
             )
         return TradeCursor(
             symbol=symbol,
@@ -320,9 +324,10 @@ def attest_bounded_native_restart(
             raise P90RealNativeRestartUnverified(
                 "P90_RESTART_LIVE_ANCHOR_NOT_IN_ORIGINAL_WS"
             )
-        # The REST endpoint is recent-N, newest-first. All rows between
-        # the two exact anchors must belong to this one page. Sorting an
-        # arbitrary untrusted subset would falsely certify a missing tick.
+        # Both accepted native sources are newest-first. For REST every
+        # trade in the replay must be inside the single verified page.
+        # For a full archive the *independent* coverage witness must attest
+        # the complete interval before these rows are accepted.
         seen: set[str] = set()
         prev_seq: int | None = None
         prev_at: datetime | None = None
@@ -364,8 +369,8 @@ def attest_bounded_native_restart(
         )
         if (
             not known_old_ids
-            # Every original ID must be independently present in this exact
-            # already-validated bounded (<=1000) native REST proof window.
+            # Every original ID must be present in the source's complete
+            # exact native interval; REST's 1000 rows are only a fast path.
             or len(known_old_ids) > len(parsed)
             or durable_anchor.exec_id not in known_old_ids
             or any(not isinstance(item, str) or not item for item in known_old_ids)
