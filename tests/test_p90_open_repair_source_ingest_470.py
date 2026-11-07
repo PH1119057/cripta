@@ -102,6 +102,7 @@ def test_open_position_source_repair_cannot_be_reported_as_financial_ready() -> 
     assert "active_bundles=() if p90_repair_ingest_only else bundles" in runtime
     assert "P90RealSourceCompatibilityUnverified" in runtime
     assert "P90RealOpenRestartUnverified" in runtime
+    assert "_record_observer_runtime_fault(" in runtime
     assert "p90_real_live = False" in runtime
 
 
