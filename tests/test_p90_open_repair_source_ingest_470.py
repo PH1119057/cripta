@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from operations.monitoring.universal_entry_shadow import (
+    _p90_native_recovery_failure,
     _scoped_p90_repair_ingest_allowed,
 )
 
@@ -102,3 +103,66 @@ def test_open_position_source_repair_cannot_be_reported_as_financial_ready() -> 
     assert "P90RealSourceCompatibilityUnverified" in runtime
     assert "P90RealOpenRestartUnverified" in runtime
     assert "p90_real_live = False" in runtime
+
+
+def test_only_exact_p90_recovery_failures_can_trigger_repair_source_restart() -> None:
+    from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
+        P90RealOpenSourceRecoveryUnverified,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+        P90RealOpenRestartUnverified,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_bounded_native_restart import (
+        P90RealNativeRestartUnverified,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+        P90RealSourceCompatibilityUnverified,
+    )
+    from bybit_workbench.universal_exit.p90l90_real_mfe import (
+        P90RealMfeUnverified,
+    )
+
+    for error in (
+        P90RealOpenRestartUnverified("old source"),
+        P90RealOpenSourceRecoveryUnverified("old native gap"),
+        P90RealNativeRestartUnverified("missing original seq"),
+        P90RealSourceCompatibilityUnverified("identity"),
+        P90RealMfeUnverified("missing current MFE"),
+    ):
+        assert _p90_native_recovery_failure(error)
+
+    for error in (
+        RuntimeError("Unknown Exchange mutation"),
+        ValueError("source integrity conflict"),
+        ConnectionError("public WS unavailable"),
+    ):
+        assert not _p90_native_recovery_failure(error)
+
+
+def test_late_p90_recovery_error_restarts_only_pure_source_rail() -> None:
+    source = SOURCE.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    runner = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_run_multi_strategy_observer"
+    )
+    body = ast.get_source_segment(source, runner)
+    assert body is not None
+    assert "source_repair_only=force_p90_source_repair" in body
+    assert "if _p90_native_recovery_failure(exc):" in body
+    assert "force_p90_source_repair = True" in body
+    assert "SOURCE_REPAIR_PREPARING" in body
+    assert "fault_id = _record_observer_runtime_fault(" in body
+    epoch = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_run_observer_epoch"
+    )
+    text = ast.get_source_segment(source, epoch)
+    assert text is not None
+    assert "source_repair_only: bool = False" in text
+    assert "p90_real_force_source_only" in text
+    assert "P90_SCOPED_SOURCE_REPAIR_FINANCIAL_SCOPE_INVALID" in text
+    assert "if source_repair_only:" in text
+    assert "if p90_repair_ingest_only:" in text
