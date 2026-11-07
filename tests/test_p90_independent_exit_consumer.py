@@ -62,13 +62,17 @@ def test_old_open_position_never_arms_a_stale_active_price(seconds):
     assert "INSERT" not in db.sql[0] and "UPDATE" not in db.sql[0]
 
 
-@pytest.mark.parametrize("source_age", (-1, 16, 300))
-def test_pre_fill_and_expired_windows_are_never_promoted_to_exit(source_age):
+@pytest.mark.parametrize("protection_offset,now_offset", (
+    (-1, 16), (1, 18), (3, 600),
+))
+def test_pre_fill_and_expired_windows_are_never_promoted_to_exit(
+    protection_offset, now_offset,
+):
     with pytest.raises(subject.P90IndependentExitBlocked):
         subject._validate_first_fill_age(
             fill_at=AT,
-            protected_at=AT + timedelta(seconds=source_age),
-            now=AT + timedelta(seconds=16),
+            protected_at=AT + timedelta(seconds=protection_offset),
+            now=AT + timedelta(seconds=now_offset),
         )
 
 
@@ -158,6 +162,7 @@ class ExitConnection(CandidateConnection):
 
 
 def _live_proofs(monkeypatch, uid="12345678"):
+    monkeypatch.setattr(subject, "datetime", SimpleNamespace(now=lambda _: AT))
     account = "ta-" + "a" * 32
     connector = "ac-" + "c" * 32
     position = SimpleNamespace(
