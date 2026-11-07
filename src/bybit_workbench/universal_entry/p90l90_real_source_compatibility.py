@@ -24,6 +24,15 @@ _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _EPOCH = re.compile(r"p90-real-epoch-[0-9a-f]{40}\Z")
 _SYMBOLS = frozenset().union(*ALLOWED_SYMBOLS.values())
 _TABLE = "strategy_entry.p90l90_real_source_release_compatibility"
+# Exact historical producers reviewed for the Entry -> Exit ownership fix.
+# Their evidence remains bound to their own code, not rewritten to current code.
+# This NEVER approves the loaded executable using an older producer's digest.
+_REVIEWED_HISTORICAL_CONSUMERS = dict.fromkeys((
+    "3682292450a6f6e2f49f67e30e473ab035a0e27d",
+    "aa65991b7e704fdbd87b8f3ca158add94cb76d53",
+    "1fc88f96f110337bfe575c4caaba48b5cdbaa134",
+    "0044d4eabd89b762641e7468e56161d707b07ea5",
+), "e455220878f19f5d1fd530abdb98b7d379a67fbe5a911f378747b8d1301979a9")
 # These wiring adapters are reviewed in the release diff. All Strategy,
 # Entry/Exit algorithms, codecs, contracts, account and private-proof modules
 # below remain byte-identical to the retained origin release.
@@ -328,7 +337,11 @@ def inspect_real_source_identity(connection: Any, *, epoch_id: str,
     for release, saved_origin, version, code, pair, checksum, evidence in rows:
         _require(isinstance(release, str) and _SHA.fullmatch(release) is not None
                  and saved_origin == origin and version == CONTRACT_VERSION
-                 and code == contract and pair == plans
+                 and (
+                     code == contract
+                     or (release != loaded_commit
+                         and _REVIEWED_HISTORICAL_CONSUMERS.get(release) == code)
+                 ) and pair == plans
                  and isinstance(checksum, str) and _DIGEST.fullmatch(checksum) is not None
                  and isinstance(evidence, list) and len(evidence) == 5
                  and {x.get("symbol") for x in evidence if isinstance(x, dict)} == _SYMBOLS

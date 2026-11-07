@@ -121,6 +121,43 @@ def test_new_release_is_not_approved_by_valid_sha_or_ancestry_alone():
         inspect_p90_real_open_restart_epoch(db, source_commit=LOADED, bundles=bundles())
 
 
+def test_reviewed_historical_producer_keeps_own_digest_without_relabelling():
+    db = SourceDB()
+    attest(db)
+    old = list(copy.deepcopy(db.attestations[0]))
+    old[0], old[3] = next(iter(compat._REVIEWED_HISTORICAL_CONSUMERS.items()))
+    db.attestations.insert(0, tuple(old))
+    before = copy.deepcopy(db.attestations)
+    identity = compat.inspect_real_source_identity(
+        db, epoch_id=EPOCH, loaded_commit=LOADED, bundles=bundles(),
+    )
+    assert old[0] in identity.approved_producers
+    assert db.attestations == before
+    assert all(sql.lstrip().startswith("SELECT") for sql in db.sql)
+
+
+@pytest.mark.parametrize("defect", ["unknown-release", "wrong-digest", "loaded-release"])
+def test_historical_allowlist_cannot_approve_unreviewed_or_loaded_code(defect):
+    db = SourceDB()
+    attest(db)
+    old = list(copy.deepcopy(db.attestations[0]))
+    old[0], old[3] = next(iter(compat._REVIEWED_HISTORICAL_CONSUMERS.items()))
+    if defect == "unknown-release":
+        old[0] = "d" * 40
+    elif defect == "wrong-digest":
+        old[3] = "0" * 64
+    else:
+        # Old code cannot certify the executable that is actually loaded.
+        db.attestations = []
+    db.attestations.insert(0, tuple(old))
+    with pytest.raises(compat.P90RealSourceCompatibilityUnverified):
+        compat.inspect_real_source_identity(
+            db, epoch_id=EPOCH,
+            loaded_commit=old[0] if defect == "loaded-release" else LOADED,
+            bundles=bundles(),
+        )
+
+
 @pytest.mark.parametrize("bad", [
     "origin", "release", "contract", "consumer", "plans", "digest", "snapshot",
     "retired", "missing-symbol", "mixed-origin", "unknown-writer", "invalid-generation",
