@@ -162,10 +162,12 @@ def resolve_durable_restart_anchor(
 
     The checkpoint stores every execId emitted at its last sequence.  One of
     those IDs whose timestamp equals the persisted last-emitted timestamp is
-    sufficient as the physical anchor only when *all* persisted IDs are still
-    present in the same bounded recent-trade page.  The caller passes the full
-    ID set back to :func:`attest_bounded_native_restart` so none is replayed
-    a second time.
+    sufficient as the physical anchor only when *all* persisted IDs occur
+    in one independently validated source window: recent-trade for the
+    short-gap fast path, or an approved original-native coverage interval
+    for a long gap. The latter must cover the separately verified new live
+    cursor. The full original ID set is passed onward unchanged so none is
+    replayed twice.
     """
     try:
         at = _utc(last_event_at) if isinstance(last_event_at, datetime) else None
@@ -275,7 +277,13 @@ def attest_bounded_native_restart(
     durable_exec_ids: Sequence[str] | None = None,
     verified_native_source: P90VerifiedNativeSourceWindow | None = None,
 ) -> P90RealBoundedNativeRecovery:
-    """Prove original native coverage via REST fast path or approved full source.
+    """Prove required native causality via optional REST or full source.
+
+    This function is NOT a global Observer gate, a required old-epoch
+    replay for every flat Strategy, or a source for MFE price-only results.
+    Its strict seq/execId checks apply only to consumers needing exact
+    native causal replay. Independently authenticated Exit price evidence
+    follows the separate position/Exit recovery contract.
 
     The caller MUST load the durable anchor from the original source
     checkpoint, independently authenticate Exchange position/protection,
