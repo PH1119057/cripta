@@ -574,6 +574,9 @@ migration_files=(
   # Same source checkpoint owner: exact rolling trade-ID journal and V2 JSON
   # accepted atomically; the migration never opens any financial gate.
   operations/sql/20261106_p90_native_sequence_exec_ids.sql
+  # Shared native MarketSource evidence. Required before Observer code cutover.
+  # Additive only: no source cursor reset or financial gate mutation.
+  operations/sql/20261107_native_public_trade_evidence.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
