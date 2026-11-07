@@ -223,9 +223,14 @@ def test_complete_vetted_native_source_is_not_limited_to_recent_rest_1000() -> N
         latest_rest_rows=case["latest_rest_rows"],
         verified_native_source=proof,
         live_anchor=NEW,
+        verify_coverage=lambda candidate: candidate is proof,
     )
     result = attest_bounded_native_restart(
-        **{**case, "durable_anchor": durable, "verified_native_source": proof},
+        **{
+            **case, "durable_anchor": durable,
+            "verified_native_source": proof,
+            "verify_coverage": lambda candidate: candidate is proof,
+        },
     )
     assert len(result.trades) == 1201
     assert result.trades[0].exec_id == "original-native-intermediate-1"
@@ -256,7 +261,10 @@ def test_unproved_archives_never_bypass_original_native_requirement() -> None:
     for invalid in invalids:
         with pytest.raises(P90RealNativeRestartUnverified):
             attest_bounded_native_restart(
-                **{**case, "verified_native_source": invalid},
+                **{
+                    **case, "verified_native_source": invalid,
+                    "verify_coverage": lambda _candidate: True,
+                },
             )
     with pytest.raises(P90RealNativeRestartUnverified):
         resolve_durable_restart_anchor(
@@ -321,6 +329,7 @@ def test_21_hour_outage_can_use_complete_original_native_source_not_rest_page() 
         last_event_at=old.traded_at, last_exec_ids=(old.exec_id,),
         latest_rest_rows=only_recent,
         verified_native_source=proof, live_anchor=new,
+        verify_coverage=lambda candidate: candidate is proof,
     )
     result = attest_bounded_native_restart(
         source_commit=SHA, source_epoch_id=EPOCH,
@@ -330,6 +339,7 @@ def test_21_hour_outage_can_use_complete_original_native_source_not_rest_page() 
         checked_at=AT + timedelta(seconds=3, milliseconds=100),
         durable_exec_ids=(old.exec_id,),
         verified_native_source=proof,
+        verify_coverage=lambda candidate: candidate is proof,
     )
     assert len(result.trades) == 1201
     assert result.trades[-1].exec_id == new.exec_id
@@ -342,4 +352,27 @@ def test_21_hour_outage_can_use_complete_original_native_source_not_rest_page() 
             rest_server_at=AT + timedelta(seconds=3),
             checked_at=AT + timedelta(seconds=3, milliseconds=100),
             durable_exec_ids=(old.exec_id,),
+        )
+
+
+def test_source_metadata_cannot_self_certify_native_continuity() -> None:
+    case = _case()
+    case["latest_rest_rows"] = [_row(NEW)]
+    proof = _long_native_source_window()
+    with pytest.raises(
+        P90RealNativeRestartUnverified,
+        match="INDEPENDENT_COVERAGE_VERIFIER_MISSING",
+    ):
+        attest_bounded_native_restart(
+            **{**case, "verified_native_source": proof},
+        )
+    with pytest.raises(
+        P90RealNativeRestartUnverified,
+        match="INDEPENDENT_COVERAGE_NOT_VERIFIED",
+    ):
+        attest_bounded_native_restart(
+            **{
+                **case, "verified_native_source": proof,
+                "verify_coverage": lambda _proof: False,
+            },
         )
