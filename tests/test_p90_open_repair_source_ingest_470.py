@@ -201,3 +201,47 @@ def test_scoped_p90_fault_keeps_unrelated_ordinary_consumer_ownership() -> None:
     assert "if p90_real_source_only or p90_real_live:" in body
     assert '"SOURCE_REPAIR_ONLY"' in body
     assert "active_bundles=active_source_consumers" in body
+
+
+
+def test_source_repair_oi_config_never_constructs_an_empty_symbol_set() -> None:
+    """Evaluate the real OI argument for pure ingest and mixed consumers."""
+    from bybit_workbench.universal_entry.oi30s_source import Oi30sConfig
+
+    source = SOURCE.read_text(encoding="utf-8")
+    epoch = next(
+        n for n in ast.parse(source).body
+        if isinstance(n, ast.FunctionDef) and n.name == "_run_observer_epoch"
+    )
+    config = next(
+        n for n in ast.walk(epoch)
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "oi_config" for t in n.targets)
+        and isinstance(n.value, ast.Call)
+        and isinstance(n.value.func, ast.Name)
+        and n.value.func.id == "Oi30sConfig"
+    )
+    required = next(
+        keyword.value for keyword in config.value.keywords
+        if keyword.arg == "required_symbols"
+    )
+    expr = compile(ast.Expression(required), str(SOURCE), "eval")
+    for repairing, ordinary, expected in (
+        (False, set(), ("APTUSDT", "BTCUSDT")),
+        (True, set(), ("APTUSDT", "BTCUSDT")),
+        (True, {"BTCUSDT"}, ("BTCUSDT",)),
+    ):
+        result = eval(
+            expr,
+            {"tuple": tuple, "sorted": sorted},
+            {
+                "p90_repair_ingest_only": repairing,
+                "ordinary_symbols": ordinary,
+                "symbols": ("APTUSDT", "BTCUSDT"),
+            },
+        )
+        assert result == expected
+        assert Oi30sConfig(
+            fact_source_id="BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1",
+            required_symbols=result,
+        ).required_symbols == expected
