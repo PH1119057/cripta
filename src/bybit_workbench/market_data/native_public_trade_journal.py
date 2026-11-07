@@ -226,7 +226,7 @@ def read_native_candidates(
         )
     if any(
         previous.event_at > current.event_at
-        for previous, current in zip(events, events[1:])
+        for previous, current in zip(events, events[1:], strict=False)
     ):
         raise NativeTradeEvidenceConflict(
             "NATIVE_PUBLIC_TRADE_SAVED_ORDER_CONFLICT"
