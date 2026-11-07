@@ -350,7 +350,7 @@ def _prepare_native_tp(recovery_db):
     )
     admin.execute(f"ALTER TABLE {schema}.executions ADD COLUMN payload_json text")
     admin.execute(
-        f"UPDATE {schema}.position_ownership SET side='Sell',actual_qty=16.51,"
+        f"UPDATE {schema}.position_ownership SET actual_qty=16.51,"
         "position_idx=0,initial_protection_evidence=%s::jsonb,"
         "exit_order_ids=%s::jsonb,exit_execution_ids=%s::jsonb WHERE position_id='pos'",
         (
@@ -360,7 +360,7 @@ def _prepare_native_tp(recovery_db):
         ),
     )
     admin.execute(
-        f"UPDATE {schema}.executions SET side='Sell',exec_qty='16.51' "
+        f"UPDATE {schema}.executions SET exec_qty='16.51' "
         "WHERE exec_id='entry-exec'"
     )
     admin.execute(
@@ -385,8 +385,8 @@ def _prepare_native_tp(recovery_db):
         "VALUES('tp-order','','DOTUSDT','Sell','Filled',%s,%s,%s,'PROVEN')",
         (json.dumps(history), ACCOUNT, CONNECTOR),
     )
-    # The original positive fixture is DOTUSDT LONG. Native TP has opposite Sell
-    # execution; the actual producer has no orderLinkId for exchange-created TP.
+    # The base fixture is LONG: its Exchange-created TP Sell has no orderLinkId.
+    # A separate SHORT regression exercises the production APT close shape.
     admin.execute(
         f"INSERT INTO {schema}.executions "
         "(exec_id,order_id,order_link_id,trading_account_id,"
@@ -416,6 +416,26 @@ def test_native_takeprofit_recovery_records_original_exchange_provenance(recover
         f"SELECT count(*) FROM {schema}.trade_commands "
         "WHERE command_type IN ('close','strategy_exit')"
     ).fetchone() == (0,)
+
+
+def test_native_takeprofit_short_position_uses_opposite_buy_execution(recovery_db):
+    admin, _worker, schema, recover = recovery_db
+    _prepare_native_tp(recovery_db)
+    admin.execute(f"UPDATE {schema}.position_ownership SET side='Sell'")
+    admin.execute(
+        f"UPDATE {schema}.executions SET side='Sell' WHERE exec_id='entry-exec'"
+    )
+    admin.execute(
+        f"UPDATE {schema}.exchange_order_history SET side='Buy'"
+    )
+    admin.execute(
+        f"UPDATE {schema}.executions SET side='Buy' WHERE exec_id='tp-exec'"
+    )
+    assert recover()["status"] == "RECOVERED"
+    assert admin.execute(
+        f"SELECT count(*) FROM {schema}.account_mutation_recovery_events "
+        "WHERE evidence->>'close_proof_mode'='EXCHANGE_NATIVE_TAKE_PROFIT'"
+    ).fetchone() == (1,)
 
 
 @pytest.mark.parametrize(
