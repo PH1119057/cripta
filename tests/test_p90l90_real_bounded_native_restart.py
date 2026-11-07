@@ -268,3 +268,78 @@ def test_unproved_archives_never_bypass_original_native_requirement() -> None:
             verified_native_source=proof,
             # Without original live WS cursor the archive cannot be accepted.
         )
+
+
+def test_21_hour_outage_can_use_complete_original_native_source_not_rest_page() -> None:
+    old = TradeCursor(
+        symbol="LTCUSDT", exec_id="bybit-21h-old-101",
+        seq=101, traded_at=AT - timedelta(hours=21),
+    )
+    new = TradeCursor(
+        symbol="LTCUSDT", exec_id="bybit-21h-new-1302",
+        seq=1302, traded_at=AT + timedelta(seconds=2),
+    )
+    mirror = PublicTradeMirrorBuffer(("LTCUSDT",), retention_seconds=120)
+    mirror.start_epoch(AT + timedelta(seconds=1))
+    mirror.record_message({
+        "topic": "publicTrade.LTCUSDT",
+        "data": [{
+            "s": new.symbol, "i": new.exec_id, "seq": new.seq,
+            "T": int(new.traded_at.timestamp() * 1000),
+            "S": "Buy", "p": "100.2", "v": "0.1",
+        }],
+    }, received_at=AT + timedelta(seconds=2, milliseconds=100))
+    native = tuple([
+        _row(new),
+        *(
+            _row(TradeCursor(
+                symbol="LTCUSDT", exec_id=f"bybit-historical-{i}",
+                seq=101 + i,
+                traded_at=old.traded_at + timedelta(seconds=63 * i),
+            ))
+            for i in range(1200, 0, -1)
+        ),
+        _row(old),
+    ])
+    proof = P90VerifiedNativeSourceWindow(
+        symbol="LTCUSDT",
+        instrument_id=bybit_instrument_id("linear", "LTCUSDT"),
+        market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
+        coverage_start=old.traded_at,
+        coverage_end=new.traded_at,
+        event_count=len(native),
+        max_required_records=len(native),
+        source_sha256=_source_rows_digest(native),
+        source_reference="approved-native-source-21h-gap-test",
+        coverage_witness="VERIFIED_ATOMIC_PUBLIC_WS_SESSION_CHAIN_V1",
+        complete_coverage_verified=True,
+        rows=native,
+    )
+    only_recent = [_row(new)]
+    durable = resolve_durable_restart_anchor(
+        symbol="LTCUSDT", last_sequence=old.seq,
+        last_event_at=old.traded_at, last_exec_ids=(old.exec_id,),
+        latest_rest_rows=only_recent,
+        verified_native_source=proof, live_anchor=new,
+    )
+    result = attest_bounded_native_restart(
+        source_commit=SHA, source_epoch_id=EPOCH,
+        durable_anchor=durable, live_anchor=new, mirror=mirror,
+        latest_rest_rows=only_recent,
+        rest_server_at=AT + timedelta(seconds=3),
+        checked_at=AT + timedelta(seconds=3, milliseconds=100),
+        durable_exec_ids=(old.exec_id,),
+        verified_native_source=proof,
+    )
+    assert len(result.trades) == 1201
+    assert result.trades[-1].exec_id == new.exec_id
+    # The same outdated REST page must NEVER become historical coverage.
+    with pytest.raises(P90RealNativeRestartUnverified):
+        attest_bounded_native_restart(
+            source_commit=SHA, source_epoch_id=EPOCH,
+            durable_anchor=durable, live_anchor=new, mirror=mirror,
+            latest_rest_rows=only_recent,
+            rest_server_at=AT + timedelta(seconds=3),
+            checked_at=AT + timedelta(seconds=3, milliseconds=100),
+            durable_exec_ids=(old.exec_id,),
+        )
