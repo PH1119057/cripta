@@ -438,9 +438,10 @@ def test_exact_historical_compatibility_rows_not_relabelled_as_loaded(
 def test_reviewed_current_ws_reconnect_delta_is_hash_bound():
     # The historical origin is immutable; this one extra source module was
     # separately reviewed. Its current exact bytes must remain pinned.
-    from pathlib import Path
-
-    source = Path("src/bybit_workbench/universal_entry/trade_mirror.py")
-    assert hashlib.sha256(source.read_bytes()).hexdigest() == (
+    relative = "src/bybit_workbench/universal_entry/trade_mirror.py"
+    # Runtime releases use immutable Git blob bytes. Windows checkout may
+    # convert LF to CRLF and therefore cannot be used for content attestation.
+    source_bytes = subprocess.check_output(["git", "show", f"HEAD:{relative}"])
+    assert hashlib.sha256(source_bytes).hexdigest() == (
         compat.REVIEWED_BUGFIX_CONSUMER_SHA256["universal_entry/trade_mirror.py"]
     )
