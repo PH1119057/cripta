@@ -153,7 +153,13 @@ class NativeTradeCandidateSlice:
     events: tuple[NativeTradeEvidence, ...]
     first_sequence: int
     last_sequence: int
-    coverage_proven: bool = False
+
+    @property
+    def coverage_proven(self) -> bool:
+        # This object cannot be constructed with a spoofed 'verified' bit.
+        # Only an independent original-WS / exact archive certificate can
+        # prove all intervening native ticks, never this row sample alone.
+        return False
 
 
 def read_native_candidates(
@@ -222,7 +228,7 @@ def read_native_candidates(
         previous.event_at > current.event_at
         for previous, current in zip(events, events[1:])
     ):
-        raise NativeTradeEvidenceUnavailable(
+        raise NativeTradeEvidenceConflict(
             "NATIVE_PUBLIC_TRADE_SAVED_ORDER_CONFLICT"
         )
     return NativeTradeCandidateSlice(
