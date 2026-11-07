@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
+from importlib import import_module
 from typing import Any
 
 from psycopg.rows import tuple_row
@@ -43,7 +44,6 @@ from bybit_workbench.universal_exit.storage import PostgresExitShadowStore
 
 # One credential-free import, independent of whether the consumer was
 # launched as an installed script or imported as a package in CI.
-from importlib import import_module
 
 read_real_postfill_source_window = import_module(
     (str(__package__) + "." if __package__ else "")
