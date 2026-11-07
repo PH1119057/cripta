@@ -76,7 +76,7 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
     # optional complete native evidence does not replace signed account,
     # original epoch or open-position Exit/MFE verification.
     "universal_entry/p90l90_real_bounded_native_restart.py":
-        "996b2cc454466c334a58b0219d0d18ab6afe0baefef92b20e6c920e1d6438a36",
+        "b989475fbe499c5eb139ea19998b3a3ad5c2cdb3451bc8b9dab3d3f23a18726c",
     "universal_entry/p90l90_real_observer_runtime.py":
         "8d93f93b29446dab448e172a36ea2d74260ec6526022d92785c42e70e762cee9",
     "universal_entry/p90l90_real_shared_candle_ledger.py":
