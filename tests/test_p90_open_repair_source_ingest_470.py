@@ -106,14 +106,14 @@ def test_open_position_source_repair_cannot_be_reported_as_financial_ready() -> 
 
 
 def test_only_exact_p90_recovery_failures_can_trigger_repair_source_restart() -> None:
-    from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
-        P90RealOpenSourceRecoveryUnverified,
+    from bybit_workbench.universal_entry.p90l90_real_bounded_native_restart import (
+        P90RealNativeRestartUnverified,
     )
     from bybit_workbench.universal_entry.p90l90_real_open_restart import (
         P90RealOpenRestartUnverified,
     )
-    from bybit_workbench.universal_entry.p90l90_real_bounded_native_restart import (
-        P90RealNativeRestartUnverified,
+    from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
+        P90RealOpenSourceRecoveryUnverified,
     )
     from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
         P90RealSourceCompatibilityUnverified,
