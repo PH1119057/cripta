@@ -3185,12 +3185,25 @@ def _run_observer_epoch(
                 P90RealOpenRestartUnverified,
                 P90RealSourceCompatibilityUnverified,
             ):
-                if not _scoped_p90_repair_ingest_allowed(
-                    degraded=p90_real_degraded,
-                    mainnet_gate_enabled=gate_enabled,
-                    selected_real_activations=selected,
-                    ordinary_consumer_count=len(observer_split.ordinary),
-                    paper_consumer_count=len(observer_split.p90_paper),
+                # Read the current financial gate again. The original
+                # snapshot was taken before history warmup and WS connect;
+                # stale DISARM evidence must not authorize this fallback.
+                current_gate = connection.execute(
+                    "SELECT enabled FROM control.execution_gates "
+                    "WHERE mode='mainnet'"
+                ).fetchone()
+                current_selected = _real_execution_selected_activation_ids(
+                    connection, observer_split.p90_real,
+                )
+                if (
+                    current_gate != (False,)
+                    or not _scoped_p90_repair_ingest_allowed(
+                        degraded=p90_real_degraded,
+                        mainnet_gate_enabled=bool(current_gate[0]),
+                        selected_real_activations=current_selected,
+                        ordinary_consumer_count=len(observer_split.ordinary),
+                        paper_consumer_count=len(observer_split.p90_paper),
+                    )
                 ):
                     raise
                 # Only a fresh WS/publicTrade MarketSource may continue.
