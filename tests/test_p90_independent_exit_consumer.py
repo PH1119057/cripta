@@ -142,6 +142,12 @@ class ExitConnection(CandidateConnection):
     def cursor(self, *, row_factory):
         return self
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
     def execute(self, sql, parameters=()):
         self.sql.append(sql)
         if "SELECT p.position_id,p.fill_at,p.initial_protection_confirmed_at" in sql:
