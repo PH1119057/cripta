@@ -28,6 +28,8 @@ from bybit_workbench.universal_exit.execution_store import (
 )
 from bybit_workbench.universal_exit.loader import load_exit_binding
 
+from p90_real_independent_exit import run_p90_exit_once
+
 DB_DSN = os.environ.get(
     "CRIPTA_DATABASE_DSN",
     "dbname=cripta user=cripta host=/var/run/postgresql application_name=universal-exit-consumer",
@@ -205,6 +207,11 @@ def run_once(
     now: datetime | None = None,
 ) -> str:
     current = (now or datetime.now(UTC)).astimezone(UTC)
+    # A protected OPEN position is an Exit obligation even when new Entry is
+    # disarmed. P90 now has an independent owner; Entry does not queue TRAIL035.
+    p90 = run_p90_exit_once(connection, now=current)
+    if p90 == "P90_EXIT_TRAIL035_REQUEST_PUBLISHED":
+        return p90
     materialized = materialize_once(connection, now=current)
     if materialized.startswith("REQUEST_CREATED:"):
         return materialized
