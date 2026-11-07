@@ -1,7 +1,7 @@
 [Unit]
 Description=CRIPTA bounded 24h recomputable market telemetry retention (non-trading)
-After=postgresql.service
-Requires=postgresql.service
+After=postgresql@16-main.service
+Requires=postgresql@16-main.service
 
 [Service]
 Type=oneshot
@@ -18,7 +18,6 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
-ReadOnlyPaths=/srv/cripta/runtime/current
 
 [Install]
 WantedBy=multi-user.target
