@@ -54,14 +54,14 @@ def test_observer_fault_read_model_exposes_unresolved_durable_evidence(monkeypat
         (
             "observer-fault-1",
             "ERROR",
-            NOW,
+            datetime(2026, 11, 7, 19, 20, tzinfo=UTC),
             {
                 "service": "cripta-universal-entry-observer.service",
                 "source_commit": "a" * 40,
             },
             {
                 "first_seen_at": "2026-10-06T16:40:00+00:00",
-                "last_seen_at": "2026-10-06T16:49:00+00:00",
+                "last_seen_at": "2026-11-07T19:20:00+00:00",
                 "occurrence_count": 7,
                 "error_type": "ValueError",
                 "error_message": "forced dashboard test",
@@ -84,6 +84,75 @@ def test_observer_fault_read_model_exposes_unresolved_durable_evidence(monkeypat
     assert item["last_observer_epoch_id"] == "epoch-7"
     assert item["source_commit"] == "a" * 40
     assert connection.calls[0][1] == (app.OBSERVER_RUNTIME_FAULT_CODE,)
+
+
+
+def test_legacy_observer_errors_are_archived_without_resolution(monkeypatch) -> None:
+    old = (
+        "observer-fault-old", "ERROR", NOW,
+        {"source_commit": "a" * 40},
+        {"last_seen_at": "2026-10-06T16:49:00+00:00", "error_type": "ValueError"},
+    )
+    connection = ReadConnection([old])
+    monkeypatch.setattr(app.psycopg, "connect", lambda *_a, **_kw: connection)
+
+    model = app.observer_runtime_fault_state()
+
+    assert model["state"] == "clear"
+    assert model["count"] == 0
+    assert model["items"] == []
+    assert model["historical_open_count"] == 1
+    assert [row["fault_id"] for row in model["archived_items"]] == [
+        "observer-fault-old"
+    ]
+    assert model["superseded_count"] == 0  # Nothing was resolved or deleted.
+    assert all("UPDATE" not in sql and "DELETE" not in sql for sql, _ in connection.calls)
+
+
+def test_old_signature_reappearing_after_reset_is_a_new_notice(monkeypatch) -> None:
+    old_detected = datetime(2026, 10, 6, 16, 50, tzinfo=UTC)
+    rows = [(
+        "observer-fault-recurrent", "ERROR", old_detected,
+        {"source_commit": "a" * 40},
+        {"first_seen_at": "2026-10-06T16:40:00+00:00",
+         "last_seen_at": "2026-11-07T19:20:00+00:00",
+         "occurrence_count": 2},
+    )]
+    monkeypatch.setattr(
+        app.psycopg, "connect",
+        lambda *_a, **_kw: ReadConnection(rows),
+    )
+    model = app.observer_runtime_fault_state()
+    assert model["state"] == "red"
+    assert model["count"] == 1
+    assert model["items"][0]["fault_id"] == "observer-fault-recurrent"
+    assert model["archived_items"] == []
+
+
+def test_unparseable_fault_time_is_not_silently_hidden() -> None:
+    assert app._current_operator_error_notice(
+        "broken timestamp", NOW,
+    )
+    assert not app._current_operator_error_notice(
+        "2026-10-06T16:49:00+00:00", NOW,
+    )
+    assert app._current_operator_error_notice(
+        "2026-11-07T19:18:25+00:00", NOW,
+    )
+
+
+def test_dashboard_attention_reset_never_masks_current_safety_banners() -> None:
+    html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
+    assert 'id="observerFaultArchive"' in html
+    assert 'id="observerFaultArchiveItems"' in html
+    assert "function isNewErrorNotice(item)" in html
+    assert "newNotices=faults.filter(isNewErrorNotice)" in html
+    assert "const ownerFaults=faults.filter(" in html
+    assert "const criticalFaults=" in html
+    assert "const historical=Array.isArray(value.archived_items)" in html
+    assert "faultIds=items.map(" in html  # Receipt excludes archived unseen rows.
+    assert "fetch('/api/observer-faults/displayed'" in html
+
 
 
 def test_observer_fault_escalates_dashboard_health_to_red() -> None:
