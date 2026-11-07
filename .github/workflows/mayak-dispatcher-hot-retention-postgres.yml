@@ -1,0 +1,44 @@
+name: mayak-dispatcher-hot-retention-postgres
+
+on:
+  pull_request:
+    paths:
+      - "operations/monitoring/market_hot_retention.py"
+      - "operations/systemd/cripta-market-hot-retention.service"
+      - "operations/systemd/cripta-market-hot-retention.timer"
+      - "operations/infrastructure/install_verified_release.sh"
+      - "tests/test_market_hot_retention.py"
+      - "tests/test_market_hot_retention_postgres.py"
+      - ".github/workflows/mayak-dispatcher-hot-retention-postgres.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  scoped-retention-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_retention_ci_only
+          POSTGRES_DB: retention_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d retention_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      CRIPTA_RETENTION_INTEGRATION_DSN: "dbname=retention_ci user=postgres host=127.0.0.1 port=5432 password=disposable_retention_ci_only"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bounded test dependencies
+        run: python -m pip install "psycopg[binary]==3.2.10" "pytest>=8,<10"
+      - name: Run disposable PostgreSQL 16 integration and static scope tests
+        run: |
+          python -m pytest -q tests/test_market_hot_retention.py tests/test_market_hot_retention_postgres.py
