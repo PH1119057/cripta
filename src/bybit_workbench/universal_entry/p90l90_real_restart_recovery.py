@@ -407,12 +407,18 @@ def recover_p90_real_open_source(
         saved_native: dict[str, NativeTradeCandidateSlice | None] = {}
         for symbol in sorted(_SYMBOLS):
             join = joins[symbol]
+            durable_sequence = join.last_emitted_trade_sequence
+            _require(
+                type(durable_sequence) is int,
+                "DURABLE_NATIVE_CURSOR_INCOMPLETE",
+            )
+            assert isinstance(durable_sequence, int)
             try:
                 saved_native[symbol] = read_native_candidates(
                     connection,
                     market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
                     instrument_id=bybit_instrument_id("linear", symbol),
-                    first_sequence=join.last_emitted_trade_sequence,
+                    first_sequence=durable_sequence,
                     first_exec_ids=frozenset(join.last_emitted_exec_ids),
                     last_sequence=live_cursors[symbol].seq,
                     last_exec_id=live_cursors[symbol].exec_id,
