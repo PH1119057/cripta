@@ -33,6 +33,10 @@ from operations.monitoring.observer_preparation import (
     preparation_retry_request,
     prepare_p90_closed_tails,
 )
+from bybit_workbench.market_data.native_public_trade_journal import (
+    NativePublicTradeJournal,
+    NativeTradeEvidence,
+)
 from bybit_workbench.market_data.shared_closed_candles import CandleSourceConflict
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
@@ -428,6 +432,46 @@ def _fetch_oi_history(symbol: str) -> tuple[GenericOiPoint, ...]:
         if value > 0:
             points.append(GenericOiPoint(timestamp, value))
     return tuple(sorted(points, key=lambda item: item.timestamp))
+
+
+
+def _exact_native_evidence(
+    fact: MarketFactEnvelope,
+    cursor: TradeCursor,
+    *,
+    source_transport: str,
+) -> NativeTradeEvidence:
+    """Source-owned public trade persistence, without Strategy/Account copies.
+
+    The parent Observer transaction commits this event, the causal P90 cursor,
+    and any dependent real Exit/MFE effects atomically or none of them.
+    """
+    if (
+        fact.event_kind != "PUBLIC_TRADE"
+        or fact.symbol != cursor.symbol
+        or fact.event_at != cursor.traded_at
+        or f"bybit:publicTrade:{fact.symbol}:{cursor.exec_id}" not in fact.source_refs
+    ):
+        raise ContinuityNotProvable("NATIVE_PUBLIC_TRADE_PROVENANCE_MISMATCH")
+    attrs = fact.attributes.to_dict()
+    try:
+        price = Decimal(str(attrs["price"]))
+        quantity = Decimal(str(attrs["size"]))
+    except (KeyError, ValueError, InvalidOperation) as exc:
+        raise ContinuityNotProvable("NATIVE_PUBLIC_TRADE_PRICE_OR_SIZE_INVALID") from exc
+    return NativeTradeEvidence(
+        market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
+        instrument_id=bybit_instrument_id("linear", fact.symbol),
+        external_symbol=fact.symbol,
+        exchange_sequence=cursor.seq,
+        exec_id=cursor.exec_id,
+        event_at=cursor.traded_at,
+        price=price,
+        quantity=quantity,
+        taker_side=str(attrs.get("taker_side")),
+        source_transport=source_transport,
+        producer_release_commit=LOADED_COMMIT,
+    )
 
 
 def _trade_fact(raw: Mapping[str, object], received_at: datetime) -> MarketFactEnvelope:
@@ -3051,19 +3095,37 @@ def _run_observer_epoch(
                     encode_p90l90_fact(fact, cursor=cursor)
                 )
 
-    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
-        # One source event is an atomic mixed-Strategy PAPER epoch on shared
-        # symbols. The nested P90 join, Entry, positions and ordinary PAPER
-        # records use this exact connection and roll back as ONE DB unit.
-        # In-memory state MUST be discarded by ending the whole epoch on any
-        # exception; the enclosing Observer restart handles that boundary.
-        dispatch_observer_fact_atomically(
-            connection,
-            symbol=fact.symbol,
-            p90_symbols=p90l90_symbols,
-            p90_enabled=p90_consumer is not None,
-            dispatch=lambda: _process_fact_body(fact, cursor),
-        )
+    def process_fact(
+        fact: MarketFactEnvelope,
+        cursor: TradeCursor | None = None,
+        *,
+        native_transport: str = "BYBIT_WS_PUBLIC_TRADE",
+    ) -> None:
+        # Original source owner: native events and the P90/ordinary dependent
+        # effects share the SAME PostgreSQL transaction, not a second writer.
+        # The journal is durable independently of Strategy/TradingAccount and
+        # is never used as an Entry authorization or invented recovery cursor.
+        def dispatch() -> None:
+            if fact.event_kind == "PUBLIC_TRADE":
+                if cursor is None:
+                    raise ContinuityNotProvable(
+                        "observer PUBLIC_TRADE lacks exact cursor"
+                    )
+                NativePublicTradeJournal(connection).append(
+                    _exact_native_evidence(
+                        fact, cursor, source_transport=native_transport,
+                    )
+                )
+            _process_fact_body(fact, cursor)
+
+        with connection.transaction():
+            dispatch_observer_fact_atomically(
+                connection,
+                symbol=fact.symbol,
+                p90_symbols=p90l90_symbols,
+                p90_enabled=p90_consumer is not None,
+                dispatch=dispatch,
+            )
 
     try:
         trade_mirror_thread.start()
@@ -3716,6 +3778,7 @@ def _run_observer_epoch(
                                 event.seq,
                                 event.traded_at,
                             ),
+                            native_transport="BYBIT_WS_MIRROR_REPLAY",
                         )
                 proven_at = time.monotonic()
                 for symbol in stale:
