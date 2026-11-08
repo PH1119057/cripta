@@ -93,8 +93,8 @@ _FIRSTFILL_SUCCESS = frozenset({
     "P90_EXIT_TRAIL035_REQUEST_PUBLISHED",
     "P90_EXIT_NO_MUTATION_PROVED",
 })
-_FIRSTFILL_RESULT_TOKEN = re.compile(r"P90_[A-Za-z0-9_]+(?::[A-Za-z0-9_]+){0,2}\\Z")
-_FIRSTFILL_PROOF_TOKEN = re.compile(r"P90_[A-Z0-9_]{1,120}\\Z")
+_FIRSTFILL_RESULT_TOKEN = re.compile(r"P90_[A-Za-z0-9_]+(?::[A-Za-z0-9_]+){0,2}\Z")
+_FIRSTFILL_PROOF_TOKEN = re.compile(r"P90_[A-Z0-9_]{1,120}\Z")
 
 
 def safe_firstfill_block_reason(exc: Exception) -> str:
