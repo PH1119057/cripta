@@ -20,6 +20,7 @@ from bybit_workbench.market_data.native_public_trade_journal import (
     NativeTradeEvidenceConflict,
 )
 from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
+    read_ordered_native_events,
     read_scoped_native_source,
 )
 from operations.monitoring import native_public_trade_source as source
@@ -247,3 +248,36 @@ def test_pg_source_transaction_abort_removes_frame_order_and_cursor() -> None:
                 f"SELECT count(*) FROM {table} WHERE source_session_id=%s",
                 (session,),
             ).fetchone() == (0,)
+
+
+def test_pg_scoped_native_reader_preserves_same_sequence_provider_frame_order() -> None:
+    session = uuid4().hex
+    now = datetime.now(UTC)
+    first = replace(
+        _event("ci-z-first-470-" + uuid4().hex), event_at=now,
+    )
+    second = replace(
+        _event("ci-a-second-470-" + uuid4().hex), event_at=now,
+    )
+    with _db() as conn:
+        _session_start(conn, session)
+        _persist_frame(
+            conn, session=session, frame_number=11, facts=(first, second),
+        )
+        proof = read_scoped_native_source(
+            conn, symbols=("LTCUSDT",),
+            accepted_producer_commits=frozenset(("a" * 40,)),
+            observed_at=datetime.now(UTC),
+            max_lag=timedelta(seconds=20),
+        )
+        assert proof.ready
+        ordered = read_ordered_native_events(
+            conn, source=proof, after_frame=10,
+            after_index=0, limit=50,
+        )
+        assert [x.exec_id for x in ordered] == [
+            first.exec_id, second.exec_id,
+        ]
+        assert [(x.frame_number, x.frame_index) for x in ordered] == [
+            (11, 0), (11, 1),
+        ]
