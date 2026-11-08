@@ -1,6 +1,7 @@
 """All probe tests are offline: no mounted credentials, network or production DB."""
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -21,6 +22,12 @@ CONNECTOR = ("ac-main", "ta-main", "CEX_PRIVATE_RUNTIME", "BYBIT_V5_PRIVATE",
 GOOD = {"retCode": 0, "result": {
     "userID": "654321", "isMaster": True, "parentUid": "0", "uta": 1,
     "apiKey": "SECRET_NEVER_ECHO", "ips": ["PRIVATE_IP"],
+    "readOnly": 0,
+    "permissions": {
+        "ContractTrade": ["Order", "Position"],
+        "Derivatives": ["DerivativesTrade"],
+        "Wallet": [],
+    },
 }}
 
 
@@ -70,6 +77,91 @@ def test_exact_main_uid_authenticated_by_mounted_connector_without_writes():
     assert ready and not reasons
     assert calls == ["mounted", "signed"]
     assert all(sql.strip().startswith("SELECT") for sql in queries)
+
+
+def test_contract_and_derivatives_trade_scope_with_no_wallet_actions_passes():
+    ready, reasons, calls, _ = verify()
+    assert ready and not reasons and calls == ["mounted", "signed"]
+
+
+def test_missing_permission_data_cannot_pass_as_no_withdrawal():
+    response = deepcopy(GOOD)
+    response["result"].pop("permissions")
+    ready, reasons, calls, _ = verify(response=response)
+    assert not ready and calls == ["mounted", "signed"]
+    assert reasons == ("API_KEY_PERMISSIONS_UNAVAILABLE",)
+
+
+def test_wallet_and_transfer_entitlements_are_rejected_without_data_leakage():
+    for wallet in (
+        ["AccountTransfer"],
+        ["SubMemberTransferList"],
+        ["Withdraw"],
+        ["UnexpectedWalletPrivilege"],
+    ):
+        response = deepcopy(GOOD)
+        response["result"]["permissions"]["Wallet"] = wallet
+        ready, reasons, calls, _ = verify(response=response)
+        assert not ready and calls == ["mounted", "signed"]
+        assert "API_KEY_ASSET_MOVEMENT_PERMISSION_PRESENT" in reasons
+        assert "SECRET_NEVER_ECHO" not in repr(reasons)
+        assert wallet[0] not in repr(reasons)
+
+
+def test_top_level_withdraw_permission_is_not_ignored():
+    response = deepcopy(GOOD)
+    response["result"]["permissions"]["Withdraw"] = ["Withdraw"]
+    ready, reasons, calls, _ = verify(response=response)
+    assert not ready and calls == ["mounted", "signed"]
+    assert reasons == ("API_KEY_ASSET_MOVEMENT_PERMISSION_PRESENT",)
+
+
+def test_no_wallet_object_is_not_assumed_safe():
+    response = deepcopy(GOOD)
+    response["result"]["permissions"].pop("Wallet")
+    ready, reasons, _, _ = verify(response=response)
+    assert not ready and reasons == ("API_KEY_WALLET_PERMISSIONS_UNVERIFIED",)
+
+
+def test_missing_trade_scopes_or_readonly_do_not_pass():
+    for missing in ("ContractTrade", "Derivatives"):
+        response = deepcopy(GOOD)
+        response["result"]["permissions"].pop(missing)
+        ready, reasons, _, _ = verify(response=response)
+        assert not ready and "API_KEY_REQUIRED_TRADE_SCOPE_MISSING" in reasons
+    for read_only in (1, True, None):
+        response = deepcopy(GOOD)
+        response["result"]["readOnly"] = read_only
+        ready, reasons, _, _ = verify(response=response)
+        assert not ready and "API_KEY_NOT_TRADE_WRITABLE" in reasons
+
+
+def test_independent_sub_is_verified_with_only_its_own_connector():
+    db = Connection(
+        accounts=[("ta-sub", "venue-bybit", "789", None, "SUB",
+                   "UNIFIED", "MAINNET", "ACTIVE")],
+        connectors=[("ac-sub", "ta-sub", "CEX_PRIVATE_RUNTIME",
+                     "BYBIT_V5_PRIVATE", "mount:sub", "ACTIVE", None)],
+    )
+    config = {
+        "CRIPTA_TRADING_ACCOUNT_ID": "ta-sub",
+        "CRIPTA_ACCOUNT_CONNECTOR_ID": "ac-sub",
+        "CRIPTA_EXPECTED_PROVIDER_UID": "789",
+        "CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND": "SUB",
+        "CRIPTA_BYBIT_CREDENTIAL_NAME": "bybit-sub-ta-sub",
+    }
+    response = deepcopy(GOOD)
+    response["result"].update({"userID": "789", "isMaster": False, "parentUid": "654321"})
+    sent = []
+    ready, reasons = verify_mounted_account(
+        db, config=config,
+        load_mounted=lambda _: {"api_key": "FAKE", "api_secret": "FAKE_SECRET",
+                                "credential_ref": "mount:sub"},
+        signed_get=lambda _key, _secret: sent.append("signed") or response,
+        now=NOW,
+    )
+    assert ready and not reasons and sent == ["signed"]
+    assert all(sql.strip().startswith("SELECT") for sql in db.queries)
 
 
 def test_wrong_uid_is_not_accepted_or_leaked():
