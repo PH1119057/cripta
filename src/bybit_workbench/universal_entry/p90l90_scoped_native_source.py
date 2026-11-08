@@ -240,6 +240,7 @@ class OrderedNativeTrade:
     price: Decimal
     quantity: Decimal
     taker_side: str
+    db_accepted_at: datetime
 
 
 def read_ordered_native_events(
@@ -271,8 +272,8 @@ def read_ordered_native_events(
     rows = connection.execute(
         """SELECT e.frame_number,e.frame_index,e.market_source_id,
                   e.instrument_id,e.external_symbol,e.exchange_sequence,
-                  e.exec_id,e.event_at,n.event_at,n.price,n.quantity,
-                  n.taker_side
+                  e.exec_id,e.event_at,e.accepted_at,
+                  n.event_at,n.price,n.quantity,n.taker_side
              FROM analytics.native_public_trade_source_events e
              JOIN analytics.native_public_trade_events n
                ON n.market_source_id=e.market_source_id
@@ -292,7 +293,7 @@ def read_ordered_native_events(
     for raw in rows:
         (
             frame, index, market_source, instrument, symbol, seq, exec_id,
-            event_time, journal_time, price, qty, side,
+            event_time, accepted_at, journal_time, price, qty, side,
         ) = raw
         point = (frame, index)
         if (
@@ -304,6 +305,11 @@ def read_ordered_native_events(
             or type(seq) is not int or seq < 0
             or not isinstance(exec_id, str) or not exec_id
             or not isinstance(event_time, datetime)
+            or event_time.utcoffset() is None
+            or not isinstance(accepted_at, datetime)
+            or accepted_at.utcoffset() is None
+            or accepted_at.astimezone(UTC)
+               < event_time.astimezone(UTC) - timedelta(seconds=2)
             or event_time != journal_time
             or not isinstance(price, Decimal) or price <= 0
             or not isinstance(qty, Decimal) or qty <= 0
@@ -317,7 +323,7 @@ def read_ordered_native_events(
         seen.add((symbol, seq, exec_id))
         events.append(OrderedNativeTrade(
             frame, index, symbol, seq, exec_id,
-            event_time, price, qty, side,
+            event_time, price, qty, side, accepted_at,
         ))
     return tuple(events)
 
