@@ -87,11 +87,11 @@ class DB:
             return Rows([
                 (1, 0, BYBIT_PUBLIC_MARKET_SOURCE_ID,
                  "inst-bybit-linear-ltcusdt", "LTCUSDT", 10,
-                 "provider-first", self.now, self.now,
+                 "provider-first", self.now, self.now, self.now,
                  Decimal("52.1"), Decimal("0.1"), "Buy"),
                 (1, 1, BYBIT_PUBLIC_MARKET_SOURCE_ID,
                  "inst-bybit-linear-ltcusdt", "LTCUSDT", 10,
-                 "provider-second", self.now, self.now,
+                 "provider-second", self.now, self.now, self.now,
                  Decimal("52.2"), Decimal("0.2"), "Sell"),
             ])
         if "UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints" in sql:
