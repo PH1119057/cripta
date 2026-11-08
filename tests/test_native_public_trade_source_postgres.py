@@ -19,6 +19,7 @@ from bybit_workbench.market_data.native_public_trade_journal import (
     NativeTradeEvidence,
     NativeTradeEvidenceConflict,
 )
+from operations.monitoring import native_public_trade_source as source
 from operations.monitoring.native_public_trade_source import (
     NativeSourceInputUnverified,
     _acquire_exclusive_producer,
@@ -28,6 +29,13 @@ from operations.monitoring.native_public_trade_source import (
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 pytestmark = pytest.mark.skipif(not DSN, reason="disposable PostgreSQL only")
+
+
+@pytest.fixture(autouse=True)
+def exact_disposable_release(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The service receives this from release.env in production, never from
+    # an arbitrary CI runner environment.
+    monkeypatch.setattr(source, "RELEASE", "a" * 40)
 
 
 def _db() -> psycopg.Connection:
@@ -105,13 +113,14 @@ def test_pg_transaction_crash_rolls_back_session_native_and_cursor_together() ->
     session = uuid4().hex
     evidence = _event("ci-native-rollback-514-" + uuid4().hex)
     with _db() as conn:
-        with pytest.raises(RuntimeError, match="SIMULATED_CRASH"):
-            with conn.transaction():
-                _session_start(conn, session)
-                _persist_frame(
-                    conn, session=session, frame_number=1, facts=(evidence,),
-                )
-                raise RuntimeError("SIMULATED_CRASH")
+        with pytest.raises(
+            RuntimeError, match="SIMULATED_CRASH"
+        ), conn.transaction():
+            _session_start(conn, session)
+            _persist_frame(
+                conn, session=session, frame_number=1, facts=(evidence,),
+            )
+            raise RuntimeError("SIMULATED_CRASH")
         assert conn.execute(
             "SELECT count(*) FROM analytics.native_public_trade_source_sessions "
             "WHERE source_session_id=%s",
