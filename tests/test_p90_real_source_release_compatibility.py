@@ -590,3 +590,68 @@ def test_20261108_source_origin_allows_only_exact_reviewed_exit_ipc_bytes(
         compat.verify_reviewed_bugfix_delta(
             current_root=loaded, origin_root=foreign_origin,
         )
+
+
+def test_20261108_git_origin_uses_exact_reviewed_two_file_delta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Production uses retained Git objects because the 6dc3 runtime folder
+    # was safely pruned. Test that physical code path, not only an on-disk
+    # historical root, without relying on CI checkout depth.
+    original = tmp_path / "origin"
+    loaded = tmp_path / ("f" * 40)
+    edited = frozenset({
+        "universal_exit/p90l90_real_exit_execution.py",
+        "universal_exit/p90l90_real_private_ipc.py",
+    })
+    paths = [
+        "universal_entry/example.py", *sorted(edited),
+        "strategy_position.py", "exchange_position_identity.py",
+        "domain/models.py", "market_data/shared_closed_candles.py",
+    ]
+    for relative in paths:
+        old = original / "src/bybit_workbench" / relative
+        new = loaded / "src/bybit_workbench" / relative
+        old.parent.mkdir(parents=True, exist_ok=True)
+        new.parent.mkdir(parents=True, exist_ok=True)
+        old.write_bytes(b"# original immutable source evidence\n")
+        new.write_bytes(
+            subprocess.check_output([
+                "git", "show", f"HEAD:src/bybit_workbench/{relative}",
+            ]) if relative in edited else old.read_bytes()
+        )
+    subprocess.run(
+        ("git", "-C", str(original), "init"),
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ("git", "-C", str(original), "add", "."),
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ("git", "-C", str(original), "-c", "user.name=Test",
+         "-c", "user.email=proof@example.invalid", "commit",
+         "-m", "immutable source evidence"),
+        check=True, capture_output=True,
+    )
+    origin_sha = subprocess.check_output([
+        "git", "-C", str(original), "rev-parse", "HEAD",
+    ], text=True).strip()
+    monkeypatch.setattr(
+        compat, "_REVIEWED_20261108_SOURCE_ORIGIN", origin_sha,
+    )
+    compat.verify_reviewed_bugfix_delta_from_git(
+        current_root=loaded, source_checkout=original,
+        origin_commit=origin_sha,
+    )
+
+    changed = loaded / "src/bybit_workbench/universal_exit/p90l90_real_private_ipc.py"
+    changed.write_bytes(changed.read_bytes() + b"# invalid delta\n")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="REVIEWED_BUGFIX_CONTENT_DRIFT",
+    ):
+        compat.verify_reviewed_bugfix_delta_from_git(
+            current_root=loaded, source_checkout=original,
+            origin_commit=origin_sha,
+        )
