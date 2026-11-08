@@ -166,7 +166,8 @@ def test_verified_flat_recovery_requests_only_scoped_database_transition(
                  (41, reconnect)),
     )
     monkeypatch.setattr(
-        adapter, "_journal", lambda *_args: {"attempts": previous_attempts, "phase": previous_phase},
+        adapter, "_journal",
+        lambda *_args: {"attempts": previous_attempts, "phase": previous_phase},
     )
     monkeypatch.setattr(adapter, "_pending_clear_not_committed",
                         lambda _blocked: True)
