@@ -282,6 +282,30 @@ def _generation_and_uid(generation: str) -> tuple[object, ...] | None:
     return row
 
 
+def _pending_clear_not_committed(blocked_at: datetime) -> bool:
+    """Independently prove that a previous PENDING DB clear did not commit.
+
+    The SECURITY DEFINER writer and the repeated-latch trigger hold this same
+    per-account advisory transaction lock. Once acquired, a READ COMMITTED,
+    read-only lookup of the unchanged exact latch proves no earlier clear
+    committed. Missing, replaced or stronger latches are NEVER retry proof.
+    A lock timeout/DB error propagates to the supervisor's BLOCKED verdict.
+    """
+    with psycopg.connect(DSN, connect_timeout=3) as conn:
+        conn.execute("SET TRANSACTION READ ONLY")
+        conn.execute("SET LOCAL lock_timeout = '3s'")
+        conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtext(%s),hashtext(%s))",
+            (ACCOUNT, CONNECTOR),
+        )
+        row = conn.execute(
+            """SELECT blocked_at,reason FROM runtime.account_entry_safety_blocks
+               WHERE trading_account_id=%s AND account_connector_id=%s""",
+            (ACCOUNT, CONNECTOR),
+        ).fetchone()
+    return row == (blocked_at, "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN")
+
+
 def _journal(blocked_at: datetime, release: str) -> dict[str, object]:
     if not STATE.parent.is_dir() or STATE.parent.is_symlink():
         raise RuntimeError("RECOVERY_STATE_DIRECTORY_UNPREPARED")
@@ -325,7 +349,13 @@ def run_once(*, now: datetime) -> dict[str, object]:
         return _block("NONTRANSIENT_ACCOUNT_SAFETY_BLOCK")
     journal = _journal(blocked_at, release)
     attempts = int(journal["attempts"])
-    if journal["phase"] not in {"IDLE", "COMPLETE"}:
+    if journal["phase"] == "PENDING":
+        # The prior SQL outcome is unknown from the local journal alone.
+        # Never retry before serializing behind the original DB writer and
+        # proving its exact latch is still present (i.e. no clear committed).
+        if not _pending_clear_not_committed(blocked_at):
+            return _block("PRIOR_RECOVERY_OUTCOME_UNCERTAIN")
+    elif journal["phase"] not in {"IDLE", "COMPLETE"}:
         return _block("PRIOR_RECOVERY_OUTCOME_UNCERTAIN")
     if attempts >= 2:
         return _block("RECOVERY_ATTEMPT_BUDGET_EXHAUSTED")
