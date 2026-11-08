@@ -258,6 +258,65 @@ def test_synthetic_local_end_to_end_uses_exact_account_and_nonce() -> None:
     assert not failures
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="abstract AF_UNIX Linux transport")
+@pytest.mark.parametrize(("failure", "safe_code"), [
+    ("typed", "P90_PRIVATE_IPC_POSITION_NOT_CURRENTLY_OPEN"),
+    ("internal", "P90_PRIVATE_IPC_POSITION_INTERNAL_UNVERIFIED"),
+])
+def test_verified_position_request_returns_safe_blocked_frame_not_eof(
+    failure: str, safe_code: str,
+) -> None:
+    """Never turn credential-worker failure into incomplete-frame guessing."""
+    account = _account()
+    position, cursor, evidence = _scope_for_account(account)
+    ready = threading.Event()
+    running = threading.Event()
+    running.set()
+    calls = 0
+    failures: list[str] = []
+
+    def handler(_request):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            if failure == "typed":
+                raise P90PrivateIpcUnverified(
+                    "P90_PRIVATE_IPC_POSITION_NOT_CURRENTLY_OPEN"
+                )
+            raise RuntimeError("sensitive signed provider body must be hidden")
+        return replace(evidence, observed_at=datetime.now(UTC))
+
+    def producer() -> None:
+        try:
+            serve_private_proof(
+                account=account, connector=CONNECTOR, handler=handler,
+                running=running.is_set, ready=ready.set,
+            )
+        except Exception as exc:
+            failures.append(type(exc).__name__)
+
+    worker = threading.Thread(target=producer, daemon=True)
+    worker.start()
+    try:
+        assert ready.wait(3.0), failures
+        client = P90PrivateProofClient(
+            account=account, connector=CONNECTOR, timeout_seconds=3.0,
+        )
+        with pytest.raises(P90PrivateIpcUnverified) as exception:
+            client(position, cursor)
+        assert "PROOF_BLOCKED" in str(exception.value)
+        assert safe_code in str(exception.value)
+        assert "INCOMPLETE_FRAME" not in str(exception.value)
+        assert "sensitive signed provider body" not in str(exception.value)
+        accepted = client(position, cursor)
+        assert accepted.trading_account_id == account
+        assert calls == 2
+    finally:
+        running.clear()
+        worker.join(timeout=3.0)
+    assert not worker.is_alive() and not failures
+
+
 def test_private_worker_starts_ipc_only_when_bound_and_thread_alive() -> None:
     """Source guard keeps broker startup fail closed, without enabling REAL."""
     import ast
