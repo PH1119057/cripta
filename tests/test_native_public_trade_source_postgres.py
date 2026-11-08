@@ -195,3 +195,55 @@ def test_pg_scoped_reader_independently_proves_one_symbol_not_other() -> None:
             "NATIVE_SOURCE_CURSOR_MISSING"
         )
         # Historical/observer status and account LIVE arm are NOT read.
+
+
+def test_pg_original_same_sequence_event_order_is_immutable() -> None:
+    """Exact source frame order must not be fabricated from execId sort."""
+    session = uuid4().hex
+    second = "ci-z-before-a-470-" + uuid4().hex
+    first = "ci-a-after-z-470-" + uuid4().hex
+    # Deliberately place lexically later ID before earlier ID in provider frame.
+    events = (_event(second), _event(first))
+    with _db() as conn:
+        _session_start(conn, session)
+        _persist_frame(conn, session=session, frame_number=7, facts=events)
+        rows = conn.execute(
+            """SELECT frame_number,frame_index,exchange_sequence,exec_id
+                 FROM analytics.native_public_trade_source_events
+                WHERE source_session_id=%s
+                ORDER BY frame_number,frame_index""",
+            (session,),
+        ).fetchall()
+        assert rows == [
+            (7, 0, events[0].exchange_sequence, second),
+            (7, 1, events[1].exchange_sequence, first),
+        ]
+        # A repeated exact native provider ID in the next frame may not
+        # produce a duplicate causal event, even if the cursor advances.
+        _persist_frame(
+            conn, session=session, frame_number=8, facts=(events[0],),
+        )
+        assert conn.execute(
+            """SELECT count(*) FROM analytics.native_public_trade_source_events
+                WHERE source_session_id=%s""",
+            (session,),
+        ).fetchone() == (2,)
+
+
+def test_pg_source_transaction_abort_removes_frame_order_and_cursor() -> None:
+    session = uuid4().hex
+    evidence = _event("ci-crash-order-470-" + uuid4().hex)
+    with _db() as conn:
+        with pytest.raises(RuntimeError, match="INJECTED"), conn.transaction():
+            _session_start(conn, session)
+            _persist_frame(conn, session=session, frame_number=1, facts=(evidence,))
+            raise RuntimeError("INJECTED")
+        for table in (
+            "analytics.native_public_trade_source_events",
+            "analytics.native_public_trade_source_cursors",
+            "analytics.native_public_trade_source_sessions",
+        ):
+            assert conn.execute(
+                f"SELECT count(*) FROM {table} WHERE source_session_id=%s",
+                (session,),
+            ).fetchone() == (0,)
