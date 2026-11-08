@@ -12,7 +12,9 @@ created by this consumer.
 """
 from __future__ import annotations
 
+import json
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from typing import Any
@@ -61,7 +63,8 @@ class P90IndependentExitBlocked(RuntimeError):
 
 def _candidate(connection: Any) -> dict[str, object] | None:
     return connection.execute(
-        """SELECT p.position_id,p.fill_at,p.initial_protection_confirmed_at
+        """SELECT p.position_id,p.fill_at,p.initial_protection_confirmed_at,
+                  p.trading_account_id,p.symbol
              FROM runtime.position_ownership p
             WHERE p.strategy_version=%s AND p.state='OPEN'
               AND p.identity_status='PROVEN'
@@ -80,6 +83,88 @@ def _candidate(connection: Any) -> dict[str, object] | None:
             LIMIT 1""",
         (VERSION,),
     ).fetchone()
+
+
+
+# Existing connection_events is the durable safety/incident audit; a proof
+# failure must not disappear merely because a separate Exit consumer polls.
+_FIRSTFILL_SUCCESS = frozenset({
+    "P90_NO_PROTECTED_POSITION_REQUIRING_TRAIL",
+    "P90_EXIT_TRAIL035_REQUEST_PUBLISHED",
+    "P90_EXIT_NO_MUTATION_PROVED",
+})
+_FIRSTFILL_RESULT_TOKEN = re.compile(r"P90_[A-Za-z0-9_]+(?::[A-Za-z0-9_]+){0,2}\Z")
+_FIRSTFILL_PROOF_TOKEN = re.compile(r"P90_[A-Z0-9_]{1,120}\Z")
+
+
+def safe_firstfill_block_reason(exc: Exception) -> str:
+    """Only verified code tokens may leave a private/account exception.
+
+    Never persist raw signed responses, endpoint messages or credentials.
+    """
+    name = type(exc).__name__
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+        name = "UnknownException"
+    code = str(exc)
+    if _FIRSTFILL_PROOF_TOKEN.fullmatch(code):
+        return f"P90_EXIT_PROOF_BLOCKED:{name}:{code}"
+    return f"P90_EXIT_PROOF_BLOCKED:{name}"
+
+
+def audit_firstfill_exit_result(
+    connection: Any, *, result: str, observed_at: datetime,
+) -> None:
+    """Durable exact first-fill denial; never grant or revoke any permission.
+
+    The already proven candidate is re-read under the existing Exit connection;
+    one record per changed verdict and position survives process restarts.
+    """
+    if result in _FIRSTFILL_SUCCESS:
+        return
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        raise RuntimeError("P90_EXIT_AUDIT_TIME_NOT_UTC")
+    candidate = _candidate(connection)
+    if candidate is None:
+        # A filled TP may close the position between proof failure and audit.
+        return
+    account = candidate.get("trading_account_id")
+    position_id = candidate.get("position_id")
+    symbol = candidate.get("symbol")
+    if not all(isinstance(v, str) and v for v in (account, position_id, symbol)):
+        raise RuntimeError("P90_EXIT_AUDIT_IDENTITY_NOT_PROVEN")
+    code = result if _FIRSTFILL_RESULT_TOKEN.fullmatch(result) else (
+        "P90_EXIT_PROOF_BLOCKED:UNCLASSIFIED_STATUS"
+    )
+    row = connection.execute(
+        """SELECT details_json::jsonb->>'reason_code'
+             FROM runtime.connection_events
+            WHERE channel='exit' AND event='P90_FIRST_FILL_EXIT_UNVERIFIED'
+              AND trading_account_id=%s
+              AND details_json::jsonb->>'position_id'=%s
+            ORDER BY at_epoch_ms DESC,id DESC LIMIT 1""",
+        (account, position_id),
+    ).fetchone()
+    if row is not None and row[0] == code:
+        return
+    protected_at = candidate["initial_protection_confirmed_at"]
+    connection.execute(
+        """INSERT INTO runtime.connection_events(
+               at_epoch_ms,channel,event,details_json,
+               trading_account_id,identity_status)
+           VALUES(%s,'exit','P90_FIRST_FILL_EXIT_UNVERIFIED',%s,%s,'PROVEN')""",
+        (
+            int(observed_at.timestamp() * 1000),
+            json.dumps({
+                "position_id": position_id,
+                "symbol": symbol,
+                "reason_code": code,
+                "protected_at": protected_at.isoformat(),
+                "checked_at": observed_at.isoformat(),
+                "exchange_mutation": False,
+            }, ensure_ascii=False),
+            account,
+        ),
+    )
 
 
 def _validate_first_fill_age(
@@ -282,4 +367,4 @@ def run_p90_exit_once(
         # manufacture Exchange evidence or turn an unknown failure into PASS.
         if isinstance(exc, P90IndependentExitBlocked):
             return str(exc)
-        return "P90_EXIT_PROOF_BLOCKED:" + type(exc).__name__
+        return safe_firstfill_block_reason(exc)
