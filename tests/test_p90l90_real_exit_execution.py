@@ -228,6 +228,35 @@ def test_real_exit_command_cannot_leave_source_checkpoint_transaction(
     assert db.events == []
 
 
+@pytest.mark.parametrize(("code", "expected"), [
+    ("MARK_ALREADY_AT_ACTIVATION", "MARK_ALREADY_AT_ACTIVATION"),
+    ("PROTECTION_CHANGED", "PROTECTION_CHANGED"),
+    ("PRIVATE_SCOPE_NOT_CURRENT", "PRIVATE_SCOPE_NOT_CURRENT"),
+    ("secret=my-private-token", None),
+])
+def test_account_mutation_denial_reason_is_safe_and_never_executes(
+    monkeypatch, code: str, expected: str | None,
+) -> None:
+    sink, db, steps, position, plan, evaluation = _sink(
+        monkeypatch, safety=False,
+    )
+
+    def denied(*_args):
+        return False
+
+    denied.last_denial_code = code
+    sink._safety = denied
+    with pytest.raises(mod.P90RealExitExecutionUnverified) as info:
+        sink(evaluation, position, plan)
+    assert "MUTATION_SAFETY_UNVERIFIED" in str(info.value)
+    if expected is None:
+        assert code not in str(info.value)
+    else:
+        assert expected in str(info.value)
+    assert steps == ["load"]
+    assert db.open_transactions == 0
+
+
 def test_unknown_account_mutation_safety_never_materializes_command(
     monkeypatch,
 ) -> None:

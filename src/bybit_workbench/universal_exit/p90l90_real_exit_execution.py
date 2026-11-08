@@ -10,6 +10,7 @@ all-account supervisor protection, release parity, and owner LIVE-arm.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
@@ -172,8 +173,19 @@ class P90RealExitExecutionPort:
                     "P90_REAL_EXIT_DURABLE_POSITION_OR_PLAN_DRIFT"
                 )
             if self._safety(position, evaluation, now) is not True:
+                # A denial does not disclose signed payloads or authorize
+                # retries. Keep a typed safe subcode when the independent
+                # account guard can identify exactly which proof failed.
+                code = getattr(self._safety, "last_denial_code", None)
+                diagnostic = (
+                    ":" + code
+                    if isinstance(code, str)
+                    and re.fullmatch(r"[A-Z][A-Z0-9_]{7,63}", code)
+                    else ""
+                )
                 raise P90RealExitExecutionUnverified(
                     "P90_REAL_EXIT_ACCOUNT_MUTATION_SAFETY_UNVERIFIED"
+                    + diagnostic
                 )
             request = prepare_exit_execution_request(
                 decision, position, plan, now=now
