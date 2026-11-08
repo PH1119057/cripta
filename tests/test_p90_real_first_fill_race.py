@@ -78,6 +78,7 @@ def test_delayed_visibility_preserves_all_original_ticks_and_pending_is_not_epoc
         exit_store=SimpleNamespace(record=lambda evaluation, **_: records.append(evaluation)),
         verified_execution_port=lambda *args: commands.append(args),
         verified_native_prefix=source.native_prefix,
+        verified_historical_prefix_coverage=source.native_historical_coverage,
         private_state_pending=lambda _: state["pending"],
     )
     result = port(_fact(cursor), cursor)[0]
