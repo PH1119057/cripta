@@ -230,6 +230,7 @@ def test_out_of_order_source_frame_never_appends_or_acknowledges(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from contextlib import contextmanager
+
     from operations.monitoring import native_public_trade_source as native
 
     row = decode_native_trades(
