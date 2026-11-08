@@ -546,11 +546,33 @@ class P90PrivateProofClient:
         except OSError:
             raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE") from None
         if (
+            raw.get("version") == _VERSION
+            and raw.get("nonce") == nonce
+            and raw.get("account") == self._account
+            and raw.get("connector") == self._connector
+            and raw.get("status") == "BLOCKED"
+            and set(raw) == {
+                "version", "nonce", "status", "account", "connector",
+                "proof_error",
+            }
+        ):
+            code = raw.get("proof_error")
+            if isinstance(code, str) and re.fullmatch(
+                r"P90_PRIVATE_IPC_[A-Z0-9_]{4,80}", code,
+            ):
+                raise P90PrivateIpcUnverified(
+                    "P90_PRIVATE_IPC_PROOF_BLOCKED:" + code
+                )
+            raise P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_PROOF_RESPONSE_UNVERIFIED"
+            )
+        if (
             raw.get("version") != _VERSION
             or raw.get("nonce") != nonce
             or raw.get("account") != self._account
             or raw.get("connector") != self._connector
             or raw.get("status") != "VERIFIED"
+            or "proof_error" in raw
         ):
             raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_RESPONSE_UNVERIFIED")
         return _checked_evidence(
@@ -656,11 +678,31 @@ def serve_private_proof(
                             "recovery": recovery_to_wire(recovery),
                         }))
                     else:
+                        # Only a fully validated account/connector/nonce may
+                        # receive a negative proof result. Invalid/malicious
+                        # requests still close without reflecting their data.
                         checked_request(
                             raw, expected_account=account,
                             expected_connector=connector,
                         )
-                        evidence = handler(raw)
+                        try:
+                            evidence = handler(raw)
+                        except Exception as exc:
+                            code = (
+                                str(exc)
+                                if isinstance(exc, P90PrivateIpcUnverified)
+                                and re.fullmatch(
+                                    r"P90_PRIVATE_IPC_[A-Z0-9_]{4,80}",
+                                    str(exc),
+                                )
+                                else "P90_PRIVATE_IPC_POSITION_INTERNAL_UNVERIFIED"
+                            )
+                            stream.sendall(_frame({
+                                "version": _VERSION, "nonce": raw["nonce"],
+                                "status": "BLOCKED", "account": account,
+                                "connector": connector, "proof_error": code,
+                            }))
+                            continue
                         if (
                             evidence.trading_account_id != account
                             or evidence.connector_id != connector
