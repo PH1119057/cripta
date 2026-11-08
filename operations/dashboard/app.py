@@ -6095,8 +6095,24 @@ def _u6_p90_real_v3_arm(
                 + str(preparation.get("blocker_detail") or "")
             )
         # READY_FOR_OWNER_ARM is technical state only. Re-run exact evidence
-        # immediately before the existing staged/final OWNER ARM transaction.
-        _wait_p90_real_v3_technical_evidence(timeout_seconds=5.0)
+        # immediately before staged/final OWNER ARM. A COMPLETE/PROVEN account
+        # generation can be briefly older than the strict 15s age limit while
+        # private runtime publishes the next one. Wait a bounded interval for
+        # fresh *independent proof*; do not broaden its age/capacity predicates.
+        # Mark a failed second check durably, rather than leaving READY in UI.
+        try:
+            _wait_p90_real_v3_technical_evidence(timeout_seconds=30.0)
+        except (P90PrearmEvidenceBlocked, P90PrivateIpcUnverified) as exc:
+            _mark_p90_readiness_blocked(
+                request_id=request_id,
+                code="OWNER_ARM_FINAL_TECHNICAL_RECHECK_BLOCKED",
+                detail=type(exc).__name__ + ":" + str(exc),
+                retry_eligible=(
+                    not isinstance(exc, P90PrivateIpcUnverified)
+                    or str(exc) in P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC
+                ),
+            )
+            raise
     if not enabled:
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
