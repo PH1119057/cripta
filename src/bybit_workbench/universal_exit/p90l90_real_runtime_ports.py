@@ -78,6 +78,7 @@ def assemble_p90_real_exit_runtime(
     independently_verified_closed_continuity: ClosedCausalSourceProof,
     independently_verified_mutation_safety: SafetyPort,
     verified_native_prefix: NativePrefixProvider | None = None,
+    verified_historical_prefix_coverage: SourceCoverageProvider | None = None,
     independently_verified_native_tie_order: NativeTieOrderProvider | None = None,
 ) -> P90RealExitRuntimePorts:
     """Bind existing Universal Exit and Execution owners, never invent proofs.
@@ -140,6 +141,7 @@ def assemble_p90_real_exit_runtime(
         exit_store=store,
         verified_execution_port=execution,
         verified_native_prefix=verified_native_prefix,
+        verified_historical_prefix_coverage=verified_historical_prefix_coverage,
         private_state_pending=private_state_pending,
         independently_verified_native_tie_order=independently_verified_native_tie_order,
     )
@@ -183,6 +185,7 @@ def assemble_p90_real_exit_runtime_from_db_bundles(
     independently_verified_closed_continuity: ClosedCausalSourceProof,
     independently_verified_mutation_safety: SafetyPort,
     verified_native_prefix: NativePrefixProvider | None = None,
+    verified_historical_prefix_coverage: SourceCoverageProvider | None = None,
     independently_verified_native_tie_order: NativeTieOrderProvider | None = None,
 ) -> P90RealExitRuntimePorts:
     """Read actual two-account roster, then construct typed Exit owners.
@@ -212,5 +215,6 @@ def assemble_p90_real_exit_runtime_from_db_bundles(
         independently_verified_closed_continuity=independently_verified_closed_continuity,
         independently_verified_mutation_safety=independently_verified_mutation_safety,
         verified_native_prefix=verified_native_prefix,
+        verified_historical_prefix_coverage=verified_historical_prefix_coverage,
         independently_verified_native_tie_order=independently_verified_native_tie_order,
     )

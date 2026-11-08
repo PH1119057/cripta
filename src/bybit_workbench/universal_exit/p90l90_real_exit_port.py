@@ -57,11 +57,18 @@ class P90RealExitNativePort:
         exit_store: PostgresExitShadowStore,
         verified_execution_port: ExecutionPort | None = None,
         verified_native_prefix: NativePrefixProvider | None = None,
+        verified_historical_prefix_coverage: SourceCoverageProvider | None = None,
         private_state_pending: Callable[[StrategyPosition], bool] | None = None,
         independently_verified_native_tie_order: NativeTieOrderProvider | None = None,
     ) -> None:
+        if (
+            verified_native_prefix is not None
+            and not callable(verified_historical_prefix_coverage)
+        ):
+            raise ValueError("P90_REAL_HISTORICAL_PREFIX_SOURCE_PROOF_REQUIRED")
         self._positions = position_provider
         self._coverage = independently_verified_source_coverage
+        self._historical_coverage = verified_historical_prefix_coverage
         self._private = independently_signed_private_evidence
         self._source_commit = source_commit
         self._mfe = mfe_ledger
@@ -129,7 +136,10 @@ class P90RealExitNativePort:
                         symbol=trade.symbol, seq=trade.seq, exec_id=trade.exec_id,
                         traded_at=trade.traded_at,
                     )
-                    first, contiguous = self._coverage(position, earlier)
+                    # Original, already observed mirror prefix is MFE-only.
+                    # Its age must not be treated as a current Exit decision.
+                    assert self._historical_coverage is not None
+                    first, contiguous = self._historical_coverage(position, earlier)
                     self._mfe.on_trade(
                         position=position, source_commit=self._source_commit,
                         fact_id="trade-" + trade.exec_id, cursor=earlier,
