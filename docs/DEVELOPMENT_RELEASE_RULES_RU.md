@@ -1958,6 +1958,58 @@ Discovery в порядке:
 - Негативные тесты обязательны для обоих purpose: отсутствие/истечение approval, replay nonce, неподходящий SHA/baseline/tree/purpose, moving main, failing CI, dirty checkout, actor/path denial, lock collision, injection. Dashboard-specific tests дополнительно проверяют undeployed/current baseline mismatch, verifier rejection, попытку trading/control mutation и неизменность runtime identities.
 - Ввод нового/изменённого controller capability: OWNER DECISION → CANON UPDATE → IMPLEMENTATION → TEST → GITHUB → DEPLOY → RUNTIME EVIDENCE.
 
+### 50.5.1 Proposed independent native MarketSource producer cutover — #470
+
+**Status: `PROPOSED_CANON_CHANGE=YES`,
+`OWNER_DECISION_REQUIRED=YES`, `ACTIVE_RELEASE_CAPABILITY=NO`.**
+This is a proposed clarification of the existing canonical ARCH §60,
+TC §4.18, OBS §7.10 and DEV §58. It cannot be activated solely because
+a PR passes CI or a previous FULL release was approved.
+
+The existing `EXACT_VERIFIED_SOURCE_RELEASE` MUST reject source-code
+changes to a running native publicTrade producer. If approved, add a
+**separate explicit owner-approved** one-time request purpose
+`NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE` to the Release Controller:
+exact GitHub main SHA/tree, reviewed CI, source mirror clean,
+current installed baseline, account-independent backup/release lock,
+unmodified owner comment/nonce/TTL, plus the old writer PID/source
+commit/session and actor/ACL/systemd sandbox.
+
+BEFORE: one separate credential-free Bybit native `publicTrade`
+producer with one PG advisory lock and original append-only journal.
+AFTER: exactly one newly loaded producer with a different PID and
+new WS session, after the prior session was durably recorded as `GAP`.
+No seamless `seq/execId` continuity is claimed across a physical stop.
+
+Backup and additive PostgreSQL schema migration run before touching
+the native writer. Only after exact candidate/actor/systemd checks
+may the old writer stop and release its advisory lock; old source
+session must be `GAP` BEFORE symlink/unit code cutover. After
+starting the new producer, require source status `ACTIVE`, exact
+target commit, a different OS PID and WS session, five newly
+accepted exact source-symbol cursors/events following the
+cutover watermark and no concurrent old producer. Unknown or stale
+evidence is `BLOCKED`, never replaced by `systemd active`.
+
+If failure occurs before runtime cutover, the exact original source
+process restarts from the old immutable release. For failure after
+cutover, require an explicit verified source/code+unit rollback to
+the retained installed baseline, current database/Exit parity and
+a NEW session marked GAP. A failure may not silently reopen LIVE
+or delete/modify historical source facts. Ownership of existing
+positions/Exit does not transfer to the source service; the
+producer has no Bybit private credentials, account permission,
+Exchange order API, OWNER ARM or Strategy ownership.
+
+Negative tests before any production invocation must cover wrong
+owner/purpose/nonce/TTL/SHA/base/CI, no old ACTIVE producer,
+old ABI mismatch, no source-code delta, old PID/session still live,
+failure to mark GAP, source writer lock collision, missing
+symbol/source cursor, and pre/post-cutover rollback. A successful
+code cutover alone cannot assert P90 trading readiness; actual
+PG-first scoped Entry/Exit consumer parity and financial approval
+remain under DEV §58 and ARCH §60.
+
 ## 51. Generic REAL readiness preparation and bounded service-start broker — OWNER DECISION 2026-11-02 (Issue #343)
 
 ARCH §52 owns capability boundaries. This section owns implementation, actor/path, release and recovery gates.
