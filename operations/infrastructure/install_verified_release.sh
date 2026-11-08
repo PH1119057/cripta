@@ -795,6 +795,8 @@ print(sid if isinstance(sid,str) else "")
       AND s.market_source_id='ms-bybit-mainnet-public-v1'
       AND s.last_accepted_at >= now() - interval '10 seconds'
       AND c.accepted_at >= '$native_probe_started_at'::timestamptz
+      AND c.event_at >= '$native_probe_started_at'::timestamptz
+                            - interval '5 seconds'
       AND c.event_at >= now() - interval '3 minutes'")"
   if [[ "$source_cursor_count" == "5" ]]; then
     native_source_ready=1
