@@ -349,7 +349,7 @@ def test_pending_reconciliation_serializes_exact_account_latch(
     monkeypatch.setattr(adapter.psycopg, "connect",
                         lambda *_a, **_k: ReadOnlyDB())
     assert adapter._pending_clear_not_committed(blocked_at) is expected
-    assert "SET TRANSACTION READ ONLY" in commands[0][0]
+    assert "SET TRANSACTION ISOLATION LEVEL READ COMMITTED READ ONLY" in commands[0][0]
     assert "lock_timeout" in commands[1][0]
     assert "pg_advisory_xact_lock" in commands[2][0]
     assert commands[2][1] == (adapter.ACCOUNT, adapter.CONNECTOR)
