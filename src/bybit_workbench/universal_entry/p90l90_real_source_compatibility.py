@@ -59,6 +59,11 @@ _ADAPTERS = frozenset({
 # integrated stabilization release.  These are consumer/transport fixes, not
 # Strategy/EntryPlan/ExitPlan policy changes.  Registration accepts exactly
 # this delta and exact bytes; any other consumer change remains fail-closed.
+# 2026-11-08 reviewed bugfix PR #505: restore only original native MFE
+# historical prefix proof with strict fresh CURRENT exit tick unchanged.
+# Exactly three existing consumer bytes below are re-attested; no new
+# consumer, Strategy/ExitPlan, account identity or Exchange permission.
+# Historical origin release hashes and all negative delta checks are retained.
 REVIEWED_BUGFIX_CONSUMER_SHA256 = {
     "universal_entry/p90l90_atomic_paper_checkpoint.py":
         "737fdd8020c255b8aee7616c4dac2050fc415cd25c40db574f41ded332d9e5d0",
@@ -78,13 +83,13 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
     "universal_entry/p90l90_real_bounded_native_restart.py":
         "b989475fbe499c5eb139ea19998b3a3ad5c2cdb3451bc8b9dab3d3f23a18726c",
     "universal_entry/p90l90_real_observer_runtime.py":
-        "8d93f93b29446dab448e172a36ea2d74260ec6526022d92785c42e70e762cee9",
+        "eac3020627c0e5baeb9fb337ac88b3a6f7c16938689167587f66a03d739fba5f",
     "universal_entry/p90l90_real_shared_candle_ledger.py":
         "67baca3d0e8e73be61859a053052c4691f108a1adb98f8aa8dccc8069a6e1401",
     "universal_entry/p90l90_shared_candle_bridge.py":
         "01bfb15924c9fcae07b70568e79327d5426e015f5879c8fc8bf7dd4431f0ba2f",
     "universal_exit/p90l90_real_exit_port.py":
-        "f7809d96136ed6092c795d73e1b216cc5fe733be0462ffdafdd650f93628b696",
+        "26303ac77d846867e9c6c89ceac67752625f7d212a4b527362dbdbd192d3517d",
     "universal_exit/p90l90_real_mfe.py":
         "b5ea55aabc32a8860de421411b45990662c2a6b7111f53a18cae2c7603cac48f",
     "universal_exit/p90l90_real_mfe_ledger.py":
@@ -95,7 +100,7 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
     "universal_entry/trade_mirror.py":
         "228a92991c4ab3bd31506bd40bfc55e9a30a237cdda4f23921005586808d4c1a",
     "universal_exit/p90l90_real_runtime_ports.py":
-        "e471b82d1e6e84e105cb13c7094974799dfae145e9af1b68f389d08f93a57970",
+        "998f8cb804e1e57321b1925739a92e60bfc0db1061f4654596673e46fd860442",
 }
 
 
