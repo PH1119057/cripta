@@ -153,7 +153,17 @@ def _acquire_exclusive_producer(connection: psycopg.Connection[Any]) -> None:
 
 
 def _session_start(connection: psycopg.Connection[Any], session: str) -> None:
+    # The caller holds the one-producer PostgreSQL session advisory lock.
+    # A power loss/SIGKILL leaves an ACTIVE row without a clean shutdown.
+    # Close that previous epoch as an explicit gap, never as continuity.
     with connection.transaction():
+        connection.execute(
+            """UPDATE analytics.native_public_trade_source_sessions
+                  SET state='GAP', ended_at=clock_timestamp(),
+                      reason='PREVIOUS_WRITER_ENDED_UNCLEAN'
+                WHERE market_source_id=%s AND state='ACTIVE'""",
+            (BYBIT_PUBLIC_MARKET_SOURCE_ID,),
+        )
         connection.execute(
             """INSERT INTO analytics.native_public_trade_source_sessions
                 (source_session_id,market_source_id,producer_release_commit,
