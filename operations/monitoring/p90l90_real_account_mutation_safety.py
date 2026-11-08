@@ -75,6 +75,16 @@ class P90RealIndependentMutationSafety:
         self._private = signed_private
         self._accounts = dict(account_by_strategy)
         self._connectors = dict(connector_by_strategy)
+        self._last_denial_code: str | None = None
+
+    @property
+    def last_denial_code(self) -> str | None:
+        """Stable, non-secret reason from the most recent synchronous check."""
+        return self._last_denial_code
+
+    def _deny(self, code: str) -> bool:
+        self._last_denial_code = code
+        return False
 
     def __call__(
         self,
@@ -83,13 +93,16 @@ class P90RealIndependentMutationSafety:
         now: datetime,
     ) -> bool:
         """Never upgrade an unproven current Exchange state into authorization."""
+        self._last_denial_code = None
         try:
-            return self._check(position, evaluation, now)
+            accepted = self._check(position, evaluation, now)
+            if accepted is not True and self._last_denial_code is None:
+                return self._deny("SCOPED_EXIT_INPUT_UNVERIFIED")
+            return accepted
         except Exception:
-            # Exiting is the responsibility of the credential-local
-            # reconciler when proof is unavailable; do not fabricate a
-            # market close or silently queue a stale mutation.
-            return False
+            # Never put private REST/credentials or DB exceptions in the
+            # durable fault. This code is NOT permission or Exchange evidence.
+            return self._deny("SOURCE_OR_PRIVATE_PROOF_UNAVAILABLE")
 
     def _check(
         self,
@@ -99,6 +112,13 @@ class P90RealIndependentMutationSafety:
     ) -> bool:
         details = evaluation.observation.attributes.to_dict().get("p90l90_real")
         decision = evaluation.decision
+        if (
+            now.tzinfo is None or now.utcoffset() is None
+            or not timedelta() <= now.astimezone(UTC)
+               - evaluation.observation.received_at.astimezone(UTC)
+               <= timedelta(seconds=5)
+        ):
+            return self._deny("OBSERVATION_NOT_FRESH")
         if (
             decision is None
             or not isinstance(details, Mapping)
@@ -113,17 +133,13 @@ class P90RealIndependentMutationSafety:
             or evaluation.observation.strategy_position_id
                != position.strategy_position_id
             or decision.strategy_position_id != position.strategy_position_id
-            or now.tzinfo is None or now.utcoffset() is None
-            or not timedelta() <= now.astimezone(UTC)
-               - evaluation.observation.received_at.astimezone(UTC)
-               <= timedelta(seconds=5)
             or details.get("trading_account_id") != position.trading_account_id
             or details.get("strategy_execution_binding_id")
                != position.strategy_execution_binding_id
             or details.get("exchange_position_key") != position.exchange_position_key
             or details.get("pending_exit_mutation") is not False
         ):
-            return False
+            return self._deny("SCOPED_EXIT_INPUT_UNVERIFIED")
         self._source._source_transaction()
         nonterminal = self._db.execute(
             """SELECT count(*) FROM runtime.trade_commands
@@ -132,7 +148,7 @@ class P90RealIndependentMutationSafety:
             (position.trading_account_id,),
         ).fetchone()
         if nonterminal != (0,):
-            return False
+            return self._deny("ACCOUNT_COMMAND_NOT_TERMINAL")
         identity = self._db.execute(
             """SELECT strategy_execution_binding_id,trading_account_id
                 FROM strategy_entry.strategy_execution_bindings
@@ -152,7 +168,7 @@ class P90RealIndependentMutationSafety:
         if identity != [
             (position.strategy_execution_binding_id, position.trading_account_id)
         ]:
-            return False
+            return self._deny("BINDING_NOT_CURRENT")
         current = self._private.for_closed_boundary(
             position, evaluation.observation.event_at,
         )
@@ -166,7 +182,7 @@ class P90RealIndependentMutationSafety:
             or not timedelta() <= now.astimezone(UTC) -
                current.observed_at.astimezone(UTC) <= timedelta(seconds=5)
         ):
-            return False
+            return self._deny("PRIVATE_SCOPE_NOT_CURRENT")
         signed = current.position
         if (
             str(signed.get("symbol")) != position.symbol
@@ -177,13 +193,13 @@ class P90RealIndependentMutationSafety:
             or Decimal(str(signed.get("avgPrice"))) != position.actual_avg_fill
             or Decimal(str(signed.get("size"))) != position.actual_qty
         ):
-            return False
+            return self._deny("POSITION_NOT_CURRENT")
         for key, signed_key in _FIELDS.items():
             if (
                 Decimal(str(signed.get(signed_key))) !=
                 Decimal(str(details.get(key)))
             ):
-                return False
+                return self._deny("PROTECTION_CHANGED")
         mark = Decimal(str(signed.get("markPrice")))
         stop = Decimal(str(signed.get("stopLoss")))
         tp = Decimal(str(signed.get("takeProfit")))
@@ -192,23 +208,22 @@ class P90RealIndependentMutationSafety:
             not stop.is_finite() or stop <= 0 or
             not tp.is_finite() or tp <= 0
         ):
-            return False
+            return self._deny("MARK_OR_PROTECTION_INVALID")
         if position.direction.value == "LONG":
             if not stop < mark < tp:
-                return False
+                return self._deny("MARK_OR_PROTECTION_INVALID")
         elif not tp < mark < stop:
-            return False
+            return self._deny("MARK_OR_PROTECTION_INVALID")
         if decision.action_kind is ExitActionKind.SET_TRAILING:
             mutation = decision.requested_mutation.to_dict()
             active_price = Decimal(str(mutation["active_price"]))
-            if (
-                Decimal(str(signed["trailingStop"])) != 0
-                or (mark >= active_price if position.direction.value == "LONG"
-                    else mark <= active_price)
-            ):
-                return False
+            if Decimal(str(signed["trailingStop"])) != 0:
+                return self._deny("TRAIL_ALREADY_PRESENT")
+            if (mark >= active_price if position.direction.value == "LONG"
+                    else mark <= active_price):
+                return self._deny("MARK_ALREADY_AT_ACTIVATION")
         elif decision.action_kind not in (
             ExitActionKind.SET_TP, ExitActionKind.CLOSE,
         ):
-            return False
+            return self._deny("UNSUPPORTED_EXIT_MUTATION")
         return True
