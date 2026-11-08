@@ -769,12 +769,29 @@ for _attempt in {1..60}; do
   if ! systemctl is-active --quiet cripta-native-public-trade-source.service; then
     die "native MarketSource writer exited during source cutover"
   fi
+  # Read only the current source process's exact advertised ACTIVE session.
+  # A stale ACTIVE row left by a killed old process cannot prove readiness.
+  source_session="$(runuser -u cripta -- python3 -c '
+import json,sys
+try:
+    v=json.load(open(sys.argv[1],encoding="utf-8"))
+    sid=v.get("session") if v.get("state")=="ACTIVE" else ""
+except Exception:
+    sid=""
+print(sid if isinstance(sid,str) else "")
+' /var/lib/cripta/native_public_trade_source/status.json)"
+  if [[ ! "$source_session" =~ ^[0-9a-f]{32}$ ]]; then
+    sleep 1
+    continue
+  fi
   source_cursor_count="$(sql_scalar "SELECT count(DISTINCT c.external_symbol)
     FROM analytics.native_public_trade_source_cursors c
     JOIN analytics.native_public_trade_source_sessions s
       ON s.source_session_id=c.source_session_id
-    WHERE s.state='ACTIVE'
+    WHERE s.source_session_id='$source_session'
+      AND s.state='ACTIVE'
       AND s.market_source_id='ms-bybit-mainnet-public-v1'
+      AND s.last_accepted_at >= now() - interval '10 seconds'
       AND c.event_at >= now() - interval '3 minutes'")"
   if [[ "$source_cursor_count" == "5" ]]; then
     native_source_ready=1
