@@ -1082,7 +1082,7 @@ function refreshP90RealV3ArmControl(){
   if(detail)detail.textContent='loaded '+(loaded?loaded.slice(0,12):'—')+' · source '+(source?source.slice(0,12):'—')+' · observer '+observerState+(observerReady?' / ready':' / not ready')+' · readiness '+(operationState||'—')+' · mainnet '+(liveGateOpen?'OPEN':'CLOSED');
 }
 let p90PendingOperation=null,p90ModalState='confirm',p90ModalOperation=null;
-let p90ProgressStartedAt=0,p90ProgressLastPollAt=0,p90ProgressFailures=0,p90ProgressLastError='';
+globalThis.p90ArmUIProgress={startedAt:0,lastPollAt:0,failures:0,lastError:''};
 function renderP90ArmModal(operation=null){
   const dialog=document.getElementById('p90ArmDialog');if(!dialog?.open)return;
   if(operation&&p90PendingOperation?.requestId===operation.request_id)p90ModalOperation=operation;
@@ -1104,8 +1104,8 @@ function renderP90ArmModal(operation=null){
   const meta=document.getElementById('p90ArmDialogProgressMeta');
   if(meta){
     const count=p90ModalState==='success'?7:technicalReady?6:completed.size;
-    const elapsed=p90ProgressStartedAt?Math.round((Date.now()-p90ProgressStartedAt)/1000):0;
-    const pollAge=p90ProgressLastPollAt?Math.round((Date.now()-p90ProgressLastPollAt)/1000):null;
+    const elapsed=globalThis.p90ArmUIProgress?.startedAt?Math.round((Date.now()-globalThis.p90ArmUIProgress.startedAt)/1000):0;
+    const pollAge=globalThis.p90ArmUIProgress?.lastPollAt?Math.round((Date.now()-globalThis.p90ArmUIProgress.lastPollAt)/1000):null;
     const stage=op?.phase||'ожидаем первую запись о ходе проверки';
     const stageLabel=stage==='arming_closed_gate'?'финальное открытие: шлюз пока закрыт':
       stage==='finalizing'?'финальное подтверждение открытия':
@@ -1118,15 +1118,15 @@ function renderP90ArmModal(operation=null){
     const freshness=p90ModalState==='busy'?
       (pollAge===null?' · ожидаем первый ответ сервера':
       ' · последний ответ '+pollAge+' с назад'):'';
-    const failure=p90ModalState==='busy'&&(p90ProgressFailures>0||pollAge!==null&&pollAge>8)?
-      ' · НЕТ СВЕЖЕГО ПРОГРЕССА'+(p90ProgressLastError?' ('+p90ProgressLastError+')':''):'';
+    const failure=p90ModalState==='busy'&&((globalThis.p90ArmUIProgress?.failures||0)>0||pollAge!==null&&pollAge>8)?
+      ' · НЕТ СВЕЖЕГО ПРОГРЕССА'+(globalThis.p90ArmUIProgress?.lastError?' ('+globalThis.p90ArmUIProgress.lastError+')':''):'';
     meta.textContent=status+freshness+failure;
-    meta.classList.toggle('warn',Boolean(failure));
+    meta.classList?.toggle?.('warn',Boolean(failure));
   }
 }
 function showP90ArmModal(){
   p90ModalState='confirm';p90ModalOperation=null;
-  p90ProgressStartedAt=0;p90ProgressLastPollAt=0;p90ProgressFailures=0;p90ProgressLastError='';
+  globalThis.p90ArmUIProgress={startedAt:0,lastPollAt:0,failures:0,lastError:''};
   const dialog=document.getElementById('p90ArmDialog');dialog.showModal();renderP90ArmModal();
 }
 document.getElementById('p90ArmDialogClose')?.addEventListener('click',()=>document.getElementById('p90ArmDialog').close());
@@ -1180,7 +1180,7 @@ async function changeP90RealV3Arm(enabled){
   const button=document.getElementById('p90RealV3ArmButton'),status=document.getElementById('p90RealV3ArmStatus');
   const requestId='p90-owner-arm-'+Date.now()+'-'+Math.random().toString(16).slice(2);
   p90PendingOperation={requestId,state:'warn',message:enabled?'Выполняю OWNER ARM · шлюз пока закрыт':'Отключаю P90 REAL v3'};
-  p90ProgressStartedAt=Date.now();p90ProgressLastPollAt=0;p90ProgressFailures=0;p90ProgressLastError='';
+  globalThis.p90ArmUIProgress={startedAt:Date.now(),lastPollAt:0,failures:0,lastError:''};
   const finish=(state,message)=>{p90PendingOperation={requestId,state,message};p90ModalState=state==='success'?'success':state==='error'?'error':state==='unknown'?'unknown':'busy';refreshP90RealV3ArmControl()};
   const progress={done:false};
   const poll=enabled?(async()=>{
@@ -1194,14 +1194,14 @@ async function changeP90RealV3Arm(enabled){
         const op=(await response.json()).readiness_operation;
         if(progress.done)break;
         if(op&&op.request_id===requestId){
-          p90ProgressLastPollAt=Date.now();p90ProgressFailures=0;p90ProgressLastError='';
+          globalThis.p90ArmUIProgress.lastPollAt=Date.now();globalThis.p90ArmUIProgress.failures=0;globalThis.p90ArmUIProgress.lastError='';
           p90ModalOperation=op;
           p90PendingOperation={requestId,state:op.state==='BLOCKED'?'error':'warn',message:p90ReadinessOperationText(op)+(op.state==='READY_FOR_OWNER_ARM'?' · выполняю финальную проверку':' · шлюз закрыт')};
           refreshP90RealV3ArmControl();
           renderP90ArmModal();
         }
       }catch(e){
-        if(!progress.done){p90ProgressFailures++;p90ProgressLastError=String(e?.message||'ошибка опроса').slice(0,110);renderP90ArmModal();}
+        if(!progress.done){globalThis.p90ArmUIProgress.failures++;globalThis.p90ArmUIProgress.lastError=String(e?.message||'ошибка опроса').slice(0,110);renderP90ArmModal();}
       }
     }
   })():Promise.resolve();
