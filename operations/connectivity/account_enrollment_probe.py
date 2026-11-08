@@ -27,6 +27,67 @@ _CREDENTIAL_MOUNT_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
 _DB_DSN = "dbname=cripta user=cripta host=/var/run/postgresql"
 
 
+def _api_key_permission_reasons(response: Mapping[str, object] | None) -> tuple[str, ...]:
+    """Inspect one already-authenticated GET response; never return provider data.
+
+    Read/write and trade rights are necessary for the proposed trading
+    connector. Asset movement must remain impossible by this API key.
+    Missing or unknown permission shapes are BLOCKED, not presumed safe.
+    """
+    if not isinstance(response, Mapping) or response.get("retCode") != 0:
+        return ("API_KEY_PERMISSION_RESPONSE_INVALID",)
+    result = response.get("result")
+    if not isinstance(result, Mapping):
+        return ("API_KEY_PERMISSION_RESPONSE_INVALID",)
+
+    reasons: set[str] = set()
+    if type(result.get("readOnly")) is not int or result["readOnly"] != 0:
+        reasons.add("API_KEY_NOT_TRADE_WRITABLE")
+    permissions = result.get("permissions")
+    if not isinstance(permissions, Mapping):
+        return tuple(sorted(reasons | {"API_KEY_PERMISSIONS_UNAVAILABLE"}))
+
+    contract = permissions.get("ContractTrade")
+    derivatives = permissions.get("Derivatives")
+    if (
+        not isinstance(contract, list)
+        or any(not isinstance(item, str) for item in contract)
+        or not {"Order", "Position"}.issubset(set(contract))
+        or not isinstance(derivatives, list)
+        or any(not isinstance(item, str) for item in derivatives)
+        or "DerivativesTrade" not in derivatives
+    ):
+        reasons.add("API_KEY_REQUIRED_TRADE_SCOPE_MISSING")
+
+    wallet = permissions.get("Wallet")
+    if not isinstance(wallet, list) or any(not isinstance(item, str) for item in wallet):
+        reasons.add("API_KEY_WALLET_PERMISSIONS_UNVERIFIED")
+    elif wallet:
+        reasons.add("API_KEY_ASSET_MOVEMENT_PERMISSION_PRESENT")
+
+    # Newer venues can expose an additional Withdraw/Transfer capability
+    # outside Wallet. Reject rather than silently treating it as unavailable.
+    for category, values in permissions.items():
+        if not isinstance(category, str):
+            reasons.add("API_KEY_PERMISSIONS_UNAVAILABLE")
+            continue
+        if category.lower() in {"withdraw", "transfer"}:
+            if not isinstance(values, list):
+                reasons.add("API_KEY_ASSET_MOVEMENT_PERMISSION_UNVERIFIED")
+            elif values:
+                reasons.add("API_KEY_ASSET_MOVEMENT_PERMISSION_PRESENT")
+        if isinstance(values, list):
+            for item in values:
+                if isinstance(item, str) and (
+                    "withdraw" in item.lower() or "transfer" in item.lower()
+                ):
+                    reasons.add("API_KEY_ASSET_MOVEMENT_PERMISSION_PRESENT")
+                elif not isinstance(item, str):
+                    reasons.add("API_KEY_PERMISSIONS_UNAVAILABLE")
+
+    return tuple(sorted(reasons))
+
+
 def _read_mount(config: Mapping[str, str]) -> dict[str, str]:
     """Read an already mounted systemd credential, not an arbitrary file."""
     name = str(config.get("CRIPTA_BYBIT_CREDENTIAL_NAME") or "")
@@ -79,16 +140,25 @@ def verify_mounted_account(
         return False, ("PROBE_CREDENTIAL_MOUNT_UNAVAILABLE",)
     if not all(mounted.get(k) for k in ("api_key", "api_secret", "credential_ref")):
         return False, ("PROBE_CREDENTIAL_MOUNT_INCOMPLETE",)
+    signed_response: Mapping[str, object] | None = None
+
+    def get_once() -> Mapping[str, object]:
+        nonlocal signed_response
+        raw = signed_get(str(mounted["api_key"]), str(mounted["api_secret"]))
+        signed_response = raw if isinstance(raw, Mapping) else None
+        return raw
+
     result = verify_account_enrollment(
         connection, trading_account_id=account, account_connector_id=connector,
         proposed_provider_uid=proposed_uid,
         mounted_credential_ref=str(mounted["credential_ref"]),
-        signed_account_get=lambda: signed_get(
-            str(mounted["api_key"]), str(mounted["api_secret"])
-        ),
+        signed_account_get=get_once,
         now=now,
     )
-    return result.ready, result.reasons
+    if not result.ready:
+        return False, result.reasons
+    reasons = _api_key_permission_reasons(signed_response)
+    return not reasons, reasons
 
 
 def main() -> int:
@@ -116,6 +186,7 @@ def main() -> int:
         return 2
     if ready:
         print("UID_PROBE=PASS")
+        print("API_KEY_PERMISSION_PROBE=PASS")
         return 0
     # Whitelist stable internal failure codes; no external response fragments.
     allowed = tuple(
