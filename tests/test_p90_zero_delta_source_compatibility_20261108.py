@@ -10,8 +10,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from bybit_workbench.universal_entry import p90l90_real_source_compatibility as compat
 
+from bybit_workbench.universal_entry import p90l90_real_source_compatibility as compat
 
 _SHARED = (
     "strategy_position.py",
