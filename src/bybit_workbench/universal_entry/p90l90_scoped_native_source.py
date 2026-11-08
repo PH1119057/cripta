@@ -166,7 +166,10 @@ def read_scoped_native_source(
     ).fetchall()
     found: dict[str, NativeSourceSymbolEvidence] = {}
     for row in rows:
-        symbol, source, instrument, seq, exec_id, event, accepted, journal_at, price, qty, side = row
+        (
+            symbol, source, instrument, seq, exec_id, event, accepted,
+            journal_at, price, qty, side,
+        ) = row
         symbol = str(symbol)
         if symbol not in requested or symbol in found:
             raise NativeSourceProofUnavailable(
