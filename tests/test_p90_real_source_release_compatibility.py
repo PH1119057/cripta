@@ -6,6 +6,7 @@ import hashlib
 import subprocess
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -469,3 +470,119 @@ def test_owner_reviewed_recovery_delta_is_immutable_git_blob(
         assert relative not in compat.REVIEWED_BUGFIX_CONSUMER_SHA256
     else:
         assert compat.REVIEWED_BUGFIX_CONSUMER_SHA256[relative] == expected
+
+
+# Owner-reported immediate PREARM break after the independently deployed native
+# source (813023fb): two real append-only attestations are valid for their
+# historical code bytes, not the loaded release's NEW Exit/IPC digest.
+@pytest.mark.parametrize(("release", "historic_digest"), [
+    (
+        "a2c947e81aeeeb028f71750ceb58cff0fd3dacdc",
+        "ccc5f7629a3a80e6daf2e59952cb67a5bb7dd8de33d5bc8c6c83017706dfd279",
+    ),
+    (
+        "2290b2aec351de43e69b02565588e076024c8352",
+        "ccc5f7629a3a80e6daf2e59952cb67a5bb7dd8de33d5bc8c6c83017706dfd279",
+    ),
+])
+def test_20261108_historical_valid_consumer_attestation_is_not_corruption(
+    release: str, historic_digest: str,
+) -> None:
+    assert compat._REVIEWED_HISTORICAL_CONSUMERS[release] == historic_digest
+    db = SourceDB()
+    attest(db)  # Current executable is independently registered.
+    historical = list(copy.deepcopy(db.attestations[0]))
+    historical[0] = release
+    historical[3] = historic_digest
+    db.attestations.insert(0, tuple(historical))
+    before = copy.deepcopy(db.attestations)
+    identity = compat.inspect_real_source_identity(
+        db, epoch_id=EPOCH, loaded_commit=LOADED, bundles=bundles(),
+    )
+    assert release in identity.approved_producers
+    assert db.attestations == before
+    assert all(sql.lstrip().startswith("SELECT") for sql in db.sql)
+
+    # The historical exception must NOT authorize an unregistered release or
+    # a tampered old fingerprint: no ancestry inference, no DB write/DELETE.
+    historical[3] = "f" * 64
+    db.attestations[0] = tuple(historical)
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="ATTESTATION_CORRUPT_OR_INCOMPATIBLE",
+    ):
+        compat.inspect_real_source_identity(
+            db, epoch_id=EPOCH, loaded_commit=LOADED, bundles=bundles(),
+        )
+
+
+def test_20261108_source_origin_allows_only_exact_reviewed_exit_ipc_bytes(
+    tmp_path: Path,
+) -> None:
+    origin = tmp_path / "6dc3c362d45edc09450323ba080ab0b55c9ffdc2"
+    loaded = tmp_path / ("f" * 40)
+    paths = [
+        "universal_entry/example.py",
+        "universal_exit/p90l90_real_exit_execution.py",
+        "universal_exit/p90l90_real_private_ipc.py",
+        "strategy_position.py",
+        "exchange_position_identity.py",
+        "domain/models.py",
+        "market_data/shared_closed_candles.py",
+    ]
+    edited = frozenset({
+        "universal_exit/p90l90_real_exit_execution.py",
+        "universal_exit/p90l90_real_private_ipc.py",
+    })
+    for relative in paths:
+        original = origin / "src/bybit_workbench" / relative
+        current = loaded / "src/bybit_workbench" / relative
+        original.parent.mkdir(parents=True, exist_ok=True)
+        current.parent.mkdir(parents=True, exist_ok=True)
+        original.write_bytes(b"# immutable synthetic origin\n")
+        current.write_bytes(
+            (Path("src/bybit_workbench") / relative).read_bytes()
+            if relative in edited else original.read_bytes()
+        )
+    for relative in edited:
+        blob = (loaded / "src/bybit_workbench" / relative).read_bytes()
+        assert hashlib.sha256(blob).hexdigest() == (
+            compat._REVIEWED_20261108_EXIT_IPC_SHA256[relative]
+        )
+    compat.verify_reviewed_bugfix_delta(
+        current_root=loaded, origin_root=origin,
+    )
+
+    # One altered byte invalidates precisely the reviewed Exit consumer.
+    changed = loaded / "src/bybit_workbench/universal_exit/p90l90_real_exit_execution.py"
+    changed.write_bytes(changed.read_bytes() + b"\n# unreviewed\n")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="REVIEWED_BUGFIX_CONTENT_DRIFT",
+    ):
+        compat.verify_reviewed_bugfix_delta(
+            current_root=loaded, origin_root=origin,
+        )
+    changed.write_bytes((Path("src/bybit_workbench") /
+                         "universal_exit/p90l90_real_exit_execution.py").read_bytes())
+
+    # No extra consumer and no foreign historical origin may inherit approval.
+    extra = loaded / "src/bybit_workbench/universal_exit/unreviewed.py"
+    extra.write_bytes(b"# added consumer\n")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat.verify_reviewed_bugfix_delta(
+            current_root=loaded, origin_root=origin,
+        )
+    extra.unlink()
+    foreign_origin = tmp_path / ("e" * 40)
+    origin.rename(foreign_origin)
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat.verify_reviewed_bugfix_delta(
+            current_root=loaded, origin_root=foreign_origin,
+        )
