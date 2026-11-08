@@ -17,6 +17,7 @@ from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
     NativeSourceProofUnavailable,
     read_ordered_native_events,
     read_scoped_native_source,
+    verify_native_producer_code_compatibility,
 )
 
 RELEASE = "a" * 40
@@ -184,4 +185,55 @@ def test_ordered_reader_requires_verified_source_and_existing_boundary() -> None
         read_ordered_native_events(
             SourceDB(now), source=denied, after_frame=0,
             after_index=0, limit=100,
+        )
+
+
+def test_native_producer_exact_abi_can_outlive_p90_consumer_release(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from bybit_workbench.universal_entry import p90l90_scoped_native_source as mod
+
+    calls = []
+
+    def exact_git_bytes(args, **_kw):
+        assert args[0] == "git"
+        assert args[2] == str(tmp_path)
+        assert args[3] == "show"
+        calls.append(args[4])
+        return b"exact native source code is unchanged\n"
+
+    monkeypatch.setattr(mod.subprocess, "check_output", exact_git_bytes)
+    approved = verify_native_producer_code_compatibility(
+        source_checkout=tmp_path,
+        claimed_producer_commit="a" * 40,
+        loaded_consumer_commit="b" * 40,
+    )
+    assert approved == frozenset(("a" * 40,))
+    assert len(calls) == 8
+    assert all(call.split(":")[0] in ("a" * 40, "b" * 40) for call in calls)
+    assert len({call.split(":", 1)[1] for call in calls}) == 4
+
+
+def test_native_producer_changed_byte_is_never_approved(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from bybit_workbench.universal_entry import p90l90_scoped_native_source as mod
+
+    def mixed_git_bytes(args, **_kw):
+        return b"original" if args[4].startswith("a"*40) else b"different"
+
+    monkeypatch.setattr(mod.subprocess, "check_output", mixed_git_bytes)
+    with pytest.raises(NativeSourceProofUnavailable, match="PRODUCER_CODE_DRIFT"):
+        verify_native_producer_code_compatibility(
+            source_checkout=tmp_path,
+            claimed_producer_commit="a" * 40,
+            loaded_consumer_commit="b" * 40,
+        )
+    with pytest.raises(NativeSourceProofUnavailable, match="COMMIT_INVALID"):
+        verify_native_producer_code_compatibility(
+            source_checkout=tmp_path,
+            claimed_producer_commit="unknown",
+            loaded_consumer_commit="b" * 40,
         )
