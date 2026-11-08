@@ -20,7 +20,7 @@ GRANT SELECT ON control.account_mutation_recovery_events TO cripta;
 GRANT INSERT,SELECT ON control.account_mutation_recovery_events
     TO cripta_account_entry_safety_recovery;
 GRANT SELECT ON runtime.position_ownership,runtime.executions,
-                runtime.capital_reservations
+                runtime.exchange_order_history,runtime.capital_reservations
     TO cripta_account_entry_safety_recovery;
 
 CREATE OR REPLACE FUNCTION control.reject_mutation_recovery_history_change()
@@ -50,7 +50,11 @@ DECLARE
   v_generation record;
   v_now timestamptz := clock_timestamp();
   v_count integer;
+  v_rows integer;
   v_qty numeric;
+  v_tp_order_id text;
+  v_tp_order_count integer;
+  v_close_proof_mode text := 'BOT_COMMAND';
   v_event text;
 BEGIN
   IF session_user <> 'cripta'
@@ -168,7 +172,65 @@ BEGIN
       AND e.exec_qty::numeric>0 AND v_position.exit_order_ids ? e.order_id;
   IF v_count<>jsonb_array_length(v_position.exit_execution_ids)
      OR v_qty IS DISTINCT FROM v_position.actual_qty
-  THEN RAISE EXCEPTION 'MUTATION_RECOVERY_CLOSE_EXECUTIONS_UNPROVEN'; END IF;
+  THEN
+    -- A Bybit-resident initial TakeProfit has no bot close command/orderLinkId.
+    -- Do not manufacture one; accept only independently PROVEN exchange order
+    -- history plus the exact full native execution IDs and original TP price.
+    IF jsonb_typeof(v_position.exit_order_ids) IS DISTINCT FROM 'array'
+       OR jsonb_array_length(v_position.exit_order_ids)<>1
+       OR jsonb_typeof(v_position.initial_protection_evidence) IS DISTINCT FROM 'object'
+       OR NULLIF(v_position.initial_protection_evidence->>'takeProfit','') IS NULL
+       OR v_position.position_idx IS NULL
+       OR EXISTS (
+         SELECT 1 FROM runtime.trade_commands c
+         WHERE c.trading_account_id=p_account
+           AND c.command_type IN ('close','strategy_exit')
+           AND c.payload_json::jsonb->>'strategy_position_id'=p_position
+       )
+    THEN RAISE EXCEPTION 'MUTATION_RECOVERY_NATIVE_TP_ORIGIN_UNPROVEN'; END IF;
+
+    SELECT count(*),min(h.order_id) INTO v_tp_order_count,v_tp_order_id
+      FROM runtime.exchange_order_history h
+     WHERE h.order_id=v_position.exit_order_ids->>0
+       AND h.trading_account_id=p_account AND h.account_connector_id=p_connector
+       AND h.identity_status='PROVEN' AND h.order_status='Filled'
+       AND h.symbol=v_position.symbol
+       AND h.side=CASE WHEN v_position.side='Buy' THEN 'Sell' ELSE 'Buy' END
+       AND coalesce(h.order_link_id,'')=''
+       AND h.payload_json::jsonb->>'stopOrderType'='TakeProfit'
+       AND h.payload_json::jsonb->>'createType'='CreateByTakeProfit'
+       AND h.payload_json::jsonb->>'orderType'='Market'
+       AND h.payload_json::jsonb->>'reduceOnly'='true'
+       AND h.payload_json::jsonb->>'closeOnTrigger'='true'
+       AND h.payload_json::jsonb->>'positionIdx'=v_position.position_idx::text
+       AND h.payload_json::jsonb->>'triggerPrice'
+             =v_position.initial_protection_evidence->>'takeProfit'
+       AND (h.payload_json::jsonb->>'cumExecQty')::numeric=v_position.actual_qty
+       AND (h.payload_json::jsonb->>'qty')::numeric=v_position.actual_qty;
+    IF v_tp_order_count<>1 THEN
+      RAISE EXCEPTION 'MUTATION_RECOVERY_NATIVE_TP_ORDER_UNPROVEN';
+    END IF;
+
+    SELECT count(*),count(DISTINCT e.exec_id),sum(e.exec_qty::numeric)
+      INTO v_rows,v_count,v_qty
+      FROM runtime.executions e
+     WHERE e.exec_id=ANY(ARRAY(SELECT jsonb_array_elements_text(v_position.exit_execution_ids)))
+       AND e.trading_account_id=p_account AND e.account_connector_id=p_connector
+       AND e.identity_status='PROVEN' AND e.symbol=v_position.symbol
+       AND e.side=CASE WHEN v_position.side='Buy' THEN 'Sell' ELSE 'Buy' END
+       AND e.exec_qty::numeric>0 AND e.order_id=v_tp_order_id
+       AND coalesce(e.order_link_id,'')=''
+       AND e.payload_json::jsonb->>'execType'='Trade'
+       AND e.payload_json::jsonb->>'stopOrderType'='TakeProfit'
+       AND e.payload_json::jsonb->>'createType'='CreateByTakeProfit'
+       AND e.payload_json::jsonb->>'orderId'=v_tp_order_id
+       AND coalesce(e.payload_json::jsonb->>'orderLinkId','')='';
+    IF v_count<>jsonb_array_length(v_position.exit_execution_ids)
+       OR v_rows<>v_count
+       OR v_qty IS DISTINCT FROM v_position.actual_qty
+    THEN RAISE EXCEPTION 'MUTATION_RECOVERY_NATIVE_TP_EXECUTIONS_UNPROVEN'; END IF;
+    v_close_proof_mode := 'EXCHANGE_NATIVE_TAKE_PROFIT';
+  END IF;
 
   v_now := clock_timestamp();
   IF p_proof_at < v_now-interval '15 seconds'
@@ -185,6 +247,9 @@ BEGIN
         'entry_command_id',v_position.entry_command_id,
         'entry_execution_ids',v_position.execution_ids,
         'exit_execution_ids',v_position.exit_execution_ids,
+        'exit_order_ids',v_position.exit_order_ids,
+        'close_proof_mode',v_close_proof_mode,
+        'native_tp_order_id',v_tp_order_id,
         'actual_qty',v_position.actual_qty,'closed_at',v_position.closed_at));
   DELETE FROM runtime.account_entry_safety_blocks
     WHERE trading_account_id=p_account AND account_connector_id=p_connector
