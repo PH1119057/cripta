@@ -140,3 +140,21 @@ def test_gate_rejects_unknown_release_purpose():
     params["request"]["purpose"] = "ARBITRARY_SHELL_RELEASE"
     with pytest.raises(gate.ReleaseDenied, match="REQUEST_SCOPE_INVALID"):
         gate.verify_request(**params)
+
+
+def test_exact_native_cutover_requires_separate_owner_approved_purpose() -> None:
+    params = valid()
+    params["request"]["purpose"] = "NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE"
+    assert gate.verify_request(**params) == (TARGET, BASELINE, NONCE)
+    params["installed_runtime"] = "f" * 40
+    with pytest.raises(gate.ReleaseDenied, match="BASELINE_MISMATCH"):
+        gate.verify_request(**params)
+
+
+def test_native_cutover_purpose_does_not_accept_dashboard_only_baseline() -> None:
+    params = valid()
+    params["request"]["purpose"] = "NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE"
+    params["installed_runtime"] = "f" * 40
+    params["dashboard_ui_commit"] = BASELINE
+    with pytest.raises(gate.ReleaseDenied, match="BASELINE_MISMATCH"):
+        gate.verify_request(**params)

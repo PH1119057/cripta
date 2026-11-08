@@ -10,7 +10,9 @@ OWNER_LOGIN = "PH1119057"
 REPOSITORY = "PH1119057/cripta"
 FULL_PURPOSE = "EXACT_VERIFIED_SOURCE_RELEASE"
 DASHBOARD_PURPOSE = "DASHBOARD_PRESENTATION_RELEASE"
-PURPOSES = {FULL_PURPOSE, DASHBOARD_PURPOSE}
+# Explicit separate approval, never a fallback from an ordinary release.
+NATIVE_CUTOVER_PURPOSE = "NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE"
+PURPOSES = {FULL_PURPOSE, DASHBOARD_PURPOSE, NATIVE_CUTOVER_PURPOSE}
 FIELDS = {
     "repository",
     "purpose",
@@ -87,7 +89,7 @@ def verify_request(
         raise ReleaseDenied("SOURCE_HEAD_INVALID")
     if source_fast_forward_ok is not True:
         raise ReleaseDenied("SOURCE_NOT_FAST_FORWARD")
-    if purpose == FULL_PURPOSE:
+    if purpose in {FULL_PURPOSE, NATIVE_CUTOVER_PURPOSE}:
         if installed_runtime != baseline or installed_tooling != baseline:
             raise ReleaseDenied("BASELINE_MISMATCH")
     elif dashboard_ui_commit != baseline:

@@ -85,3 +85,43 @@ def test_dashboard_controller_spawns_bounded_transient_units_for_privilege_bound
     assert "CRIPTA_DASHBOARD_UI_VERIFY_ONLY=1" in block
     assert "/usr/local/sbin/cripta-deploy-dashboard-ui" in block
     assert "runuser" not in block
+
+
+def test_native_source_code_cutover_is_separate_authenticated_controller_scope():
+    src = CONTROLLER.read_text(encoding="utf-8")
+    installer = INSTALLER.read_text(encoding="utf-8")
+    assert "NATIVE_CUTOVER_PURPOSE" in src
+    assert "purpose=NATIVE_CUTOVER_PURPOSE" in src
+    assert "native_source_cutover=purpose == NATIVE_CUTOVER_PURPOSE" in src
+    assert '"CRIPTA_NATIVE_SOURCE_CUTOVER="' in src
+    assert "def _postcheck_native_source(target: str)" in src
+    assert "NATIVE_CUTOVER_LOADED_SOURCE_UNVERIFIED" in src
+    assert "NATIVE_SOURCE_PRODUCER_CODE_CHANGED_SEPARATE_CUTOVER_REQUIRED" in installer
+    assert "NATIVE_SOURCE_CUTOVER_REQUIRES_ACTIVE_OLD_WRITER" in installer
+    assert "NATIVE_SOURCE_INSTALLED_BASELINE_ABI_UNVERIFIED" in installer
+    assert "NATIVE_SOURCE_OLD_SESSION_NOT_EXPLICIT_GAP" in installer
+    assert "NATIVE_SOURCE_NEW_SESSION_IDENTITY_UNVERIFIED" in installer
+    assert "NATIVE_SOURCE_OLD_GAP_LOST" in installer
+    assert "NATIVE_SOURCE_EXACT_CODE_CUTOVER=PASS" in installer
+    assert "NATIVE_SOURCE_CUTOVER_CANNOT_COMBINE_STAGED_OFFLINE" in installer
+    assert "OWNER_ARM=UNCHANGED" in src
+    assert "SELECT enabled::int FROM control.execution_gates" in installer
+
+
+def test_old_native_writer_is_stopped_only_after_db_backup_and_migrations():
+    installer = INSTALLER.read_text(encoding="utf-8")
+    before = installer.index('pg_dump -Fc -d cripta')
+    migration = installer.index(
+        'for migration in "${migration_files[@]}"', before,
+    )
+    stop = installer.index(
+        "systemctl stop cripta-native-public-trade-source.service",
+        installer.index('if [[ "$native_code_changed" == "1" ]]; then', migration),
+    )
+    switch = installer.index('mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"')
+    new = installer.index(
+        "systemctl start cripta-native-public-trade-source.service", switch,
+    )
+    assert before < migration < stop < switch < new
+    assert installer.index("native_source_stopped_for_cutover=1") < switch
+    assert "NATIVE_SOURCE_PRE_SWITCH_RECOVERY=STARTED_OLD_CODE" in installer
