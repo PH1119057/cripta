@@ -263,6 +263,8 @@ unit_specs=(
   "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
   "operations/systemd/cripta-u5-oi30s-source-soak.service|cripta-u5-oi30s-source-soak.service|runtime"
   "operations/systemd/cripta-universal-entry-consumer.service|cripta-universal-entry-consumer.service|runtime"
+  # Credential-free native MarketSource must own the journal before consumers.
+  "operations/systemd/cripta-native-public-trade-source.service|cripta-native-public-trade-source.service|runtime"
   "operations/systemd/cripta-universal-entry-observer.service|cripta-universal-entry-observer.service|runtime"
   "operations/systemd/cripta-universal-entry-shadow.service|cripta-universal-entry-shadow.service|runtime"
   "operations/systemd/cripta-universal-exit-shadow.service|cripta-universal-exit-shadow.service|runtime"
@@ -395,6 +397,7 @@ managed_services=(
   cripta-safety-observer.service
   cripta-shadow-command-worker.service
   cripta-universal-entry-consumer.service
+  cripta-native-public-trade-source.service
   cripta-universal-entry-observer.service
   cripta-universal-exit-shadow.service
   cripta-universal-exit-consumer.service
@@ -446,6 +449,12 @@ restore_pre_cutover_services() {
       systemctl is-active --quiet "$service" && recovery_failed=1
     fi
   done
+  # New producer was not active on the baseline. Failed cutover must not
+  # strand an enabled after-release market writer behind an old Observer.
+  if [[ "${was_active[cripta-native-public-trade-source.service]:-0}" == "0" ]]; then
+    systemctl disable cripta-native-public-trade-source.service >/dev/null 2>&1 ||
+      recovery_failed=1
+  fi
   if [[ "$recovery_failed" == "0" ]]; then
     echo "PRE_CUTOVER_SERVICE_RECOVERY=PASS"
   else
@@ -577,6 +586,8 @@ migration_files=(
   # Shared native MarketSource evidence. Required before Observer code cutover.
   # Additive only: no source cursor reset or financial gate mutation.
   operations/sql/20261107_native_public_trade_evidence.sql
+  # One independently recorded WS session/cursor per original provider stream.
+  operations/sql/20261108_native_public_trade_source_sessions.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
@@ -709,16 +720,46 @@ else
   echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=BLOCKED_OBSERVER_NOT_READY" >&2
 fi
 
+# Native writer starts independently BEFORE the read-only Observer.
+# This is market-data-only (no credentials/Exchange controls/OWNER ARM).
+# A source that never records accepted provider cursors cannot be considered
+# healthy merely because systemd says active.
+systemctl enable cripta-native-public-trade-source.service >/dev/null
+systemctl start cripta-native-public-trade-source.service
+native_source_ready=0
+for _attempt in {1..60}; do
+  if ! systemctl is-active --quiet cripta-native-public-trade-source.service; then
+    die "native MarketSource writer exited during source cutover"
+  fi
+  source_cursor_count="$(sql_scalar "SELECT count(DISTINCT c.external_symbol)
+    FROM analytics.native_public_trade_source_cursors c
+    JOIN analytics.native_public_trade_source_sessions s
+      ON s.source_session_id=c.source_session_id
+    WHERE s.producer_release_commit='$RELEASE_COMMIT'
+      AND s.state='ACTIVE'
+      AND c.event_at >= now() - interval '3 minutes'")"
+  if [[ "$source_cursor_count" == "5" ]]; then
+    native_source_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "$native_source_ready" == "1" ]] ||
+  die "independent native source five-symbol fresh cursor proof missing"
+echo "INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS"
+
 for service in "${managed_services[@]}"; do
   if [[ "$service" == "cripta-real-service-broker.service" ||
-        "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
+        "$service" == "cripta-runtime-recovery-supervisor.service" ||
+        "$service" == "cripta-native-public-trade-source.service" ]]; then
     continue
   fi
   if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
 done
 for service in "${managed_services[@]}"; do
   if [[ "$service" == "cripta-real-service-broker.service" ||
-        "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
+        "$service" == "cripta-runtime-recovery-supervisor.service" ||
+        "$service" == "cripta-native-public-trade-source.service" ]]; then
     systemctl is-active --quiet "$service" ||
       die "required control-plane service inactive after deploy: $service"
   elif [[ "${was_active[$service]}" == "1" ]]; then
