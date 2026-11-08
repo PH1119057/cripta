@@ -17,11 +17,16 @@ from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 from bybit_workbench.universal_exit.contracts import ExitEvaluationStatus
 from bybit_workbench.universal_exit.p90l90_real_exit_port import P90RealExitNativePort
 from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeCheckpoint
+from operations.monitoring import p90l90_real_live_source_ports as source_module
 from test_p90l90_real_live_source_ports import (
-    AT, SHA, StubDB, _ports, _real_mirror, _trade,
+    AT,
+    SHA,
+    StubDB,
+    _ports,
+    _real_mirror,
+    _trade,
 )
 from test_p90l90_real_observation import _scope
-from operations.monitoring import p90l90_real_live_source_ports as source_module
 
 NOW = AT + timedelta(seconds=20, milliseconds=8)
 
