@@ -129,6 +129,8 @@ def test_source_commits_trade_before_session_cursor(
                 return self
             if "source_cursors" in sql:
                 operations.append("cursor")
+            elif "source_events" in sql:
+                operations.append("event-order")
             elif "source_sessions" in sql:
                 operations.append("session")
             else:
@@ -149,7 +151,8 @@ def test_source_commits_trade_before_session_cursor(
     native._persist_frame(Database(), session="a" * 32,
                           frame_number=1, facts=rows)
     assert operations == [
-        "begin", "cursor-read", "trade", "cursor", "session", "commit",
+        "begin", "cursor-read", "trade", "event-order",
+        "cursor", "session", "commit",
     ]
 
 
@@ -219,6 +222,7 @@ def test_external_producer_install_is_not_a_trading_permission() -> None:
         if False else installer.index("INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS")
     )
     assert "20261108_native_public_trade_source_sessions.sql" in installer
+    assert "20261109_native_public_trade_source_event_order.sql" in installer
     sql = Path(
         "operations/sql/20261108_native_public_trade_source_sessions.sql"
     ).read_text(encoding="utf-8")
