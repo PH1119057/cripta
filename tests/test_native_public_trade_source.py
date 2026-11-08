@@ -124,12 +124,18 @@ def test_source_commits_trade_before_session_cursor(
             operations.append("commit")
 
         def execute(self, sql: str, _params: object = ()):
+            if "SELECT exchange_sequence" in sql:
+                operations.append("cursor-read")
+                return self
             if "source_cursors" in sql:
                 operations.append("cursor")
             elif "source_sessions" in sql:
                 operations.append("session")
             else:
                 raise AssertionError(sql)
+
+        def fetchone(self):
+            return None
 
     class Journal:
         def __init__(self, _db: object) -> None:
@@ -142,7 +148,9 @@ def test_source_commits_trade_before_session_cursor(
     monkeypatch.setattr(native, "NativePublicTradeJournal", Journal)
     native._persist_frame(Database(), session="a" * 32,
                           frame_number=1, facts=rows)
-    assert operations == ["begin", "trade", "cursor", "session", "commit"]
+    assert operations == [
+        "begin", "cursor-read", "trade", "cursor", "session", "commit",
+    ]
 
 
 def test_failed_journal_write_cannot_advance_source_cursor(
@@ -164,9 +172,15 @@ def test_failed_journal_write_cannot_advance_source_cursor(
             calls.append("begin")
             yield
 
-        def execute(self, _sql: str, _params: object = ()) -> None:
+        def execute(self, sql: str, _params: object = ()):
+            if "SELECT exchange_sequence" in sql:
+                calls.append("cursor-read")
+                return self
             calls.append("cursor")
             raise AssertionError("source cursor must not advance")
+
+        def fetchone(self):
+            return None
 
     class BrokenJournal:
         def __init__(self, _db: object) -> None:
@@ -179,7 +193,7 @@ def test_failed_journal_write_cannot_advance_source_cursor(
     with pytest.raises(RuntimeError, match="persist failed"):
         native._persist_frame(Database(), session="a" * 32,
                               frame_number=1, facts=rows)
-    assert calls == ["begin"]
+    assert calls == ["begin", "cursor-read"]
 
 
 def test_external_producer_install_is_not_a_trading_permission() -> None:
@@ -210,3 +224,51 @@ def test_external_producer_install_is_not_a_trading_permission() -> None:
     ).read_text(encoding="utf-8")
     assert "PRIMARY KEY (source_session_id,external_symbol)" in sql
     assert "REVOKE DELETE,TRUNCATE" in sql
+
+
+def test_out_of_order_source_frame_never_appends_or_acknowledges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+    from operations.monitoring import native_public_trade_source as native
+
+    row = decode_native_trades(
+        {"topic": "publicTrade.LTCUSDT", "data": [_trade(seq=1234)]},
+        symbols=SYMBOLS, release=RELEASE,
+    )
+    writes: list[str] = []
+
+    class Database:
+        @contextmanager
+        def transaction(self):
+            yield
+
+        def execute(self, sql: str, _params: object = ()):
+            assert "SELECT exchange_sequence" in sql
+            return self
+
+        def fetchone(self):
+            return (1235, row[0].event_at)
+
+    class Journal:
+        def __init__(self, _db: object) -> None:
+            pass
+
+        def append(self, _event: object) -> None:
+            writes.append("unexpected native append")
+
+    monkeypatch.setattr(native, "NativePublicTradeJournal", Journal)
+    with pytest.raises(NativeSourceInputUnverified, match="ORDER_REGRESSION"):
+        native._persist_frame(Database(), session="a" * 32,
+                              frame_number=2, facts=row)
+    assert writes == []
+
+
+def test_releases_never_stop_native_source_as_trading_managed_service() -> None:
+    from pathlib import Path
+    installer = Path(
+        "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    managed = installer.split("managed_services=(", 1)[1].split(")", 1)[0]
+    assert "cripta-native-public-trade-source.service" not in managed
+    assert "systemctl start cripta-native-public-trade-source.service" in installer
