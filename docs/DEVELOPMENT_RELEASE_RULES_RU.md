@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.6 · 2026-11-07
+**Версия:** 2.7 · 2026-11-09
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -1939,76 +1939,33 @@ Discovery в порядке:
 
 Новый чат начинает ответ по незавершённой задаче с `RESUME_FOUND / NEW_TASK_CONFIRMED / BLOCKED` и exact evidence, а не с молчаливого `git checkout -b`. Это инструкция исполнителю, **не утверждение**, что CI проверяет все server worktrees или что действует автоматическая межчатовая блокировка: такие дополнительные tools/locks потребуют отдельной implementation/release проверки.
 
-## 50.5 Permanent bounded Release Controller — OWNER DECISION 2026-10-30 / 2026-11-03 (Issues #288, #381)
+## 50.5 Permanent bounded Release Controller — OWNER DECISION 2026-10-30 / 2026-11-03; revised 2026-11-09 (#470)
 
-Цель: заменить per-release SentinelX allowlist entries с фиксированными SHA постоянной узкой командой. Permanent controller является deployed management-plane rail; изменение target SHA не требует нового SentinelX command.
+Permanent controller is the single approved no-argument management rail for an exact verified Git-first deployment. It does not give financial authorization, trading/Exchange permissions, LIVE or OWNER ARM. It must never start automatically as a side effect of CI, a new main commit or source mirror sync.
 
-- Единственный стабильный exact entrypoint без произвольных аргументов shell, путей, команд или environment. Права SentinelX задаются для entrypoint, а не для каждого release SHA.
-- Каждая заявка отдельно одобряется аутентифицированным владельцем, имеет одноразовый nonce, exact GitHub repository, exact `purpose`, target SHA, purpose-specific expected baseline, время и срок действия. Строка `--operator owner` не является подтверждением полномочий.
-- Допустимы только два purpose:
-  - `EXACT_VERIFIED_SOURCE_RELEASE` — full application/trading runtime release; baseline = exact current installed runtime/tooling release; deploy owner = existing verified `install_verified_release.sh`;
-  - `DASHBOARD_PRESENTATION_RELEASE` — independent DEV §8.1 Dashboard presentation/read-model release; baseline = exact current `DASHBOARD_UI_COMMIT`; deploy owner = existing verified `deploy_dashboard_ui.sh`.
-- Контроллер независимо сверяет trusted GitHub main и обязательные проверки PR, включая `scope`, source tree, clean checkout, permissions и фактический baseline. Неизвестное состояние — fail-closed.
-- Для full runtime purpose действуют обычные backup/rollback и full installer gates. Для Dashboard purpose запрещено притворяться full release: он обязан выполнить Dashboard verify-only/scope gate, атомарный UI switch и source/live hash postcheck, сохранив `INSTALLED_COMMIT` / `LOADED_COMMIT`, mainnet gate, StrategyActivation, execution permissions и trading service PID/NRestarts неизменными.
-- Dashboard purpose не может принимать target, если current/expected `DASHBOARD_UI_COMMIT` не совпадает, target не current trusted GitHub main, required CI не PASS, source dirty/ambiguous, verifier не подтверждает presentation/read-model scope или release lock занят.
-- До записи выполняются §19.1–19.4 (actual actor/path/ACL/systemd), §50.4 (forensic) и единый release lock. Source sync — под `cripta`; никаких arbitrary refs, произвольных path/env/command.
-- Все стадии и отказы записываются долговечно с exact purpose. Таймаут/потеря связи означает UNKNOWN; повторная mutation только после сверки durable state, не вслепую.
-- После full release независимо проверяются REMOTE_HEAD, SOURCE_HEAD, INSTALLED_COMMIT, LOADED_COMMIT, runtime liveness и runtime behavior. После Dashboard release — REMOTE_HEAD, SOURCE_HEAD, `DASHBOARD_UI_COMMIT`, source/live Dashboard hashes и invariants DEV §8.1; trading `INSTALLED_COMMIT` / `LOADED_COMMIT` не переписываются.
-- Ни один purpose не включает mainnet gate, StrategyActivation, execution permissions, OWNER ARM или MICRO_LIVE.
-- Негативные тесты обязательны для обоих purpose: отсутствие/истечение approval, replay nonce, неподходящий SHA/baseline/tree/purpose, moving main, failing CI, dirty checkout, actor/path denial, lock collision, injection. Dashboard-specific tests дополнительно проверяют undeployed/current baseline mismatch, verifier rejection, попытку trading/control mutation и неизменность runtime identities.
-- Ввод нового/изменённого controller capability: OWNER DECISION → CANON UPDATE → IMPLEMENTATION → TEST → GITHUB → DEPLOY → RUNTIME EVIDENCE.
+**OWNER DECISION 2026-11-09:** Ordinary production code release must NOT require a second per-commit owner-authored GitHub Issue #291 comment/nonce/expiry. The deliberate authenticated management action via the existing scoped SentinelX rail is the deployment trigger; the controller independently validates the published artifact and environment. This replaces the earlier per-request GitHub comment requirement only for release operations. It does not remove or weaken financial approval or exchange-related safety gates.
 
-### 50.5.1 Proposed independent native MarketSource producer cutover — #470
+- Fixed no-argument entrypoint; no arbitrary shell, branch, SHA, path, environment variable or financial action from callers. Management identity/authorization belongs to the approved SentinelX/service-start rail, not a fabricated `--operator owner` flag. Do not add an automatic timer.
+- Target is the exact protected canonical GitHub `PH1119057/cripta:main` SHA/tree, with a merged scoped PR and independently PASS required GitHub CI including `scope` and `quality`; missing/incomplete checks block.
+- Full application release uses exact installed runtime+tooling baseline; Dashboard-only presentation release uses exact current Dashboard UI baseline. Source checkout must be clean and eligible for exact fast-forward to GitHub main; verify actual effective actor/path/ACL/sandbox and a free single release lock.
+- Mandatory backup/rollback integrity, immutable installer bytes, exact Git identity, failure recovery and durable audit of invocation, purpose, target/baseline/result. A failed/unknown mutation must be reconciled before any retry.
+- Deterministic release purpose from actual exact changed scope: `EXACT_VERIFIED_SOURCE_RELEASE` for ordinary full application/trading code; `DASHBOARD_PRESENTATION_RELEASE` for DEV §8.1 UI/read-model only; `NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE` for a genuinely changed running native writer ABI with the additional §50.5.1 checks. An ABI change can never fall back to ordinary FULL release.
+- Dashboard-only scope validation must exclude auth/control/mutation/Strategy/Entry/Exit/Execution changes, preserve trading service PIDs/NRestarts, mainnet gate, Strategy activation and permissions; only approved Dashboard backend may restart.
+- The controller verifies REMOTE_HEAD, SOURCE_HEAD, INSTALLED_COMMIT, LOADED_COMMIT, deployed source/runtime mapping and behavior, not service liveness alone. It cannot silently alter mainnet gate, OWNER ARM, Strategy Activation, Execution permission or Exchange orders.
+- Tests must demonstrate a management trigger cannot be synthesized by source sync; wrong baseline/commit/tree/purpose, failed CI/scope, dirty source, moving main, actor/path denial, lock collision, wrong rollback, untrusted unit, injection and stale state all block. Tests must also prove a routine release succeeds *without* Issue #291 approval. Native and Dashboard negative cases remain mandatory.
+- Deployment authorization change follows OWNER DECISION -> CANON UPDATE -> IMPLEMENTATION -> TEST -> GITHUB -> DEPLOY -> RUNTIME EVIDENCE. A source merge or this documentation alone does not alter already installed Release Controller behavior.
 
-**Status: `PROPOSED_CANON_CHANGE=YES`,
-`OWNER_DECISION_REQUIRED=YES`, `ACTIVE_RELEASE_CAPABILITY=NO`.**
-This is a proposed clarification of the existing canonical ARCH §60,
-TC §4.18, OBS §7.10 and DEV §58. It cannot be activated solely because
-a PR passes CI or a previous FULL release was approved.
+### 50.5.1 Exact native MarketSource producer cutover — OWNER DECISION 2026-11-09 (#470)
 
-The existing `EXACT_VERIFIED_SOURCE_RELEASE` MUST reject source-code
-changes to a running native publicTrade producer. If approved, add a
-**separate explicit owner-approved** one-time request purpose
-`NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE` to the Release Controller:
-exact GitHub main SHA/tree, reviewed CI, source mirror clean,
-current installed baseline, account-independent backup/release lock,
-unmodified owner comment/nonce/TTL, plus the old writer PID/source
-commit/session and actor/ACL/systemd sandbox.
+Native producer ABI upgrade is a distinct controlled management operation, never an in-place module swap while an old writer is running. An exact reviewed changed-producer SHA on protected GitHub main, plus a deliberate management invocation, selects `NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE` deterministically. No second Issue #291 comment/nonce is required. The one-writer/GAP/rollback guarantees remain strict.
 
-BEFORE: one separate credential-free Bybit native `publicTrade`
-producer with one PG advisory lock and original append-only journal.
-AFTER: exactly one newly loaded producer with a different PID and
-new WS session, after the prior session was durably recorded as `GAP`.
-No seamless `seq/execId` continuity is claimed across a physical stop.
+BEFORE: one independent credential-free Bybit `publicTrade` producer with PG advisory lock and immutable original journal. AFTER: one new producer binary with different PID and WebSocket source session; the old session is durably `GAP`, not claimed seamless.
 
-Backup and additive PostgreSQL schema migration run before touching
-the native writer. Only after exact candidate/actor/systemd checks
-may the old writer stop and release its advisory lock; old source
-session must be `GAP` BEFORE symlink/unit code cutover. After
-starting the new producer, require source status `ACTIVE`, exact
-target commit, a different OS PID and WS session, five newly
-accepted exact source-symbol cursors/events following the
-cutover watermark and no concurrent old producer. Unknown or stale
-evidence is `BLOCKED`, never replaced by `systemd active`.
+Preflight must verify exact commit+tree/CI/scope/baseline, writer PID/source commit/session, actor/ACL/systemd sandbox, locked release, backup + additive PostgreSQL migrations and source/Exit parity. Only then stop one old producer PID, prove old lock released and record old source session as `GAP` before symlink/unit code cutover. Start one new writer; verify new loaded commit, new PID/session, ACTIVE source and five fresh original native-symbol cursors beyond the cutover watermark, and that the old writer is no longer active. Service-active status alone is insufficient.
 
-If failure occurs before runtime cutover, the exact original source
-process restarts from the old immutable release. For failure after
-cutover, require an explicit verified source/code+unit rollback to
-the retained installed baseline, current database/Exit parity and
-a NEW session marked GAP. A failure may not silently reopen LIVE
-or delete/modify historical source facts. Ownership of existing
-positions/Exit does not transfer to the source service; the
-producer has no Bybit private credentials, account permission,
-Exchange order API, OWNER ARM or Strategy ownership.
+If failure is before code symlink cutover, restore the previous exact installed producer. If after cutover, perform verified code/unit rollback to retained baseline; record a NEW source GAP, preserve PostgreSQL original history and existing Exchange protections/Exit owners. Never create a second writer, synthesize missing native events, modify open positions, reopen financial LIVE or silently change strategy settings. Unknown physical outcome is BLOCKED.
 
-Negative tests before any production invocation must cover wrong
-owner/purpose/nonce/TTL/SHA/base/CI, no old ACTIVE producer,
-old ABI mismatch, no source-code delta, old PID/session still live,
-failure to mark GAP, source writer lock collision, missing
-symbol/source cursor, and pre/post-cutover rollback. A successful
-code cutover alone cannot assert P90 trading readiness; actual
-PG-first scoped Entry/Exit consumer parity and financial approval
-remain under DEV §58 and ARCH §60.
+Negative tests: absent/wrong producer, wrong code delta, stale PID/session/commit, wrong Git baseline or CI, no GAP or advisory lock release, concurrent writers, empty/late/missing symbol events, PostgreSQL failure, source/Exit parity failure, before/after cutover rollback, moving main and unknown outcomes. Producer upgrade alone never proves per-scope P90 Entry/Exit readiness; ARCH §60, OBS §7.10 and TC §4.18 still own full consumer/Exit acceptance and owner financial gates.
 
 ## 51. Generic REAL readiness preparation and bounded service-start broker — OWNER DECISION 2026-11-02 (Issue #343)
 
