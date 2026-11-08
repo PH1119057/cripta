@@ -44,6 +44,12 @@ _REVIEWED_HISTORICAL_CONSUMERS.update({
         "71458d52d543ff91350d51999bbefcfa0b8e7fd1a8b7feee4e9c9edbb6367c8e",
     "ef2ac6460bf5bd75f56fe7b6a112b3852fec271d":
         "71458d52d543ff91350d51999bbefcfa0b8e7fd1a8b7feee4e9c9edbb6367c8e",
+    # Immutable original 93-file consumer digests from the EXACT Git commits.
+    # Historical attestation contents remain append-only and never relabelled.
+    "a2c947e81aeeeb028f71750ceb58cff0fd3dacdc":
+        "ccc5f7629a3a80e6daf2e59952cb67a5bb7dd8de33d5bc8c6c83017706dfd279",
+    "2290b2aec351de43e69b02565588e076024c8352":
+        "ccc5f7629a3a80e6daf2e59952cb67a5bb7dd8de33d5bc8c6c83017706dfd279",
 })
 
 # These wiring adapters are reviewed in the release diff. All Strategy,
@@ -102,6 +108,35 @@ REVIEWED_BUGFIX_CONSUMER_SHA256 = {
     "universal_exit/p90l90_real_runtime_ports.py":
         "998f8cb804e1e57321b1925739a92e60bfc0db1061f4654596673e46fd860442",
 }
+
+
+# The 2026-11-08 independent native MarketSource deployment contains two
+# reviewed fail-closed Exit/IPC fixes. Both changed bytes are bound to the
+# exact original epoch; additional consumer changes remain unapproved.
+_REVIEWED_20261108_SOURCE_ORIGIN = (
+    "6dc3c362d45edc09450323ba080ab0b55c9ffdc2"
+)
+_REVIEWED_20261108_EXIT_IPC_SHA256 = {
+    "universal_exit/p90l90_real_exit_execution.py":
+        "a66fd0c468f4f5c3088e7f5e4704cac1af0ed7d45509891e4f53df6c44a69d55",
+    "universal_exit/p90l90_real_private_ipc.py":
+        "5bf3fab7a9d4fb3efa347d704a65083d3eac978701413aa65476bcb58239d5db",
+}
+
+
+def _reviewed_delta_for_origin(
+    changed: set[str], *, origin_commit: str,
+) -> dict[str, str]:
+    if (
+        origin_commit == _REVIEWED_20261108_SOURCE_ORIGIN
+        and changed == set(_REVIEWED_20261108_EXIT_IPC_SHA256)
+    ):
+        return _REVIEWED_20261108_EXIT_IPC_SHA256
+    _require(
+        changed == set(REVIEWED_BUGFIX_CONSUMER_SHA256),
+        "UNREVIEWED_CONSUMER_DELTA",
+    )
+    return REVIEWED_BUGFIX_CONSUMER_SHA256
 
 
 class P90RealSourceCompatibilityUnverified(RuntimeError):
@@ -168,11 +203,10 @@ def verify_reviewed_bugfix_delta(*, current_root: Path, origin_root: Path) -> No
     # Registration still requires separate plan/checkpoint/epoch attestation.
     if not changed:
         return
-    _require(
-        changed == set(REVIEWED_BUGFIX_CONSUMER_SHA256),
-        "UNREVIEWED_CONSUMER_DELTA",
+    reviewed = _reviewed_delta_for_origin(
+        changed, origin_commit=origin_root.resolve().name,
     )
-    for relative, expected in REVIEWED_BUGFIX_CONSUMER_SHA256.items():
+    for relative, expected in reviewed.items():
         item = current.get(relative)
         if item is None:
             raise P90RealSourceCompatibilityUnverified(
@@ -281,11 +315,10 @@ def verify_reviewed_bugfix_delta_from_git(
     # Registration still requires separate plan/checkpoint/epoch attestation.
     if not changed:
         return
-    _require(
-        changed == set(REVIEWED_BUGFIX_CONSUMER_SHA256),
-        "UNREVIEWED_CONSUMER_DELTA",
+    reviewed = _reviewed_delta_for_origin(
+        changed, origin_commit=origin_commit,
     )
-    for relative, expected in REVIEWED_BUGFIX_CONSUMER_SHA256.items():
+    for relative, expected in reviewed.items():
         item = current.get(relative)
         if item is None:
             raise P90RealSourceCompatibilityUnverified(
