@@ -762,6 +762,8 @@ fi
 # This is market-data-only (no credentials/Exchange controls/OWNER ARM).
 # A source that never records accepted provider cursors cannot be considered
 # healthy merely because systemd says active.
+# A stale ACTIVE status/session is not a fresh five-symbol source proof.
+native_probe_started_at="$(sql_scalar "SELECT clock_timestamp()")"
 systemctl enable cripta-native-public-trade-source.service >/dev/null
 systemctl start cripta-native-public-trade-source.service
 native_source_ready=0
@@ -792,6 +794,7 @@ print(sid if isinstance(sid,str) else "")
       AND s.state='ACTIVE'
       AND s.market_source_id='ms-bybit-mainnet-public-v1'
       AND s.last_accepted_at >= now() - interval '10 seconds'
+      AND c.accepted_at >= '$native_probe_started_at'::timestamptz
       AND c.event_at >= now() - interval '3 minutes'")"
   if [[ "$source_cursor_count" == "5" ]]; then
     native_source_ready=1
