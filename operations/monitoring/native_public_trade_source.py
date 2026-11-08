@@ -185,6 +185,20 @@ def _persist_frame(
     with connection.transaction():
         journal = NativePublicTradeJournal(connection)
         for index, event in enumerate(facts):
+            prior = connection.execute(
+                """SELECT exchange_sequence,event_at
+                     FROM analytics.native_public_trade_source_cursors
+                    WHERE source_session_id=%s AND external_symbol=%s
+                    FOR UPDATE""",
+                (session, event.external_symbol),
+            ).fetchone()
+            if prior is not None and (
+                event.exchange_sequence < prior[0]
+                or event.event_at < prior[1]
+            ):
+                raise NativeSourceInputUnverified(
+                    "NATIVE_SOURCE_ORDER_REGRESSION"
+                )
             journal.append(event)
             connection.execute(
                 """INSERT INTO analytics.native_public_trade_source_cursors
