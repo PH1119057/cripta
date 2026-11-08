@@ -50,7 +50,7 @@ class SourceDB:
         if "FROM analytics.native_public_trade_source_cursors" in sql:
             result = []
             for symbol in SYMBOLS:
-                if symbol in self.missing:
+                if symbol in self.missing or symbol not in params[1]:
                     continue
                 at = self.now - timedelta(seconds=50 if symbol in self.stale else 2)
                 source = BYBIT_PUBLIC_MARKET_SOURCE_ID
