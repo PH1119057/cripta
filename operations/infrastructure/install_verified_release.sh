@@ -14,6 +14,9 @@ RELEASE_CONTROLLER_STATE_ROOT="${CRIPTA_RELEASE_CONTROLLER_STATE_ROOT:-/var/lib/
 CONTROL_CHECKPOINT="${CRIPTA_RELEASE_CONTROL_CHECKPOINT:-0}"
 CONTROL_REASON="${CRIPTA_RELEASE_CONTROL_REASON:-}"
 STAGED_OFFLINE="${CRIPTA_STAGED_OFFLINE_CUTOVER:-0}"
+# Only the separately owner-approved controller purpose supplies this switch.
+# Ordinary exact releases must keep the independent native producer running.
+NATIVE_SOURCE_CUTOVER="${CRIPTA_NATIVE_SOURCE_CUTOVER:-0}"
 CONTROL_MAX_AGE_SECONDS=604800
 controller_stage=""
 
@@ -68,6 +71,10 @@ flock -n 9 || die "another release installer is already running"
 [[ -d "$SOURCE/.git" ]] || die "source checkout missing"
 [[ "$CONTROL_CHECKPOINT" == "0" || "$CONTROL_CHECKPOINT" == "1" ]] || die "CRIPTA_RELEASE_CONTROL_CHECKPOINT must be 0 or 1"
 [[ "$STAGED_OFFLINE" == "0" || "$STAGED_OFFLINE" == "1" ]] || die "CRIPTA_STAGED_OFFLINE_CUTOVER must be 0 or 1"
+[[ "$NATIVE_SOURCE_CUTOVER" == "0" || "$NATIVE_SOURCE_CUTOVER" == "1" ]] ||
+  die "CRIPTA_NATIVE_SOURCE_CUTOVER must be 0 or 1"
+[[ "$NATIVE_SOURCE_CUTOVER" == "0" || "$STAGED_OFFLINE" == "0" ]] ||
+  die "NATIVE_SOURCE_CUTOVER_CANNOT_COMBINE_STAGED_OFFLINE"
 if [[ "$STAGED_OFFLINE" == "1" ]]; then
   [[ "$CONTROL_CHECKPOINT" == "1" ]] || die "STAGED_OFFLINE_REQUIRES_CONTROL_CHECKPOINT"
 fi
@@ -112,6 +119,10 @@ actual_tooling_baseline="$(runuser -u cripta -- cat "$current_tooling/INSTALLED_
 # Changing native producer, its journal/identity contract or systemd unit
 # requires a separately reviewed source upgrade/cutover, not a covert
 # in-place module swap while a long-lived process still records evidence.
+native_code_changed=0
+producer_loaded_commit=""
+producer_old_session=""
+producer_old_pid=""
 if systemctl is-active --quiet cripta-native-public-trade-source.service; then
   producer_status="/var/lib/cripta/native_public_trade_source/status.json"
   [[ -f "$producer_status" ]] ||
@@ -128,15 +139,45 @@ print(value if isinstance(value,str) else "")
     die "live native source release identity invalid"
   as_repo_owner git -C "$SOURCE" cat-file -e "${producer_loaded_commit}^{commit}" ||
     die "live native source origin not in verified git"
+  producer_old_session="$(runuser -u cripta -- python3 -c '
+import json,sys
+try:
+    v=json.load(open(sys.argv[1],encoding="utf-8"))
+    print(v.get("session","") if v.get("state")=="ACTIVE" else "")
+except Exception:
+    print("")
+' "$producer_status")"
+  [[ "$producer_old_session" =~ ^[0-9a-f]{32}$ ]] ||
+    die "NATIVE_SOURCE_OLD_SESSION_UNVERIFIED"
+  producer_old_pid="$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)"
+  [[ "$producer_old_pid" =~ ^[1-9][0-9]*$ ]] ||
+    die "NATIVE_SOURCE_OLD_PID_UNVERIFIED"
   if ! as_repo_owner git -C "$SOURCE" diff --quiet \
     "$producer_loaded_commit" "$RELEASE_COMMIT" -- \
     operations/monitoring/native_public_trade_source.py \
     src/bybit_workbench/market_data/native_public_trade_journal.py \
     src/bybit_workbench/market_identity.py \
     operations/systemd/cripta-native-public-trade-source.service; then
-    die "NATIVE_SOURCE_PRODUCER_CODE_CHANGED_SEPARATE_CUTOVER_REQUIRED"
+    native_code_changed=1
+    [[ "$NATIVE_SOURCE_CUTOVER" == "1" ]] ||
+      die "NATIVE_SOURCE_PRODUCER_CODE_CHANGED_SEPARATE_CUTOVER_REQUIRED"
+    # Old loaded code must be the exact installed baseline ABI, even when
+    # source_commit originated in an earlier but byte-identical release.
+    as_repo_owner git -C "$SOURCE" diff --quiet \
+      "$producer_loaded_commit" "$EXPECTED_BASELINE" -- \
+      operations/monitoring/native_public_trade_source.py \
+      src/bybit_workbench/market_data/native_public_trade_journal.py \
+      src/bybit_workbench/market_identity.py \
+      operations/systemd/cripta-native-public-trade-source.service ||
+      die "NATIVE_SOURCE_INSTALLED_BASELINE_ABI_UNVERIFIED"
+    echo "NATIVE_SOURCE_EXACT_CUTOVER_PREPARED=PASS"
+  else
+    [[ "$NATIVE_SOURCE_CUTOVER" == "0" ]] ||
+      die "NATIVE_SOURCE_CUTOVER_NO_CODE_CHANGE"
+    echo "NATIVE_SOURCE_CONTINUOUS_CODE_IDENTITY=PASS"
   fi
-  echo "NATIVE_SOURCE_CONTINUOUS_CODE_IDENTITY=PASS"
+elif [[ "$NATIVE_SOURCE_CUTOVER" == "1" ]]; then
+  die "NATIVE_SOURCE_CUTOVER_REQUIRES_ACTIVE_OLD_WRITER"
 fi
 
 install -d -o cripta -g cripta -m 0750 "$RUNTIME_ROOT" "$RUNTIME_ROOT/releases"
