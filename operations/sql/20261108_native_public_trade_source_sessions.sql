@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS analytics.native_public_trade_source_cursors (
     exchange_sequence bigint NOT NULL CHECK (exchange_sequence >= 0),
     exec_id text NOT NULL CHECK(length(exec_id) BETWEEN 1 AND 128),
     event_at timestamptz NOT NULL,
+    accepted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (source_session_id,external_symbol)
 );
 
