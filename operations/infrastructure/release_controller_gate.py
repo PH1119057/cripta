@@ -114,3 +114,55 @@ def verify_request(
         if passed is not True:
             raise ReleaseDenied(label)
     return target, baseline, nonce
+
+
+def verify_management_release(
+    *, purpose, target, expected_baseline, remote_main, source_head,
+    source_fast_forward_ok, installed_runtime, installed_tooling,
+    dashboard_ui_commit, required_checks, source_clean, actor_paths_ok,
+    rollback_ready, release_lock_available, native_code_changed,
+):
+    """Exact verified Git-first maintenance deployment, no owner-comment gate.
+
+    The authenticated management-plane service invocation is the trigger.
+    This verifier has no API for granting financial LIVE/OWNER ARM rights.
+    """
+    if purpose not in PURPOSES:
+        raise ReleaseDenied("RELEASE_SCOPE_INVALID")
+    if (
+        any(not isinstance(x, str) or SHA.fullmatch(x) is None
+            for x in (target, expected_baseline, remote_main, source_head))
+        or target != remote_main
+    ):
+        raise ReleaseDenied("REMOTE_MAIN_MISMATCH")
+    if source_fast_forward_ok is not True or source_head != target:
+        raise ReleaseDenied("SOURCE_NOT_EXACT_SYNCED_MAIN")
+    if purpose == DASHBOARD_PURPOSE:
+        if dashboard_ui_commit != expected_baseline or native_code_changed:
+            raise ReleaseDenied("DASHBOARD_BASELINE_OR_SCOPE_MISMATCH")
+    elif (
+        installed_runtime != expected_baseline
+        or installed_tooling != expected_baseline
+    ):
+        raise ReleaseDenied("BASELINE_MISMATCH")
+    if native_code_changed is not (purpose == NATIVE_CUTOVER_PURPOSE):
+        raise ReleaseDenied("NATIVE_CUTOVER_SCOPE_MISMATCH")
+    if purpose != DASHBOARD_PURPOSE and target == expected_baseline:
+        raise ReleaseDenied("NO_RUNTIME_RELEASE_DELTA")
+    if not isinstance(required_checks, dict):
+        raise ReleaseDenied("CI_EVIDENCE_INVALID")
+    if required_checks.get("scope") != "success":
+        raise ReleaseDenied("SCOPE_NOT_PASS")
+    if required_checks.get("quality") != "success":
+        raise ReleaseDenied("QUALITY_NOT_PASS")
+    if any(value != "success" for value in required_checks.values()):
+        raise ReleaseDenied("REQUIRED_CI_NOT_PASS")
+    for value, reason in (
+        (source_clean, "SOURCE_DIRTY"),
+        (actor_paths_ok, "ACTOR_PATH_DENIED"),
+        (rollback_ready, "ROLLBACK_NOT_READY"),
+        (release_lock_available, "RELEASE_LOCKED"),
+    ):
+        if value is not True:
+            raise ReleaseDenied(reason)
+    return target, expected_baseline

@@ -158,3 +158,47 @@ def test_native_cutover_purpose_does_not_accept_dashboard_only_baseline() -> Non
     params["dashboard_ui_commit"] = BASELINE
     with pytest.raises(gate.ReleaseDenied, match="BASELINE_MISMATCH"):
         gate.verify_request(**params)
+
+
+def test_management_release_without_duplicate_owner_comment():
+    params = dict(
+        purpose=gate.FULL_PURPOSE, target=TARGET, expected_baseline=BASELINE,
+        remote_main=TARGET, source_head=TARGET, source_fast_forward_ok=True,
+        installed_runtime=BASELINE, installed_tooling=BASELINE,
+        dashboard_ui_commit=None,
+        required_checks={"scope": "success", "quality": "success"},
+        source_clean=True, actor_paths_ok=True, rollback_ready=True,
+        release_lock_available=True, native_code_changed=False,
+    )
+    assert gate.verify_management_release(**params) == (TARGET, BASELINE)
+    for key, bad, reason in (
+        ("required_checks", {"scope": "failure", "quality": "success"}, "SCOPE_NOT_PASS"),
+        ("source_clean", False, "SOURCE_DIRTY"),
+        ("rollback_ready", False, "ROLLBACK_NOT_READY"),
+        ("release_lock_available", False, "RELEASE_LOCKED"),
+        ("source_head", BASELINE, "SOURCE_NOT_EXACT_SYNCED_MAIN"),
+    ):
+        changed = {**params, key: bad}
+        with pytest.raises(gate.ReleaseDenied, match=reason):
+            gate.verify_management_release(**changed)
+
+
+def test_management_native_cutover_requires_exact_explicit_delta_scope():
+    params = dict(
+        purpose=gate.NATIVE_CUTOVER_PURPOSE, target=TARGET,
+        expected_baseline=BASELINE, remote_main=TARGET, source_head=TARGET,
+        source_fast_forward_ok=True, installed_runtime=BASELINE,
+        installed_tooling=BASELINE, dashboard_ui_commit=None,
+        required_checks={"scope": "success", "quality": "success"},
+        source_clean=True, actor_paths_ok=True, rollback_ready=True,
+        release_lock_available=True, native_code_changed=True,
+    )
+    assert gate.verify_management_release(**params) == (TARGET, BASELINE)
+    params["native_code_changed"] = False
+    with pytest.raises(gate.ReleaseDenied, match="NATIVE_CUTOVER_SCOPE_MISMATCH"):
+        gate.verify_management_release(**params)
+    params["purpose"] = gate.FULL_PURPOSE
+    params["native_code_changed"] = True
+    with pytest.raises(gate.ReleaseDenied, match="NATIVE_CUTOVER_SCOPE_MISMATCH"):
+        gate.verify_management_release(**params)
+

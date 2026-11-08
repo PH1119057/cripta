@@ -2,8 +2,9 @@
 """Permanent bounded no-argument Release Controller (Issue #288).
 
 The controller is intentionally narrow:
-GitHub owner approval -> read-only preflight -> nonce claim -> bounded source
-fast-forward -> exact existing verified installer. It never arms trading.
+Authenticated bounded management invocation -> GitHub main/CI/safety preflight
+-> exact verified installer. No separate GitHub Issue #291 owner comment.
+It never arms trading.
 """
 from __future__ import annotations
 
@@ -25,11 +26,10 @@ from release_controller_gate import (
     FULL_PURPOSE,
     NATIVE_CUTOVER_PURPOSE,
     ReleaseDenied,
-    verify_request,
+    verify_management_release,
 )
 from release_controller_github import (
     GitHubEvidenceError,
-    approval_candidates,
     current_main,
     release_evidence,
     source_can_fast_forward,
@@ -548,6 +548,53 @@ def _postcheck_native_source(target: str) -> None:
         raise ControllerError("NATIVE_CUTOVER_LOADED_SOURCE_UNVERIFIED")
 
 
+PRODUCER_ABI_PATHS = (
+    "operations/monitoring/native_public_trade_source.py",
+    "src/bybit_workbench/market_data/native_public_trade_journal.py",
+    "src/bybit_workbench/market_identity.py",
+    "operations/systemd/cripta-native-public-trade-source.service",
+)
+
+
+def _select_scoped_purpose(
+    *, target: str, runtime_baseline: str, dashboard_baseline: str | None
+) -> tuple[str, bool]:
+    """Classify only exact verified source differences; never silently swap a writer."""
+    if not SHA.fullmatch(target) or not SHA.fullmatch(runtime_baseline):
+        raise ControllerError("RELEASE_SCOPE_IDENTITY_INVALID")
+    # A changed producer must be stopped by the dedicated GAP/rollback rail.
+    status = json.loads(
+        Path("/var/lib/cripta/native_public_trade_source/status.json")
+        .read_text(encoding="utf-8")
+    )
+    old_commit = status.get("source_commit")
+    if (
+        status.get("state") != "ACTIVE"
+        or not isinstance(old_commit, str)
+        or SHA.fullmatch(old_commit) is None
+        or re.fullmatch(r"[0-9a-f]{32}", str(status.get("session") or "")) is None
+        or _run(["/usr/bin/systemctl", "is-active",
+                 "cripta-native-public-trade-source.service"]) != "active"
+    ):
+        raise ControllerError("NATIVE_SOURCE_BASELINE_NOT_PROVEN")
+    _git("cat-file", "-e", old_commit + "^{commit}")
+    source_delta = _git(
+        "diff", "--name-only", old_commit, target, "--", *PRODUCER_ABI_PATHS
+    )
+    if source_delta:
+        return NATIVE_CUTOVER_PURPOSE, True
+    # Dashboard scope is checked a second time by the existing read-only
+    # verifier before any asset installation. An uncertain scope stays FULL.
+    if dashboard_baseline is not None and dashboard_baseline != target:
+        delta = _git("diff", "--name-only", dashboard_baseline, target, "--")
+        changed = tuple(line for line in delta.splitlines() if line)
+        if changed and all(
+            path.startswith(("operations/dashboard/", "operations/dashboard_ui/"))
+            for path in changed
+        ):
+            return DASHBOARD_PURPOSE, False
+    return FULL_PURPOSE, False
+
 def main() -> int:
     if len(sys.argv) != 1:
         print("RELEASE_CONTROLLER=BLOCKED reason=NO_ARGUMENTS_ALLOWED", file=sys.stderr)
@@ -587,87 +634,67 @@ def main() -> int:
         actor_paths_ok = _actor_paths_ok()
         release_lock_available = _installer_lock_free()
 
-        approvals = [
-            *approval_candidates(
-                target=remote_main,
-                baseline=runtime_baseline,
-                purpose=FULL_PURPOSE,
-            ),
-            *approval_candidates(
-                target=remote_main,
-                baseline=runtime_baseline,
-                purpose=NATIVE_CUTOVER_PURPOSE,
-            ),
-        ]
-        if dashboard_baseline is not None:
-            approvals.extend(
-                approval_candidates(
-                    target=remote_main,
-                    baseline=dashboard_baseline,
-                    purpose=DASHBOARD_PURPOSE,
-                )
-            )
-        approvals.sort(key=lambda item: item.created_at, reverse=True)
-        if not approvals:
-            raise ControllerError("OWNER_APPROVAL_MISSING")
-        approval = approvals[0]
-        purpose = str(approval.request.get("purpose") or "")
-        nonce = approval.request.get("nonce")
-        nonce_unused = isinstance(nonce, str) and not _used_path(nonce).exists()
+        if not source_clean:
+            raise ControllerError("SOURCE_DIRTY")
+        if not source_fast_forward_ok:
+            raise ControllerError("SOURCE_NOT_FAST_FORWARD")
+        if not actor_paths_ok:
+            raise ControllerError("ACTOR_PATH_DENIED")
+        if not release_lock_available:
+            raise ControllerError("RELEASE_LOCKED")
+        if any(
+            evidence.required_checks.get(key) != "success"
+            for key in ("scope", "quality")
+        ) or any(value != "success" for value in evidence.required_checks.values()):
+            raise ControllerError("REQUIRED_CI_NOT_PASS")
 
-        if purpose in {FULL_PURPOSE, NATIVE_CUTOVER_PURPOSE}:
+        # This is only source-mirror fast-forward, never runtime deployment.
+        _sync_source(remote_main)
+        purpose, native_changed = _select_scoped_purpose(
+            target=remote_main, runtime_baseline=runtime_baseline,
+            dashboard_baseline=dashboard_baseline,
+        )
+        if purpose == DASHBOARD_PURPOSE:
+            expected_baseline = dashboard_baseline
+            rollback_ready = (
+                dashboard_baseline is not None
+                and dashboard_path is not None
+                and _dashboard_rollback_ready(dashboard_baseline, dashboard_path)
+                and _dashboard_deployer_ok()
+            )
+        else:
+            expected_baseline = runtime_baseline
             rollback_ready = _rollback_ready(
                 runtime_baseline, runtime_path, tooling_path
             )
-        elif (
-            purpose == DASHBOARD_PURPOSE
-            and dashboard_baseline is not None
-            and dashboard_path is not None
-        ):
-            rollback_ready = _dashboard_rollback_ready(
-                dashboard_baseline, dashboard_path
-            ) and _dashboard_deployer_ok()
-        else:
-            rollback_ready = False
-
-        target, expected_baseline, nonce = verify_request(
-            request=approval.request,
-            approval_actor=approval.actor,
-            approval_created_at=approval.created_at,
-            approval_unedited=approval.unedited,
-            now=datetime.now(UTC),
+        target, expected_baseline = verify_management_release(
+            purpose=purpose, target=remote_main,
+            expected_baseline=expected_baseline,
             remote_main=evidence.remote_main,
-            source_head=source_head,
+            source_head=_source_state()[0],
             source_fast_forward_ok=source_fast_forward_ok,
             installed_runtime=runtime_baseline,
             installed_tooling=tooling_baseline,
             dashboard_ui_commit=dashboard_baseline,
             required_checks=evidence.required_checks,
-            source_clean=source_clean,
+            source_clean=_source_state()[1],
             actor_paths_ok=actor_paths_ok,
             rollback_ready=rollback_ready,
             release_lock_available=release_lock_available,
-            nonce_unused=nonce_unused,
+            native_code_changed=native_changed,
         )
-
-        _claim_nonce(
-            nonce=nonce,
-            comment_id=approval.comment_id,
-            target=target,
-            baseline=expected_baseline,
-            purpose=purpose,
-        )
+        # Internal transient unit correlation ID only, NOT an approval nonce.
+        nonce = hashlib.sha256(
+            f"{target}:{expected_baseline}:{os.getpid()}:{datetime.now(UTC).isoformat()}"
+            .encode("ascii")
+        ).hexdigest()
         _audit(
-            "CLAIMED",
-            purpose=purpose,
-            target=target,
+            "MANAGEMENT_RELEASE_VERIFIED", purpose=purpose, target=target,
             baseline=expected_baseline,
-            approval_comment_id=approval.comment_id,
             merged_pr=evidence.merged_pr_number,
             rulesets=list(evidence.ruleset_ids),
+            native_code_changed=native_changed,
         )
-
-        _sync_source(target)
         local_tree = _git("rev-parse", f"{target}^{{tree}}")
         if local_tree != evidence.target_tree:
             raise ControllerError("SOURCE_TREE_MISMATCH")
@@ -696,7 +723,6 @@ def main() -> int:
                 dashboard_ui_commit=post_dashboard,
                 installed_commit=runtime_baseline,
                 remote_head=post_remote,
-                approval_comment_id=approval.comment_id,
             )
             print(f"RELEASE_CONTROLLER={final_status}")
             print(f"REMOTE_HEAD={post_remote}")
@@ -723,7 +749,6 @@ def main() -> int:
             installed_commit=post_runtime,
             release_state_commit=post_state,
             remote_head=post_remote,
-            approval_comment_id=approval.comment_id,
         )
         print(f"RELEASE_CONTROLLER={final_status}")
         print(f"REMOTE_HEAD={post_remote}")
