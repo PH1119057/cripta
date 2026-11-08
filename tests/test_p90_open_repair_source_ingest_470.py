@@ -128,6 +128,9 @@ def test_only_exact_p90_recovery_failures_can_trigger_repair_source_restart() ->
     from bybit_workbench.universal_exit.p90l90_real_mfe import (
         P90RealMfeUnverified,
     )
+    from operations.monitoring.p90l90_real_live_source_ports import (
+        P90RealLiveSourceUnverified,
+    )
 
     for error in (
         P90RealOpenRestartUnverified("old source"),
@@ -135,6 +138,8 @@ def test_only_exact_p90_recovery_failures_can_trigger_repair_source_restart() ->
         P90RealNativeRestartUnverified("missing original seq"),
         P90RealSourceCompatibilityUnverified("identity"),
         P90RealMfeUnverified("missing current MFE"),
+        P90RealLiveSourceUnverified("P90_REAL_LIVE_SOURCE_NATIVE_EVENT_STALE"),
+        P90RealLiveSourceUnverified("P90_REAL_LIVE_SOURCE_NATIVE_INTERVAL_UNPROVEN"),
     ):
         assert _p90_native_recovery_failure(error)
 

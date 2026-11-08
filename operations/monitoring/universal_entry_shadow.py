@@ -2308,6 +2308,9 @@ def _p90_native_recovery_failure(exc: Exception) -> bool:
     from bybit_workbench.universal_exit.p90l90_real_mfe import (
         P90RealMfeUnverified,
     )
+    from operations.monitoring.p90l90_real_live_source_ports import (
+        P90RealLiveSourceUnverified,
+    )
 
     return isinstance(exc, (
         P90RealOpenRestartUnverified,
@@ -2315,6 +2318,7 @@ def _p90_native_recovery_failure(exc: Exception) -> bool:
         P90RealNativeRestartUnverified,
         P90RealSourceCompatibilityUnverified,
         P90RealMfeUnverified,
+        P90RealLiveSourceUnverified,
     ))
 
 
