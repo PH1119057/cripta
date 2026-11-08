@@ -146,3 +146,23 @@ def test_pg_exclusive_native_producer_survives_transactions_and_rejects_second()
             NativeSourceInputUnverified, match="WRITER_ALREADY_OWNED",
         ):
             _acquire_exclusive_producer(second)
+
+
+def test_pg_unclean_old_producer_epoch_is_not_falsely_active() -> None:
+    first, second = uuid4().hex, uuid4().hex
+    with _db() as conn:
+        _session_start(conn, first)
+        _session_start(conn, second)
+        state = conn.execute(
+            """SELECT source_session_id,state,reason,ended_at IS NOT NULL
+                 FROM analytics.native_public_trade_source_sessions
+                 WHERE source_session_id IN (%s,%s)
+                 ORDER BY source_session_id""",
+            (first, second),
+        ).fetchall()
+        assert len(state) == 2
+        by_id = {row[0]: row[1:] for row in state}
+        assert by_id[first] == (
+            "GAP", "PREVIOUS_WRITER_ENDED_UNCLEAN", True,
+        )
+        assert by_id[second] == ("ACTIVE", None, False)
