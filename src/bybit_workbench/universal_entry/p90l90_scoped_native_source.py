@@ -211,3 +211,98 @@ def read_scoped_native_source(
     return NativeSourceEvidence(
         BYBIT_PUBLIC_MARKET_SOURCE_ID, session_id, producer, at, found,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class OrderedNativeTrade:
+    """Original provider event order (not an inferred seq/execId sort)."""
+
+    frame_number: int
+    frame_index: int
+    symbol: str
+    exchange_sequence: int
+    exec_id: str
+    event_at: datetime
+    price: Decimal
+    quantity: Decimal
+    taker_side: str
+
+
+def read_ordered_native_events(
+    connection: Any,
+    *,
+    source: NativeSourceEvidence,
+    after_frame: int,
+    after_index: int,
+    limit: int,
+) -> tuple[OrderedNativeTrade, ...]:
+    """Read a bounded native event suffix from one proven source session.
+
+    The future consumer must supply an independently persisted, source-scoped
+    position (frame,index) in its OWN transaction, and commit the next
+    checkpoint together with Engine decisions. This method performs NO writes,
+    invents no WS ordering, and NEVER grants trading permissions.
+    """
+    if (
+        not source.ready or not source.session_id
+        or not source.producer_release_commit
+        or type(after_frame) is not int or after_frame < 0
+        or type(after_index) is not int or after_index < 0
+        or type(limit) is not int or not 1 <= limit <= 1000
+    ):
+        raise NativeSourceProofUnavailable(
+            "NATIVE_SOURCE_CONSUMER_CHECKPOINT_OR_PROOF_MISSING"
+        )
+    wanted = tuple(sorted(source.by_symbol))
+    rows = connection.execute(
+        """SELECT e.frame_number,e.frame_index,e.market_source_id,
+                  e.instrument_id,e.external_symbol,e.exchange_sequence,
+                  e.exec_id,e.event_at,n.event_at,n.price,n.quantity,
+                  n.taker_side
+             FROM analytics.native_public_trade_source_events e
+             JOIN analytics.native_public_trade_events n
+               ON n.market_source_id=e.market_source_id
+              AND n.instrument_id=e.instrument_id
+              AND n.exchange_sequence=e.exchange_sequence
+              AND n.exec_id=e.exec_id
+            WHERE e.source_session_id=%s
+              AND e.external_symbol=ANY(%s)
+              AND (e.frame_number,e.frame_index)>(%s,%s)
+            ORDER BY e.frame_number,e.frame_index
+            LIMIT %s""",
+        (source.session_id, list(wanted), after_frame, after_index, limit),
+    ).fetchall()
+    events: list[OrderedNativeTrade] = []
+    previous = (after_frame, after_index)
+    seen: set[tuple[str, int, str]] = set()
+    for raw in rows:
+        (
+            frame, index, market_source, instrument, symbol, seq, exec_id,
+            event_time, journal_time, price, qty, side,
+        ) = raw
+        point = (frame, index)
+        if (
+            type(frame) is not int or type(index) is not int
+            or point <= previous
+            or market_source != BYBIT_PUBLIC_MARKET_SOURCE_ID
+            or symbol not in wanted
+            or instrument != bybit_instrument_id("linear", symbol)
+            or type(seq) is not int or seq < 0
+            or not isinstance(exec_id, str) or not exec_id
+            or not isinstance(event_time, datetime)
+            or event_time != journal_time
+            or not isinstance(price, Decimal) or price <= 0
+            or not isinstance(qty, Decimal) or qty <= 0
+            or side not in ("Buy", "Sell")
+            or (symbol, seq, exec_id) in seen
+        ):
+            raise NativeSourceProofUnavailable(
+                "NATIVE_SOURCE_ORDERED_EVENT_IDENTITY_CORRUPT"
+            )
+        previous = point
+        seen.add((symbol, seq, exec_id))
+        events.append(OrderedNativeTrade(
+            frame, index, symbol, seq, exec_id,
+            event_time, price, qty, side,
+        ))
+    return tuple(events)
