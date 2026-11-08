@@ -71,19 +71,16 @@ def _api_key_permission_reasons(response: Mapping[str, object] | None) -> tuple[
         if not isinstance(category, str):
             reasons.add("API_KEY_PERMISSIONS_UNAVAILABLE")
             continue
-        if category.lower() in {"withdraw", "transfer"}:
-            if not isinstance(values, list):
-                reasons.add("API_KEY_ASSET_MOVEMENT_PERMISSION_UNVERIFIED")
-            elif values:
+        if not isinstance(values, list):
+            reasons.add("API_KEY_PERMISSIONS_UNAVAILABLE")
+            continue
+        if category.lower() in {"withdraw", "transfer"} and values:
+            reasons.add("API_KEY_ASSET_MOVEMENT_PERMISSION_PRESENT")
+        for item in values:
+            if not isinstance(item, str):
+                reasons.add("API_KEY_PERMISSIONS_UNAVAILABLE")
+            elif "withdraw" in item.lower() or "transfer" in item.lower():
                 reasons.add("API_KEY_ASSET_MOVEMENT_PERMISSION_PRESENT")
-        if isinstance(values, list):
-            for item in values:
-                if isinstance(item, str) and (
-                    "withdraw" in item.lower() or "transfer" in item.lower()
-                ):
-                    reasons.add("API_KEY_ASSET_MOVEMENT_PERMISSION_PRESENT")
-                elif not isinstance(item, str):
-                    reasons.add("API_KEY_PERMISSIONS_UNAVAILABLE")
 
     return tuple(sorted(reasons))
 
