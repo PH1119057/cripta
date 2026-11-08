@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.49
+**Версия:** 3.50
 **Дата:** 2026-11-07
 **Статус:** канонический индекс документации
 
@@ -1754,3 +1754,8 @@ manual or unknown close is admitted; no change of Strategy policy, financial
 authorization, source routing, Project Source or bootstrap.
 `OWNER_DECISION=YES`; `CANON=AFTER MERGE`;
 `IMPLEMENTED=NO`; `DEPLOYED=NO`; `OWNER_ARM=OFF`.
+
+
+## 71. 2026-11-09 — release deployment authorization separated from financial ARM
+
+OWNER DECISION: remove the second per-commit Issue #291 approval for an authenticated maintenance Release Controller invocation. DEV §50.5/§50.5.1 owns the changed process: exact protected GitHub main/CI/scope, verified baseline and actor, backup/rollback, durable audit, no automatic source-sync deploy, native writer one-writer/GAP/cutover guarantees. Financial OWNER ARM/LIVE and Exchange mutation gates remain separately owner-controlled. `CANON=AFTER_MERGE`; `IMPLEMENTED=NO`; `DEPLOYED=NO`; `RUNTIME_BEHAVIOR_VERIFIED=NO`. No documentation topology or Project Source change.
