@@ -107,6 +107,38 @@ actual_tooling_baseline="$(runuser -u cripta -- cat "$current_tooling/INSTALLED_
 [[ "$actual_runtime_baseline" == "$EXPECTED_BASELINE" ]] || die "runtime baseline mismatch: actual=$actual_runtime_baseline expected=$EXPECTED_BASELINE"
 [[ "$actual_tooling_baseline" == "$EXPECTED_BASELINE" ]] || die "tooling baseline mismatch: actual=$actual_tooling_baseline expected=$EXPECTED_BASELINE"
 
+# The native source is NOT stopped by normal trading releases. If already
+# running, preserve its exact loaded source code across the new release.
+# Changing native producer, its journal/identity contract or systemd unit
+# requires a separately reviewed source upgrade/cutover, not a covert
+# in-place module swap while a long-lived process still records evidence.
+if systemctl is-active --quiet cripta-native-public-trade-source.service; then
+  producer_status="/var/lib/cripta/native_public_trade_source/status.json"
+  [[ -f "$producer_status" ]] ||
+    die "live native recorder has no physical source status proof"
+  producer_loaded_commit="$(runuser -u cripta -- python3 -c '
+import json,sys
+try:
+    value=json.load(open(sys.argv[1],encoding="utf-8"))["source_commit"]
+except Exception:
+    value=""
+print(value if isinstance(value,str) else "")
+' "$producer_status")"
+  [[ "$producer_loaded_commit" =~ ^[0-9a-f]{40}$ ]] ||
+    die "live native source release identity invalid"
+  as_repo_owner git -C "$SOURCE" cat-file -e "${producer_loaded_commit}^{commit}" ||
+    die "live native source origin not in verified git"
+  if ! as_repo_owner git -C "$SOURCE" diff --quiet \
+    "$producer_loaded_commit" "$RELEASE_COMMIT" -- \
+    operations/monitoring/native_public_trade_source.py \
+    src/bybit_workbench/market_data/native_public_trade_journal.py \
+    src/bybit_workbench/market_identity.py \
+    operations/systemd/cripta-native-public-trade-source.service; then
+    die "NATIVE_SOURCE_PRODUCER_CODE_CHANGED_SEPARATE_CUTOVER_REQUIRED"
+  fi
+  echo "NATIVE_SOURCE_CONTINUOUS_CODE_IDENTITY=PASS"
+fi
+
 install -d -o cripta -g cripta -m 0750 "$RUNTIME_ROOT" "$RUNTIME_ROOT/releases"
 install -d -o root -g cripta -m 0755 "$DASHBOARD_UI_ROOT" "$DASHBOARD_UI_ROOT/releases"
 install -d -o cripta -g cripta -m 2770 "$RESEARCH_TOOLING_ROOT" "$RESEARCH_TOOLING_ROOT/releases"
