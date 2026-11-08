@@ -19,6 +19,11 @@ from bybit_workbench.market_data.native_public_trade_journal import (
     NativeTradeEvidence,
     NativeTradeEvidenceConflict,
 )
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
+from bybit_workbench.universal_entry.p90l90_scoped_native_dispatch import (
+    consume_scoped_native_batch,
+)
 from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
     read_ordered_native_events,
     read_scoped_native_source,
@@ -286,3 +291,92 @@ def test_pg_scoped_native_reader_preserves_same_sequence_provider_frame_order() 
         assert [(x.frame_number, x.frame_index) for x in ordered] == [
             (11, 0), (11, 1),
         ]
+
+
+def test_pg_scoped_engine_and_cursor_rollback_atomically() -> None:
+    """An Engine fault cannot ACK original source events in PostgreSQL."""
+    session = uuid4().hex
+    now = datetime.now(UTC)
+    ltc = replace(
+        _event("ci-scoped-dispatch-ltc-"+uuid4().hex), event_at=now,
+    )
+    inj = replace(
+        _event("ci-scoped-dispatch-inj-"+uuid4().hex), event_at=now,
+        external_symbol="INJUSDT",
+        instrument_id="inst-bybit-linear-injusdt",
+    )
+    with _db() as conn:
+        _session_start(conn, session)
+        _persist_frame(
+            conn, session=session, frame_number=1, facts=(ltc, inj),
+        )
+        proof = read_scoped_native_source(
+            conn, symbols=("LTCUSDT", "INJUSDT"),
+            accepted_producer_commits=frozenset(("a"*40,)),
+            observed_at=datetime.now(UTC),
+            max_lag=timedelta(seconds=20),
+        )
+        assert proof.ready
+        conn.execute(
+            """INSERT INTO strategy_entry.p90_scoped_native_consumer_checkpoints
+                (strategy_id,strategy_version,entry_plan_fingerprint,
+                 exit_plan_fingerprint,source_session_id,
+                 producer_release_commit,consumer_release_commit,
+                 frame_number,frame_index)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,0,0)""",
+            (MAIN_ID,VERSION,"c"*64,"d"*64,session,"a"*40,"b"*40),
+        )
+        conn.execute(
+            "CREATE TEMP TABLE p90_ci_native_effects (exec_id text)"
+        )
+
+        def callback(event):
+            conn.execute(
+                "INSERT INTO p90_ci_native_effects(exec_id) VALUES (%s)",
+                (event.exec_id,),
+            )
+            if event.exec_id == inj.exec_id:
+                raise RuntimeError("INJECTED_ENGINE_ABORT")
+
+        kwargs = {
+            "source": proof,
+            "strategy_id": MAIN_ID,
+            "strategy_version": VERSION,
+            "entry_plan_fingerprint": "c"*64,
+            "exit_plan_fingerprint": "d"*64,
+            "consumer_release_commit": "b"*40,
+            "observed_at": datetime.now(UTC),
+            "max_evidence_age": timedelta(seconds=20),
+        }
+        with pytest.raises(RuntimeError, match="INJECTED_ENGINE_ABORT"):
+            consume_scoped_native_batch(conn, on_native_trade=callback, **kwargs)
+        assert conn.execute(
+            "SELECT count(*) FROM p90_ci_native_effects"
+        ).fetchone() == (0,)
+        assert conn.execute(
+            """SELECT frame_number,frame_index FROM
+               strategy_entry.p90_scoped_native_consumer_checkpoints
+               WHERE strategy_id=%s AND source_session_id=%s""",
+            (MAIN_ID,session),
+        ).fetchone() == (0,0)
+
+        accepted = consume_scoped_native_batch(
+            conn,
+            on_native_trade=lambda ev: conn.execute(
+                "INSERT INTO p90_ci_native_effects(exec_id) VALUES (%s)",
+                (ev.exec_id,),
+            ),
+            **kwargs,
+        )
+        assert [e.exec_id for e in accepted] == [
+            ltc.exec_id, inj.exec_id,
+        ]
+        assert conn.execute(
+            "SELECT count(*) FROM p90_ci_native_effects"
+        ).fetchone() == (2,)
+        assert conn.execute(
+            """SELECT frame_number,frame_index FROM
+               strategy_entry.p90_scoped_native_consumer_checkpoints
+               WHERE strategy_id=%s AND source_session_id=%s""",
+            (MAIN_ID,session),
+        ).fetchone() == (1,1)
