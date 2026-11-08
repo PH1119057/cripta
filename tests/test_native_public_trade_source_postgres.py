@@ -94,13 +94,18 @@ def test_pg_session_native_row_and_cursor_commit_as_one_source_boundary() -> Non
             evidence.exchange_sequence, evidence.exec_id, evidence.event_at,
             evidence.price, evidence.quantity, "ACTIVE",
         )
-        # Exact immutable replay is allowed, a different provider value is not.
+        assert conn.execute(
+            """SELECT count(*) FROM analytics.native_public_trade_source_events
+                WHERE source_session_id=%s""",
+            (session,),
+        ).fetchone() == (1,)
+        # A redelivered exact native identity is NOT a new ordered trade.
         _persist_frame(conn, session=session, frame_number=2, facts=(evidence,))
         assert conn.execute(
             "SELECT frame_number FROM analytics.native_public_trade_source_cursors "
             "WHERE source_session_id=%s",
             (session,),
-        ).fetchone() == (2,)
+        ).fetchone() == (1,)
         with pytest.raises(NativeTradeEvidenceConflict):
             _persist_frame(
                 conn, session=session, frame_number=3,
@@ -110,7 +115,7 @@ def test_pg_session_native_row_and_cursor_commit_as_one_source_boundary() -> Non
             "SELECT frame_number FROM analytics.native_public_trade_source_cursors "
             "WHERE source_session_id=%s",
             (session,),
-        ).fetchone() == (2,)
+        ).fetchone() == (1,)
 
 
 def test_pg_transaction_crash_rolls_back_session_native_and_cursor_together() -> None:
