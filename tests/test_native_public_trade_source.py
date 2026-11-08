@@ -223,6 +223,12 @@ def test_external_producer_install_is_not_a_trading_permission() -> None:
     )
     assert "20261108_native_public_trade_source_sessions.sql" in installer
     assert "20261109_native_public_trade_source_event_order.sql" in installer
+    # A live writer code upgrade requires its own exact, reviewed cutover.
+    # Merely adding this migration must NEVER bypass that production rail.
+    assert (
+        "NATIVE_SOURCE_PRODUCER_CODE_CHANGED_SEPARATE_CUTOVER_REQUIRED"
+        in installer
+    )
     sql = Path(
         "operations/sql/20261108_native_public_trade_source_sessions.sql"
     ).read_text(encoding="utf-8")
