@@ -106,6 +106,7 @@ def test_exact_current_signed_main_sub_protection_allows_a_real_exit_request(
 ) -> None:
     checker, db, source, signed, position, evaluated, now = _case(sub=sub)
     assert checker(position, evaluated, now) is True
+    assert checker.last_denial_code is None
     assert source.calls == 1 and signed.reads == 1
     assert len(db.statements) == 2
 
@@ -144,6 +145,19 @@ def test_exit_mutation_never_trusts_stale_or_foreign_signed_protection(
         now = now + timedelta(seconds=6)
     signed.evidence = replace(signed.evidence, position=raw)
     assert checker(position, evaluated, now) is False
+    codes = {
+        "changed-stop": "PROTECTION_CHANGED",
+        "changed-tp": "PROTECTION_CHANGED",
+        "changed-trailing": "PROTECTION_CHANGED",
+        "late-activation": "MARK_ALREADY_AT_ACTIVATION",
+        "other-connector": "PRIVATE_SCOPE_NOT_CURRENT",
+        "other-account": "PRIVATE_SCOPE_NOT_CURRENT",
+        "pending-command": "ACCOUNT_COMMAND_NOT_TERMINAL",
+        "wrong-binding": "BINDING_NOT_CURRENT",
+        "stale-signed": "PRIVATE_SCOPE_NOT_CURRENT",
+        "stale-decision": "OBSERVATION_NOT_FRESH",
+    }
+    assert checker.last_denial_code == codes[bad]
 
 
 def test_current_signed_source_or_account_transport_failure_denies_exit(
@@ -154,3 +168,4 @@ def test_current_signed_source_or_account_transport_failure_denies_exit(
         raise RuntimeError("SOURCE_EPOCH_FORKED")
     monkeypatch.setattr(source, "_source_transaction", reject)
     assert checker(position, evaluated, now) is False
+    assert checker.last_denial_code == "SOURCE_OR_PRIVATE_PROOF_UNAVAILABLE"
