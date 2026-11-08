@@ -91,7 +91,10 @@ def test_native_source_code_cutover_is_separate_authenticated_controller_scope()
     src = CONTROLLER.read_text(encoding="utf-8")
     installer = INSTALLER.read_text(encoding="utf-8")
     assert "NATIVE_CUTOVER_PURPOSE" in src
-    assert "purpose=NATIVE_CUTOVER_PURPOSE" in src
+    assert "return NATIVE_CUTOVER_PURPOSE, True" in src
+    assert "verify_management_release(" in src
+    assert "approval_candidates(" not in src
+    assert "OWNER_APPROVAL_MISSING" not in src
     assert "native_source_cutover=purpose == NATIVE_CUTOVER_PURPOSE" in src
     assert '"CRIPTA_NATIVE_SOURCE_CUTOVER="' in src
     assert "def _postcheck_native_source(target: str)" in src
