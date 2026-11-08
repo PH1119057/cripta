@@ -397,7 +397,7 @@ managed_services=(
   cripta-safety-observer.service
   cripta-shadow-command-worker.service
   cripta-universal-entry-consumer.service
-  cripta-native-public-trade-source.service
+  # MarketSource is NOT stopped for ordinary trading release/backup.
   cripta-universal-entry-observer.service
   cripta-universal-exit-shadow.service
   cripta-universal-exit-consumer.service
@@ -427,6 +427,10 @@ for unit in "${discovered_sub_units[@]}"; do
 done
 
 declare -A was_active=()
+native_source_was_active=0
+if systemctl is-active --quiet cripta-native-public-trade-source.service; then
+  native_source_was_active=1
+fi
 services_stopped=0
 db_mutation_steps=0
 cutover_started=0
@@ -449,9 +453,11 @@ restore_pre_cutover_services() {
       systemctl is-active --quiet "$service" && recovery_failed=1
     fi
   done
-  # New producer was not active on the baseline. Failed cutover must not
-  # strand an enabled after-release market writer behind an old Observer.
-  if [[ "${was_active[cripta-native-public-trade-source.service]:-0}" == "0" ]]; then
+  # On failed first cutover restore the original inactive producer state;
+  # otherwise preserve the previous independently running native recorder.
+  if [[ "$native_source_was_active" == "0" ]]; then
+    systemctl stop cripta-native-public-trade-source.service >/dev/null 2>&1 ||
+      recovery_failed=1
     systemctl disable cripta-native-public-trade-source.service >/dev/null 2>&1 ||
       recovery_failed=1
   fi
@@ -735,8 +741,8 @@ for _attempt in {1..60}; do
     FROM analytics.native_public_trade_source_cursors c
     JOIN analytics.native_public_trade_source_sessions s
       ON s.source_session_id=c.source_session_id
-    WHERE s.producer_release_commit='$RELEASE_COMMIT'
-      AND s.state='ACTIVE'
+    WHERE s.state='ACTIVE'
+      AND s.market_source_id='ms-bybit-mainnet-public-v1'
       AND c.event_at >= now() - interval '3 minutes'")"
   if [[ "$source_cursor_count" == "5" ]]; then
     native_source_ready=1
@@ -750,16 +756,14 @@ echo "INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS"
 
 for service in "${managed_services[@]}"; do
   if [[ "$service" == "cripta-real-service-broker.service" ||
-        "$service" == "cripta-runtime-recovery-supervisor.service" ||
-        "$service" == "cripta-native-public-trade-source.service" ]]; then
+        "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
     continue
   fi
   if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
 done
 for service in "${managed_services[@]}"; do
   if [[ "$service" == "cripta-real-service-broker.service" ||
-        "$service" == "cripta-runtime-recovery-supervisor.service" ||
-        "$service" == "cripta-native-public-trade-source.service" ]]; then
+        "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
     systemctl is-active --quiet "$service" ||
       die "required control-plane service inactive after deploy: $service"
   elif [[ "${was_active[$service]}" == "1" ]]; then
