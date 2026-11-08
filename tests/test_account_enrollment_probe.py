@@ -123,6 +123,15 @@ def test_no_wallet_object_is_not_assumed_safe():
     assert not ready and reasons == ("API_KEY_WALLET_PERMISSIONS_UNVERIFIED",)
 
 
+def test_unknown_permission_category_shape_cannot_hide_asset_rights():
+    response = deepcopy(GOOD)
+    response["result"]["permissions"]["OtherAccess"] = {"Transfer": True}
+    ready, reasons, calls, _ = verify(response=response)
+    assert not ready and calls == ["mounted", "signed"]
+    assert "API_KEY_PERMISSIONS_UNAVAILABLE" in reasons
+    assert "SECRET_NEVER_ECHO" not in repr(reasons)
+
+
 def test_missing_trade_scopes_or_readonly_do_not_pass():
     for missing in ("ContractTrade", "Derivatives"):
         response = deepcopy(GOOD)
