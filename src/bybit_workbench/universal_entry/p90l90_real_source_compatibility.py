@@ -162,6 +162,12 @@ def verify_reviewed_bugfix_delta(*, current_root: Path, origin_root: Path) -> No
         or relative not in origin
         or current[relative].read_bytes() != origin[relative].read_bytes()
     }
+    # A new release may contain only Dashboard/independent adapter fixes.
+    # Identical original consumer bytes are stronger evidence than a
+    # stabilization delta and must not be forced through its OLD exact set.
+    # Registration still requires separate plan/checkpoint/epoch attestation.
+    if not changed:
+        return
     _require(
         changed == set(REVIEWED_BUGFIX_CONSUMER_SHA256),
         "UNREVIEWED_CONSUMER_DELTA",
@@ -269,6 +275,12 @@ def verify_reviewed_bugfix_delta_from_git(
         or relative not in origin
         or current[relative].read_bytes() != origin[relative]
     }
+    # A new release may contain only Dashboard/independent adapter fixes.
+    # Identical original consumer bytes are stronger evidence than a
+    # stabilization delta and must not be forced through its OLD exact set.
+    # Registration still requires separate plan/checkpoint/epoch attestation.
+    if not changed:
+        return
     _require(
         changed == set(REVIEWED_BUGFIX_CONSUMER_SHA256),
         "UNREVIEWED_CONSUMER_DELTA",
