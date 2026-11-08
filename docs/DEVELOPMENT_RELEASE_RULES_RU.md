@@ -1958,47 +1958,6 @@ Discovery в порядке:
 - Негативные тесты обязательны для обоих purpose: отсутствие/истечение approval, replay nonce, неподходящий SHA/baseline/tree/purpose, moving main, failing CI, dirty checkout, actor/path denial, lock collision, injection. Dashboard-specific tests дополнительно проверяют undeployed/current baseline mismatch, verifier rejection, попытку trading/control mutation и неизменность runtime identities.
 - Ввод нового/изменённого controller capability: OWNER DECISION → CANON UPDATE → IMPLEMENTATION → TEST → GITHUB → DEPLOY → RUNTIME EVIDENCE.
 
-### 50.5.1 Proposed independent native MarketSource code-upgrade rail — REVIEW REQUIRED (#470)
-
-**Status:** `PROPOSED_CANON_CHANGE=YES`; `OWNER_DECISION_REQUIRED=YES`
-before activation. Existing `EXACT_VERIFIED_SOURCE_RELEASE` must still reject
-changes to a running native MarketSource producer; a new purpose is not a
-shortcut around that guard. The source process has no Exchange credentials,
-orders, account control or financial issuer authority.
-
-Proposed reviewed purpose:
-`NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE` as an exact additional
-owner-authenticated, time-limited, nonce-claimed GitHub main target and
-baseline. It uses the same CI/source/actor/backup/release lock checks as the
-full installer, plus a separate actual producer preflight.
-
-BEFORE: an independently supervised, exclusively locked publicTrade producer
-records exact immutable `seq/execId` rows and its last per-symbol cursor.
-AFTER: exactly one new approved producer owns the same append-only public
-source and a NEW physical WS session, with an explicitly marked old
-`GAP`. No continuous trade sequence may be inferred across that switch.
-
-Required cutover evidence: exact old systemd PID, status
-`producer_release_commit`, current source session and Git-verified
-old ABI == installed baseline. Backup and additive migrations complete
-BEFORE stopping the old writer. The old systemd unit stops and marks the
-session as `GAP` BEFORE changing any live runtime symlink. A new unit
-must report a DIFFERENT PID, new exact release SHA, DIFFERENT ACTIVE session,
-fresh provider timestamps and all five original per-symbol event cursors
-in PostgreSQL AFTER the cutover probe. A failure is `HARD_STOP`, never
-a false `active == ready`. A pre-switch failure restarts the old immutable
-producer; post-switch failure demands exact reviewed rollback from retained
-baseline code, backup and session/GAP evidence with no concurrent writer.
-Neither route changes Gate/Owner ARM/StrategyActivation or Exchange orders.
-
-This document subsection does not independently authorize using the new
-purpose. DEV §58 and ARCH §60 source/consumer parity remain mandatory;
-even a successful native writer upgrade does NOT certify P90 Engine/Exit,
-financial readiness or old positions. Before promotion, pass negative
-tests for unknown purpose, wrong author/baseline/SHA/nonce, no old producer,
-no source-code delta, identical old PID/session, stale cursor, missing
-symbol, source lock collision and rollback. Runtime evidence is required.
-
 ## 51. Generic REAL readiness preparation and bounded service-start broker — OWNER DECISION 2026-11-02 (Issue #343)
 
 ARCH §52 owns capability boundaries. This section owns implementation, actor/path, release and recovery gates.
