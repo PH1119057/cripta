@@ -71,3 +71,142 @@ def test_source_transport_requires_exact_release() -> None:
             {"topic": "publicTrade.LTCUSDT", "data": [_trade()]},
             symbols=SYMBOLS, release="stale",
         )
+
+
+def test_exact_external_writer_is_claimed_once_and_fails_closed() -> None:
+    from operations.monitoring.native_public_trade_source import (
+        NativeSourceInputUnverified,
+        _acquire_exclusive_producer,
+    )
+
+    class Database:
+        def __init__(self, granted: bool) -> None:
+            self.granted = granted
+            self.calls: list[object] = []
+
+        def execute(self, sql: str, params: object) -> Database:
+            self.calls.append((sql, params))
+            return self
+
+        def fetchone(self) -> tuple[bool]:
+            return (self.granted,)
+
+        def commit(self) -> None:
+            self.calls.append("commit")
+
+    first = Database(True)
+    _acquire_exclusive_producer(first)
+    assert "pg_try_advisory_lock" in first.calls[0][0]
+    assert first.calls[-1] == "commit"
+    second = Database(False)
+    with pytest.raises(NativeSourceInputUnverified, match="WRITER_ALREADY_OWNED"):
+        _acquire_exclusive_producer(second)
+
+
+def test_source_commits_trade_before_session_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+
+    from operations.monitoring import native_public_trade_source as native
+
+    rows = decode_native_trades(
+        {"topic": "publicTrade.LTCUSDT", "data": [_trade()]},
+        symbols=SYMBOLS, release=RELEASE,
+    )
+    operations: list[str] = []
+
+    class Database:
+        @contextmanager
+        def transaction(self):
+            operations.append("begin")
+            yield
+            operations.append("commit")
+
+        def execute(self, sql: str, _params: object = ()):
+            if "source_cursors" in sql:
+                operations.append("cursor")
+            elif "source_sessions" in sql:
+                operations.append("session")
+            else:
+                raise AssertionError(sql)
+
+    class Journal:
+        def __init__(self, _db: object) -> None:
+            pass
+
+        def append(self, _event: object) -> bool:
+            operations.append("trade")
+            return True
+
+    monkeypatch.setattr(native, "NativePublicTradeJournal", Journal)
+    native._persist_frame(Database(), session="a" * 32,
+                          frame_number=1, facts=rows)
+    assert operations == ["begin", "trade", "cursor", "session", "commit"]
+
+
+def test_failed_journal_write_cannot_advance_source_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+
+    from operations.monitoring import native_public_trade_source as native
+
+    rows = decode_native_trades(
+        {"topic": "publicTrade.LTCUSDT", "data": [_trade()]},
+        symbols=SYMBOLS, release=RELEASE,
+    )
+    calls: list[str] = []
+
+    class Database:
+        @contextmanager
+        def transaction(self):
+            calls.append("begin")
+            yield
+
+        def execute(self, _sql: str, _params: object = ()) -> None:
+            calls.append("cursor")
+            raise AssertionError("source cursor must not advance")
+
+    class BrokenJournal:
+        def __init__(self, _db: object) -> None:
+            pass
+
+        def append(self, _event: object) -> None:
+            raise RuntimeError("persist failed")
+
+    monkeypatch.setattr(native, "NativePublicTradeJournal", BrokenJournal)
+    with pytest.raises(RuntimeError, match="persist failed"):
+        native._persist_frame(Database(), session="a" * 32,
+                              frame_number=1, facts=rows)
+    assert calls == ["begin"]
+
+
+def test_external_producer_install_is_not_a_trading_permission() -> None:
+    from pathlib import Path
+
+    source = Path(
+        "operations/systemd/cripta-native-public-trade-source.service"
+    ).read_text(encoding="utf-8")
+    assert "User=cripta" in source
+    assert "NoNewPrivileges=true" in source
+    assert "ReadOnlyPaths=/srv/cripta/runtime/current" in source
+    assert "LoadCredential" not in source
+    assert "Environment=CRIPTA_NATIVE_PUBLIC_TRADE_SYMBOLS=" in source
+    observer = Path(
+        "operations/systemd/cripta-universal-entry-observer.service"
+    ).read_text(encoding="utf-8")
+    assert "CRIPTA_NATIVE_SOURCE_EXTERNAL=ENABLED" in observer
+    installer = Path(
+        "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    assert installer.index("systemctl start cripta-native-public-trade-source") < (
+        installer.index('if [[ "$service" == "cripta-real-service-broker')
+        if False else installer.index("INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS")
+    )
+    assert "20261108_native_public_trade_source_sessions.sql" in installer
+    sql = Path(
+        "operations/sql/20261108_native_public_trade_source_sessions.sql"
+    ).read_text(encoding="utf-8")
+    assert "PRIMARY KEY (source_session_id,external_symbol)" in sql
+    assert "REVOKE DELETE,TRUNCATE" in sql
