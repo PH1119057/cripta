@@ -111,7 +111,9 @@ def test_native_source_code_cutover_is_separate_authenticated_controller_scope()
 def test_old_native_writer_is_stopped_only_after_db_backup_and_migrations():
     installer = INSTALLER.read_text(encoding="utf-8")
     before = installer.index('pg_dump -Fc -d cripta')
-    migration = installer.index('for migration in "${migration_files[@]}"')
+    migration = installer.index(
+        'for migration in "${migration_files[@]}"', before,
+    )
     stop = installer.index(
         "systemctl stop cripta-native-public-trade-source.service",
         installer.index('if [[ "$native_code_changed" == "1" ]]; then', migration),
