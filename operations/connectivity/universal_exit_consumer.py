@@ -209,17 +209,15 @@ def run_once(
     # disarmed. P90 now has an independent owner; Entry does not queue TRAIL035.
     # Runtime direct script and package-imported tests have different paths.
     if __package__:
-        from .p90_real_independent_exit import (
-            audit_firstfill_exit_result,
-            run_p90_exit_once,
-        )
+        from . import p90_real_independent_exit
+        from .p90_real_independent_exit import run_p90_exit_once
     else:
-        from p90_real_independent_exit import (
-            audit_firstfill_exit_result,
-            run_p90_exit_once,
-        )
+        import p90_real_independent_exit
+        from p90_real_independent_exit import run_p90_exit_once
     p90 = run_p90_exit_once(connection, now=current)
-    audit_firstfill_exit_result(connection, result=p90, observed_at=current)
+    p90_real_independent_exit.audit_firstfill_exit_result(
+        connection, result=p90, observed_at=current,
+    )
     if p90 == "P90_EXIT_TRAIL035_REQUEST_PUBLISHED":
         return p90
     materialized = materialize_once(connection, now=current)
