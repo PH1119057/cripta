@@ -26,6 +26,10 @@ from operations.monitoring.native_public_trade_source import (
     _persist_frame,
     _session_start,
 )
+from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
+    read_scoped_native_source,
+)
+from datetime import timedelta
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 pytestmark = pytest.mark.skipif(not DSN, reason="disposable PostgreSQL only")
@@ -166,3 +170,29 @@ def test_pg_unclean_old_producer_epoch_is_not_falsely_active() -> None:
             "GAP", "PREVIOUS_WRITER_ENDED_UNCLEAN", True,
         )
         assert by_id[second] == ("ACTIVE", None, False)
+
+
+def test_pg_scoped_reader_independently_proves_one_symbol_not_other() -> None:
+    """Actual PostgreSQL session/journal/cursor, no Observer service or ARM."""
+    session = uuid4().hex
+    now = datetime.now(UTC)
+    evidence = replace(
+        _event("ci-scoped-native-470-" + uuid4().hex), event_at=now,
+    )
+    with _db() as conn:
+        _session_start(conn, session)
+        _persist_frame(conn, session=session, frame_number=1, facts=(evidence,))
+        proof = read_scoped_native_source(
+            conn, symbols=("LTCUSDT", "APTUSDT"),
+            accepted_producer_commits=frozenset(("a" * 40,)),
+            observed_at=datetime.now(UTC),
+            max_lag=timedelta(seconds=20),
+        )
+        assert not proof.ready
+        assert proof.session_id == session
+        assert proof.by_symbol["LTCUSDT"].ready is True
+        assert proof.by_symbol["APTUSDT"].ready is False
+        assert proof.by_symbol["APTUSDT"].reason == (
+            "NATIVE_SOURCE_CURSOR_MISSING"
+        )
+        # Historical/observer status and account LIVE arm are NOT read.
