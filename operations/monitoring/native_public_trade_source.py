@@ -209,7 +209,11 @@ def _persist_frame(
                 raise NativeSourceInputUnverified(
                     "NATIVE_SOURCE_ORDER_REGRESSION"
                 )
-            journal.append(event)
+            if not journal.append(event):
+                # The same immutable native execId may be redelivered by
+                # WebSocket. It is NOT a second causal trade and must not
+                # advance the ordered checkpoint to a nonexistent event row.
+                continue
             # Persist original provider WS ordering, including every
             # same-sequence distinct execId, before advancing a cursor.
             # Duplicates of the identical native identity are harmless;
