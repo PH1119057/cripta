@@ -222,7 +222,8 @@ def _persist_frame(
                      frame_index=EXCLUDED.frame_index,
                      exchange_sequence=EXCLUDED.exchange_sequence,
                      exec_id=EXCLUDED.exec_id,
-                     event_at=EXCLUDED.event_at
+                     event_at=EXCLUDED.event_at,
+                     accepted_at=clock_timestamp()
                    WHERE (native_public_trade_source_cursors.frame_number,
                           native_public_trade_source_cursors.frame_index)
                        < (EXCLUDED.frame_number,EXCLUDED.frame_index)""",
