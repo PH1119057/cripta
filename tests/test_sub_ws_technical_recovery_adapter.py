@@ -73,6 +73,9 @@ def test_hard_latch_and_uncertain_operation_never_request_signed_proof(
         adapter, "_journal", lambda *_args: journal or {"attempts": 0, "phase": "IDLE"},
     )
     monkeypatch.setattr(
+        adapter, "_pending_clear_not_committed", lambda _blocked: False,
+    )
+    monkeypatch.setattr(
         adapter, "P90PrivateProofClient",
         lambda **_kwargs: pytest.fail("signed proof should not be called"),
     )
@@ -101,8 +104,13 @@ def test_global_critical_or_unknown_exposure_blocks_before_signed_ipc(
     )
 
 
+@pytest.mark.parametrize(("previous_phase", "previous_attempts"), [
+    ("IDLE", 0), ("PENDING", 1),
+])
 def test_verified_flat_recovery_requests_only_scoped_database_transition(
     monkeypatch: pytest.MonkeyPatch,
+    previous_phase: str,
+    previous_attempts: int,
 ) -> None:
     now, blocked, reconnect = _sample()
     source = "bybit:signed-recovery-linear-usdt:exact-account"
@@ -158,8 +166,10 @@ def test_verified_flat_recovery_requests_only_scoped_database_transition(
                  (41, reconnect)),
     )
     monkeypatch.setattr(
-        adapter, "_journal", lambda *_args: {"attempts": 0, "phase": "IDLE"},
+        adapter, "_journal", lambda *_args: {"attempts": previous_attempts, "phase": previous_phase},
     )
+    monkeypatch.setattr(adapter, "_pending_clear_not_committed",
+                        lambda _blocked: True)
     monkeypatch.setattr(adapter, "_independent_lifecycle", lambda _now: (True, True))
     monkeypatch.setattr(
         adapter, "_ws_heartbeat", lambda **_kwargs: now,
@@ -185,7 +195,8 @@ def test_verified_flat_recovery_requests_only_scoped_database_transition(
     assert result["owner_arm_change"] is False
     assert result["gate_change"] is False
     assert result["exchange_mutation"] is False
-    assert saves == [(1, "PENDING"), (1, "COMPLETE")]
+    assert saves == [(previous_attempts + 1, "PENDING"),
+                     (previous_attempts + 1, "COMPLETE")]
     assert sum("control.clear_sub_ws_transient_latch" in sql for sql, _ in calls) == 1
     assert calls[-1] == ("COMMIT", None)
 
@@ -294,3 +305,64 @@ def test_sub_critical_scope_isolated_from_unrelated_main(
                         lambda *_a, **_k: ReadOnlyDB(1))
     assert not adapter._sub_hard_faults_clear()
     assert seen
+
+
+@pytest.mark.parametrize(("observed", "expected"), [
+    ("same", True), ("missing", False), ("relatched", False),
+    ("hard", False),
+])
+def test_pending_reconciliation_serializes_exact_account_latch(
+    monkeypatch: pytest.MonkeyPatch, observed: str, expected: bool,
+) -> None:
+    """No trusted retry until the prior SQL writer has released its lock."""
+    blocked_at = datetime.now(UTC) - timedelta(minutes=1)
+    rows = {
+        "same": (blocked_at, "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN"),
+        "missing": None,
+        "relatched": (blocked_at + timedelta(seconds=1),
+                      "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN"),
+        "hard": (blocked_at, "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED"),
+    }
+    commands: list[tuple[str, object]] = []
+
+    class Cursor:
+        def __init__(self, row: object) -> None:
+            self.row = row
+
+        def fetchone(self) -> object:
+            return self.row
+
+    class ReadOnlyDB:
+        def __enter__(self) -> ReadOnlyDB:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def execute(self, sql: str, params: object = ()) -> Cursor:
+            commands.append((sql, params))
+            if "FROM runtime.account_entry_safety_blocks" in sql:
+                return Cursor(rows[observed])
+            return Cursor(None)
+
+    monkeypatch.setattr(adapter.psycopg, "connect",
+                        lambda *_a, **_k: ReadOnlyDB())
+    assert adapter._pending_clear_not_committed(blocked_at) is expected
+    assert "SET TRANSACTION READ ONLY" in commands[0][0]
+    assert "lock_timeout" in commands[1][0]
+    assert "pg_advisory_xact_lock" in commands[2][0]
+    assert commands[2][1] == (adapter.ACCOUNT, adapter.CONNECTOR)
+    assert "FROM runtime.account_entry_safety_blocks" in commands[3][0]
+    assert commands[3][1] == (adapter.ACCOUNT, adapter.CONNECTOR)
+    assert len(commands) == 4
+
+
+def test_pending_reconciliation_lock_failure_never_assumes_rollback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise TimeoutError("advisory lock unavailable")
+
+    monkeypatch.setattr(adapter.psycopg, "connect", unavailable)
+    with pytest.raises(TimeoutError):
+        adapter._pending_clear_not_committed(datetime.now(UTC))
