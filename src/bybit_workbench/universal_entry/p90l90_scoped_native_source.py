@@ -10,9 +10,12 @@ original provider identity proof.
 """
 from __future__ import annotations
 
+import hashlib
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from bybit_workbench.market_identity import (
@@ -24,6 +27,17 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
 )
 
 _EXACT_SYMBOLS = frozenset().union(*ALLOWED_SYMBOLS.values())
+# Precisely the four physical MarketSource producer-code surfaces protected
+# by install_verified_release.sh. P90 consumer Exit/IPC attestation is a
+# SEPARATE contract; those historic consumer SHA sets cannot approve/deny a
+# continuously running source process from an older release.
+_PRODUCER_ABI_PATHS = (
+    "operations/monitoring/native_public_trade_source.py",
+    "src/bybit_workbench/market_data/native_public_trade_journal.py",
+    "src/bybit_workbench/market_identity.py",
+    "operations/systemd/cripta-native-public-trade-source.service",
+)
+
 
 
 class NativeSourceProofUnavailable(RuntimeError):
@@ -306,3 +320,49 @@ def read_ordered_native_events(
             event_time, price, qty, side,
         ))
     return tuple(events)
+
+
+def verify_native_producer_code_compatibility(
+    *,
+    source_checkout: Path,
+    claimed_producer_commit: str,
+    loaded_consumer_commit: str,
+) -> frozenset[str]:
+    """Exact immutable code-equivalence proof, NOT P90 consumer attestation.
+
+    An older but still-running MarketSource process may be byte-identical to
+    the newly installed consumer release. It must not borrow P90 consumer
+    attestation, nor infer compatibility from Git ancestry or a changed
+    process status file. Caller STILL verifies the actual running service,
+    its session/producer SHA and original events independently.
+    """
+    for commit in (claimed_producer_commit, loaded_consumer_commit):
+        if (
+            not isinstance(commit, str)
+            or len(commit) != 40
+            or any(char not in "0123456789abcdef" for char in commit)
+        ):
+            raise NativeSourceProofUnavailable(
+                "NATIVE_SOURCE_PRODUCER_COMMIT_INVALID"
+            )
+    for path in _PRODUCER_ABI_PATHS:
+        try:
+            origin = subprocess.check_output(
+                ["git", "-C", str(source_checkout), "show",
+                 f"{claimed_producer_commit}:{path}"],
+                stderr=subprocess.DEVNULL,
+            )
+            consumer = subprocess.check_output(
+                ["git", "-C", str(source_checkout), "show",
+                 f"{loaded_consumer_commit}:{path}"],
+                stderr=subprocess.DEVNULL,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise NativeSourceProofUnavailable(
+                "NATIVE_SOURCE_PRODUCER_GIT_BYTES_UNAVAILABLE"
+            ) from exc
+        if hashlib.sha256(origin).digest() != hashlib.sha256(consumer).digest():
+            raise NativeSourceProofUnavailable(
+                "NATIVE_SOURCE_PRODUCER_CODE_DRIFT"
+            )
+    return frozenset((claimed_producer_commit,))
