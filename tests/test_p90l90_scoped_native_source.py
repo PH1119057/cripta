@@ -151,11 +151,11 @@ def test_ordered_source_reader_uses_provider_frame_ordinal_not_execid_sort() -> 
             return _Cursor([
                 (7, 0, BYBIT_PUBLIC_MARKET_SOURCE_ID,
                  bybit_instrument_id("linear", "LTCUSDT"),
-                 "LTCUSDT", 1000, "z-provider-first", now, now,
+                 "LTCUSDT", 1000, "z-provider-first", now, now, now,
                  Decimal("52.1"), Decimal("0.1"), "Buy"),
                 (7, 1, BYBIT_PUBLIC_MARKET_SOURCE_ID,
                  bybit_instrument_id("linear", "LTCUSDT"),
-                 "LTCUSDT", 1000, "a-provider-second", now, now,
+                 "LTCUSDT", 1000, "a-provider-second", now, now, now,
                  Decimal("52.2"), Decimal("0.2"), "Sell"),
             ])
 
