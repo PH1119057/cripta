@@ -59,7 +59,8 @@ class AuditConnection:
                 if event["account"] == account and event["detail"]["position_id"] == pos
             ]
             prior = rows[-1]["detail"]["reason_code"] if rows else None
-            return SimpleNamespace(fetchone=lambda: None if prior is None else {"reason_code": prior})
+            result = None if prior is None else {"reason_code": prior}
+            return SimpleNamespace(fetchone=lambda: result)
         if "INSERT INTO runtime.connection_events" in sql:
             observed_ms, payload, account = params
             detail = json.loads(payload)
