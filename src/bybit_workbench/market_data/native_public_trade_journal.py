@@ -136,6 +136,37 @@ class NativePublicTradeJournal:
         return False
 
 
+    def require_committed(self, item: NativeTradeEvidence) -> bool:
+        """Read-only external-writer gate for the causal Observer consumer.
+
+        An exact immutable row must have committed in the independent source
+        before an Observer may process its native TradeCursor. A missing row
+        remains missing (not a guessed/replayed native event), and a changed
+        row is source corruption. This method never inserts or ACKs a cursor.
+        """
+        if not isinstance(item, NativeTradeEvidence):
+            raise TypeError("NATIVE_TRADE_EVIDENCE_REQUIRED")
+        row = self._connection.execute(
+            """SELECT external_symbol,event_at,price,quantity,taker_side
+                 FROM analytics.native_public_trade_events
+                 WHERE market_source_id=%s AND instrument_id=%s
+                   AND exchange_sequence=%s AND exec_id=%s""",
+            (item.market_source_id, item.instrument_id,
+             item.exchange_sequence, item.exec_id),
+        ).fetchone()
+        if row is None:
+            return False
+        expected = (
+            item.external_symbol, item.event_at.astimezone(UTC),
+            item.price, item.quantity, item.taker_side,
+        )
+        if tuple(row) != expected:
+            raise NativeTradeEvidenceConflict(
+                "NATIVE_PUBLIC_TRADE_EXTERNAL_WRITER_IDENTITY_CONFLICT"
+            )
+        return True
+
+
 class NativeTradeEvidenceUnavailable(RuntimeError):
     """No exact saved-native range: never replace with candle approximation."""
 

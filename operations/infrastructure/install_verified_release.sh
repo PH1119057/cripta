@@ -107,6 +107,38 @@ actual_tooling_baseline="$(runuser -u cripta -- cat "$current_tooling/INSTALLED_
 [[ "$actual_runtime_baseline" == "$EXPECTED_BASELINE" ]] || die "runtime baseline mismatch: actual=$actual_runtime_baseline expected=$EXPECTED_BASELINE"
 [[ "$actual_tooling_baseline" == "$EXPECTED_BASELINE" ]] || die "tooling baseline mismatch: actual=$actual_tooling_baseline expected=$EXPECTED_BASELINE"
 
+# The native source is NOT stopped by normal trading releases. If already
+# running, preserve its exact loaded source code across the new release.
+# Changing native producer, its journal/identity contract or systemd unit
+# requires a separately reviewed source upgrade/cutover, not a covert
+# in-place module swap while a long-lived process still records evidence.
+if systemctl is-active --quiet cripta-native-public-trade-source.service; then
+  producer_status="/var/lib/cripta/native_public_trade_source/status.json"
+  [[ -f "$producer_status" ]] ||
+    die "live native recorder has no physical source status proof"
+  producer_loaded_commit="$(runuser -u cripta -- python3 -c '
+import json,sys
+try:
+    value=json.load(open(sys.argv[1],encoding="utf-8"))["source_commit"]
+except Exception:
+    value=""
+print(value if isinstance(value,str) else "")
+' "$producer_status")"
+  [[ "$producer_loaded_commit" =~ ^[0-9a-f]{40}$ ]] ||
+    die "live native source release identity invalid"
+  as_repo_owner git -C "$SOURCE" cat-file -e "${producer_loaded_commit}^{commit}" ||
+    die "live native source origin not in verified git"
+  if ! as_repo_owner git -C "$SOURCE" diff --quiet \
+    "$producer_loaded_commit" "$RELEASE_COMMIT" -- \
+    operations/monitoring/native_public_trade_source.py \
+    src/bybit_workbench/market_data/native_public_trade_journal.py \
+    src/bybit_workbench/market_identity.py \
+    operations/systemd/cripta-native-public-trade-source.service; then
+    die "NATIVE_SOURCE_PRODUCER_CODE_CHANGED_SEPARATE_CUTOVER_REQUIRED"
+  fi
+  echo "NATIVE_SOURCE_CONTINUOUS_CODE_IDENTITY=PASS"
+fi
+
 install -d -o cripta -g cripta -m 0750 "$RUNTIME_ROOT" "$RUNTIME_ROOT/releases"
 install -d -o root -g cripta -m 0755 "$DASHBOARD_UI_ROOT" "$DASHBOARD_UI_ROOT/releases"
 install -d -o cripta -g cripta -m 2770 "$RESEARCH_TOOLING_ROOT" "$RESEARCH_TOOLING_ROOT/releases"
@@ -263,6 +295,8 @@ unit_specs=(
   "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
   "operations/systemd/cripta-u5-oi30s-source-soak.service|cripta-u5-oi30s-source-soak.service|runtime"
   "operations/systemd/cripta-universal-entry-consumer.service|cripta-universal-entry-consumer.service|runtime"
+  # Credential-free native MarketSource must own the journal before consumers.
+  "operations/systemd/cripta-native-public-trade-source.service|cripta-native-public-trade-source.service|runtime"
   "operations/systemd/cripta-universal-entry-observer.service|cripta-universal-entry-observer.service|runtime"
   "operations/systemd/cripta-universal-entry-shadow.service|cripta-universal-entry-shadow.service|runtime"
   "operations/systemd/cripta-universal-exit-shadow.service|cripta-universal-exit-shadow.service|runtime"
@@ -395,6 +429,7 @@ managed_services=(
   cripta-safety-observer.service
   cripta-shadow-command-worker.service
   cripta-universal-entry-consumer.service
+  # MarketSource is NOT stopped for ordinary trading release/backup.
   cripta-universal-entry-observer.service
   cripta-universal-exit-shadow.service
   cripta-universal-exit-consumer.service
@@ -424,6 +459,10 @@ for unit in "${discovered_sub_units[@]}"; do
 done
 
 declare -A was_active=()
+native_source_was_active=0
+if systemctl is-active --quiet cripta-native-public-trade-source.service; then
+  native_source_was_active=1
+fi
 services_stopped=0
 db_mutation_steps=0
 cutover_started=0
@@ -446,6 +485,14 @@ restore_pre_cutover_services() {
       systemctl is-active --quiet "$service" && recovery_failed=1
     fi
   done
+  # On failed first cutover restore the original inactive producer state;
+  # otherwise preserve the previous independently running native recorder.
+  if [[ "$native_source_was_active" == "0" ]]; then
+    systemctl stop cripta-native-public-trade-source.service >/dev/null 2>&1 ||
+      recovery_failed=1
+    systemctl disable cripta-native-public-trade-source.service >/dev/null 2>&1 ||
+      recovery_failed=1
+  fi
   if [[ "$recovery_failed" == "0" ]]; then
     echo "PRE_CUTOVER_SERVICE_RECOVERY=PASS"
   else
@@ -577,6 +624,8 @@ migration_files=(
   # Shared native MarketSource evidence. Required before Observer code cutover.
   # Additive only: no source cursor reset or financial gate mutation.
   operations/sql/20261107_native_public_trade_evidence.sql
+  # One independently recorded WS session/cursor per original provider stream.
+  operations/sql/20261108_native_public_trade_source_sessions.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
@@ -708,6 +757,56 @@ if runuser -u cripta -- env PYTHONDONTWRITEBYTECODE=1 \
 else
   echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=BLOCKED_OBSERVER_NOT_READY" >&2
 fi
+
+# Native writer starts independently BEFORE the read-only Observer.
+# This is market-data-only (no credentials/Exchange controls/OWNER ARM).
+# A source that never records accepted provider cursors cannot be considered
+# healthy merely because systemd says active.
+# A stale ACTIVE status/session is not a fresh five-symbol source proof.
+native_probe_started_at="$(sql_scalar "SELECT clock_timestamp()")"
+systemctl enable cripta-native-public-trade-source.service >/dev/null
+systemctl start cripta-native-public-trade-source.service
+native_source_ready=0
+for _attempt in {1..60}; do
+  if ! systemctl is-active --quiet cripta-native-public-trade-source.service; then
+    die "native MarketSource writer exited during source cutover"
+  fi
+  # Read only the current source process's exact advertised ACTIVE session.
+  # A stale ACTIVE row left by a killed old process cannot prove readiness.
+  source_session="$(runuser -u cripta -- python3 -c '
+import json,sys
+try:
+    v=json.load(open(sys.argv[1],encoding="utf-8"))
+    sid=v.get("session") if v.get("state")=="ACTIVE" else ""
+except Exception:
+    sid=""
+print(sid if isinstance(sid,str) else "")
+' /var/lib/cripta/native_public_trade_source/status.json)"
+  if [[ ! "$source_session" =~ ^[0-9a-f]{32}$ ]]; then
+    sleep 1
+    continue
+  fi
+  source_cursor_count="$(sql_scalar "SELECT count(DISTINCT c.external_symbol)
+    FROM analytics.native_public_trade_source_cursors c
+    JOIN analytics.native_public_trade_source_sessions s
+      ON s.source_session_id=c.source_session_id
+    WHERE s.source_session_id='$source_session'
+      AND s.state='ACTIVE'
+      AND s.market_source_id='ms-bybit-mainnet-public-v1'
+      AND s.last_accepted_at >= now() - interval '10 seconds'
+      AND c.accepted_at >= '$native_probe_started_at'::timestamptz
+      AND c.event_at >= '$native_probe_started_at'::timestamptz
+                            - interval '5 seconds'
+      AND c.event_at >= now() - interval '3 minutes'")"
+  if [[ "$source_cursor_count" == "5" ]]; then
+    native_source_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "$native_source_ready" == "1" ]] ||
+  die "independent native source five-symbol fresh cursor proof missing"
+echo "INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS"
 
 for service in "${managed_services[@]}"; do
   if [[ "$service" == "cripta-real-service-broker.service" ||

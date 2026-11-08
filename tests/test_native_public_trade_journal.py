@@ -53,6 +53,38 @@ def test_native_identity_and_source_semantics_are_strict() -> None:
         replace(_event(), producer_release_commit="not-a-release")
 
 
+def test_external_native_producer_reader_requires_exact_committed_row() -> None:
+    evidence = _event()
+
+    class Reader:
+        def __init__(self, row):
+            self.row = row
+            self.queries = []
+
+        def execute(self, sql, params):
+            self.queries.append((sql, params))
+            return self
+
+        def fetchone(self):
+            return self.row
+
+    original = (
+        evidence.external_symbol, evidence.event_at, evidence.price,
+        evidence.quantity, evidence.taker_side,
+    )
+    present = Reader(original)
+    assert NativePublicTradeJournal(present).require_committed(evidence) is True
+    assert "SELECT external_symbol" in present.queries[0][0]
+    assert len(present.queries) == 1
+
+    missing = Reader(None)
+    assert NativePublicTradeJournal(missing).require_committed(evidence) is False
+    changed = Reader((*original[:2], Decimal("999"), *original[3:]))
+    with pytest.raises(NativeTradeEvidenceConflict, match="EXTERNAL_WRITER_IDENTITY"):
+        NativePublicTradeJournal(changed).require_committed(evidence)
+    assert not any("INSERT" in sql for sql, _ in present.queries)
+
+
 def test_native_journal_rejects_implicit_autocommit_without_source_transaction() -> None:
     connection = SimpleNamespace(
         autocommit=True,
