@@ -3220,30 +3220,6 @@ def _run_observer_epoch(
         # effects share the SAME PostgreSQL transaction, not a second writer.
         # The journal is durable independently of Strategy/TradingAccount and
         # is never used as an Entry authorization or invented recovery cursor.
-        native_evidence: NativeTradeEvidence | None = None
-        if fact.event_kind == "PUBLIC_TRADE":
-            if cursor is None:
-                raise ContinuityNotProvable(
-                    "observer PUBLIC_TRADE lacks exact cursor"
-                )
-            native_evidence = _exact_native_evidence(
-                fact, cursor, source_transport=native_transport,
-            )
-            if EXTERNAL_NATIVE_SOURCE:
-                # The independent producer must COMMIT this exact provider
-                # event before the Observer evaluates any Strategy/Exit.
-                # Separate sockets may deliver the same event milliseconds
-                # apart; bound the wait and never invent/insert an absent row.
-                deadline = time.monotonic() + 1.5
-                while not NativePublicTradeJournal(connection).require_committed(
-                    native_evidence
-                ):
-                    if time.monotonic() >= deadline:
-                        raise ContinuityNotProvable(
-                            "NATIVE_SOURCE_EXTERNAL_EXACT_EVENT_NOT_COMMITTED"
-                        )
-                    time.sleep(0.025)
-
         def dispatch() -> None:
             if native_evidence is not None and not EXTERNAL_NATIVE_SOURCE:
                 # Legacy single-owner mode used only until the verified
@@ -3252,6 +3228,31 @@ def _run_observer_epoch(
             _process_fact_body(fact, cursor)
 
         with connection.transaction():
+            native_evidence: NativeTradeEvidence | None = None
+            if fact.event_kind == "PUBLIC_TRADE":
+                if cursor is None:
+                    raise ContinuityNotProvable(
+                        "observer PUBLIC_TRADE lacks exact cursor"
+                    )
+                native_evidence = _exact_native_evidence(
+                    fact, cursor, source_transport=native_transport,
+                )
+                if EXTERNAL_NATIVE_SOURCE:
+                    # The independent producer must COMMIT this exact provider
+                    # event before the Observer evaluates any Strategy/Exit.
+                    # Separate sockets may deliver the same event milliseconds
+                    # apart; bound the wait and never invent/insert an absent row.
+                    deadline = time.monotonic() + 1.5
+                    while not NativePublicTradeJournal(connection).require_committed(
+                        native_evidence
+                    ):
+                        if time.monotonic() >= deadline:
+                            raise ContinuityNotProvable(
+                                "NATIVE_SOURCE_EXTERNAL_EXACT_EVENT_NOT_COMMITTED"
+                            )
+                        time.sleep(0.025)
+
+
             dispatch_observer_fact_atomically(
                 connection,
                 symbol=fact.symbol,
@@ -3259,6 +3260,7 @@ def _run_observer_epoch(
                 p90_enabled=p90_consumer is not None,
                 dispatch=dispatch,
             )
+
 
     try:
         trade_mirror_thread.start()
