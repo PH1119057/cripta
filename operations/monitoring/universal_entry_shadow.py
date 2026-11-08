@@ -164,6 +164,11 @@ DATABASE_DSN = os.environ.get(
     "CRIPTA_U5_DATABASE_DSN", "dbname=cripta user=cripta host=/var/run/postgresql"
 )
 LOADED_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
+# Existing in-process journal writer is retained for a guarded rollback only.
+# Production switches to the independently supervised physical MarketSource.
+EXTERNAL_NATIVE_SOURCE = (
+    os.environ.get("CRIPTA_NATIVE_SOURCE_EXTERNAL", "DISABLED") == "ENABLED"
+)
 BASELINE_COMMIT = os.environ.get(
     "CRIPTA_U5_BASELINE_COMMIT", "49670cb0631a8742b2bf8dace9ab33d6b29a107d"
 ).strip()
@@ -3215,17 +3220,35 @@ def _run_observer_epoch(
         # effects share the SAME PostgreSQL transaction, not a second writer.
         # The journal is durable independently of Strategy/TradingAccount and
         # is never used as an Entry authorization or invented recovery cursor.
-        def dispatch() -> None:
-            if fact.event_kind == "PUBLIC_TRADE":
-                if cursor is None:
-                    raise ContinuityNotProvable(
-                        "observer PUBLIC_TRADE lacks exact cursor"
-                    )
-                NativePublicTradeJournal(connection).append(
-                    _exact_native_evidence(
-                        fact, cursor, source_transport=native_transport,
-                    )
+        native_evidence: NativeTradeEvidence | None = None
+        if fact.event_kind == "PUBLIC_TRADE":
+            if cursor is None:
+                raise ContinuityNotProvable(
+                    "observer PUBLIC_TRADE lacks exact cursor"
                 )
+            native_evidence = _exact_native_evidence(
+                fact, cursor, source_transport=native_transport,
+            )
+            if EXTERNAL_NATIVE_SOURCE:
+                # The independent producer must COMMIT this exact provider
+                # event before the Observer evaluates any Strategy/Exit.
+                # Separate sockets may deliver the same event milliseconds
+                # apart; bound the wait and never invent/insert an absent row.
+                deadline = time.monotonic() + 1.5
+                while not NativePublicTradeJournal(connection).require_committed(
+                    native_evidence
+                ):
+                    if time.monotonic() >= deadline:
+                        raise ContinuityNotProvable(
+                            "NATIVE_SOURCE_EXTERNAL_EXACT_EVENT_NOT_COMMITTED"
+                        )
+                    time.sleep(0.025)
+
+        def dispatch() -> None:
+            if native_evidence is not None and not EXTERNAL_NATIVE_SOURCE:
+                # Legacy single-owner mode used only until the verified
+                # physical cutover / for exact rollback, never concurrently.
+                NativePublicTradeJournal(connection).append(native_evidence)
             _process_fact_body(fact, cursor)
 
         with connection.transaction():
