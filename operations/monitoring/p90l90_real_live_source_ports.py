@@ -132,7 +132,25 @@ class P90RealLiveSourcePorts:
     def native_coverage(
         self, position: StrategyPosition, cursor: TradeCursor,
     ) -> tuple[bool, bool]:
-        """Prove from actual mirror trades between signed fill/prior MFE and tick.
+        """Prove a CURRENT, fresh native trade before evaluating Exit."""
+        return self._native_coverage(position, cursor, current_decision=True)
+
+    def native_historical_coverage(
+        self, position: StrategyPosition, cursor: TradeCursor,
+    ) -> tuple[bool, bool]:
+        """Prove one original MFE-only prefix trade without a live-age claim.
+
+        Only the Source-owned native_prefix provider may supply old trades.
+        Original mirror continuity/ordering and exact transaction/position
+        checks remain mandatory. This does not certify a current Exit action.
+        """
+        return self._native_coverage(position, cursor, current_decision=False)
+
+    def _native_coverage(
+        self, position: StrategyPosition, cursor: TradeCursor, *,
+        current_decision: bool,
+    ) -> tuple[bool, bool]:
+        """Prove exact signed fill-to-tick original sequence in ONE source txn.
 
         No invented source cursor. If previous MFE has fallen out of mirror
         retention, there is no shortcut: fail-closed and exact recovery needed.
@@ -219,7 +237,10 @@ class P90RealLiveSourcePorts:
                     "P90_REAL_LIVE_SOURCE_OLD_POSITION_RESTART_BRIDGE_UNVERIFIED"
                 ) from None
         at = datetime.now(UTC)
-        if not timedelta() <= at - cursor.traded_at <= timedelta(seconds=15):
+        if (
+            current_decision
+            and not timedelta() <= at - cursor.traded_at <= timedelta(seconds=15)
+        ):
             raise P90RealLiveSourceUnverified(
                 "P90_REAL_LIVE_SOURCE_NATIVE_EVENT_STALE"
             )
