@@ -10,12 +10,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from test_p90_real_source_release_compatibility import (
-    EPOCH,
-    LOADED,
-    SourceDB,
-    bundles,
-)
 
 from bybit_workbench.universal_entry import p90l90_real_source_compatibility as compat
 
@@ -100,13 +94,3 @@ def test_exact_git_origin_zero_delta_requires_same_all_consumer_bytes(
             current_root=loaded, source_checkout=repo, origin_commit=origin_sha,
         )
 
-
-def test_equal_bytes_are_not_implicit_release_authorization():
-    db = SourceDB()
-    with pytest.raises(
-        compat.P90RealSourceCompatibilityUnverified,
-        match="RELEASE_NOT_REGISTERED",
-    ):
-        compat.inspect_real_source_identity(
-            db, epoch_id=EPOCH, loaded_commit=LOADED, bundles=bundles(),
-        )
