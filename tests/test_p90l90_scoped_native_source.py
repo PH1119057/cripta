@@ -15,6 +15,7 @@ from bybit_workbench.market_identity import (
 )
 from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
     NativeSourceProofUnavailable,
+    read_ordered_native_events,
     read_scoped_native_source,
 )
 
@@ -131,3 +132,56 @@ def test_exact_symbols_and_current_utc_policy_are_mandatory() -> None:
     conn.now = datetime.now().replace(tzinfo=None)
     with pytest.raises(NativeSourceProofUnavailable):
         _read(conn)
+
+
+def test_ordered_source_reader_uses_provider_frame_ordinal_not_execid_sort() -> None:
+    now = datetime.now(UTC)
+    proof = _read(SourceDB(now), symbols=("LTCUSDT",))
+    assert proof.ready
+
+    class OrderedDB:
+        def __init__(self):
+            self.queries = []
+
+        def execute(self, sql, params):
+            self.queries.append((sql, params))
+            assert "native_public_trade_source_events" in sql
+            assert "ORDER BY e.frame_number,e.frame_index" in sql
+            return _Cursor([
+                (7, 0, BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                 bybit_instrument_id("linear", "LTCUSDT"),
+                 "LTCUSDT", 1000, "z-provider-first", now, now,
+                 Decimal("52.1"), Decimal("0.1"), "Buy"),
+                (7, 1, BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                 bybit_instrument_id("linear", "LTCUSDT"),
+                 "LTCUSDT", 1000, "a-provider-second", now, now,
+                 Decimal("52.2"), Decimal("0.2"), "Sell"),
+            ])
+
+    conn = OrderedDB()
+    rows = read_ordered_native_events(
+        conn, source=proof, after_frame=6, after_index=0, limit=100,
+    )
+    assert [(r.frame_number, r.frame_index, r.exec_id) for r in rows] == [
+        (7, 0, "z-provider-first"), (7, 1, "a-provider-second"),
+    ]
+    assert conn.queries[0][1] == (
+        "session-1", ["LTCUSDT"], 6, 0, 100,
+    )
+
+
+def test_ordered_reader_requires_verified_source_and_existing_boundary() -> None:
+    now = datetime.now(UTC)
+    proof = _read(SourceDB(now), symbols=("LTCUSDT",))
+    with pytest.raises(NativeSourceProofUnavailable):
+        read_ordered_native_events(
+            SourceDB(now), source=proof, after_frame=-1,
+            after_index=0, limit=100,
+        )
+    denied = _read(SourceDB(now, missing=("LTCUSDT",)),
+                   symbols=("LTCUSDT",))
+    with pytest.raises(NativeSourceProofUnavailable):
+        read_ordered_native_events(
+            SourceDB(now), source=denied, after_frame=0,
+            after_index=0, limit=100,
+        )
