@@ -541,7 +541,9 @@ def test_20261108_source_origin_allows_only_exact_reviewed_exit_ipc_bytes(
         current.parent.mkdir(parents=True, exist_ok=True)
         original.write_bytes(b"# immutable synthetic origin\n")
         current.write_bytes(
-            (Path("src/bybit_workbench") / relative).read_bytes()
+            subprocess.check_output([
+                "git", "show", f"HEAD:src/bybit_workbench/{relative}",
+            ])
             if relative in edited else original.read_bytes()
         )
     for relative in edited:
@@ -563,8 +565,10 @@ def test_20261108_source_origin_allows_only_exact_reviewed_exit_ipc_bytes(
         compat.verify_reviewed_bugfix_delta(
             current_root=loaded, origin_root=origin,
         )
-    changed.write_bytes((Path("src/bybit_workbench") /
-                         "universal_exit/p90l90_real_exit_execution.py").read_bytes())
+    changed.write_bytes(subprocess.check_output([
+        "git", "show",
+        "HEAD:src/bybit_workbench/universal_exit/p90l90_real_exit_execution.py",
+    ]))
 
     # No extra consumer and no foreign historical origin may inherit approval.
     extra = loaded / "src/bybit_workbench/universal_exit/unreviewed.py"
