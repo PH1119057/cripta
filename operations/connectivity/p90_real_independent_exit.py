@@ -136,7 +136,7 @@ def audit_firstfill_exit_result(
         "P90_EXIT_PROOF_BLOCKED:UNCLASSIFIED_STATUS"
     )
     row = connection.execute(
-        """SELECT details_json::jsonb->>'reason_code'
+        """SELECT details_json::jsonb->>'reason_code' AS reason_code
              FROM runtime.connection_events
             WHERE channel='exit' AND event='P90_FIRST_FILL_EXIT_UNVERIFIED'
               AND trading_account_id=%s
@@ -144,7 +144,7 @@ def audit_firstfill_exit_result(
             ORDER BY at_epoch_ms DESC,id DESC LIMIT 1""",
         (account, position_id),
     ).fetchone()
-    if row is not None and row[0] == code:
+    if row is not None and row["reason_code"] == code:
         return
     protected_at = candidate["initial_protection_confirmed_at"]
     connection.execute(

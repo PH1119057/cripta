@@ -59,7 +59,8 @@ class AuditConnection:
                 if event["account"] == account and event["detail"]["position_id"] == pos
             ]
             prior = rows[-1]["detail"]["reason_code"] if rows else None
-            return SimpleNamespace(fetchone=lambda: None if prior is None else (prior,))
+            result = None if prior is None else {"reason_code": prior}
+            return SimpleNamespace(fetchone=lambda: result)
         if "INSERT INTO runtime.connection_events" in sql:
             observed_ms, payload, account = params
             detail = json.loads(payload)
@@ -143,3 +144,20 @@ def test_only_safe_canonical_error_token_is_disclosed_in_blocked_result():
     assert subject.safe_firstfill_block_reason(
         RuntimeError("secret key=unsafe URL with provider response")
     ) == "P90_EXIT_PROOF_BLOCKED:RuntimeError"
+
+
+def test_installed_consumer_and_audit_use_exact_dict_row_contract():
+    source = (CONNECTIVITY / "universal_exit_consumer.py").read_text(encoding="utf-8")
+    independent = (CONNECTIVITY / "p90_real_independent_exit.py").read_text(
+        encoding="utf-8"
+    )
+    assert "row_factory=dict_row" in source
+    assert "AS reason_code" in independent
+    assert 'row["reason_code"] == code' in independent
+    # Regression: first insert is followed by the read of that same row.
+    # Under psycopg.rows.dict_row the result is NOT a tuple; previous
+    # row[0] crashed the systemd consumer every 2s after first durable audit.
+    db = AuditConnection()
+    subject.audit_firstfill_exit_result(db, result=SOURCE_FAILURE, observed_at=AT)
+    subject.audit_firstfill_exit_result(db, result=SOURCE_FAILURE, observed_at=AT)
+    assert len(db.writes) == 1
