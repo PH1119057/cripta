@@ -292,7 +292,7 @@ def _pending_clear_not_committed(blocked_at: datetime) -> bool:
     A lock timeout/DB error propagates to the supervisor's BLOCKED verdict.
     """
     with psycopg.connect(DSN, connect_timeout=3) as conn:
-        conn.execute("SET TRANSACTION READ ONLY")
+        conn.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED READ ONLY")
         conn.execute("SET LOCAL lock_timeout = '3s'")
         conn.execute(
             "SELECT pg_advisory_xact_lock(hashtext(%s),hashtext(%s))",
