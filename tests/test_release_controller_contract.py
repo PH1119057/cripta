@@ -119,7 +119,9 @@ def test_old_native_writer_is_stopped_only_after_db_backup_and_migrations():
         installer.index('if [[ "$native_code_changed" == "1" ]]; then', migration),
     )
     switch = installer.index('mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"')
-    new = installer.index("systemctl start cripta-native-public-trade-source.service")
+    new = installer.index(
+        "systemctl start cripta-native-public-trade-source.service", switch,
+    )
     assert before < migration < stop < switch < new
     assert installer.index("native_source_stopped_for_cutover=1") < switch
     assert "NATIVE_SOURCE_PRE_SWITCH_RECOVERY=STARTED_OLD_CODE" in installer
