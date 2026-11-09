@@ -40,7 +40,7 @@ def test_pinned_window_symbols_source_and_scope() -> None:
     assert m.LAST.isoformat() == "2025-09-30"
     assert len(list(m.days(m.FIRST, m.LAST))) == 193
     assert m.SYMBOLS == ("LTCUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT", "INJUSDT")
-    assert str(m.ROOT) == (
+    assert m.ROOT.as_posix() == (
         "/data/cripta/research/runs/p90l90_bull_2025_holdout_v1"
     )
     assert m.RESERVE_BYTES >= 15 * 1024**3
