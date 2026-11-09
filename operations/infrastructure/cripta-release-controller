@@ -559,6 +559,9 @@ def _verify_post_deploy_research_source_advance(
         or _git_remote_main() != remote
     ):
         raise ControllerError("POST_DEPLOY_REMOTE_MOVED_DURING_VERIFY")
+    latest_source, latest_clean = _source_state()
+    if latest_source != source or not latest_clean:
+        raise ControllerError("POST_DEPLOY_SOURCE_MOVED_DURING_VERIFY")
 
 
 def _postcheck(target: str) -> tuple[str, str, str, str]:
