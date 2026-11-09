@@ -303,3 +303,177 @@ def test_source_repair_oi_config_never_constructs_an_empty_symbol_set() -> None:
             fact_source_id="BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1",
             required_symbols=result,
         ).required_symbols == expected
+
+
+@pytest.mark.parametrize("ordinary_count", (0, 1, 2))
+def test_p90_scoped_repair_executes_independent_ordinary_fact_path(
+    ordinary_count: int,
+) -> None:
+    """Execute the actual epoch dispatch body, never an Exchange/DB worker."""
+    from contextlib import nullcontext
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    original = ast.parse(SOURCE.read_text(encoding="utf-8"))
+    epoch = next(
+        node for node in original.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_run_observer_epoch"
+    )
+    processor = next(
+        node for node in ast.walk(epoch)
+        if isinstance(node, ast.FunctionDef) and node.name == "_process_fact_body"
+    )
+    # Preserve the production function's nonlocal counters and every branch:
+    # only supply inert boundary ports to execute this real dispatch function.
+    harness = ast.parse(
+        "def make_processor():\n"
+        "    facts_received = 0\n"
+        "    evaluations_count = 0\n"
+        "    signals_count = 0\n"
+        "    return _process_fact_body, lambda: "
+        "(facts_received, evaluations_count, signals_count)\n"
+    )
+    wrapper = harness.body[0]
+    assert isinstance(wrapper, ast.FunctionDef)
+    wrapper.body.insert(-1, processor)
+    ast.fix_missing_locations(harness)
+
+    calls: list[tuple[object, dict[str, object]]] = []
+    oi_seen: set[str] = set()
+    stored: list[object] = []
+    paper_orders: list[tuple[object, object]] = []
+    ordinary_bundle = SimpleNamespace(
+        entry_plan=SimpleNamespace(
+            watch_policy=SimpleNamespace(
+                to_dict=lambda: {"geometry": {"operator": "R1"}},
+            ),
+        ),
+    )
+    ordinary_evaluation = SimpleNamespace(
+        signal=SimpleNamespace(
+            entry_plan_fingerprint="synthetic-ordinary-plan",
+            strategy_activation_id="synthetic-ordinary-activation",
+        ),
+        decision=None,
+    )
+
+    def evaluate(fact: object, **kwargs: object) -> tuple[object, ...]:
+        calls.append((fact, kwargs))
+        return (ordinary_evaluation,) if ordinary_count else ()
+
+    environment: dict[str, object] = {
+        "p90_real_source_only": False,
+        "p90_repair_ingest_only": True,
+        "observer_split": SimpleNamespace(
+            ordinary=tuple(object() for _ in range(ordinary_count)),
+        ),
+        "deduper": SimpleNamespace(accept=lambda _fact_id: True),
+        "oi_seen": oi_seen,
+        "refresh_inputs": lambda _at: None,
+        "global_context": None,
+        "coin_contexts": {},
+        "capacity": None,
+        "real_execution_selected_for": frozenset(),
+        "real_admission_ready_for": frozenset(),
+        "multi_account_candidates": {},
+        "connection": SimpleNamespace(),
+        "nullcontext": nullcontext,
+        "TechnicalReadiness": (
+            lambda ready, at, reason: SimpleNamespace(
+                ready=ready, observed_at=at, reason=reason,
+            )
+        ),
+        "engine": SimpleNamespace(process=evaluate),
+        "store": SimpleNamespace(
+            record_evaluation=lambda evaluation, provenance: stored.append(evaluation),
+        ),
+        "provenance": "synthetic-only",
+        "bundle_by_entry_plan": {"synthetic-ordinary-plan": ordinary_bundle},
+        "_maybe_record_reverse_transition": lambda *_args: None,
+        "paper": SimpleNamespace(
+            create_order=lambda evaluation, bundle, now: paper_orders.append(
+                (evaluation, bundle)
+            ),
+        ),
+        "entry_admission_port": None,
+        "execution_bindings": {},
+        "exchange_position_key": lambda account, symbol, index: (
+            f"{account}:{symbol}:{index}"
+        ),
+        "TRADING_ACCOUNT_ID": "synthetic-no-exchange",
+        "symbols": ("BTCUSDT", "APTUSDT"),
+        "sensor_ready": lambda _at: True,
+        "p90_consumer": None,
+        "p90l90_symbols": frozenset(("APTUSDT",)),
+    }
+    exec(compile(harness, str(SOURCE), "exec"), environment)
+    factory = environment["make_processor"]
+    assert callable(factory)
+    dispatch, counters = factory()
+    observed = SimpleNamespace(
+        event_kind="OPEN_INTEREST",
+        fact_id="synthetic-btc-oi-in-independent-observer",
+        symbol="BTCUSDT",
+        observed_at=datetime(2026, 11, 9, tzinfo=UTC),
+    )
+    dispatch(observed)
+    assert counters() == (
+        (1, 0, 0) if ordinary_count == 0 else (1, 1, 1)
+    )
+    assert oi_seen == {"BTCUSDT"}
+    assert stored == ([] if ordinary_count == 0 else [ordinary_evaluation])
+    assert paper_orders == (
+        [] if ordinary_count == 0
+        else [(ordinary_evaluation, ordinary_bundle)]
+    )
+    # Zero ordinary Plans = pure native-source repair, not even an
+    # evaluation. One/multiple ordinary Plans still reach their real Engine
+    # while the scoped P90 consumer is absent and has no financial power.
+    assert len(calls) == (0 if ordinary_count == 0 else 1)
+    if calls:
+        fact, kwargs = calls[0]
+        assert fact is observed
+        assert kwargs["allow_new_signals"] is True
+        assert kwargs["real_admission_required_for"] == frozenset()
+        assert kwargs["real_admission_ready_for"] == frozenset()
+        assert getattr(kwargs["technical_readiness"], "ready", None) is True
+
+
+def test_p90_repair_selects_only_ordinary_active_consumer_plans() -> None:
+    """Execute production active-consumer selector; P90 must remain blocked."""
+    source = ast.parse(SOURCE.read_text(encoding="utf-8"))
+    epoch = next(
+        node for node in source.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_run_observer_epoch"
+    )
+    selector = next(
+        node for node in ast.walk(epoch)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "active_source_consumers"
+            for target in node.targets
+        )
+    )
+    expression = compile(ast.Expression(selector.value), str(SOURCE), "eval")
+    ordinary = object()
+    blocked_p90 = object()
+    split = type("ObserverSplit", (), {"ordinary": (ordinary,)})()
+    bundles = (ordinary, blocked_p90)
+    assert eval(
+        expression,
+        {"tuple": tuple},
+        {
+            "observer_split": split,
+            "bundles": bundles,
+            "p90_repair_ingest_only": True,
+        },
+    ) == (ordinary,)
+    assert eval(
+        expression,
+        {"tuple": tuple},
+        {
+            "observer_split": split,
+            "bundles": bundles,
+            "p90_repair_ingest_only": False,
+        },
+    ) == bundles
