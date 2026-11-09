@@ -134,7 +134,6 @@ signal_deques = {side:deque() for side in SIDES}
 signal_events = {(side,bps):[] for side in SIDES for bps in THRESHOLDS_BPS}
 scenario_events = defaultdict(list)
 n = 0
-n = 0
 previous_day = None
 last_prices = {}
 candidate_counts = Counter()
@@ -209,7 +208,6 @@ while heap:
             controlled=books[case]
             if direction_events or controlled.pos[symbol] is not None:
                 controlled.handle(symbol,t,seq,px,direction_events,state)
-    last_prices[symbol] = px
     last_prices[symbol] = px
     n += 1
     day = int(t // 86400)
@@ -296,7 +294,6 @@ for side in SIDES:
         assert all(z["side"]==side.split("_")[0]
                    for z in books[case].trades)
 print(json.dumps({
-    "stage": "REPLAY_QC_PASS"print(json.dumps({
     "stage": "REPLAY_QC_PASS", "ticks": n,
     "control_closed": EXPECTED_CLOSED, "period": PERIOD,
     "counts": {side: reports[side]["counts"] for side in SIDES}
