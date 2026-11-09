@@ -516,14 +516,70 @@ def _postcheck_dashboard(
     return remote, source, dashboard
 
 
+# Only an independently published Research source advance is invisible to
+# the immutable, already installed trading runtime. The prefix list is the
+# canonical Research branch path set (DEV §50.1), not a generic "non-core" pass.
+POST_DEPLOY_RESEARCH_ONLY_PREFIXES = (
+    "research/",
+    "tests/research/",
+    "scripts/research/",
+)
+
+
+def _verify_post_deploy_research_source_advance(
+    *, target: str, source: str, remote: str, remote_tree: str,
+) -> None:
+    """Check an exact, clean, current-main Research fast-forward after cutover.
+
+    Never confers SOURCE_LIVE_IDENTITY, LIVE/OWNER ARM, strategy readiness,
+    further deployment authorization, or Exchange protection evidence.
+    """
+    if source != remote:
+        raise ControllerError("POST_DEPLOY_SOURCE_REMOTE_DIVERGENCE")
+    if _git("rev-parse", f"{source}^{{tree}}") != remote_tree:
+        raise ControllerError("POST_DEPLOY_SOURCE_TREE_MISMATCH")
+    if _git("merge-base", target, source) != target:
+        raise ControllerError("POST_DEPLOY_SOURCE_NOT_DESCENDANT")
+    # --no-renames makes old/new path sides independently subject to the
+    # research boundary; -z disambiguates whitespace and newlines in paths.
+    delta = _git(
+        "diff", "--no-renames", "--name-only", "-z", target, source, "--",
+    )
+    paths = tuple(path for path in delta.split("\0") if path)
+    if not paths or any(
+        not path.startswith(POST_DEPLOY_RESEARCH_ONLY_PREFIXES)
+        or path in POST_DEPLOY_RESEARCH_ONLY_PREFIXES
+        for path in paths
+    ):
+        raise ControllerError("POST_DEPLOY_UNSAFE_SOURCE_DELTA")
+    latest_remote, latest_tree = current_main()
+    if (
+        latest_remote != remote
+        or latest_tree != remote_tree
+        or _git_remote_main() != remote
+    ):
+        raise ControllerError("POST_DEPLOY_REMOTE_MOVED_DURING_VERIFY")
+    latest_source, latest_clean = _source_state()
+    if latest_source != source or not latest_clean:
+        raise ControllerError("POST_DEPLOY_SOURCE_MOVED_DURING_VERIFY")
+
+
 def _postcheck(target: str) -> tuple[str, str, str, str]:
     runtime, _runtime_path = _commit_from_current(RUNTIME_ROOT)
     tooling, _tooling_path = _commit_from_current(TOOLING_ROOT)
     source, clean = _source_state()
     state_commit = (RELEASE_STATE / "INSTALLED_COMMIT").read_text(encoding="utf-8").strip()
-    if not clean or any(value != target for value in (runtime, tooling, source, state_commit)):
+    # The immutable release and durable state always stay on the reviewed
+    # target. Neither Research source movement nor a moving remote may stand
+    # in for a stale trading runtime or tooling installation.
+    if not clean or any(value != target for value in (runtime, tooling, state_commit)):
         raise ControllerError("POST_DEPLOY_IDENTITY_MISMATCH")
-    remote, _tree = current_main()
+    remote, remote_tree = current_main()
+    if source != target:
+        _verify_post_deploy_research_source_advance(
+            target=target, source=source, remote=remote,
+            remote_tree=remote_tree,
+        )
     return remote, source, runtime, state_commit
 
 
@@ -749,6 +805,9 @@ def main() -> int:
             installed_commit=post_runtime,
             release_state_commit=post_state,
             remote_head=post_remote,
+            post_deploy_source_advance=(
+                "RESEARCH_ONLY" if post_source != target else "NONE"
+            ),
         )
         print(f"RELEASE_CONTROLLER={final_status}")
         print(f"REMOTE_HEAD={post_remote}")
