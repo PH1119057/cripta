@@ -34,14 +34,18 @@ def controller():
     statements = []
     for node in parsed.body:
         if (
-            isinstance(node, (ast.FunctionDef, ast.ClassDef))
-            and node.name in needed
-        ):
-            statements.append(node)
-        elif isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name)
-            and target.id == "POST_DEPLOY_RESEARCH_ONLY_PREFIXES"
-            for target in node.targets
+            (
+                isinstance(node, (ast.FunctionDef, ast.ClassDef))
+                and node.name in needed
+            )
+            or (
+                isinstance(node, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name)
+                    and target.id == "POST_DEPLOY_RESEARCH_ONLY_PREFIXES"
+                    for target in node.targets
+                )
+            )
         ):
             statements.append(node)
     assert len(statements) == 4
