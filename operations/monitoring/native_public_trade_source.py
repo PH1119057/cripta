@@ -209,7 +209,29 @@ def _persist_frame(
                 raise NativeSourceInputUnverified(
                     "NATIVE_SOURCE_ORDER_REGRESSION"
                 )
-            journal.append(event)
+            if not journal.append(event):
+                # The same immutable native execId may be redelivered by
+                # WebSocket. It is NOT a second causal trade and must not
+                # advance the ordered checkpoint to a nonexistent event row.
+                continue
+            # Persist original provider WS ordering, including every
+            # same-sequence distinct execId, before advancing a cursor.
+            # Duplicates of the identical native identity are harmless;
+            # a frame-position collision with DIFFERENT identity is not.
+            connection.execute(
+                """INSERT INTO analytics.native_public_trade_source_events
+                   (source_session_id,frame_number,frame_index,
+                    market_source_id,instrument_id,external_symbol,
+                    exchange_sequence,exec_id,event_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (
+                       source_session_id,market_source_id,instrument_id,
+                       exchange_sequence,exec_id
+                   ) DO NOTHING""",
+                (session, frame_number, index, event.market_source_id,
+                 event.instrument_id, event.external_symbol,
+                 event.exchange_sequence, event.exec_id, event.event_at),
+            )
             connection.execute(
                 """INSERT INTO analytics.native_public_trade_source_cursors
                    (source_session_id,market_source_id,instrument_id,

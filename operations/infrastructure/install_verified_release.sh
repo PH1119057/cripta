@@ -678,6 +678,9 @@ migration_files=(
   operations/sql/20261107_native_public_trade_evidence.sql
   # One independently recorded WS session/cursor per original provider stream.
   operations/sql/20261108_native_public_trade_source_sessions.sql
+  # Immutable provider WS frame order: required for scoped native P90 reading.
+  operations/sql/20261109_native_public_trade_source_event_order.sql
+  operations/sql/20261109_p90_scoped_native_consumer_checkpoint.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"

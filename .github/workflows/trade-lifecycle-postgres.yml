@@ -105,6 +105,8 @@ jobs:
             operations/sql/20261106_p90_native_sequence_exec_ids.sql
             operations/sql/20261107_native_public_trade_evidence.sql
             operations/sql/20261108_native_public_trade_source_sessions.sql
+            operations/sql/20261109_native_public_trade_source_event_order.sql
+            operations/sql/20261109_p90_scoped_native_consumer_checkpoint.sql
             operations/sql/20261101_owner_full_contour_diagnostic.sql
             operations/sql/20261101_subordinate_diagnostic_binding.sql
             operations/sql/20261101_owner_full_contour_diagnostic_v2.sql
