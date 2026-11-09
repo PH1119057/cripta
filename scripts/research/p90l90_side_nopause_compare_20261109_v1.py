@@ -170,10 +170,16 @@ for symbol in SYMBOLS:
     row = data[symbol]
     if PERIOD == "90d":
         assert row["seen_candidate"] == sum(map(len, row["events"].values()))
+        files = row["manifest"]["inputs"]
+        assert len(files) == 100, "missing 10d warmup or 90d data"
+        assert files[0]["file"].endswith("2026-05-08.csv.gz")
+        assert files[10]["file"].endswith("2026-05-18.csv.gz")
+        assert files[-1]["file"].endswith("2026-08-15.csv.gz")
         assert row["read_count"] == sum(
-            v["rows"] for v in row["manifest"]["inputs"]
-        )
-        expected_eval += row["read_count"]
+            int(v["rows"]) for v in files
+        ), "full 100d source coverage mismatch"
+        # The reader checks all 100 source days; its yield excludes 10d warmup.
+        expected_eval += sum(int(v["rows"]) for v in files[10:])
     else:
         assert row["seen_events"] == sum(map(len, row["events"].values()))
         assert row["seen_rows"] == sum(
