@@ -22,10 +22,16 @@ def test_longonly_replay_source_compiles() -> None:
 def test_longonly_replay_has_exact_direction_and_baseline_isolation() -> None:
     source = SOURCE.read_text(encoding="utf-8")
     assert 'long=tuple(e for e in events if e["side"]=="LONG")' in source
-    assert 'books={"CONTROL":old.EntryEmbargo(2,48),"LONG_ONLY":old.EntryEmbargo(2,48)}' in source
+    assert (
+        'books={"CONTROL":old.EntryEmbargo(2,48),"LONG_ONLY":old.EntryEmbargo(2,48)}'
+        in source
+    )
     assert 'books["CONTROL"].handle(symbol,t,seq,px,events,state)' in source
     assert 'books["LONG_ONLY"].handle(symbol,t,seq,px,long,state)' in source
-    assert source.index('long=tuple(e for e in events if e["side"]=="LONG")') < source.index('books["LONG_ONLY"].handle')
+    assert (
+        source.index('long=tuple(e for e in events if e["side"]=="LONG")')
+        < source.index('books["LONG_ONLY"].handle')
+    )
     assert 'CONTROL TRADE-BY-TRADE PARITY FAILED' in source
     assert 'control count parity' in source
     assert '"short_only_counts"' not in source
@@ -38,7 +44,13 @@ def test_longonly_output_is_isolated_and_writes_after_qc() -> None:
     assert 'assert os.geteuid()==107' in source
     assert 'smoke-hours' in source
     assert 'if SMOKE_HOURS:' in source
-    assert source.index('assert books["CONTROL"].trades==reference') < source.index('OUT.mkdir(mode=0o2770)')
-    assert source.index('OUT.mkdir(mode=0o2770)') < source.index('(OUT/"result.json").write_text')
+    assert (
+        source.index('assert books["CONTROL"].trades==reference')
+        < source.index('OUT.mkdir(mode=0o2770)')
+    )
+    assert (
+        source.index('OUT.mkdir(mode=0o2770)')
+        < source.index('(OUT/"result.json").write_text')
+    )
     assert '"fee_model":"Conservative taker/taker' in source
     assert 'capital_admission_warning' in source
