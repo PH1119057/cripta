@@ -13,6 +13,7 @@ import pytest
 
 from operations.monitoring.universal_entry_shadow import (
     _p90_expected_initial_cursor_wait,
+    _scoped_p90_ordinary_isolation_allowed,
     _p90_native_recovery_failure,
     _scoped_p90_repair_ingest_allowed,
 )
@@ -477,3 +478,69 @@ def test_p90_repair_selects_only_ordinary_active_consumer_plans() -> None:
             "p90_repair_ingest_only": False,
         },
     ) == bundles
+
+
+def test_ordinary_isolation_after_p90_failure_has_no_financial_grant() -> None:
+    # P90 selected REAL permissions do NOT become an ordinary Entry binding.
+    # The isolated bundle set must contain only unselected SHADOW/PAPER Plans.
+    good = {
+        "p90_real_count": 2,
+        "ordinary_count": 1,
+        "paper_consumer_count": 0,
+        "mainnet_gate_enabled": False,
+        "selected_ordinary_activations": frozenset(),
+    }
+    assert _scoped_p90_ordinary_isolation_allowed(**good)
+    for change in (
+        {"p90_real_count": 1},
+        {"p90_real_count": 0},
+        {"ordinary_count": 0},
+        {"paper_consumer_count": 1},
+        {"mainnet_gate_enabled": True},
+        {"selected_ordinary_activations": frozenset({"ordinary-real"})},
+    ):
+        scope = dict(good)
+        scope.update(change)
+        assert not _scoped_p90_ordinary_isolation_allowed(**scope)
+
+
+def test_p90_fault_ordinary_only_route_never_includes_p90_consumer() -> None:
+    """Guard the actual runner epoch selection and fail-closed P90 isolation."""
+    source = SOURCE.read_text(encoding="utf-8")
+    module = ast.parse(source)
+    runner = next(
+        node for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_run_multi_strategy_observer"
+    )
+    body = ast.get_source_segment(source, runner)
+    assert body is not None
+    for expected in (
+        "force_p90_ordinary_isolation = False",
+        "ordinary_isolation_bundles = isolated_split.ordinary",
+        "selected_ordinary = _real_execution_selected_activation_ids(",
+        "_scoped_p90_ordinary_isolation_allowed(",
+        "source_repair_only=force_p90_source_repair,",
+        "isolated_p90_block=force_p90_ordinary_isolation,",
+        "P90_ORDINARY_ISOLATION_SCOPE_DRIFT",
+        "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_PREPARING",
+        "P90_REAL_NATIVE_WAIT_FOR_EVIDENCE",
+    ):
+        assert expected in body
+    assert body.index(
+        "fault_id = _record_observer_runtime_fault("
+    ) < body.index("force_p90_ordinary_isolation = True")
+    assert body.index("ordinary_isolation_bundles = isolated_split.ordinary") < (
+        body.index("outcome = _run_observer_epoch(")
+    )
+    assert "wait_blocked(connection, {" in body
+    epoch = next(
+        node for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_run_observer_epoch"
+    )
+    epoch_body = ast.get_source_segment(source, epoch)
+    assert epoch_body is not None
+    assert "P90_ORDINARY_ISOLATION_TOPOLOGY_INVALID" in epoch_body
+    assert "if isolated_p90_block" in epoch_body
+    assert "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_ACTIVE" in epoch_body
+    assert "if isolated_p90_block else" in epoch_body
