@@ -9,7 +9,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-SOURCE = Path(__file__).resolve().parents[1] / "scripts/research/p90l90_longonly_full90_20261109_v1.py"
+SOURCE = (
+    Path(__file__).resolve().parents[1]
+    / "scripts/research/p90l90_longonly_full90_20261109_v1.py"
+)
 
 
 def test_longonly_replay_source_compiles() -> None:
