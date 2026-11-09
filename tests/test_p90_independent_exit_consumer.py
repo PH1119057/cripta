@@ -254,3 +254,118 @@ def test_signed_wrong_uid_blocks_the_exit_without_preparing_order(monkeypatch):
     result=subject.run_p90_exit_once(ExitConnection(),now=AT)
     assert result=="P90_REAL_EXIT_PRIVATE_SIGNED_UID_MISMATCH"
     assert not seen
+
+
+@pytest.mark.parametrize("p90_verdict", (
+    "P90_NO_PROTECTED_POSITION_REQUIRING_TRAIL",
+    "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED",
+    "P90_EXIT_PROOF_BLOCKED:P90IndependentExitBlocked",
+))
+def test_p90_blocked_or_idle_does_not_veto_independent_ordinary_exit(
+    monkeypatch: pytest.MonkeyPatch, p90_verdict: str,
+) -> None:
+    """Execute actual universal Exit consumer with no DB/Exchange connections."""
+    from operations.connectivity import (
+        p90_real_independent_exit as p90_owner,
+        universal_exit_consumer as ordinary_exit,
+    )
+
+    events: list[str] = []
+    connection = object()
+
+    def p90_once(db: object, *, now: datetime) -> str:
+        assert db is connection and now == AT
+        events.append("p90")
+        return p90_verdict
+
+    def audit(db: object, *, result: str, observed_at: datetime) -> None:
+        assert db is connection and result == p90_verdict
+        assert observed_at == AT
+        events.append("audit")
+
+    def ordinary_materialize(db: object, *, now: datetime) -> str:
+        assert db is connection and now == AT
+        events.append("ordinary-materialize")
+        return "NO_PENDING_DECISION"
+
+    def ordinary_dispatch(db: object, *, now: datetime) -> str:
+        assert db is connection and now == AT
+        events.append("ordinary-dispatch")
+        return "ORDINARY_EXIT_DISPATCHED"
+
+    monkeypatch.setattr(p90_owner, "run_p90_exit_once", p90_once)
+    monkeypatch.setattr(p90_owner, "audit_firstfill_exit_result", audit)
+    monkeypatch.setattr(ordinary_exit, "materialize_once", ordinary_materialize)
+    monkeypatch.setattr(ordinary_exit, "dispatch_once", ordinary_dispatch)
+
+    assert ordinary_exit.run_once(connection, now=AT) == "ORDINARY_EXIT_DISPATCHED"
+    assert events == [
+        "p90", "audit", "ordinary-materialize", "ordinary-dispatch",
+    ]
+
+
+@pytest.mark.parametrize("materialized", (
+    "REQUEST_CREATED:synthetic-ordinary-exit",
+    "DECISION_BLOCKED:synthetic-ordinary-exit",
+))
+def test_p90_repair_denial_does_not_hide_independent_ordinary_exit_result(
+    monkeypatch: pytest.MonkeyPatch, materialized: str,
+) -> None:
+    from operations.connectivity import (
+        p90_real_independent_exit as p90_owner,
+        universal_exit_consumer as ordinary_exit,
+    )
+
+    observed: list[str] = []
+    monkeypatch.setattr(
+        p90_owner, "run_p90_exit_once",
+        lambda _db, *, now: "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED",
+    )
+    monkeypatch.setattr(
+        p90_owner, "audit_firstfill_exit_result",
+        lambda *_args, **_kwargs: observed.append("audit"),
+    )
+    monkeypatch.setattr(
+        ordinary_exit, "materialize_once",
+        lambda _db, *, now: observed.append("materialize") or materialized,
+    )
+    monkeypatch.setattr(
+        ordinary_exit, "dispatch_once",
+        lambda *_args, **_kwargs: pytest.fail(
+            "must not dispatch an unrelated blocked/unpublished decision"
+        ),
+    )
+    assert ordinary_exit.run_once(object(), now=AT) == materialized
+    assert observed == ["audit", "materialize"]
+
+
+def test_fresh_p90_exit_request_is_prioritized_without_duplicate_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from operations.connectivity import (
+        p90_real_independent_exit as p90_owner,
+        universal_exit_consumer as ordinary_exit,
+    )
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        p90_owner, "run_p90_exit_once",
+        lambda _db, *, now: calls.append("p90") or
+        "P90_EXIT_TRAIL035_REQUEST_PUBLISHED",
+    )
+    monkeypatch.setattr(
+        p90_owner, "audit_firstfill_exit_result",
+        lambda *_args, **_kwargs: calls.append("audit"),
+    )
+    monkeypatch.setattr(
+        ordinary_exit, "materialize_once",
+        lambda *_args, **_kwargs: pytest.fail("no duplicate materialization"),
+    )
+    monkeypatch.setattr(
+        ordinary_exit, "dispatch_once",
+        lambda *_args, **_kwargs: pytest.fail("no duplicate dispatch"),
+    )
+    assert ordinary_exit.run_once(object(), now=AT) == (
+        "P90_EXIT_TRAIL035_REQUEST_PUBLISHED"
+    )
+    assert calls == ["p90", "audit"]
