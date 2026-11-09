@@ -3680,7 +3680,13 @@ def observer_runtime_fault_state() -> dict[str, object]:
             except (ValueError, TypeError):
                 pass
             else:
-                if when.tzinfo is not None:
+                if (
+                    when.tzinfo is not None
+                    and str(details.get("error_type") or "").startswith("P90Real")
+                ):
+                    # Only legacy P90 recovery/compatibility faults were in
+                    # the 19-item stale operator queue at the owner reset.
+                    # Other Observer error types remain visible unchanged.
                     visible = (
                         visible
                         and when.astimezone(UTC) >= observer_attention_reset_at
