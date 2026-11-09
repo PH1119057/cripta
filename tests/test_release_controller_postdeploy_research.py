@@ -38,18 +38,18 @@ def controller():
             and node.name in needed
         ):
             statements.append(node)
-        elif isinstance(node, ast.Assign):
-            if any(
-                isinstance(target, ast.Name)
-                and target.id == "POST_DEPLOY_RESEARCH_ONLY_PREFIXES"
-                for target in node.targets
-            ):
-                statements.append(node)
+        elif isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name)
+            and target.id == "POST_DEPLOY_RESEARCH_ONLY_PREFIXES"
+            for target in node.targets
+        ):
+            statements.append(node)
     assert len(statements) == 4
     actual = ast.Module(body=statements, type_ignores=[])
     module = ModuleType("cripta_release_controller_postdeploy_test")
     module.RUNTIME_ROOT = Path("/isolated/runtime")
     module.TOOLING_ROOT = Path("/isolated/tooling")
+    module.RELEASE_STATE = Path("/isolated/release-state")
     exec(compile(actual, str(CONTROLLER_PATH), "exec"), module.__dict__)
     return module
 
