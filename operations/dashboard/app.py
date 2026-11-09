@@ -5509,6 +5509,13 @@ P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC = frozenset({
 })
 P90_REAL_READINESS_PRIVATE_ATTEMPT_SECONDS = P90_ACCOUNT_PROOF_TIMEOUT_SECONDS
 P90_REAL_READINESS_RETRY_SLEEP_SECONDS = 0.25
+# A P90 OPEN Exit source-only repair state cannot establish normal Entry/Exit
+# readiness by waiting 180 seconds. Fail promptly but preserve the closed
+# financial gate and all original mandatory readiness conditions.
+P90_REAL_READINESS_SOURCE_REPAIR_ONLY_PREFIX = (
+    "P90 REAL v3 PREARM: source-only observer not exact/fresh: "
+    "SOURCE_REPAIR_ONLY:"
+)
 P90_REAL_MAIN_ACCOUNT_ID = "ta-2122c81ecff14f3b85b102db605212f7"
 P90_REAL_MAIN_CONNECTOR_ID = "ac-ed73de20410548d6841aeafa5f196f70"
 P90_REAL_SUB_ACCOUNT_ID = "ta-853ac5fcd58185697396d33cd57459fa"
@@ -5610,6 +5617,11 @@ def _wait_p90_real_v3_technical_evidence(
             )
         except P90PrearmEvidenceBlocked as exc:
             last_blocker = exc
+            # A deliberately source-only P90 repair is a typed blocking state,
+            # not a transient market warmup. Do not spend the whole owner-arm
+            # preparation timeout repeatedly asking the same impossible proof.
+            if str(exc).startswith(P90_REAL_READINESS_SOURCE_REPAIR_ONLY_PREFIX):
+                raise
             if time.monotonic() >= deadline:
                 raise
             time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
@@ -6062,9 +6074,16 @@ def _u6_prepare_p90_real_v3_readiness(
             retry_eligible=False,
         )
     except Exception as exc:
+        source_repair_only = (
+            isinstance(exc, P90PrearmEvidenceBlocked)
+            and str(exc).startswith(P90_REAL_READINESS_SOURCE_REPAIR_ONLY_PREFIX)
+        )
         return _mark_p90_readiness_blocked(
             request_id=request_id,
-            code="TECHNICAL_EVIDENCE_BLOCKED",
+            code=(
+                "P90_EXIT_SOURCE_ONLY_NOT_READY"
+                if source_repair_only else "TECHNICAL_EVIDENCE_BLOCKED"
+            ),
             detail=f"{type(exc).__name__}:{exc}",
             retry_eligible=True,
         )
