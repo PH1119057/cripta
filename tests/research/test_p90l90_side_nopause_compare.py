@@ -21,6 +21,11 @@ def test_compilation_and_both_periods() -> None:
     assert 'choices=("90d", "29d")' in text
     assert "EXPECTED_TICKS = 68988768 if PERIOD" in text
     assert "EXPECTED_CLOSED = 730 if PERIOD" in text
+    assert 'assert len(files) == 100' in text
+    assert 'files[0]["file"].endswith("2026-05-08.csv.gz")' in text
+    assert 'files[10]["file"].endswith("2026-05-18.csv.gz")' in text
+    assert "for v in files[10:]" in text
+    assert "expected_eval += row[\"read_count\"]" not in text
 
 
 def test_disable_only_embargo_and_keep_independent_books() -> None:
