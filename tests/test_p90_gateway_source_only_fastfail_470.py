@@ -12,7 +12,6 @@ import types
 
 import pytest
 
-
 APP = pathlib.Path("operations/dashboard/app.py")
 HTML = pathlib.Path("operations/dashboard/index.html")
 SOURCE_ONLY = (
