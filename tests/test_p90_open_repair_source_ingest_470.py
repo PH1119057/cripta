@@ -13,8 +13,8 @@ import pytest
 
 from operations.monitoring.universal_entry_shadow import (
     _p90_expected_initial_cursor_wait,
-    _scoped_p90_ordinary_isolation_allowed,
     _p90_native_recovery_failure,
+    _scoped_p90_ordinary_isolation_allowed,
     _scoped_p90_repair_ingest_allowed,
 )
 
