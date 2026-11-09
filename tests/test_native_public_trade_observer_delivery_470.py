@@ -5,6 +5,7 @@ contracts are used. No Exchange, strategy permission or real account access.
 """
 from __future__ import annotations
 
+import ast
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -262,3 +263,35 @@ def test_source_delivery_is_never_strategy_or_financial_gate():
     assert "GRANT SELECT,INSERT,UPDATE" in sql
     assert "REVOKE DELETE,TRUNCATE" in sql
     assert "20261110_native_public_trade_observer_delivery.sql" in installer
+
+
+def test_observer_uses_git_checkout_not_historical_strategy_snapshot() -> None:
+    """The deployed source snapshot may be absent or lack .git entirely."""
+    tree = ast.parse(
+        Path("operations/monitoring/universal_entry_shadow.py").read_text(
+            encoding="utf-8"
+        )
+    )
+    roots = [
+        node.value for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "NATIVE_SOURCE_GIT_CHECKOUT"
+            for target in node.targets
+        )
+    ]
+    assert len(roots) == 1
+    assert isinstance(roots[0], ast.Call)
+    assert ast.literal_eval(roots[0].args[0]) == "/srv/cripta/source_checkout"
+
+    proof_calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "active_native_observer_source"
+    ]
+    assert len(proof_calls) == 1
+    kwargs = {kw.arg: kw.value for kw in proof_calls[0].keywords}
+    assert isinstance(kwargs["source_checkout"], ast.Name)
+    assert kwargs["source_checkout"].id == "NATIVE_SOURCE_GIT_CHECKOUT"
