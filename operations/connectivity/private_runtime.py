@@ -15,6 +15,7 @@ import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
+from collections.abc import Callable
 from pathlib import Path
 
 import psycopg
@@ -1553,6 +1554,53 @@ def own_p90_real_signed_position_reader(
     )
 
 
+_P90_FIRST_FILL_GENERATION_PROOF_RETRY_SECONDS = 3.0
+_P90_FIRST_FILL_GENERATION_PROOF_SLEEP_SECONDS = 0.2
+_P90_FIRST_FILL_GENERATION_PROOF_AGE_SECONDS = 12.0
+def _p90_bounded_first_fill_signed_proof[TProof](
+    attempt: Callable[[], TProof],
+    *,
+    position: StrategyPosition,
+    event_kind: str,
+    utc_now: Callable[[], datetime] = lambda: datetime.now(UTC),
+    monotonic: Callable[[], float] = time.monotonic,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> TProof:
+    """Bound one postfill account-generation race; never waive private proof.
+
+    A newly filled position can be durable before the credential-local
+    account snapshot is COMPLETE. The first signed proof then fails closed.
+    Only the exact generation-unavailable code may be retried, for at most
+    three seconds and only immediately after a protected native first fill.
+    Every attempt re-runs the *original* signed account/WS/UID/size/protection
+    checks, never substituting a prior prefill generation or local hot row.
+    """
+    from bybit_workbench.universal_exit.p90l90_real_signed_position import (
+        P90RealSignedPositionUnverified,
+    )
+
+    checked_at = utc_now()
+    age = (checked_at - position.fill_at).total_seconds()
+    if (
+        event_kind != "TRADE"
+        or position.initial_protection_confirmed_at is None
+        or position.initial_protection_confirmed_at > checked_at
+        or not 0 <= age <= _P90_FIRST_FILL_GENERATION_PROOF_AGE_SECONDS
+    ):
+        return attempt()
+    deadline = monotonic() + _P90_FIRST_FILL_GENERATION_PROOF_RETRY_SECONDS
+    while True:
+        try:
+            return attempt()
+        except P90RealSignedPositionUnverified as exc:
+            if str(exc) != "P90_REAL_SIGNED_GENERATION_UNAVAILABLE":
+                raise
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise
+            sleeper(min(_P90_FIRST_FILL_GENERATION_PROOF_SLEEP_SECONDS, remaining))
+
+
 def _p90_private_ipc_evidence_handler(
     raw: dict[str, object],
     *,
@@ -1630,7 +1678,11 @@ def _p90_private_ipc_evidence_handler(
             cursor = TradeCursor(
                 symbol=symbol, seq=seq, exec_id=exec_id, traded_at=at
             )
-            evidence = signed_reader(position, cursor)
+            evidence = _p90_bounded_first_fill_signed_proof(
+                lambda: signed_reader(position, cursor),
+                position=position,
+                event_kind=kind,
+            )
         else:
             evidence = signed_reader.for_closed_boundary(position, at)
         # Re-check exact owner in the same READ ONLY repeatable transaction.
