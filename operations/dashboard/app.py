@@ -3592,6 +3592,9 @@ def _current_operator_error_notice(last_seen: object, detected_at: datetime) -> 
 
 
 def observer_runtime_fault_state() -> dict[str, object]:
+    # Exact owner-directed attention epoch, Observer read-model ONLY.
+    # No DELETE, automatic RESOLVED/ACK, or financial permission changes.
+    observer_attention_reset_at = datetime(2026, 11, 9, 0, 40, tzinfo=UTC)
     try:
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
@@ -3667,9 +3670,28 @@ def observer_runtime_fault_state() -> dict[str, object]:
                 ),
                 "p90_operation_request_id": operation_request_id,
             }
-            if _current_operator_error_notice(
-                details.get("last_seen_at") or detected, detected_at,
-            ):
+            raw_seen = details.get("last_seen_at") or detected
+            visible = _current_operator_error_notice(raw_seen, detected_at)
+            # Invalid or naive timestamps are NOT silently hidden.
+            try:
+                when = datetime.fromisoformat(
+                    str(raw_seen).replace("Z", "+00:00")
+                )
+            except (ValueError, TypeError):
+                pass
+            else:
+                if (
+                    when.tzinfo is not None
+                    and str(details.get("error_type") or "").startswith("P90Real")
+                ):
+                    # Only legacy P90 recovery/compatibility faults were in
+                    # the 19-item stale operator queue at the owner reset.
+                    # Other Observer error types remain visible unchanged.
+                    visible = (
+                        visible
+                        and when.astimezone(UTC) >= observer_attention_reset_at
+                    )
+            if visible:
                 items.append(item)
             else:
                 archived_items.append(item)
@@ -3690,7 +3712,7 @@ def observer_runtime_fault_state() -> dict[str, object]:
         "count": len(items),
         "items": items,
         "archived_items": archived_items,
-        "attention_reset_at": OPERATOR_ERROR_ATTENTION_RESET_AT.isoformat(),
+        "attention_reset_at": observer_attention_reset_at.isoformat(),
         "historical_open_count": historical_open_count,
         "superseded_count": 0,
         "p90_operation_request_id": operation_request_id,
