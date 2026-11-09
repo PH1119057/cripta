@@ -695,6 +695,34 @@ smoke безопасен для данного пути.
    deploy и LIVE-arm имеют разные owner approvals и канонические gates.
    Успех уровней 1–2 не даёт права на уровень 3.
 
+**Штатное редактирование admin-конфигурации SentinelX — CHECKED HERE
+2026-11-09, Issue #470.** В установленном агенте `0.11.14`
+(`sentinelx_core/handlers/edit.py`) редактор имеет **два различных**
+маршрута. Вызов `sentinel_edit(path="/etc/sentinelx/config.yaml",
+sudo=false)` проверяет `file_ops.access=rw` и закономерно получает
+`path_not_allowed`, поскольку `/etc` сейчас разрешён только для чтения.
+Это **не** доказывает потери отдельного административного маршрута.
+Штатный `sentinel_edit(..., sudo=true)` использует существующий
+operator-controlled `sudoers` gate для защищённого файла; `file_ops`
+не расширяется. Он не даёт произвольных root-прав и не отменяет
+независимое разрешение владельца на exact изменение.
+
+Для уже owner-approved точечной записи в `allowed_commands`:
+сначала проверить exact actor/host и capabilities; вызвать структурированный
+`sentinel_edit` с `sudo=true, mode="replace", count=1,
+validator_preset="yaml", diff=true, dry_run=true` и проверить единственный
+diff. Затем теми же аргументами и `dry_run=false` выполнить правку,
+проверить YAML, сохранённый backup, применить конфигурацию через уже
+разрешённый `sentinel_restart(service="sentinelx-cloud-core")` и после
+переподключения подтвердить `sentinel_ping` и **точный новый префикс**
+в `sentinel_capabilities(detail="full")`. При потере соединения во время
+self-restart сначала проверить состояние — не повторять mutation вслепую.
+Никогда не добавлять generic `sudo`, не менять `/etc` на `file_ops rw`
+и не использовать другой actor/скрипт как обход запрета. При реальном
+отказе sudoers/tool-security — `HARD_STOP` с классификацией по §19.6.
+Эта запись документирует проверенный штатный канал, а не создаёт
+автоматическое разрешение на будущие deploy/LIVE/Exchange mutations.
+
 **Проверка точной команды SentinelX до запуска (OWNER DECISION 2026-10-24).**
 Аккаунтный или интерфейсный режим «полный доступ» не является доказательством
 `exec_mode=unrestricted` для конкретного подключённого host/agent и не
