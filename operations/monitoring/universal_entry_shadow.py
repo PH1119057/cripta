@@ -2296,6 +2296,25 @@ def _scoped_p90_repair_ingest_allowed(
     )
 
 
+def _scoped_p90_ordinary_isolation_allowed(
+    *, p90_real_count: int, ordinary_count: int,
+    paper_consumer_count: int, mainnet_gate_enabled: bool,
+    selected_ordinary_activations: frozenset[str],
+) -> bool:
+    """Keep proven ordinary SHADOW/PAPER running, never reconstruct P90 REAL.
+
+    This is not SOURCE_REPAIR_ONLY and grants no P90 Entry/Exit permission.
+    Ordinary REAL remains forbidden during the blocked P90 startup.
+    """
+    return (
+        p90_real_count == 2
+        and ordinary_count > 0
+        and paper_consumer_count == 0
+        and mainnet_gate_enabled is False
+        and not selected_ordinary_activations
+    )
+
+
 def _p90_native_recovery_failure(exc: Exception) -> bool:
     """Only an exact P90 recovery/certification failure can isolate ingress."""
     from bybit_workbench.universal_entry.p90l90_real_open_restart import (
@@ -2347,6 +2366,7 @@ def _run_observer_epoch(
     preparation_budget: PreparationBudget | None = None,
     *,
     source_repair_only: bool = False,
+    isolated_p90_block: bool = False,
 ) -> str:
     epoch_started = datetime.now(UTC)
     signature = _observer_light_signature(connection)
@@ -2358,6 +2378,11 @@ def _run_observer_epoch(
     # gated on exact durable restart and 90-day code/ledger parity.
     observer_split = partition_observer_strategies(bundles)
     require_p90_policy_before_registry(observer_split)
+    if isolated_p90_block and (
+        observer_split.p90_real or observer_split.p90_paper
+        or not observer_split.ordinary or source_repair_only
+    ):
+        raise RuntimeError("P90_ORDINARY_ISOLATION_TOPOLOGY_INVALID")
     if source_repair_only and not observer_split.p90_real:
         raise RuntimeError("P90_SOURCE_REPAIR_STRATEGY_TOPOLOGY_DRIFT")
     # REAL v3 is NEVER allowed through the ordinary Strategy registry.
@@ -3747,6 +3772,8 @@ def _run_observer_epoch(
             symbols=symbols,
             warmup_until=warmup_until,
             reason=(
+                "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_ACTIVE"
+                if isolated_p90_block else (
                 (
                     "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_ACTIVE"
                     if observer_split.ordinary
@@ -3760,6 +3787,7 @@ def _run_observer_epoch(
                         if p90_real_degraded and initial_running
                         else "causal seed complete"
                     )
+                )
                 )
             ),
             sensor_status=sensor_status(datetime.now(UTC)),
@@ -4012,6 +4040,8 @@ def _run_observer_epoch(
                     signals=signals_count,
                     warmup_until=warmup_until,
                     reason=(
+                        "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_ACTIVE"
+                        if isolated_p90_block else (
                         (
                             "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_ACTIVE"
                             if observer_split.ordinary
@@ -4025,6 +4055,7 @@ def _run_observer_epoch(
                             )
                             if running
                             else "waiting for plan-owned pre-start influence/sensor completeness"
+                        )
                         )
                     ),
                     sensor_status=sensor_status(datetime.now(UTC)),
@@ -4082,6 +4113,9 @@ def _run_multi_strategy_observer() -> None:
     # Set only following an exact P90 restart failure plus durable fault.
     # This does NOT repair the open position or authorize Entry/Exit.
     force_p90_source_repair = False
+    # Exact P90 native fault may leave unrelated ordinary SHADOW/PAPER alive.
+    # P90 itself is not present in this fallback's bundles or consumer ports.
+    force_p90_ordinary_isolation = False
 
     def stop(_signum: int, _frame: object) -> None:
         nonlocal stopping_flag
@@ -4129,13 +4163,33 @@ def _run_multi_strategy_observer() -> None:
                     )
                     time.sleep(1.0)
                     continue
+                ordinary_isolation_bundles: tuple[object, ...] = bundles
+                if force_p90_ordinary_isolation:
+                    isolated_split = partition_observer_strategies(bundles)
+                    gate_now = connection.execute(
+                        "SELECT enabled FROM control.execution_gates "
+                        "WHERE mode='mainnet'"
+                    ).fetchone()
+                    selected_ordinary = _real_execution_selected_activation_ids(
+                        connection, isolated_split.ordinary,
+                    )
+                    if not _scoped_p90_ordinary_isolation_allowed(
+                        p90_real_count=len(isolated_split.p90_real),
+                        ordinary_count=len(isolated_split.ordinary),
+                        paper_consumer_count=len(isolated_split.p90_paper),
+                        mainnet_gate_enabled=gate_now != (False,),
+                        selected_ordinary_activations=selected_ordinary,
+                    ):
+                        raise RuntimeError("P90_ORDINARY_ISOLATION_SCOPE_DRIFT")
+                    ordinary_isolation_bundles = isolated_split.ordinary
                 outcome = _run_observer_epoch(
                     connection,
-                    cast(tuple[object, ...], bundles),
+                    cast(tuple[object, ...], ordinary_isolation_bundles),
                     lambda: stopping_flag,
                     service_started_at,
                     preparation_budget=preparation_budget,
                     source_repair_only=force_p90_source_repair,
+                    isolated_p90_block=force_p90_ordinary_isolation,
                 )
                 if outcome == "STOP":
                     break
@@ -4320,6 +4374,43 @@ def _run_multi_strategy_observer() -> None:
                     )
                     # Last old WS/mirror workers already joined in finally.
                     # One next invocation creates a new verified WS epoch.
+                    continue
+                if _p90_native_recovery_failure(exc) and not force_p90_source_repair:
+                    if not force_p90_ordinary_isolation:
+                        split = partition_observer_strategies(bundles)
+                        gate_now = connection.execute(
+                            "SELECT enabled FROM control.execution_gates "
+                            "WHERE mode='mainnet'"
+                        ).fetchone()
+                        selected_ordinary = _real_execution_selected_activation_ids(
+                            connection, split.ordinary,
+                        )
+                        if _scoped_p90_ordinary_isolation_allowed(
+                            p90_real_count=len(split.p90_real),
+                            ordinary_count=len(split.ordinary),
+                            paper_consumer_count=len(split.p90_paper),
+                            mainnet_gate_enabled=gate_now != (False,),
+                            selected_ordinary_activations=selected_ordinary,
+                        ):
+                            force_p90_ordinary_isolation = True
+                            _observer_status(
+                                state="PREPARING", epoch_id=None,
+                                active_bundles=split.ordinary, symbols=(),
+                                reason=(
+                                    "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_PREPARING "
+                                    f"[fault_id={fault_id}]"
+                                ),
+                            )
+                            continue
+                    # An original native anchor with no safe independent
+                    # consumer cannot be fixed by a 2-second retry loop.
+                    # The credential-free MarketSource remains independently
+                    # running; P90 Exit/MFE stays BLOCKED, never READY.
+                    wait_blocked(connection, {
+                        "reason": "P90_REAL_NATIVE_WAIT_FOR_EVIDENCE",
+                        "fault_id": fault_id,
+                        "p90_ready": False,
+                    })
                     continue
                 _observer_status(
                     state="ERROR",
