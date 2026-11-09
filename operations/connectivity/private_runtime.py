@@ -1557,15 +1557,15 @@ def own_p90_real_signed_position_reader(
 _P90_FIRST_FILL_GENERATION_PROOF_RETRY_SECONDS = 3.0
 _P90_FIRST_FILL_GENERATION_PROOF_SLEEP_SECONDS = 0.2
 _P90_FIRST_FILL_GENERATION_PROOF_AGE_SECONDS = 12.0
-def _p90_bounded_first_fill_signed_proof[_P90ProofT](
-    attempt: Callable[[], _P90ProofT],
+def _p90_bounded_first_fill_signed_proof[TProof](
+    attempt: Callable[[], TProof],
     *,
     position: StrategyPosition,
     event_kind: str,
     utc_now: Callable[[], datetime] = lambda: datetime.now(UTC),
     monotonic: Callable[[], float] = time.monotonic,
     sleeper: Callable[[float], None] = time.sleep,
-) -> _P90ProofT:
+) -> TProof:
     """Bound one postfill account-generation race; never waive private proof.
 
     A newly filled position can be durable before the credential-local
