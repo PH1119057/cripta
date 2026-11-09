@@ -340,10 +340,26 @@ def test_p90_scoped_repair_executes_independent_ordinary_fact_path(
 
     calls: list[tuple[object, dict[str, object]]] = []
     oi_seen: set[str] = set()
+    stored: list[object] = []
+    paper_orders: list[tuple[object, object]] = []
+    ordinary_bundle = SimpleNamespace(
+        entry_plan=SimpleNamespace(
+            watch_policy=SimpleNamespace(
+                to_dict=lambda: {"geometry": {"operator": "R1"}},
+            ),
+        ),
+    )
+    ordinary_evaluation = SimpleNamespace(
+        signal=SimpleNamespace(
+            entry_plan_fingerprint="synthetic-ordinary-plan",
+            strategy_activation_id="synthetic-ordinary-activation",
+        ),
+        decision=None,
+    )
 
-    def evaluate(fact: object, **kwargs: object) -> tuple[()]:
+    def evaluate(fact: object, **kwargs: object) -> tuple[object, ...]:
         calls.append((fact, kwargs))
-        return ()
+        return (ordinary_evaluation,) if ordinary_count else ()
 
     environment: dict[str, object] = {
         "p90_real_source_only": False,
@@ -368,6 +384,17 @@ def test_p90_scoped_repair_executes_independent_ordinary_fact_path(
             )
         ),
         "engine": SimpleNamespace(process=evaluate),
+        "store": SimpleNamespace(
+            record_evaluation=lambda evaluation, provenance: stored.append(evaluation),
+        ),
+        "provenance": "synthetic-only",
+        "bundle_by_entry_plan": {"synthetic-ordinary-plan": ordinary_bundle},
+        "_maybe_record_reverse_transition": lambda *_args: None,
+        "paper": SimpleNamespace(
+            create_order=lambda evaluation, bundle, now: paper_orders.append(
+                (evaluation, bundle)
+            ),
+        ),
         "entry_admission_port": None,
         "execution_bindings": {},
         "exchange_position_key": lambda account, symbol, index: (
@@ -390,8 +417,15 @@ def test_p90_scoped_repair_executes_independent_ordinary_fact_path(
         observed_at=datetime(2026, 11, 9, tzinfo=UTC),
     )
     dispatch(observed)
-    assert counters() == (1, 0, 0)
+    assert counters() == (
+        (1, 0, 0) if ordinary_count == 0 else (1, 1, 1)
+    )
     assert oi_seen == {"BTCUSDT"}
+    assert stored == ([] if ordinary_count == 0 else [ordinary_evaluation])
+    assert paper_orders == (
+        [] if ordinary_count == 0
+        else [(ordinary_evaluation, ordinary_bundle)]
+    )
     # Zero ordinary Plans = pure native-source repair, not even an
     # evaluation. One/multiple ordinary Plans still reach their real Engine
     # while the scoped P90 consumer is absent and has no financial power.
@@ -402,7 +436,7 @@ def test_p90_scoped_repair_executes_independent_ordinary_fact_path(
         assert kwargs["allow_new_signals"] is True
         assert kwargs["real_admission_required_for"] == frozenset()
         assert kwargs["real_admission_ready_for"] == frozenset()
-        assert kwargs["technical_readiness"].ready is True
+        assert getattr(kwargs["technical_readiness"], "ready", None) is True
 
 
 def test_p90_repair_selects_only_ordinary_active_consumer_plans() -> None:
