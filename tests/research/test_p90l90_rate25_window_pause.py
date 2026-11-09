@@ -67,3 +67,33 @@ def test_data_and_money_parity() -> None:
     assert '"run_manifest.json"' in code
     assert '"input_provenance.json"' in code
     assert '"logs"' in code
+
+
+def test_no_undefined_baseline_path_during_postprocessing() -> None:
+    """Regression: no NameError after 43,124,572 valid replay ticks.
+
+    All three uses (result read, side-ledger parity, provenance) must
+    resolve to the one output-independent immutable baseline folder.
+    """
+    code = source()
+    module = ast.parse(code)
+    uses = [
+        node for node in ast.walk(module)
+        if isinstance(node, ast.Name)
+        and isinstance(node.ctx, ast.Load)
+        and node.id in {"BASE", "BASELINE"}
+    ]
+    assert uses and all(node.id == "BASELINE" for node in uses)
+    assert code.count('BASELINE/"result.json"') == 2
+    assert 'leaf=BASELINE/("trade_ledger_"+side.lower()+".jsonl")' in code
+    assert 'BASELINE = RESULTS / "p90l90_side_nopause_compare_20261109_v1"' in code
+
+
+def test_baseline_checks_precede_immutable_output_create() -> None:
+    code = source()
+    assert code.index('baseline = json.loads((BASELINE/"result.json")') < (
+        code.index("OUT.mkdir(mode=0o2770)")
+    )
+    assert code.index('assert books[side].trades == [json.loads(z)') < (
+        code.index("OUT.mkdir(mode=0o2770)")
+    )
