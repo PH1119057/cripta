@@ -41,7 +41,7 @@ def test_2p5_threshold_exact_at_boundary() -> None:
     comparisons = [
         n for n in ast.walk(tree)
         if isinstance(n, ast.Compare)
-        and "stopped * 10000 < len(q) * threshold_bps" == ast.unparse(n)
+        and ast.unparse(n) == "stopped * 10000 < len(q) * threshold_bps"
     ]
     assert len(comparisons) == 1
     code = compile(ast.Expression(comparisons[0]), str(SOURCE_PATH), "eval")
@@ -51,7 +51,7 @@ def test_2p5_threshold_exact_at_boundary() -> None:
     assert eval(code, {}, {**env, "threshold_bps": 200}) is False
     assert eval(code, {}, {**env, "threshold_bps": 300}) is True
     # 1/20=5% qualifies all six thresholds once mature and eligible.
-    assert all(1 * 10000 >= 20 * bps for bps in (150, 200, 250, 300, 350, 400))
+    assert all(20 * bps <= 10000 for bps in (150, 200, 250, 300, 350, 400))
 
 
 def test_causal_shadow_maturity_and_same_direction_only() -> None:
