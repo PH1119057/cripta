@@ -203,11 +203,11 @@ def test_slow_signed_history_with_verified_tail_preserves_15s_freshness():
     def get(endpoint, params):
         calls.append((endpoint, dict(params)))
         if endpoint == "/v5/position/list":
-            return {"retCode": 0, "result": {"list": deepcopy(inv.positions)}}
+            return {"retCode": 0, "result": {"list": list(deepcopy(inv.positions))}}
         if endpoint == "/v5/execution/list":
             if params["startTime"] == "999":
                 now["ms"] = 23000  # the first window took longer than 15s
-                return {"retCode": 0, "result": {"list": deepcopy(inv.executions)}}
+                return {"retCode": 0, "result": {"list": list(deepcopy(inv.executions))}}
             assert params["startTime"] == "3001"
             assert params["endTime"] == "23000"
             return {"retCode": 0, "result": {"list": []}}
@@ -246,7 +246,7 @@ def test_catchup_rejects_changed_signed_position_even_if_quantities_match():
         nonlocal positions_read
         if endpoint == "/v5/position/list":
             positions_read += 1
-            positions = deepcopy(inv.positions)
+            positions = list(deepcopy(inv.positions))
             if positions_read == 3:
                 positions[0]["seq"] = "21"  # same size/side/price, new cycle/version
             return {"retCode": 0, "result": {"list": positions}}
@@ -254,7 +254,7 @@ def test_catchup_rejects_changed_signed_position_even_if_quantities_match():
             if params["startTime"] == "999":
                 now["ms"] = 23000
             return {"retCode": 0, "result": {
-                "list": deepcopy(inv.executions) if params["startTime"] == "999" else []
+                "list": list(deepcopy(inv.executions)) if params["startTime"] == "999" else []
             }}
         if endpoint == "/v5/order/history":
             return {"retCode": 0, "result": {
@@ -278,11 +278,11 @@ def test_catchup_rejects_incomplete_signed_suffix_page():
 
     def get(endpoint, params):
         if endpoint == "/v5/position/list":
-            return {"retCode": 0, "result": {"list": deepcopy(inv.positions)}}
+            return {"retCode": 0, "result": {"list": list(deepcopy(inv.positions))}}
         if endpoint == "/v5/execution/list":
             if params["startTime"] == "999":
                 now["ms"] = 23000
-                return {"retCode": 0, "result": {"list": deepcopy(inv.executions)}}
+                return {"retCode": 0, "result": {"list": list(deepcopy(inv.executions))}}
             return {"retCode": 0, "result": {}}  # missing signed page evidence
         if endpoint == "/v5/order/history":
             return {"retCode": 0, "result": {"list": list(inv.orders.values())}}
@@ -304,12 +304,12 @@ def test_repeated_slow_suffixes_remain_blocked_with_bounded_retries():
 
     def get(endpoint, params):
         if endpoint == "/v5/position/list":
-            return {"retCode": 0, "result": {"list": deepcopy(inv.positions)}}
+            return {"retCode": 0, "result": {"list": list(deepcopy(inv.positions))}}
         if endpoint == "/v5/execution/list":
             reads.append(dict(params))
             now["ms"] += 20000  # every independent history page itself goes stale
             return {"retCode": 0, "result": {
-                "list": deepcopy(inv.executions) if params["startTime"] == "999" else []
+                "list": list(deepcopy(inv.executions)) if params["startTime"] == "999" else []
             }}
         if endpoint == "/v5/order/history":
             return {"retCode": 0, "result": {
