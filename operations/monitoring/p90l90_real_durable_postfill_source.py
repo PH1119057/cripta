@@ -268,7 +268,7 @@ def read_independent_durable_postfill_window(
         """SELECT e.frame_number,e.frame_index,e.market_source_id,
                   e.instrument_id,e.external_symbol,e.exchange_sequence,
                   e.exec_id,e.event_at,e.accepted_at,
-                  n.event_at,n.price,n.quantity,n.taker_side,
+                  n.event_at AS journal_at,n.price,n.quantity,n.taker_side,
                   n.source_transport,n.producer_release_commit
              FROM analytics.native_public_trade_source_events e
              JOIN analytics.native_public_trade_events n
