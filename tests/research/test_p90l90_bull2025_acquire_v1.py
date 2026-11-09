@@ -4,8 +4,11 @@ from __future__ import annotations
 import csv
 import gzip
 import importlib.util
+import sys
+import types
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -19,7 +22,11 @@ def module():
     spec = importlib.util.spec_from_file_location("bull2025_acquire", RUNNER)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # The production runner is Linux-only; pure schema/contract tests also run
+    # on Windows CI, where the Linux kernel locking module is not installed.
+    dummy_fcntl = types.ModuleType("fcntl")
+    with patch.dict(sys.modules, {"fcntl": dummy_fcntl}):
+        spec.loader.exec_module(mod)
     return mod
 
 
