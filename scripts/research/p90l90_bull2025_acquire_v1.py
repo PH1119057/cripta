@@ -166,6 +166,7 @@ def validate_archive(symbol: str, day: dt.date, path: Path) -> dict:
     start = dt.datetime.combine(day, dt.time(), dt.timezone.utc).timestamp()
     count = 0
     first = last = None
+    last_trade_ids = set()
     with gzip.open(path, "rt", newline="") as source:
         reader = csv.DictReader(source)
         if not SCHEMA.issubset(reader.fieldnames or []):
@@ -178,6 +179,11 @@ def validate_archive(symbol: str, day: dt.date, path: Path) -> dict:
                 raise ValueError(f"out-of-order native event {path}")
             if not row["trdMatchID"] or not row["tickDirection"] or float(row["price"]) <= 0:
                 raise ValueError(f"trade source invalid {path}")
+            if last is None or t != last:
+                last_trade_ids.clear()
+            if row["trdMatchID"] in last_trade_ids:
+                raise ValueError(f"duplicate native execution ID at same timestamp: {path}")
+            last_trade_ids.add(row["trdMatchID"])
             first = t if first is None else first
             last = t
             count += 1
