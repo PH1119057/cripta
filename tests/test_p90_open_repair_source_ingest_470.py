@@ -544,3 +544,35 @@ def test_p90_fault_ordinary_only_route_never_includes_p90_consumer() -> None:
     assert "if isolated_p90_block" in epoch_body
     assert "P90_OPEN_EXIT_BLOCKED_ORDINARY_CONSUMERS_ACTIVE" in epoch_body
     assert "if isolated_p90_block else" in epoch_body
+
+
+def test_ordinary_isolation_refuses_unknown_or_open_global_gate_from_real_code() -> None:
+    """Execute both runner gate expressions, not a copied scope predicate."""
+    source = SOURCE.read_text(encoding="utf-8")
+    runner = next(
+        node for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_run_multi_strategy_observer"
+    )
+    scopes = [
+        node for node in ast.walk(runner)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_scoped_p90_ordinary_isolation_allowed"
+    ]
+    # Once on the next epoch's admission boundary, once after a typed fault.
+    assert len(scopes) == 2
+    for scope in scopes:
+        expression = next(
+            keyword.value for keyword in scope.keywords
+            if keyword.arg == "mainnet_gate_enabled"
+        )
+        executable = compile(ast.Expression(expression), str(SOURCE), "eval")
+        for gate_row, expected in (
+            ((False,), False),
+            ((0,), False),
+            ((True,), True),
+            (None, True),
+            ((), True),
+        ):
+            assert eval(executable, {}, {"gate_now": gate_row}) is expected
