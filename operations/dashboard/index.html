@@ -1677,7 +1677,8 @@ function renderObserverFaults(model){
     archive.hidden=value.state==='unavailable'||historical.length===0;
     if(historical.length){
       document.getElementById('observerFaultArchiveSummary').textContent=
-        'История до 8 ноября 2026 · '+historical.length+' незакрытых записей (не новые уведомления)';
+        'История до '+new Date(value.attention_reset_at).toLocaleString('ru-RU')+
+        ' · '+historical.length+' незакрытых записей (не новые уведомления)';
       const archiveKey=historical.map(x=>String(x.fault_id)+':'+String(x.last_seen_at)+':'+String(x.occurrence_count)).join('|');
       if(archive.dataset.renderKey!==archiveKey){
         // Keep the operator's expanded archive/details stable across polling.
