@@ -191,3 +191,137 @@ def test_partially_filled_live_order_is_read_by_exact_id_when_history_has_not_ar
     args["inventory"] = reader.read(999)
     assert prove_current_entry_cycle(**args).filled_qty == Decimal("1.25")
     assert any(e == "/v5/order/realtime" for e, _ in calls)
+
+
+def test_slow_signed_history_with_verified_tail_preserves_15s_freshness():
+    """Slow initial GET must catch up all signed executions through new cutoff."""
+    args = case()
+    inv = args["inventory"]
+    now = {"ms": 3000}
+    calls = []
+
+    def get(endpoint, params):
+        calls.append((endpoint, dict(params)))
+        if endpoint == "/v5/position/list":
+            return {"retCode": 0, "result": {"list": deepcopy(inv.positions)}}
+        if endpoint == "/v5/execution/list":
+            if params["startTime"] == "999":
+                now["ms"] = 23000  # the first window took longer than 15s
+                return {"retCode": 0, "result": {"list": deepcopy(inv.executions)}}
+            assert params["startTime"] == "3001"
+            assert params["endTime"] == "23000"
+            return {"retCode": 0, "result": {"list": []}}
+        if endpoint == "/v5/order/history":
+            return {"retCode": 0, "result": {
+                "list": deepcopy(list(inv.orders.values()))
+                if params.get("startTime") == "999" else []
+            }}
+        raise AssertionError(f"unexpected signed history endpoint {endpoint}")
+
+    reader = SignedRecoveryInventoryReader(
+        get, account="MAIN", connector="connector-MAIN",
+        clock_ms=lambda: now["ms"], monotonic=lambda: 0,
+    )
+    proof = reader.read(999)
+    assert proof.end_ms == 23000
+    assert proof.observed_ms == 23000
+    assert [(e, p["startTime"], p["endTime"]) for e, p in calls
+            if e == "/v5/execution/list"] == [
+        ("/v5/execution/list", "999", "3000"),
+        ("/v5/execution/list", "3001", "23000"),
+    ]
+    assert sum(e == "/v5/position/list" for e, _ in calls) == 3
+    assert prove_current_entry_cycle(
+        **{**args, "inventory": proof, "now_ms": now["ms"]}
+    ).remaining_qty == Decimal("1.25")
+
+
+def test_catchup_rejects_changed_signed_position_even_if_quantities_match():
+    args = case()
+    inv = args["inventory"]
+    now = {"ms": 3000}
+    positions_read = 0
+
+    def get(endpoint, params):
+        nonlocal positions_read
+        if endpoint == "/v5/position/list":
+            positions_read += 1
+            positions = deepcopy(inv.positions)
+            if positions_read == 3:
+                positions[0]["seq"] = "21"  # same size/side/price, new cycle/version
+            return {"retCode": 0, "result": {"list": positions}}
+        if endpoint == "/v5/execution/list":
+            if params["startTime"] == "999":
+                now["ms"] = 23000
+            return {"retCode": 0, "result": {
+                "list": deepcopy(inv.executions) if params["startTime"] == "999" else []
+            }}
+        if endpoint == "/v5/order/history":
+            return {"retCode": 0, "result": {
+                "list": deepcopy(list(inv.orders.values()))
+                if params.get("startTime") == "999" else []
+            }}
+        raise AssertionError(endpoint)
+
+    reader = SignedRecoveryInventoryReader(
+        get, account="MAIN", connector="connector-MAIN",
+        clock_ms=lambda: now["ms"], monotonic=lambda: 0,
+    )
+    with pytest.raises(RecoveryCycleUnproven, match="F01_POSITION_CHANGED_DURING_HISTORY"):
+        reader.read(999)
+
+
+def test_catchup_rejects_incomplete_signed_suffix_page():
+    args = case()
+    inv = args["inventory"]
+    now = {"ms": 3000}
+
+    def get(endpoint, params):
+        if endpoint == "/v5/position/list":
+            return {"retCode": 0, "result": {"list": deepcopy(inv.positions)}}
+        if endpoint == "/v5/execution/list":
+            if params["startTime"] == "999":
+                now["ms"] = 23000
+                return {"retCode": 0, "result": {"list": deepcopy(inv.executions)}}
+            return {"retCode": 0, "result": {}}  # missing signed page evidence
+        if endpoint == "/v5/order/history":
+            return {"retCode": 0, "result": {"list": list(inv.orders.values())}}
+        raise AssertionError(endpoint)
+
+    reader = SignedRecoveryInventoryReader(
+        get, account="MAIN", connector="connector-MAIN",
+        clock_ms=lambda: now["ms"], monotonic=lambda: 0,
+    )
+    with pytest.raises(RecoveryCycleUnproven, match="F01_HISTORY_PAGE_INVALID"):
+        reader.read(999)
+
+
+def test_repeated_slow_suffixes_remain_blocked_with_bounded_retries():
+    args = case()
+    inv = args["inventory"]
+    now = {"ms": 3000}
+    reads = []
+
+    def get(endpoint, params):
+        if endpoint == "/v5/position/list":
+            return {"retCode": 0, "result": {"list": deepcopy(inv.positions)}}
+        if endpoint == "/v5/execution/list":
+            reads.append(dict(params))
+            now["ms"] += 20000  # every independent history page itself goes stale
+            return {"retCode": 0, "result": {
+                "list": deepcopy(inv.executions) if params["startTime"] == "999" else []
+            }}
+        if endpoint == "/v5/order/history":
+            return {"retCode": 0, "result": {
+                "list": deepcopy(list(inv.orders.values()))
+                if params.get("startTime") == "999" else []
+            }}
+        raise AssertionError(endpoint)
+
+    reader = SignedRecoveryInventoryReader(
+        get, account="MAIN", connector="connector-MAIN",
+        clock_ms=lambda: now["ms"], monotonic=lambda: 0,
+    )
+    with pytest.raises(RecoveryCycleUnproven, match="F01_HISTORY_CATCHUP_BUDGET_EXPIRED"):
+        reader.read(999)
+    assert len(reads) <= 4  # one initial bounded window, at most three tails
