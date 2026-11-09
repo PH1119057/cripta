@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 
+from bybit_workbench.market_data import p90l90_real_durable_postfill_source as source
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
@@ -17,7 +18,6 @@ from bybit_workbench.universal_entry.contracts import TradeDirection
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
 from operations.connectivity import p90_real_independent_exit as exit_mod
-from operations.monitoring import p90l90_real_durable_postfill_source as source
 
 AT = datetime(2026, 11, 9, 4, 7, 30, tzinfo=UTC)
 SESSION = "a" * 32
@@ -260,7 +260,7 @@ def test_exit_fallback_only_for_exact_transport_outage(monkeypatch):
         return proof
 
     monkeypatch.setattr(exit_mod, "read_real_postfill_source_window", lost)
-    from operations.monitoring import p90l90_real_durable_postfill_source as mod
+    from bybit_workbench.market_data import p90l90_real_durable_postfill_source as mod
     monkeypatch.setattr(mod, "read_independent_durable_postfill_window", approved)
     result = exit_mod.read_firstfill_source_with_independent_market_fallback(
         Store(), position=position(), source_epoch_id=EPOCH,
@@ -280,7 +280,7 @@ def test_invalid_broker_source_proof_not_bypassed(monkeypatch):
             "P90_REAL_MARKET_SOURCE_NATIVE_WINDOW_INCOMPLETE"
         )
 
-    from operations.monitoring import p90l90_real_durable_postfill_source as mod
+    from bybit_workbench.market_data import p90l90_real_durable_postfill_source as mod
     monkeypatch.setattr(exit_mod, "read_real_postfill_source_window", bad)
     monkeypatch.setattr(
         mod, "read_independent_durable_postfill_window",
@@ -300,7 +300,7 @@ def test_successful_broker_proof_makes_no_secondary_market_request(monkeypatch):
     monkeypatch.setattr(
         exit_mod, "read_real_postfill_source_window", lambda **_kwargs: first,
     )
-    from operations.monitoring import p90l90_real_durable_postfill_source as mod
+    from bybit_workbench.market_data import p90l90_real_durable_postfill_source as mod
     def unexpected(*_args, **_kwargs):
         raise AssertionError("never query fallback for a good broker")
     monkeypatch.setattr(mod, "read_independent_durable_postfill_window",

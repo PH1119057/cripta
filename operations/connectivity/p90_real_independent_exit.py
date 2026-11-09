@@ -87,7 +87,7 @@ def read_firstfill_source_with_independent_market_fallback(
     except P90RealPostfillSourceClientUnverified as exc:
         if str(exc) != "P90_REAL_POSTFILL_SOURCE_TRANSPORT_UNAVAILABLE":
             raise
-    from operations.monitoring.p90l90_real_durable_postfill_source import (
+    from bybit_workbench.market_data.p90l90_real_durable_postfill_source import (
         read_independent_durable_postfill_window,
     )
 

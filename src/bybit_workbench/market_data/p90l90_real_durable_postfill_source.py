@@ -20,7 +20,7 @@ import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, cast
 
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
@@ -56,13 +56,15 @@ def _need(condition: bool, code: str) -> None:
         )
 
 
-def _utc(value: datetime) -> datetime:
-    _need(
-        isinstance(value, datetime)
-        and value.tzinfo is not None
-        and value.utcoffset() == timedelta(),
-        "TIME_INVALID",
-    )
+def _utc(value: object) -> datetime:
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() != timedelta()
+    ):
+        raise P90IndependentDurablePostfillUnverified(
+            "P90_REAL_DURABLE_POSTFILL_TIME_INVALID"
+        )
     return value.astimezone(UTC)
 
 
@@ -103,7 +105,7 @@ def fetch_bybit_recent_public_trades(
               "VENUE_WINDOW_MISSING")
         server_at = datetime.fromtimestamp(int(str(data.get("time"))) / 1000, UTC)
         _utc(server_at)
-        return rows, server_at
+        return cast(list[Mapping[str, object]], rows), server_at
     except P90IndependentDurablePostfillUnverified:
         raise
     except (OSError, ValueError, TypeError, OverflowError, KeyError):
@@ -112,7 +114,7 @@ def fetch_bybit_recent_public_trades(
         ) from None
 
 
-def _fields(record: object, *names: str) -> tuple[object, ...]:
+def _fields(record: object, *names: str) -> tuple[Any, ...]:
     """Support the account Exit dict_row connection and tuple-row test ports."""
     if isinstance(record, Mapping):
         try:
@@ -153,7 +155,7 @@ def _source_session(connection: Any, *, source_commit: str,
         and _utc(accepted) >= fill_at,
         "SOURCE_SESSION_INCOMPLETE",
     )
-    return session
+    return cast(str, session)
 
 
 def _rest_window(
@@ -172,6 +174,10 @@ def _rest_window(
             "VENUE_IDENTITY_INVALID",
         )
         ident = row.get("execId")
+        if not isinstance(ident, str) or not ident:
+            raise P90IndependentDurablePostfillUnverified(
+                "P90_REAL_DURABLE_POSTFILL_VENUE_ORDER_OR_DUPLICATE"
+            )
         try:
             seq = int(str(row["seq"]))
             when = datetime.fromtimestamp(
@@ -184,8 +190,12 @@ def _rest_window(
                 "P90_REAL_DURABLE_POSTFILL_VENUE_IDENTITY_INVALID"
             ) from None
         side = row.get("side")
+        if not isinstance(side, str):
+            raise P90IndependentDurablePostfillUnverified(
+                "P90_REAL_DURABLE_POSTFILL_VENUE_ORDER_OR_DUPLICATE"
+            )
         _need(
-            isinstance(ident, str) and ident and ident not in all_ids
+            ident not in all_ids
             and seq >= 0 and side in ("Buy", "Sell")
             and (prev_seq is None or (
                 seq <= prev_seq
@@ -232,7 +242,7 @@ def read_independent_durable_postfill_window(
         and source_epoch_id.startswith("p90-real-epoch-")
         and len(source_epoch_id) == 55
         and len(source_commit) == 40
-        and accepted_producer_commits
+        and bool(accepted_producer_commits)
         and all(len(item) == 40 for item in accepted_producer_commits)
         and fill <= protected <= at
         and at - protected <= _WINDOW,
