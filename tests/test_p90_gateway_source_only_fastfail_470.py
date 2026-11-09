@@ -7,17 +7,17 @@ Only the actual production readiness-wait function is executed with inert ports.
 from __future__ import annotations
 
 import ast
+import datetime
+import pathlib
 import shutil
 import subprocess
-from datetime import UTC, datetime
-from pathlib import Path
-from types import ModuleType, SimpleNamespace
+import types
 
 import pytest
 
 
-APP = Path("operations/dashboard/app.py")
-HTML = Path("operations/dashboard/index.html")
+APP = pathlib.Path("operations/dashboard/app.py")
+HTML = pathlib.Path("operations/dashboard/index.html")
 SOURCE_ONLY = (
     "P90 REAL v3 PREARM: source-only observer not exact/fresh: "
     "SOURCE_REPAIR_ONLY: P90_OPEN_EXIT_BLOCKED_MARKET_SOURCE_INGEST_ONLY"
@@ -32,7 +32,7 @@ class P90PrivateIpcUnverified(ValueError):
     pass
 
 
-def _real_wait_function() -> ModuleType:
+def _real_wait_function() -> types.ModuleType:
     """Compile source AST without importing the network-enabled Dashboard."""
     tree = ast.parse(APP.read_text(encoding="utf-8"))
     statements = []
@@ -52,11 +52,11 @@ def _real_wait_function() -> ModuleType:
         if selected_fn or selected_prefix:
             statements.append(node)
     assert len(statements) == 2
-    module = ModuleType("p90_gateway_source_only_unit")
-    module.time = SimpleNamespace()
-    module.psycopg = SimpleNamespace()
-    module.UTC = UTC
-    module.datetime = datetime
+    module = types.ModuleType("p90_gateway_source_only_unit")
+    module.time = types.SimpleNamespace()
+    module.psycopg = types.SimpleNamespace()
+    module.UTC = datetime.UTC
+    module.datetime = datetime.datetime
     module.P90PrearmEvidenceBlocked = P90PrearmEvidenceBlocked
     module.P90PrivateIpcUnverified = P90PrivateIpcUnverified
     module.P90_REAL_READINESS_PRIVATE_ATTEMPT_SECONDS = 10.0
