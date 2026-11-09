@@ -292,7 +292,7 @@ for side in SIDES:
             assert controlled["counts"]["qualified_candidate"] == sum(
                 candidate_counts[(sym,side)] for sym in SYMBOLS
             )
-            assert controlled["counts"]["signal_triggers"] == len(
+            assert controlled["counts"].get("signal_triggers", 0) == len(
                 signal_events[(side,window)]
             )
             assert controlled["counts"]["accepted"] == (

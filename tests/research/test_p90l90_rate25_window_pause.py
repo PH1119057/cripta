@@ -97,3 +97,29 @@ def test_baseline_checks_precede_immutable_output_create() -> None:
     assert code.index('assert books[side].trades == [json.loads(z)') < (
         code.index("OUT.mkdir(mode=0o2770)")
     )
+
+
+def test_zero_shadow_signal_does_not_raise_or_fake_trigger() -> None:
+    """90d SHORT 30d window has no trigger; Counter omits zero keys."""
+    tree = ast.parse(source())
+    matches = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Assert)
+        and "signal_triggers" in ast.unparse(node.test)
+    ]
+    assert len(matches) == 1
+    check = compile(ast.Expression(matches[0].test), str(RUNNER), "eval")
+    env = {"side": "SHORT_ONLY", "window": 30}
+    env["controlled"] = {"counts": {}}  # Counter serialized without zero entry
+    env["signal_events"] = {("SHORT_ONLY", 30): []}
+    assert eval(check, {}, env) is True
+    env["signal_events"][("SHORT_ONLY", 30)] = [{"ts": "example"}]
+    assert eval(check, {}, env) is False
+    env["controlled"]["counts"]["signal_triggers"] = 1
+    assert eval(check, {}, env) is True
+
+
+def test_undefined_zero_key_never_used_directly_in_qc() -> None:
+    code = source()
+    assert 'controlled["counts"].get("signal_triggers", 0)' in code
+    assert 'controlled["counts"]["signal_triggers"]' not in code
