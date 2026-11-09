@@ -208,8 +208,10 @@ def test_incomplete_or_wrong_original_market_source_remains_blocked(failure):
     elif failure == "wrong-transport":
         db.rows[0]["source_transport"] = "BYBIT_REST_KLINE"
     elif failure == "missing-pre-fill-venue":
-        other_venue = lambda _symbol: (venue(_symbol)[0][:-1],
-                                       AT + timedelta(seconds=6))
+        def no_prefill(_symbol):
+            return (venue(_symbol)[0][:-1], AT + timedelta(seconds=6))
+
+        other_venue = no_prefill
     elif failure == "wrong-venue-seq":
         def corrupt(_symbol):
             out, at = venue(_symbol)
@@ -218,7 +220,10 @@ def test_incomplete_or_wrong_original_market_source_remains_blocked(failure):
             return x, at
         other_venue = corrupt
     elif failure == "rest-too-old":
-        other_venue = lambda _symbol: (venue(_symbol)[0], AT)
+        def old_rest(_symbol):
+            return (venue(_symbol)[0], AT)
+
+        other_venue = old_rest
     elif failure == "stale-window":
         options["observed_at"] = AT + timedelta(seconds=18)
     with pytest.raises(source.P90IndependentDurablePostfillUnverified):
