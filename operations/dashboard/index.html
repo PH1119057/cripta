@@ -1064,6 +1064,7 @@ function p90ReadinessOperationText(operation){
   };
   const checks={versions:'Проверяем версию системы',services:'Проверяем торговые службы',market:'Проверяем рыночные данные',strategies:'Проверяем стратегии и планы',accounts:'Проверяем аккаунты Bybit и ресурсы',entry_exit:'Проверяем допуск Entry и сопровождение Exit',arming_closed_gate:'Проверяем рабочий контур при закрытом шлюзе',finalizing:'Завершаем открытие шлюза',opened:'Подтверждаем открытие шлюза'};
   if(state!=='BLOCKED'&&checks[phase])return checks[phase];
+  if(state==='BLOCKED'&&code==='P90_EXIT_SOURCE_ONLY_NOT_READY')return 'Подготовка остановлена · Observer принимает рыночные данные только в режиме восстановления. P90 Entry/Exit не подтверждены, шлюз закрыт. Следующие этапы ещё не проверены.';
   if(state==='BLOCKED')return (phaseMap[state]||state)+' · '+(String(operation.blocker_detail||'')||blockerMap[code]||'обязательная проверка не прошла');
   return (phaseMap[state]||state)+(phase&&phase!==state.toLowerCase()?' · '+phase:'');
 }
@@ -1122,7 +1123,7 @@ function renderP90ArmModal(operation=null){
   const technicalReady=op?.state==='READY_FOR_OWNER_ARM';
   document.getElementById('p90ArmChecks').querySelectorAll('[data-check]').forEach(row=>{
     const key=row.dataset.check,done=p90ModalState==='success'||completed.has(key)||(technicalReady&&key!=='arm');
-    const current=key===op?.phase||(key==='services'&&op?.phase==='checking_services')||(key==='accounts'&&op?.phase==='reconciling_runtime')||(key==='versions'&&op?.phase==='validating_full_evidence')||(key==='arm'&&technicalReady&&p90ModalState==='busy');
+    const current=p90ModalState==='busy'&&(key===op?.phase||(key==='services'&&op?.phase==='checking_services')||(key==='accounts'&&op?.phase==='reconciling_runtime')||(key==='versions'&&op?.phase==='validating_full_evidence')||(key==='arm'&&technicalReady));
     row.dataset.state=done?'done':current?'busy':'pending';
   });
   const busy=p90ModalState==='busy',confirming=p90ModalState==='confirm';
