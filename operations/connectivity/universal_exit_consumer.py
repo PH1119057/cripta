@@ -224,7 +224,12 @@ def run_once(
     if materialized.startswith("REQUEST_CREATED:"):
         return materialized
     if materialized.startswith("DECISION_BLOCKED:"):
-        return materialized
+        # A failed, independently audited materialization must not postpone an
+        # unrelated already-durable Exit request in the same account-neutral
+        # consumer cycle. dispatch_once only selects existing PROVEN requests,
+        # and still performs the exact Exit/Execution safety checks.
+        dispatched = dispatch_once(connection, now=current)
+        return dispatched if dispatched != "NO_REQUEST" else materialized
     return dispatch_once(connection, now=current)
 
 
