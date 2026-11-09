@@ -112,6 +112,22 @@ def fetch_bybit_recent_public_trades(
         ) from None
 
 
+def _fields(record: object, *names: str) -> tuple[object, ...]:
+    """Support the account Exit dict_row connection and tuple-row test ports."""
+    if isinstance(record, Mapping):
+        try:
+            return tuple(record[name] for name in names)
+        except KeyError:
+            raise P90IndependentDurablePostfillUnverified(
+                "P90_REAL_DURABLE_POSTFILL_DATABASE_ROW_INVALID"
+            ) from None
+    if isinstance(record, (tuple, list)) and len(record) == len(names):
+        return tuple(record)
+    raise P90IndependentDurablePostfillUnverified(
+        "P90_REAL_DURABLE_POSTFILL_DATABASE_ROW_INVALID"
+    )
+
+
 def _source_session(connection: Any, *, source_commit: str,
                     producer_commits: frozenset[str],
                     fill_at: datetime) -> str:
@@ -124,7 +140,11 @@ def _source_session(connection: Any, *, source_commit: str,
         (_SOURCE,),
     ).fetchall()
     _need(len(rows) == 1, "SOURCE_SESSION_AMBIGUOUS")
-    session, market, producer, state, subscribed, accepted, ended, reason = rows[0]
+    session, market, producer, state, subscribed, accepted, ended, reason = (
+        _fields(rows[0], "source_session_id", "market_source_id",
+                "producer_release_commit", "state", "subscribed_at",
+                "last_accepted_at", "ended_at", "reason")
+    )
     _need(
         market == _SOURCE and producer in producer_commits
         and state == "ACTIVE" and ended is None and reason is None
@@ -224,7 +244,12 @@ def read_independent_durable_postfill_window(
             WHERE epoch_id=%s""",
         (source_epoch_id,),
     ).fetchone()
-    _need(epoch == (source_commit, "ACTIVE"), "SOURCE_EPOCH_UNVERIFIED")
+    _need(
+        epoch is not None
+        and _fields(epoch, "source_commit", "status")
+        == (source_commit, "ACTIVE"),
+        "SOURCE_EPOCH_UNVERIFIED",
+    )
     session = _source_session(
         connection, source_commit=source_commit,
         producer_commits=accepted_producer_commits,
@@ -268,7 +293,13 @@ def read_independent_durable_postfill_window(
         (
             frame, index, market, instrument, symbol, seq, ident, when,
             accepted, journal_when, price, qty, side, transport, producer,
-        ) = row
+        ) = _fields(
+            row, "frame_number", "frame_index", "market_source_id",
+            "instrument_id", "external_symbol", "exchange_sequence",
+            "exec_id", "event_at", "accepted_at", "journal_at", "price",
+            "quantity", "taker_side", "source_transport",
+            "producer_release_commit",
+        )
         point = (frame, index)
         when = _utc(when)
         _need(
