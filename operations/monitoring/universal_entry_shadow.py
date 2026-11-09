@@ -3287,6 +3287,20 @@ def _run_observer_epoch(
             )
 
 
+    # #470/1: in the P90 OPEN/Exit BLOCKED technical transport-only state,
+    # consume original native events from the ONE independent PG MarketSource,
+    # not a separate non-atomic WS socket + 1.5s timing race.
+    # Deliberately excludes every real/ordinary Strategy/Exit dispatch epoch
+    # until its own causal source/checkpoint parity is independently proven.
+    native_pg_delivery_only = (
+        EXTERNAL_NATIVE_SOURCE and p90_repair_ingest_only
+        and not observer_split.ordinary
+    )
+    native_pg_delivery_session: str | None = None
+    native_pg_delivery_state = (
+        "PREPARING" if native_pg_delivery_only else "NOT_ENABLED"
+    )
+
     try:
         trade_mirror_thread.start()
         if not trade_mirror_ready.wait(MIRROR_READY_TIMEOUT_SECONDS):
@@ -3924,12 +3938,12 @@ def _run_observer_epoch(
                     )
                     return "RELOAD"
                 next_signature = now_mono + 1.0
-            stale = tuple(
+            stale = (() if native_pg_delivery_only else tuple(
                 symbol
                 for symbol, cursor in trade_cursors.items()
                 if now_mono - trade_proof_monotonic.get(symbol, now_mono)
                 >= TRADE_SILENCE_AUDIT_SECONDS
-            )
+            ))
             if stale:
                 try:
                     _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
@@ -3980,6 +3994,57 @@ def _run_observer_epoch(
                     )
                 for fact in oi_result.facts:
                     process_fact(fact)
+            if native_pg_delivery_only:
+                # Never replay native historical events into financial/Strategy
+                # owners. In this guarded source-only mode process each saved
+                # original trade then durably ACK its transport cursor in ONE
+                # PostgreSQL transaction (including nested fact savepoints).
+                from bybit_workbench.universal_entry.p90l90_scoped_native_codec import (
+                    original_native_fact,
+                )
+                from operations.monitoring.native_public_trade_observer_delivery import (
+                    NativeObserverDeliveryBlocked,
+                    active_native_observer_source,
+                    consume_native_observer_batch,
+                )
+
+                try:
+                    pg_source = active_native_observer_source(
+                        connection,
+                        symbols=tuple(sorted(p90l90_symbols)),
+                        source_checkout=PROJECT_ROOT,
+                        loaded_consumer_commit=LOADED_COMMIT,
+                        observed_at=datetime.now(UTC),
+                    )
+                    if (
+                        native_pg_delivery_session is not None
+                        and pg_source.session_id != native_pg_delivery_session
+                    ):
+                        # An actual WS producer reconnect is a NEW source
+                        # session/GAP. Reset only technical transport state;
+                        # never treat it as an original P90 Exit rewind.
+                        trade_cursors.clear()
+                        trade_current_seq_exec_ids.clear()
+                        trade_proof_monotonic.clear()
+                    pg_result = consume_native_observer_batch(
+                        connection,
+                        source=pg_source,
+                        observed_at=datetime.now(UTC),
+                        on_trade=lambda event: process_fact(
+                            *original_native_fact(event)
+                        ),
+                        limit=256,
+                    )
+                    native_pg_delivery_session = pg_result.source_session_id
+                    native_pg_delivery_state = (
+                        "CATCHING_UP" if len(pg_result.events) == 256
+                        else "CAUGHT_UP"
+                    )
+                except NativeObserverDeliveryBlocked as blocked:
+                    # Keep MarketSource transport alive. Missing real native
+                    # proof is a typed, visible source-only diagnosis, never
+                    # a hidden skip or permission to fall back to self-WS.
+                    native_pg_delivery_state = "BLOCKED:" + str(blocked)
             message: dict[str, Any] | None = None
             received_at = datetime.now(UTC)
             if buffered_messages:
@@ -4006,7 +4071,11 @@ def _run_observer_epoch(
                 elif message.get("op") != "subscribe":
                     heartbeat.note_market_frame(now_mono)
                 topic = str(message.get("topic") or "")
-                if topic.startswith("publicTrade."):
+                if topic.startswith("publicTrade.") and native_pg_delivery_only:
+                    # The sole native source is already committed in PG.
+                    # Do not double-process or race the independent producer.
+                    pass
+                elif topic.startswith("publicTrade."):
                     data = message.get("data")
                     if isinstance(data, list):
                         for item in data:
@@ -4058,7 +4127,11 @@ def _run_observer_epoch(
                         )
                         )
                     ),
-                    sensor_status=sensor_status(datetime.now(UTC)),
+                    sensor_status={
+                        **sensor_status(datetime.now(UTC)),
+                        "native_pg_delivery": native_pg_delivery_state,
+                        "native_pg_session_id": native_pg_delivery_session,
+                    } if native_pg_delivery_only else sensor_status(datetime.now(UTC)),
                     strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
                     p90_owner_arm_stage=(
                         "READY" if p90_real_staged and running

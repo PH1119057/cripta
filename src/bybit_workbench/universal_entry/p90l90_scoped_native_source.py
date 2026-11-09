@@ -275,7 +275,7 @@ def read_ordered_native_events(
                   e.exec_id,e.event_at,e.accepted_at,
                   n.event_at,n.price,n.quantity,n.taker_side
              FROM analytics.native_public_trade_source_events e
-             JOIN analytics.native_public_trade_events n
+             LEFT JOIN analytics.native_public_trade_events n
                ON n.market_source_id=e.market_source_id
               AND n.instrument_id=e.instrument_id
               AND n.exchange_sequence=e.exchange_sequence
