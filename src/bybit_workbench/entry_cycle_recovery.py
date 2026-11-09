@@ -331,34 +331,88 @@ class SignedRecoveryInventoryReader:
         executions: list[Mapping[str, Any]] = []
         orders: dict[str, Mapping[str, Any]] = {}
         week = 7 * 24 * 3600 * 1000
-        _require(end_ms - start_ms <= 2 * 366 * 24 * 3600 * 1000, "HISTORY_OUTSIDE_RETENTION")
-        for lo in range(start_ms, end_ms + 1, week):
-            params = {"category": "linear", "settleCoin": "USDT",
-                      "startTime": str(lo), "endTime": str(min(end_ms, lo + week - 1))}
-            executions.extend(pages("/v5/execution/list", {**params, "limit": "100"}))
-            for order in pages("/v5/order/history", {**params, "limit": "50"}):
-                orders[str(order.get("orderId") or "")] = order
-        # A resting Entry can have been created before its first fill/window.
-        for order_id in {str(r.get("orderId") or "") for r in executions
-                         if r.get("execType") == "Trade"} - set(orders):
-            rows = pages("/v5/order/history", {"category": "linear", "orderId": order_id})
-            if not rows:
-                # An actively partially-filled order need not be in terminal
-                # history yet. Its exact authenticated live order is valid
-                # evidence; symbol-only or guessed order matches are not.
-                rows = pages("/v5/order/realtime", {"category": "linear", "orderId": order_id,
-                                                   "openOnly": "0"})
-            _require(len(rows) == 1 and rows[0].get("orderId") == order_id,
-                     "EXACT_ORDER_HISTORY_MISSING")
-            orders[order_id] = rows[0]
-        after = pages("/v5/position/list", dict(pos_params))
-        after = [p for p in after if _number(p.get("size")) > 0]
-        _require(sorted(map(position_fingerprint, before)) ==
-                 sorted(map(position_fingerprint, after)),
-                 "POSITION_CHANGED_DURING_HISTORY")
+        _require(
+            end_ms - start_ms <= 2 * 366 * 24 * 3600 * 1000,
+            "HISTORY_OUTSIDE_RETENTION",
+        )
+
+        def read_history_window(lo_ms: int, hi_ms: int) -> None:
+            """Read *both* signed histories over each exact inclusive interval.
+
+            The previous cutoff and next cutoff must be joined at +1ms;
+            never widen an old proof by merely refreshing its timestamp.
+            """
+            if hi_ms < lo_ms:
+                return
+            for lo in range(lo_ms, hi_ms + 1, week):
+                params = {"category": "linear", "settleCoin": "USDT",
+                          "startTime": str(lo), "endTime": str(min(hi_ms, lo + week - 1))}
+                executions.extend(pages("/v5/execution/list", {**params, "limit": "100"}))
+                for order in pages("/v5/order/history", {**params, "limit": "50"}):
+                    orders[str(order.get("orderId") or "")] = order
+
+        def resolve_exact_orders() -> None:
+            # An Entry order may predate its first fill and be absent from the
+            # interval history. The same exact-ID history/realtime rule applies
+            # after every trailing window, including newly seen executions.
+            missing = {
+                str(r.get("orderId") or "") for r in executions
+                if r.get("execType") == "Trade"
+            } - set(orders)
+            for order_id in missing:
+                rows = pages("/v5/order/history", {"category": "linear", "orderId": order_id})
+                if not rows:
+                    rows = pages("/v5/order/realtime", {
+                        "category": "linear", "orderId": order_id, "openOnly": "0",
+                    })
+                _require(
+                    len(rows) == 1 and rows[0].get("orderId") == order_id,
+                    "EXACT_ORDER_HISTORY_MISSING",
+                )
+                orders[order_id] = rows[0]
+
+        def stable_after() -> list[Mapping[str, Any]]:
+            rows = pages("/v5/position/list", dict(pos_params))
+            current = [p for p in rows if _number(p.get("size")) > 0]
+            _require(
+                sorted(map(position_fingerprint, before))
+                == sorted(map(position_fingerprint, current)),
+                "POSITION_CHANGED_DURING_HISTORY",
+            )
+            return current
+
+        read_history_window(start_ms, end_ms)
+        resolve_exact_orders()
+        after = stable_after()
         observed = self.clock_ms()
-        _require(observed - end_ms <= 15_000, "HISTORY_SNAPSHOT_WINDOW_EXPIRED")
-        _require(all(int(str(p["updatedTime"])) <= end_ms for p in after),
-                 "POSITION_OVERTAKES_HISTORY")
-        return RecoveryInventory(self.account, self.connector, start_ms, end_ms, observed,
-                                 tuple(after), tuple(executions), orders)
+
+        # The first page set can take >15s. Do not waive freshness or
+        # relabel an old end_ms as current. Read every missing millisecond
+        # of BOTH signed histories, then re-check the complete position
+        # version; at most three bounded catch-up rounds and the same
+        # original 30s global monotonic request budget.
+        for _ in range(3):
+            _require(observed >= end_ms, "HISTORY_CLOCK_REGRESSION")
+            if observed - end_ms <= 15_000:
+                break
+            _require(self.monotonic() < deadline, "HISTORY_READ_BUDGET_EXPIRED")
+            newer_end_ms = observed
+            read_history_window(end_ms + 1, newer_end_ms)
+            resolve_exact_orders()
+            after = stable_after()
+            end_ms = newer_end_ms
+            observed = self.clock_ms()
+
+        _require(
+            0 <= observed - end_ms <= 15_000,
+            "HISTORY_CATCHUP_BUDGET_EXPIRED",
+        )
+        _require(self.monotonic() < deadline, "HISTORY_READ_BUDGET_EXPIRED")
+        _require(
+            all(int(str(p["updatedTime"])) <= end_ms for p in after),
+            "POSITION_OVERTAKES_HISTORY",
+        )
+        return RecoveryInventory(
+            self.account, self.connector, start_ms, end_ms, observed,
+            tuple(after), tuple(executions), orders,
+        )
