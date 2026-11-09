@@ -334,14 +334,72 @@ def test_p90_repair_denial_does_not_hide_independent_ordinary_exit_result(
         ordinary_exit, "materialize_once",
         lambda _db, *, now: observed.append("materialize") or materialized,
     )
+    def independent_dispatch(_db: object, *, now: datetime) -> str:
+        # A blocked materialization is NOT the same as a pre-existing
+        # PROVEN request. The latter is searched independently and remains
+        # eligible; no fabricated request is published by this test.
+        if materialized.startswith("REQUEST_CREATED:"):
+            pytest.fail("do not dispatch newly materialized request twice")
+        assert now == AT
+        observed.append("independent-dispatch-check")
+        return "NO_REQUEST"
+
     monkeypatch.setattr(
-        ordinary_exit, "dispatch_once",
-        lambda *_args, **_kwargs: pytest.fail(
-            "must not dispatch an unrelated blocked/unpublished decision"
-        ),
+        ordinary_exit, "dispatch_once", independent_dispatch,
     )
     assert ordinary_exit.run_once(object(), now=AT) == materialized
-    assert observed == ["audit", "materialize"]
+    assert observed == (
+        ["audit", "materialize", "independent-dispatch-check"]
+        if materialized.startswith("DECISION_BLOCKED:")
+        else ["audit", "materialize"]
+    )
+
+
+def test_blocked_materialization_does_not_starve_durable_ordinary_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Execute actual consumer cycle: one bad decision, one ready Exit request."""
+    p90_owner = import_module(
+        "operations.connectivity.p90_real_independent_exit"
+    )
+    ordinary_exit = import_module(
+        "operations.connectivity.universal_exit_consumer"
+    )
+    events: list[str] = []
+    connection = object()
+
+    def p90_once(db: object, *, now: datetime) -> str:
+        assert db is connection and now == AT
+        events.append("p90")
+        return "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED"
+
+    def audit(db: object, *, result: str, observed_at: datetime) -> None:
+        assert db is connection and observed_at == AT
+        assert result == "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED"
+        events.append("audit")
+
+    def blocked_decision(db: object, *, now: datetime) -> str:
+        assert db is connection and now == AT
+        events.append("materialization-blocked")
+        return "DECISION_BLOCKED:INDEPENDENT_OWNER_UNVERIFIED"
+
+    def durable_exit_request(db: object, *, now: datetime) -> str:
+        assert db is connection and now == AT
+        events.append("existing-durable-dispatch")
+        return "DISPATCHED:existing-proven-exit-command"
+
+    monkeypatch.setattr(p90_owner, "run_p90_exit_once", p90_once)
+    monkeypatch.setattr(p90_owner, "audit_firstfill_exit_result", audit)
+    monkeypatch.setattr(ordinary_exit, "materialize_once", blocked_decision)
+    monkeypatch.setattr(ordinary_exit, "dispatch_once", durable_exit_request)
+
+    assert ordinary_exit.run_once(connection, now=AT) == (
+        "DISPATCHED:existing-proven-exit-command"
+    )
+    assert events == [
+        "p90", "audit", "materialization-blocked",
+        "existing-durable-dispatch",
+    ]
 
 
 def test_fresh_p90_exit_request_is_prioritized_without_duplicate_dispatch(
