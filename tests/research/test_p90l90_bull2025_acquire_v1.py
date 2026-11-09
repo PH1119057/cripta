@@ -81,6 +81,10 @@ def test_native_source_day_good_and_bad(tmp_path: Path) -> None:
     assert checked["size_bytes"] == path.stat().st_size
     assert len(checked["sha256"]) == 64
 
+    write_gzip_day(path, [good[0], {**good[1], "trdMatchID": "eventA"}])
+    with pytest.raises(ValueError, match="duplicate native execution ID"):
+        m.validate_archive("LTCUSDT", day, path)
+
     write_gzip_day(path, [good[1], good[0]])
     with pytest.raises(ValueError, match="empty|off|out-of-order"):
         m.validate_archive("DOTUSDT", day, path)
