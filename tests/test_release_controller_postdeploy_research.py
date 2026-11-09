@@ -5,10 +5,9 @@ The real Release Controller module is executed with inert injected ports.
 """
 from __future__ import annotations
 
-import importlib.machinery
-import importlib.util
+import ast
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -20,15 +19,36 @@ TREE = "c" * 40
 
 
 @pytest.fixture
-def controller(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.syspath_prepend(str(CONTROLLER_PATH.parent))
-    loader = importlib.machinery.SourceFileLoader(
-        "cripta_release_controller_postdeploy_test", str(CONTROLLER_PATH),
-    )
-    spec = importlib.util.spec_from_loader(loader.name, loader)
-    assert spec is not None
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
+def controller():
+    """Compile the actual production functions without Linux-only fcntl.
+
+    Tests execute the exact AST nodes of _postcheck and its guarded helper,
+    while all filesystem/Git/GitHub ports remain inert on every CI platform.
+    """
+    parsed = ast.parse(CONTROLLER_PATH.read_text(encoding="utf-8"))
+    needed = {
+        "ControllerError",
+        "_verify_post_deploy_research_source_advance",
+        "_postcheck",
+    }
+    statements = []
+    for node in parsed.body:
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            if node.name in needed:
+                statements.append(node)
+        elif isinstance(node, ast.Assign):
+            if any(
+                isinstance(target, ast.Name)
+                and target.id == "POST_DEPLOY_RESEARCH_ONLY_PREFIXES"
+                for target in node.targets
+            ):
+                statements.append(node)
+    assert len(statements) == 4
+    actual = ast.Module(body=statements, type_ignores=[])
+    module = ModuleType("cripta_release_controller_postdeploy_test")
+    module.RUNTIME_ROOT = Path("/isolated/runtime")
+    module.TOOLING_ROOT = Path("/isolated/tooling")
+    exec(compile(actual, str(CONTROLLER_PATH), "exec"), module.__dict__)
     return module
 
 
