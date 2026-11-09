@@ -881,6 +881,37 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
         ?'Entry '+entrySide+' '+(entryDistance==null||!Number.isFinite(entryDistance)?'—':entryDistance.toFixed(3)+'%')+' · цена '+entry+' · сейчас '+current
         :'нет valid Entry edge · сейчас '+current;
       const geometryText=h9Text+' · '+entryText+' · Entry требует overlap с L5-3';
+      // Presentation-only P90 geometry snapshot, not a StrategySignal or
+      // permission to trade. A price touching H9 does NOT imply Entry.
+      const presentNumber=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
+      const width=item.geometry?.working_width_pct,median=item.geometry?.previous_seven_day_median;
+      const widthKnown=presentNumber(width)&&presentNumber(median);
+      const widthDeltaPp=widthKnown?Number(width)-Number(median):null;
+      // Canonical P90 PREV7D band, displayed only; Entry owns enforcement.
+      const widthPass=widthKnown&&Math.abs(widthDeltaPp)<=0.5;
+      const h9Aligned=h9NearestSide==='LONG'?h9.long_exact_alignment===true:
+        h9NearestSide==='SHORT'?h9.short_exact_alignment===true:false;
+      const sideCandidate=h9NearestSide&&Array.isArray(item.entry_candidates)
+        ?item.entry_candidates.find(x=>x?.side===h9NearestSide):null;
+      const blockers=[];
+      if(!h9NearestSide)blockers.push('нет проверенной H9 distance');
+      else if(!h9Aligned)blockers.push('H9 5m/15m не совпадают');
+      if(!widthKnown)blockers.push('нет данных PREV7D');
+      else if(!widthPass)blockers.push('ширина вне PREV7D');
+      if(h9NearestSide&&h9Aligned&&widthPass&&!sideCandidate)
+        blockers.push('глубина L5-3 не допущена');
+      const h9RuleText=!h9NearestSide?'НЕ ПРОВЕРЕНО':h9Aligned?'СОВПАДАЕТ':'НЕ СОВПАДАЕТ';
+      const deltaText=widthKnown?(widthDeltaPp>=0?'+':'')+widthDeltaPp.toFixed(3)+' п.п.':'—';
+      const widthRuleText=!widthKnown?'НЕ ПРОВЕРЕНО':
+        (widthPass?'В ДОПУСКЕ':'ВНЕ ДОПУСКА')+' · Δ '+deltaText+' (±0.5 п.п.)';
+      const l53RuleText=sideCandidate?'допущена геометрия':'нет допущенного RAW Entry edge';
+      const verdictText=blockers.length
+        ?'ENTRY BLOCKED (геометрия) · '+blockers.join(' / ')
+        :'Геометрия допущена, но сигнал Entry требует отдельного первого пересечения RAW L5-3';
+      const ruleHtml='<div class="rail-position-meta"><b class="'+(blockers.length?'warn':'muted')+'">'+safe(verdictText)+'</b></div>'+
+        '<div class="rail-position-meta">H9 5m/15m ('+safe(h9NearestSide||'—')+'): <b>'+safe(h9RuleText)+'</b>'+
+        ' · PREV7D: <b>'+safe(widthRuleText)+'</b></div>'+
+        '<div class="rail-position-meta">L5-3: '+safe(l53RuleText)+' · crossing: только по ordered publicTrade, не по H9 distance</div>';
       const diag=currentP90Diagnostic(diagnostic&&String(diagnostic.symbol||'')===String(item.symbol||'')?diagnostic:null);
       const diagLine=diag
         ?'<div class="rail-position-meta">Сквозной REAL‑тест: <b>'+safe(diagnosticStateRu(diag.state))+'</b>'+(diag.error?' · '+safe(diag.error):'')+'</div>'
@@ -896,6 +927,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
           '<span class="rail-position-pnl"><span class="p90-rail-distance">'+safe(distanceText)+'</span><br><small class="rail-position-meta">'+safe(h9NearestSide||'—')+'</small></span>'+
         '</div>'+
         '<div class="rail-position-meta">'+safe(geometryText)+'</div>'+
+        ruleHtml+
         '<div class="rail-position-meta">geometry '+safe(item.geometry?.effective_at||'—')+'</div>'+
         diagLine+diagControls+
       '</div>';
