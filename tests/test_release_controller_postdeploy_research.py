@@ -33,9 +33,11 @@ def controller():
     }
     statements = []
     for node in parsed.body:
-        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-            if node.name in needed:
-                statements.append(node)
+        if (
+            isinstance(node, (ast.FunctionDef, ast.ClassDef))
+            and node.name in needed
+        ):
+            statements.append(node)
         elif isinstance(node, ast.Assign):
             if any(
                 isinstance(target, ast.Name)
