@@ -15,8 +15,8 @@ import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, TypeVar
 
 import psycopg
 import websocket
@@ -1557,10 +1557,7 @@ def own_p90_real_signed_position_reader(
 _P90_FIRST_FILL_GENERATION_PROOF_RETRY_SECONDS = 3.0
 _P90_FIRST_FILL_GENERATION_PROOF_SLEEP_SECONDS = 0.2
 _P90_FIRST_FILL_GENERATION_PROOF_AGE_SECONDS = 12.0
-_P90ProofT = TypeVar("_P90ProofT")
-
-
-def _p90_bounded_first_fill_signed_proof(
+def _p90_bounded_first_fill_signed_proof[_P90ProofT](
     attempt: Callable[[], _P90ProofT],
     *,
     position: StrategyPosition,
