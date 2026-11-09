@@ -380,3 +380,61 @@ def test_pg_scoped_engine_and_cursor_rollback_atomically() -> None:
                WHERE strategy_id=%s AND source_session_id=%s""",
             (MAIN_ID,session),
         ).fetchone() == (1,1)
+
+
+def test_pg_513_plus_same_sequence_original_ids_preserve_atomic_frame_order() -> None:
+    """Prove actual PostgreSQL source writes above 512 IDs in one native seq."""
+    session = uuid4().hex
+    prefix = "ci-native-sameseq-513-470-" + uuid4().hex
+    events = tuple(
+        _event(f"{prefix}-{index:04d}") for index in range(513)
+    )
+    next_event = _event(f"{prefix}-0513")
+    with _db() as conn:
+        _session_start(conn, session)
+        _persist_frame(conn, session=session, frame_number=1, facts=events)
+        rows = conn.execute(
+            """SELECT frame_number,frame_index,exchange_sequence,exec_id
+                 FROM analytics.native_public_trade_source_events
+                WHERE source_session_id=%s
+                ORDER BY frame_number,frame_index""",
+            (session,),
+        ).fetchall()
+        assert rows == [
+            (1, index, event.exchange_sequence, event.exec_id)
+            for index, event in enumerate(events)
+        ]
+        assert conn.execute(
+            """SELECT count(*)
+                 FROM analytics.native_public_trade_events j
+                 JOIN analytics.native_public_trade_source_events s
+                   ON s.market_source_id=j.market_source_id
+                  AND s.instrument_id=j.instrument_id
+                  AND s.exchange_sequence=j.exchange_sequence
+                  AND s.exec_id=j.exec_id
+                WHERE s.source_session_id=%s""",
+            (session,),
+        ).fetchone() == (513,)
+        assert conn.execute(
+            """SELECT frame_number,frame_index,exchange_sequence,exec_id
+                 FROM analytics.native_public_trade_source_cursors
+                WHERE source_session_id=%s AND external_symbol='LTCUSDT'""",
+            (session,),
+        ).fetchone() == (1, 512, 12121, events[-1].exec_id)
+
+        # The next distinct execId with exactly the same original seq is
+        # accepted, ordered after the 513 recorded facts and never evicted.
+        _persist_frame(
+            conn, session=session, frame_number=2, facts=(next_event,),
+        )
+        assert conn.execute(
+            """SELECT count(*) FROM analytics.native_public_trade_source_events
+                WHERE source_session_id=%s""",
+            (session,),
+        ).fetchone() == (514,)
+        assert conn.execute(
+            """SELECT frame_number,frame_index,exchange_sequence,exec_id
+                 FROM analytics.native_public_trade_source_cursors
+                WHERE source_session_id=%s AND external_symbol='LTCUSDT'""",
+            (session,),
+        ).fetchone() == (2, 0, 12121, next_event.exec_id)
