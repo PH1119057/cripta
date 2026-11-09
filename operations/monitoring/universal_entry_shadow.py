@@ -155,6 +155,11 @@ from bybit_workbench.universal_entry.transport_continuity import (
 from bybit_workbench.universal_entry.v1_compat import load_v1_compatibility_bundle
 
 PROJECT_ROOT = Path(os.environ.get("CRIPTA_U5_SOURCE_ROOT", "/srv/cripta/source_checkout"))
+# The Observer's historical source snapshot is NOT necessarily a Git checkout.
+# Original MarketSource producer ABI must be verified from the real operational
+# Git mirror; otherwise git show on an immutable release snapshot fails closed.
+# This Git root is READ-ONLY and never grants Strategy/Exit/Exchange permission.
+NATIVE_SOURCE_GIT_CHECKOUT = Path("/srv/cripta/source_checkout")
 STATE_ROOT = Path(os.environ.get("CRIPTA_U5_STATE_ROOT", "/var/lib/cripta/universal_entry_shadow"))
 STATUS_PATH = STATE_ROOT / "status.json"
 JOURNAL_PATH = STATE_ROOT / "normalized_facts.jsonl"
@@ -4012,7 +4017,7 @@ def _run_observer_epoch(
                     pg_source = active_native_observer_source(
                         connection,
                         symbols=tuple(sorted(p90l90_symbols)),
-                        source_checkout=PROJECT_ROOT,
+                        source_checkout=NATIVE_SOURCE_GIT_CHECKOUT,
                         loaded_consumer_commit=LOADED_COMMIT,
                         observed_at=datetime.now(UTC),
                     )
