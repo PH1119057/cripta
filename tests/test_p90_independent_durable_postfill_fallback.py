@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 
+from bybit_workbench.market_data import p90l90_real_durable_postfill_source as source
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
@@ -17,7 +18,6 @@ from bybit_workbench.universal_entry.contracts import TradeDirection
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
 from operations.connectivity import p90_real_independent_exit as exit_mod
-from bybit_workbench.market_data import p90l90_real_durable_postfill_source as source
 
 AT = datetime(2026, 11, 9, 4, 7, 30, tzinfo=UTC)
 SESSION = "a" * 32
