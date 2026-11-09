@@ -23,7 +23,7 @@ jobs:
       - name: Checkout exact Ruff baseline (no secrets)
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.event.before }}
+          ref: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || github.event.repository.default_branch }}
           path: .ruff-baseline
           persist-credentials: false
       - name: Ruff regression gate (NEW_DIAGNOSTICS=0)
