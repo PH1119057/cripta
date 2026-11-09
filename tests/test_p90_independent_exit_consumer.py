@@ -9,6 +9,7 @@ import ast
 import sys
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -265,9 +266,11 @@ def test_p90_blocked_or_idle_does_not_veto_independent_ordinary_exit(
     monkeypatch: pytest.MonkeyPatch, p90_verdict: str,
 ) -> None:
     """Execute actual universal Exit consumer with no DB/Exchange connections."""
-    from operations.connectivity import (
-        p90_real_independent_exit as p90_owner,
-        universal_exit_consumer as ordinary_exit,
+    p90_owner = import_module(
+        "operations.connectivity.p90_real_independent_exit"
+    )
+    ordinary_exit = import_module(
+        "operations.connectivity.universal_exit_consumer"
     )
 
     events: list[str] = []
@@ -311,9 +314,11 @@ def test_p90_blocked_or_idle_does_not_veto_independent_ordinary_exit(
 def test_p90_repair_denial_does_not_hide_independent_ordinary_exit_result(
     monkeypatch: pytest.MonkeyPatch, materialized: str,
 ) -> None:
-    from operations.connectivity import (
-        p90_real_independent_exit as p90_owner,
-        universal_exit_consumer as ordinary_exit,
+    p90_owner = import_module(
+        "operations.connectivity.p90_real_independent_exit"
+    )
+    ordinary_exit = import_module(
+        "operations.connectivity.universal_exit_consumer"
     )
 
     observed: list[str] = []
@@ -342,9 +347,11 @@ def test_p90_repair_denial_does_not_hide_independent_ordinary_exit_result(
 def test_fresh_p90_exit_request_is_prioritized_without_duplicate_dispatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from operations.connectivity import (
-        p90_real_independent_exit as p90_owner,
-        universal_exit_consumer as ordinary_exit,
+    p90_owner = import_module(
+        "operations.connectivity.p90_real_independent_exit"
+    )
+    ordinary_exit = import_module(
+        "operations.connectivity.universal_exit_consumer"
     )
 
     calls: list[str] = []
