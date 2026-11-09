@@ -116,11 +116,13 @@ def _row(
     _need(raw.get("symbol") == symbol, "FOREIGN_SYMBOL")
     ident = raw.get("trdMatchID")
     side = raw.get("side")
-    _need(
-        isinstance(ident, str) and 1 <= len(ident) <= 128
-        and isinstance(side, str) and side in ("Buy", "Sell"),
-        "TRADE_IDENTITY_INVALID",
-    )
+    if (
+        not isinstance(ident, str) or not 1 <= len(ident) <= 128
+        or not isinstance(side, str) or side not in ("Buy", "Sell")
+    ):
+        raise BybitDailyPriceArchiveUnverified(
+            "BYBIT_DAILY_PRICE_ARCHIVE_TRADE_IDENTITY_INVALID"
+        )
     try:
         timestamp = _decimal(raw.get("timestamp"))
         ms = int(timestamp * 1000)
@@ -262,12 +264,14 @@ def audit_bybit_daily_price_archive(
         raise BybitDailyPriceArchiveUnverified(
             "BYBIT_DAILY_PRICE_ARCHIVE_COMPRESSED_FILE_INCOMPLETE"
         ) from None
-    _need(
-        selected == native_interval_row_count
-        and first_ms is not None and last_ms is not None
-        and low is not None and high is not None,
-        "ARCHIVE_NATIVE_INTERVAL_COUNT_OR_COVERAGE_MISMATCH",
-    )
+    if (
+        selected != native_interval_row_count
+        or first_ms is None or last_ms is None
+        or low is None or high is None
+    ):
+        raise BybitDailyPriceArchiveUnverified(
+            "BYBIT_DAILY_PRICE_ARCHIVE_NATIVE_INTERVAL_COUNT_OR_COVERAGE_MISMATCH"
+        )
     return BybitPriceArchiveAudit(
         symbol=symbol,
         market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
