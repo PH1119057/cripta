@@ -440,12 +440,12 @@ for book_name in books:
     )
 
 # The no-pause controls must EXACTLY match immutable prior side books.
-baseline = json.loads((BASE/"result.json").read_text())
+baseline = json.loads((BASELINE/"result.json").read_text())
 assert baseline["status"] == "COMPLETE_HISTORICAL_PROXY_NOT_LIVE"
 assert baseline["raw_native_ticks_evaluated"] == n
 assert baseline["control_counts"] == reports["CONTROL"]["counts"]
 for side in SIDES:
-    leaf=BASE/("trade_ledger_"+side.lower()+".jsonl")
+    leaf=BASELINE/("trade_ledger_"+side.lower()+".jsonl")
     raw=leaf.read_bytes()
     assert hashlib.sha256(raw).hexdigest()==baseline["ledger_sha256"][side]
     assert books[side].trades == [json.loads(z) for z in raw.splitlines()]
@@ -566,7 +566,7 @@ assert json.loads((OUT / "result.json").read_text())["control_reference_trade_pa
     "python":sys.version,"uid":os.geteuid(),"gid":os.getegid(),
     "source_head":ARGS.source_head},sort_keys=True)+"\n")
 (OUT/"input_provenance.json").write_text(json.dumps({
-    "old_baseline_path":str(BASE/"result.json"),
+    "old_baseline_path":str(BASELINE/"result.json"),
     "old_baseline_ledger_sha":baseline["ledger_sha256"],
     "candidate_sha256":result["candidate_sha256_by_symbol"],
     "source_input_manifest":{
