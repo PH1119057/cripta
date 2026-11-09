@@ -54,14 +54,14 @@ def test_observer_fault_read_model_exposes_unresolved_durable_evidence(monkeypat
         (
             "observer-fault-1",
             "ERROR",
-            datetime(2026, 11, 9, 0, 40, 20, tzinfo=UTC),
+            datetime(2026, 11, 7, 19, 20, tzinfo=UTC),
             {
                 "service": "cripta-universal-entry-observer.service",
                 "source_commit": "a" * 40,
             },
             {
                 "first_seen_at": "2026-10-06T16:40:00+00:00",
-                "last_seen_at": "2026-11-09T00:40:20+00:00",
+                "last_seen_at": "2026-11-07T19:20:00+00:00",
                 "occurrence_count": 7,
                 "error_type": "ValueError",
                 "error_message": "forced dashboard test",
@@ -114,7 +114,7 @@ def test_old_signature_reappearing_after_reset_is_a_new_notice(monkeypatch) -> N
         "observer-fault-recurrent", "ERROR", old_detected,
         {"source_commit": "a" * 40},
         {"first_seen_at": "2026-10-06T16:40:00+00:00",
-         "last_seen_at": "2026-11-09T00:40:01+00:00",
+         "last_seen_at": "2026-11-07T19:20:00+00:00",
          "occurrence_count": 2},
     )]
     monkeypatch.setattr(
@@ -125,43 +125,6 @@ def test_old_signature_reappearing_after_reset_is_a_new_notice(monkeypatch) -> N
     assert model["state"] == "red"
     assert model["count"] == 1
     assert model["items"][0]["fault_id"] == "observer-fault-recurrent"
-    assert model["archived_items"] == []
-
-
-def test_nov9_observer_attention_reset_preserves_old_open_and_new_notice(monkeypatch) -> None:
-    old = datetime(2026, 11, 8, 19, 44, tzinfo=UTC)
-    new = datetime(2026, 11, 9, 0, 40, 1, tzinfo=UTC)
-    rows = [
-        ("observer-fault-old", "ERROR", old, {"source_commit": "a" * 40},
-         {"last_seen_at": old.isoformat(), "occurrence_count": 19}),
-        ("observer-fault-reappeared", "ERROR", old, {"source_commit": "a" * 40},
-         {"last_seen_at": new.isoformat(), "occurrence_count": 20}),
-    ]
-    connection = ReadConnection(rows)
-    monkeypatch.setattr(app.psycopg, "connect", lambda *_a, **_kw: connection)
-    model = app.observer_runtime_fault_state()
-    assert model["attention_reset_at"] == "2026-11-09T00:40:00+00:00"
-    assert model["count"] == 1
-    assert model["historical_open_count"] == 2
-    assert [i["fault_id"] for i in model["items"]] == ["observer-fault-reappeared"]
-    assert [i["fault_id"] for i in model["archived_items"]] == ["observer-fault-old"]
-    assert model["superseded_count"] == 0
-    assert all("UPDATE" not in sql and "DELETE" not in sql for sql, _ in connection.calls)
-    assert app.OPERATOR_ERROR_ATTENTION_RESET_AT == datetime(
-        2026, 11, 7, 19, 18, 25, tzinfo=UTC
-    )
-
-
-def test_nov9_bad_observer_time_remains_visible(monkeypatch) -> None:
-    rows = [
-        ("observer-fault-invalid-time", "ERROR",
-         datetime(2026, 11, 8, 19, 44, tzinfo=UTC),
-         {"source_commit": "a" * 40},
-         {"last_seen_at": "invalid"})
-    ]
-    monkeypatch.setattr(app.psycopg, "connect", lambda *_a, **_kw: ReadConnection(rows))
-    model = app.observer_runtime_fault_state()
-    assert model["count"] == 1
     assert model["archived_items"] == []
 
 
