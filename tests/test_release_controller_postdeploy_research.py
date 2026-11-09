@@ -113,11 +113,11 @@ def configure(
             return "".join(path + "\0" for path in facts.paths)
         raise AssertionError(f"unexpected git read: {args}")
 
-    monkeypatch.setattr(controller, "_commit_from_current", current_release)
-    monkeypatch.setattr(controller, "_source_state", source_state)
-    monkeypatch.setattr(controller, "current_main", current_main)
-    monkeypatch.setattr(controller, "_git_remote_main", lambda: facts.remote)
-    monkeypatch.setattr(controller, "_git", git)
+    monkeypatch.setattr(controller, "_commit_from_current", current_release, raising=False)
+    monkeypatch.setattr(controller, "_source_state", source_state, raising=False)
+    monkeypatch.setattr(controller, "current_main", current_main, raising=False)
+    monkeypatch.setattr(controller, "_git_remote_main", lambda: facts.remote, raising=False)
+    monkeypatch.setattr(controller, "_git", git, raising=False)
     return facts
 
 
