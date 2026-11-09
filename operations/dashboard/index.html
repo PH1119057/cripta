@@ -906,7 +906,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
         (widthPass?'В ДОПУСКЕ':'ВНЕ ДОПУСКА')+' · Δ '+deltaText+' (±0.5 п.п.)';
       const l53RuleText=sideCandidate?'допущена геометрия':'нет допущенного RAW Entry edge';
       const verdictText=blockers.length
-        ?'ENTRY BLOCKED · '+blockers.join(' / ')
+        ?'ENTRY BLOCKED (геометрия) · '+blockers.join(' / ')
         :'Геометрия допущена, но сигнал Entry требует отдельного первого пересечения RAW L5-3';
       const ruleHtml='<div class="rail-position-meta"><b class="'+(blockers.length?'warn':'muted')+'">'+safe(verdictText)+'</b></div>'+
         '<div class="rail-position-meta">H9 5m/15m ('+safe(h9NearestSide||'—')+'): <b>'+safe(h9RuleText)+'</b>'+
