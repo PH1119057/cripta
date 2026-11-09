@@ -47,10 +47,14 @@ from bybit_workbench.universal_exit.storage import PostgresExitShadowStore
 # One credential-free import, independent of whether the consumer was
 # launched as an installed script or imported as a package in CI.
 
-read_real_postfill_source_window = import_module(
+_postfill_source_client = import_module(
     (str(__package__) + "." if __package__ else "")
     + "p90l90_real_postfill_source_client"
-).read_real_postfill_source_window
+)
+read_real_postfill_source_window = _postfill_source_client.read_real_postfill_source_window
+P90RealPostfillSourceClientUnverified = (
+    _postfill_source_client.P90RealPostfillSourceClientUnverified
+)
 
 # A first-fill arm is intentionally not a historical repair operation.
 # Source broker has its own stricter protection/clock/coverage deadlines.
@@ -59,6 +63,40 @@ _FIRST_FILL_WINDOW = timedelta(seconds=15)
 
 class P90IndependentExitBlocked(RuntimeError):
     """Proof missing: keep the OPEN position and its existing SL/TP intact."""
+
+
+def read_firstfill_source_with_independent_market_fallback(
+    connection: Any, *,
+    position: Any,
+    source_epoch_id: str,
+    source_commit: str,
+    accepted_producer_commits: frozenset[str],
+) -> Any:
+    """Only an unavailable Observer IPC gets a new original MarketSource proof.
+
+    A negative, stale or identity-drift broker verdict stays a hard block.
+    The alternative is a separate MarketSource-owned immutable WS journal
+    read *plus* complete short Bybit original trade REST overlap: never an
+    unchecked PostgreSQL slice or permission/re-arm substitute.
+    """
+    try:
+        return read_real_postfill_source_window(
+            position=position, source_epoch_id=source_epoch_id,
+            source_commit=source_commit,
+        )
+    except P90RealPostfillSourceClientUnverified as exc:
+        if str(exc) != "P90_REAL_POSTFILL_SOURCE_TRANSPORT_UNAVAILABLE":
+            raise
+    from operations.monitoring.p90l90_real_durable_postfill_source import (
+        read_independent_durable_postfill_window,
+    )
+
+    return read_independent_durable_postfill_window(
+        connection, position=position, source_epoch_id=source_epoch_id,
+        source_commit=source_commit,
+        accepted_producer_commits=accepted_producer_commits,
+        observed_at=datetime.now(UTC),
+    )
 
 
 def _candidate(connection: Any) -> dict[str, object] | None:
@@ -287,9 +325,10 @@ def run_p90_exit_once(
                 raise P90IndependentExitBlocked(
                     "P90_REAL_EXIT_FIRST_FILL_LINEAGE_OR_MUTATION_UNVERIFIED"
                 )
-            coverage = read_real_postfill_source_window(
-                position=position, source_epoch_id=epoch_id,
+            coverage = read_firstfill_source_with_independent_market_fallback(
+                connection, position=position, source_epoch_id=epoch_id,
                 source_commit=identity.origin_commit,
+                accepted_producer_commits=identity.approved_producers,
             )
             private_client = P90PrivateProofClient(
                 account=route.trading_account_id,

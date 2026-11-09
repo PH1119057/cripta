@@ -213,7 +213,10 @@ def _live_proofs(monkeypatch, uid="12345678"):
     monkeypatch.setattr(subject, "read_p90_real_account_routes", lambda *_a, **_kw: routes)
     monkeypatch.setattr(
         subject, "inspect_real_source_identity",
-        lambda *_a, **_kw: SimpleNamespace(origin_commit="b"*40),
+        lambda *_a, **_kw: SimpleNamespace(
+            origin_commit="b"*40,
+            approved_producers=frozenset(("b"*40,)),
+        ),
     )
     monkeypatch.setattr(subject, "read_real_postfill_source_window", lambda **_kw: coverage)
     monkeypatch.setattr(subject, "p90_real_exit_no_pending", lambda *_a, **_kw: True)
