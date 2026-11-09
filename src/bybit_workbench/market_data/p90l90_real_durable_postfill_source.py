@@ -155,7 +155,7 @@ def _source_session(connection: Any, *, source_commit: str,
         and _utc(accepted) >= fill_at,
         "SOURCE_SESSION_INCOMPLETE",
     )
-    return session
+    return cast(str, session)
 
 
 def _rest_window(
