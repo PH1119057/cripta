@@ -7,10 +7,11 @@ A reconnect does NOT prove source continuity; exact gap epoch is mandatory.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Literal, Mapping
+from typing import Literal
 
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
