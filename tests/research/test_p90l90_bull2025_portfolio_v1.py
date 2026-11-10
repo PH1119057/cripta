@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import ast
-
-import pytest
 from datetime import UTC, datetime
 from decimal import Decimal as D
 from pathlib import Path
+
+import pytest
 
 from scripts.research import p90l90_bull2025_portfolio_v1 as p
 
