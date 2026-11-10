@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import gzip
+import hashlib
 import importlib.util
 import sys
 import types
@@ -102,3 +103,58 @@ def test_native_source_day_good_and_bad(tmp_path: Path) -> None:
     write_gzip_day(path, [])
     with pytest.raises(ValueError, match="empty"):
         m.validate_archive("LTCUSDT", day, path)
+
+
+def test_regression_child_multimegabyte_output_no_pipe_deadlock(tmp_path: Path) -> None:
+    m = module()
+    log = tmp_path / "large_download.log"
+    cmd = [
+        sys.executable, "-c",
+        "import sys; sys.stdout.write('A'*1200000); sys.stdout.flush(); "
+        "sys.stderr.write('B'*1200000); sys.stderr.flush()",
+    ]
+    code = m.run_logged_child(cmd, log, lambda _pid: None, interval_seconds=0.02)
+    assert code == 0
+    assert log.stat().st_size == 2400000
+    with log.open("rb") as stream:
+        assert stream.read(2) == b"AA"
+        stream.seek(-2, 2)
+        assert stream.read(2) == b"BB"
+    # Never overwrite a completed previous source/attempt log.
+    with pytest.raises(FileExistsError):
+        m.run_logged_child(cmd, log, lambda _pid: None, interval_seconds=0.02)
+
+
+def test_repair_provenance_is_distinct_and_immutable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    m = module()
+    source_dir = tmp_path / "repository"
+    root = tmp_path / "data"
+    source_dir.mkdir()
+    root.mkdir()
+    original = b"original research runner (historical snapshot)"
+    repaired = b"safe logged child, no undrained pipe"
+    file = source_dir / "runner.py"
+    file.write_bytes(repaired)
+    monkeypatch.setattr(m, "SOURCE", source_dir)
+    monkeypatch.setattr(m, "ROOT", root)
+    monkeypatch.setattr(m, "FILES", ("runner.py",))
+    sha = hashlib.sha256(repaired).hexdigest()
+    old_hash = hashlib.sha256(original).hexdigest()
+    base = "a" * 40
+    head = "b" * 40
+    manifest = {
+        "source_head": base, "source_snapshot_sha256": {"runner.py": old_hash}
+    }
+    m.snapshot_resume_source(head, manifest)
+    saved = root / "recovery_sources" / f"{head}_p90l90_bull2025_acquire_v1.py"
+    record = root / "recovery_sources" / f"{head}_provenance.json"
+    assert saved.read_bytes() == repaired
+    assert old_hash != sha
+    assert old_hash in record.read_text()
+    # Retrying the exact same evidence is read-only/idempotent.
+    m.snapshot_resume_source(head, manifest)
+    saved.write_bytes(b"corrupted source")
+    with pytest.raises(RuntimeError, match="drifted"):
+        m.snapshot_resume_source(head, manifest)

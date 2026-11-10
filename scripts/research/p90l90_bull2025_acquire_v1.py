@@ -192,6 +192,76 @@ def validate_archive(symbol: str, day: dt.date, path: Path) -> dict:
     return {"sha256": digest(path), "size_bytes": path.stat().st_size,
             "rows": count, "first_ts": first, "last_ts": last}
 
+def run_logged_child(
+    command: list[str], log_path: Path, heartbeat, interval_seconds: float = 20.0
+) -> int:
+    """Run a bounded child without an undrained stdout/stderr pipe.
+
+    A regular on-disk log is directly owned by the child process. Its bytes
+    cannot cause pipe_write backpressure in the downloader or curl descendants.
+    On an unexpected Python callback error, terminate only this own child.
+    """
+    with log_path.open("x", encoding="utf8") as log:
+        child = subprocess.Popen(
+            command,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        )
+        try:
+            while child.poll() is None:
+                time.sleep(interval_seconds)
+                heartbeat(child.pid)
+            return child.returncode
+        except BaseException:
+            if child.poll() is None:
+                child.terminate()
+                child.wait(timeout=15)
+            raise
+
+
+def snapshot_resume_source(source_head: str, old_manifest: dict) -> None:
+    """Add separate immutable repair evidence; never touch original snapshot."""
+    rel = FILES[0]
+    current = SOURCE / rel
+    original = old_manifest["source_snapshot_sha256"][rel]
+    now = digest(current)
+    if now == original:
+        return
+    evidence = ROOT / "recovery_sources"
+    if evidence.is_symlink():
+        raise PermissionError("recovery provenance root is a symlink")
+    evidence.mkdir(mode=0o2770, exist_ok=True)
+    name = f"{source_head}_p90l90_bull2025_acquire_v1.py"
+    saved = evidence / name
+    if saved.exists() or saved.is_symlink():
+        if not saved.is_file() or digest(saved) != now:
+            raise RuntimeError("existing repair source snapshot has drifted")
+    else:
+        with current.open("rb") as source, saved.open("xb") as target:
+            shutil.copyfileobj(source, target, 1024 * 1024)
+        if digest(saved) != now:
+            raise RuntimeError("repair source snapshot SHA256 failed")
+    record = evidence / f"{source_head}_provenance.json"
+    desired = {
+        "issue": 554,
+        "base_source_head": old_manifest["source_head"],
+        "resume_source_head": source_head,
+        "original_runner_sha256": original,
+        "repaired_runner_sha256": now,
+        "immutable_repair_path": name,
+        "purpose": "drain child output to dedicated data-disk log; no P90L90 policy change",
+    }
+    if record.exists() or record.is_symlink():
+        if not record.is_file() or json.loads(record.read_text()) != desired:
+            raise RuntimeError("existing recovery provenance has drifted")
+    else:
+        with record.open("x", encoding="utf8") as out:
+            json.dump(desired, out, sort_keys=True, indent=2)
+            out.write("\n")
+
+
 def run(stage: str, source_head: str) -> None:
     pilot = stage == "pilot"
     preflight(source_head)
@@ -235,11 +305,10 @@ def run(stage: str, source_head: str) -> None:
                           "days": expected, "symbols": SYMBOLS,
                           "objects_expected": expected * len(SYMBOLS),
                           "root": str(ROOT)}), flush=True)
+        snapshot_resume_source(source_head, m)
         t0 = time.monotonic()
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
-        while proc.poll() is None:
-            time.sleep(20)
+
+        def heartbeat(pid: int) -> None:
             st_path = INPUTS / "archive_state.json"
             progress = {}
             if st_path.is_file():
@@ -258,11 +327,15 @@ def run(stage: str, source_head: str) -> None:
                 except (OSError, ValueError, TypeError):
                     progress = {"status": "progress file not yet consistent"}
             print(json.dumps({"stage": "DOWNLOAD_HEARTBEAT", "phase": stage,
-                              "pid": proc.pid, **progress}), flush=True)
-        stdout, _ = proc.communicate()
-        (ROOT / "logs" / ("download_" + stage + ".log")).write_text(stdout)
-        if proc.returncode:
-            raise RuntimeError(f"Bybit downloader failed exit={proc.returncode}; see bounded source log")
+                              "pid": pid, **progress}), flush=True)
+
+        # One new log per exact source commit; never reuse old stalled output.
+        log_file = ROOT / "logs" / f"download_{stage}_{source_head[:16]}.log"
+        exit_code = run_logged_child(cmd, log_file, heartbeat)
+        if exit_code:
+            raise RuntimeError(
+                f"Bybit downloader failed exit={exit_code}; read {log_file}"
+            )
         state = json.loads((INPUTS / "archive_state.json").read_text())
         if state.get("status") != "complete" or state.get("files_checked") != expected * len(SYMBOLS):
             raise RuntimeError("archive incomplete or missing days")
