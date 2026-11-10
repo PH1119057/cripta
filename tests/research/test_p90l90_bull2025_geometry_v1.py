@@ -67,7 +67,13 @@ def test_original_l53_geometry_process_symbol_uses_completed_bars(
     tmp_path: Path,
 ) -> None:
     """Tiny causal tick fixture, original CLEAN v2 code, no production files."""
-    from scripts.research import p90l90_l53_clean_v2 as core
+    # CI can preload a synthetic scripts.research package; import exact
+    # immutable research source directly so this test never rebinds it.
+    core_path = REPO / "scripts/research/p90l90_l53_clean_v2.py"
+    core_spec = importlib.util.spec_from_file_location("l53_clean_v2_test", core_path)
+    assert core_spec and core_spec.loader
+    core = importlib.util.module_from_spec(core_spec)
+    core_spec.loader.exec_module(core)
 
     raw = tmp_path / "raw" / "LTCUSDT" / "public_trades"
     parts = tmp_path / "parts"
