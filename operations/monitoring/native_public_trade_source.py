@@ -308,12 +308,15 @@ def _persist_closed_kline_frame(
     message: dict[str, object],
     symbols: tuple[str, ...],
     intervals: tuple[str, ...],
+    product: str = "LINEAR",
 ) -> int:
     """The existing Native MarketSource also owns closed candle acquisition.
 
     This is one transport/source owner, not an Observer-specific writer. The
     shared canonical store rejects a conflict instead of masking it.
     """
+    if product not in ("SPOT", "LINEAR"):
+        raise NativeSourceInputUnverified("NATIVE_SOURCE_CANDLE_CATEGORY_INVALID")
     observed = datetime.now(UTC)
     candles = decode_confirmed_bybit_klines(
         message,
@@ -326,9 +329,9 @@ def _persist_closed_kline_frame(
         key = MarketCandleKey(
             market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
             venue_id="venue-bybit",
-            instrument_id=bybit_instrument_id("linear", bar.symbol),
+            instrument_id=bybit_instrument_id(product.lower(), bar.symbol),
             external_symbol=bar.symbol,
-            product_category="LINEAR",
+            product_category=product,
             timeframe=bar.timeframe,
         )
         inserted += SharedClosedCandleStore(connection, key).ingest(
