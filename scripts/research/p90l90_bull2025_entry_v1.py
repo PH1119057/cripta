@@ -21,6 +21,8 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, getcontext
@@ -357,7 +359,7 @@ def finalize_result(
         "events_sha256": sha(leaf),
         "events": len(lines),
         "source_row_sequence": "original gzip file order, chronological UTC days",
-        "selection": "RAW_H9_UNION_SPAN side RAW equality 0..15%, PREV7D +-0.5pp, first adjacent tick crossing",
+        "selection": "RAW_H9_UNION_SPAN side RAW equality 0..15%; PREV7D and FIXED90 flags retained; first adjacent tick crossing",
         "FIXED90_LOOKAHEAD": True,
         "PREV7D_WIDTH_LOOKAHEAD": False,
         "candidate_only": True,
@@ -384,8 +386,25 @@ def main() -> None:
         "symbol": args.symbol, "window": [start_s,end_s],
         "source_head": args.source_head,
     }), flush=True)
-    manifest = process(args.symbol, raw, frozen, out, start, end, first, last,
-                       args.source_head, args.mode)
+    started = time.monotonic()
+    finished = threading.Event()
+
+    def heartbeat() -> None:
+        while not finished.wait(20):
+            print(json.dumps({
+                "stage": "ENTRY_REPLAY_HEARTBEAT", "mode": args.mode,
+                "symbol": args.symbol, "elapsed_s": round(time.monotonic()-started, 1),
+                "source_days_target": 100 if args.mode == "parity-2026" else 193,
+            }), flush=True)
+
+    monitor = threading.Thread(target=heartbeat, name="research-entry-progress", daemon=True)
+    monitor.start()
+    try:
+        manifest = process(args.symbol, raw, frozen, out, start, end, first, last,
+                           args.source_head, args.mode)
+    finally:
+        finished.set()
+        monitor.join(timeout=5)
     if args.mode == "parity-2026":
         reference = json.loads(
             (OLD_REFERENCE / f"entry_{args.symbol[:-4]}_FULL90/manifest.json").read_text()
@@ -409,6 +428,18 @@ def main() -> None:
     with (out/"qc.json").open("x",encoding="utf8") as stream:
         json.dump(qc,stream,sort_keys=True,indent=2)
         stream.write("\n")
+    snapshot = out / "source_snapshot"
+    snapshot.mkdir(mode=0o2770)
+    snapshots = {}
+    for rel in (ORIGINAL_REL, SELF_REL):
+        source = SOURCE / rel
+        copy = snapshot / Path(rel).name
+        shutil.copyfile(source, copy)
+        snapshots[copy.name] = sha(copy)
+        if snapshots[copy.name] != sha(source):
+            raise RuntimeError("candidate source snapshot SHA mismatch")
+    qc["source_snapshots_sha256"] = snapshots
+    (out / "qc.json").write_text(json.dumps(qc, sort_keys=True, indent=2) + "\n")
     (out/"source_commit.txt").write_text(args.source_head+"\n")
     print(json.dumps({"stage":"ENTRY_NATIVE_REPLAY_QC_PASS","mode":args.mode,
                       "symbol":args.symbol,"raw_rows":qc["raw_rows"],
