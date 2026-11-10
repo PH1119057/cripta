@@ -101,6 +101,24 @@ def test_long_controller_fails_closed_without_losing_committed_days(
 
 
 
+def test_one_shot_sudo_launcher_not_mistaken_for_second_worker():
+    launcher = (
+        b"sudo -u cripta python3 -B /srv/cripta/source_checkout/scripts/research/"
+        b"p90l90_bull2025_short_autonomous_v1.py --launch"
+    )
+    worker = (
+        b"python3 -u -B /srv/cripta/source_checkout/scripts/research/"
+        b"p90l90_bull2025_short_autonomous_v1.py --worker --lock-fd 3"
+    )
+    original_replay = (
+        b"python3 -B /srv/cripta/source_checkout/scripts/research/"
+        b"p90l90_bull2025_portfolio_chunked_v2.py --side SHORT_ONLY"
+    )
+    assert ctl.active_portfolio_command(launcher) is False
+    assert ctl.active_portfolio_command(worker) is True
+    assert ctl.active_portfolio_command(original_replay) is True
+
+
 def test_empty_short_checkpoint_has_day_zero_bootstrap(monkeypatch):
     monkeypatch.setattr(ctl.chunk, "load_parts", lambda _: (None, None, None))
     assert ctl.snapshot()["completed_days"] == 0
