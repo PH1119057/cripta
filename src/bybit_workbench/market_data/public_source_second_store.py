@@ -79,6 +79,7 @@ class PublicSecondAccumulator:
         if key not in self._pending:
             self._pending[key] = {
                 "market_source_id": event.market_source_id,
+                "venue_id": "venue-bybit",
                 "instrument_id": event.instrument_id,
                 "product": event.product,
                 "symbol": event.symbol,
@@ -187,7 +188,7 @@ def persist_compact_source_seconds(
     inserted = 0
     with connection.transaction():
         for item in rows:
-            for name in ("market_source_id", "instrument_id", "product",
+            for name in ("market_source_id", "venue_id", "instrument_id", "product",
                          "symbol", "second", "source_session_id",
                          "original_time_min", "original_time_max"):
                 if name not in item:
@@ -210,18 +211,18 @@ def persist_compact_source_seconds(
             if item["book"] is not None:
                 data["book"] = item["book"]
             values = (
-                item["market_source_id"], item["source_session_id"],
+                item["market_source_id"], item["venue_id"], item["source_session_id"],
                 item["instrument_id"], item["product"], item["symbol"],
                 item["second"], item["original_time_min"],
                 item["original_time_max"], Jsonb(data), producer_release_commit,
             )
             new_row = connection.execute(
                 """INSERT INTO analytics.public_market_source_seconds
-                   (market_source_id,source_session_id,instrument_id,
+                   (market_source_id,venue_id,source_session_id,instrument_id,
                     product_category,external_symbol,observed_second,
                     source_time_min,source_time_max,compact_features,
                     producer_release_commit)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                    ON CONFLICT (source_session_id,instrument_id,observed_second)
                    DO NOTHING RETURNING observed_second""",
                 values,
