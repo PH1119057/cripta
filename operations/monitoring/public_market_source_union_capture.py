@@ -315,6 +315,9 @@ def run_source_union(
         if item.product == "SPOT"
         and item.dataset_topic.startswith("kline.")
     }, key=int))
+    # Fail closed on an incomplete source/consumer horizon BEFORE opening
+    # either public socket or creating an ACTIVE producer source epoch.
+    repair_windows = _closed_repair_windows(union, native_symbols=p90_symbols)
     sock: dict[str, Any] = {}
     buffer: dict[str, list[dict[str, object]]] = {}
     for product in ("SPOT", "LINEAR"):
@@ -346,7 +349,6 @@ def run_source_union(
     # R03: bounded restoration uses a separate network-only worker. All PG
     # planning, original trade journaling and candle writes stay on THIS
     # advisory-lock-owning source thread. Work/results each have one slot.
-    repair_windows = _closed_repair_windows(union, native_symbols=p90_symbols)
     repair_jobs: queue.Queue[_ClosedRepairTask] = queue.Queue(maxsize=1)
     repair_results: queue.Queue[
         tuple[_ClosedRepairTask, tuple[tuple[Candle, ...], ...], str]
