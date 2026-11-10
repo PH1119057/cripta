@@ -75,6 +75,18 @@ def money(value: D) -> D:
     return value.quantize(Q, rounding=ROUND_HALF_EVEN)
 
 
+def verify_portfolio_source_fast_forward(
+    source_head: str, pinned_sources: dict[str, str]
+) -> str:
+    """Fail closed on any relevant Python drift, not unrelated main changes."""
+    end_head = unit.verify_source_fast_forward(
+        source_head, {rel: pinned_sources[rel] for rel in unit.PINNED_SOURCE_PATHS}
+    )
+    if sha(SOURCE / SELF_REL) != pinned_sources[SELF_REL]:
+        raise RuntimeError("effective 2025 P90L90 portfolio source bytes changed")
+    return end_head
+
+
 def verify_and_load(side: str, source_head: str):
     if os.geteuid() != 107 or entry.git_head() != source_head:
         raise PermissionError("2025 full research requires cripta UID107/exact SOURCE_HEAD")
@@ -545,11 +557,7 @@ def run(side: str, source_head: str, smoke_hours: int = 0) -> dict:
     results = {(case,mode): book.finish(prices, END_TS) for (case,mode),book in books.items()}
     # Reuse the independently-tested UNIT replay ancestry / exact five-source
     # gate, plus a sixth explicit hash for THIS portfolio's loaded Python code.
-    end_head = unit.verify_source_fast_forward(
-        source_head, {rel: pinned_sources[rel] for rel in unit.PINNED_SOURCE_PATHS}
-    )
-    if sha(SOURCE / SELF_REL) != pinned_sources[SELF_REL]:
-        raise RuntimeError("effective 2025 P90L90 portfolio source bytes changed")
+    end_head = verify_portfolio_source_fast_forward(source_head, pinned_sources)
     if out.exists() or out.is_symlink():
         raise FileExistsError("immutable 2025 portfolio output collision at publish")
     OUT_PARENT.mkdir(mode=0o2770, parents=False, exist_ok=True)
