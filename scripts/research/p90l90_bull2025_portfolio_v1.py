@@ -442,6 +442,11 @@ def native_ticks(d: dict):
 
 
 def run(side: str, source_head: str, smoke_hours: int = 0) -> dict:
+    # Capture all effective research source bytes BEFORE lengthy 2025 input
+    # loading/replay. An unrelated main fast-forward must not cause late loss.
+    # Any genuine Entry/Exit/geometry/portfolio source drift remains fatal.
+    pinned_paths = (*unit.PINNED_SOURCE_PATHS, SELF_REL)
+    pinned_sources = {rel: sha(SOURCE / rel) for rel in pinned_paths}
     data, unit_reference, out = verify_and_load(side, source_head)
     schedule = shadow_schedule(unit_reference, side)
     books = {
@@ -538,8 +543,13 @@ def run(side: str, source_head: str, smoke_hours: int = 0) -> dict:
         if data[s]["seen_events"] != data[s]["manifest"]["events"]:
             raise ValueError("2025 candidate event source counter mismatch")
     results = {(case,mode): book.finish(prices, END_TS) for (case,mode),book in books.items()}
-    if entry.git_head() != source_head:
-        raise RuntimeError("source HEAD changed while 2025 portfolio was running")
+    # Reuse the independently-tested UNIT replay ancestry / exact five-source
+    # gate, plus a sixth explicit hash for THIS portfolio's loaded Python code.
+    end_head = unit.verify_source_fast_forward(
+        source_head, {rel: pinned_sources[rel] for rel in unit.PINNED_SOURCE_PATHS}
+    )
+    if sha(SOURCE / SELF_REL) != pinned_sources[SELF_REL]:
+        raise RuntimeError("effective 2025 P90L90 portfolio source bytes changed")
     if out.exists() or out.is_symlink():
         raise FileExistsError("immutable 2025 portfolio output collision at publish")
     OUT_PARENT.mkdir(mode=0o2770, parents=False, exist_ok=True)
@@ -558,13 +568,13 @@ def run(side: str, source_head: str, smoke_hours: int = 0) -> dict:
     snap = out / "source_snapshot"
     snap.mkdir(mode=0o2770)
     sources = {}
-    for rel in (SELF_REL, unit.SELF_REL, unit.ENTRY_REL, ORIGINAL_REL):
+    for rel in pinned_paths:
         p = SOURCE / rel
         target = snap / p.name
         shutil.copyfile(p, target)
         sources[p.name] = sha(target)
-        if sources[p.name] != sha(p):
-            raise RuntimeError("2025 portfolio source snapshot changed")
+        if sources[p.name] != pinned_sources[rel] or sha(p) != pinned_sources[rel]:
+            raise RuntimeError("2025 portfolio source snapshot differs from launch pin")
     report = {
         "research": "P90L90_BULL2025_PORTFOLIO_V1",
         "status": "INTERNAL_QC_PASS_PENDING_INDEPENDENT",
@@ -573,7 +583,10 @@ def run(side: str, source_head: str, smoke_hours: int = 0) -> dict:
         "symbols": list(SYMBOLS), "side": side,
         "native_ticks_evaluation": n,
         "source_rows_including_warmup": 204446371,
-        "source_head": source_head, "source_sha256": sources,
+        "source_head": source_head, "source_head_at_publication": end_head,
+        "source_fastforward_only": True,
+        "source_pin_files_sha256": pinned_sources,
+        "source_sha256": sources,
         "unit_shadow_sha256": {s: unit_reference[s]["sha"] for s in SYMBOLS},
         "unlimited_no_pause_per_coin_shadow_parity": True,
         "start_wallet_each_case_usdt": str(START_WALLET),
@@ -605,7 +618,11 @@ def run(side: str, source_head: str, smoke_hours: int = 0) -> dict:
     with (out / "qc.json").open("x") as f:
         json.dump({"status":"INTERNAL_QC_PASS_PENDING_INDEPENDENT",
                    "result_sha256": sha(out/"result.json"),
-                   "source_head": source_head, "ledger_sha256": hashes,
+                   "source_head": source_head,
+                   "source_head_at_publication": end_head,
+                   "source_fastforward_only": True,
+                   "source_pin_files_sha256": pinned_sources,
+                   "ledger_sha256": hashes,
                    "native_ticks": n, "no_pause_shadow_parity": True}, f,sort_keys=True,indent=2)
         f.write("\n")
     (out/"source_commit.txt").write_text(source_head+"\n")
