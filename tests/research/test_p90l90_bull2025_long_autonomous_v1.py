@@ -118,9 +118,9 @@ def test_controller_scope_is_single_direction_and_bounded():
     assert ctl.BATCH_DAYS == 5
     assert ctl.chunk.TOTAL_DAYS == 183
     assert ctl.ID == "P90L90_BULL2025_LONG_AUTONOMOUS_V1"
-    assert str(ctl.CTRL).startswith("/data/cripta/research/")
-    assert str(ctl.STATUS).startswith("/data/cripta/research/")
-    assert str(ctl.LOG).startswith("/data/cripta/research/")
+    assert str(ctl.CTRL).replace("\\", "/").startswith("/data/cripta/research/")
+    assert str(ctl.STATUS).replace("\\", "/").startswith("/data/cripta/research/")
+    assert str(ctl.LOG).replace("\\", "/").startswith("/data/cripta/research/")
     source = Path(ctl.__file__).read_text(encoding="utf-8")
     assert "start_new_session=True" in source
     assert "pass_fds=(lock.fileno(),)" in source
