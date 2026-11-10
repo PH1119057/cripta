@@ -425,9 +425,7 @@ def main() -> None:
         "original_entry_core_sha256": sha(SOURCE / ORIGINAL_REL),
         "new_runner_sha256": sha(SOURCE / SELF_REL),
     }
-    with (out/"qc.json").open("x",encoding="utf8") as stream:
-        json.dump(qc,stream,sort_keys=True,indent=2)
-        stream.write("\n")
+    # Do not write final QC until the source snapshots also match.
     snapshot = out / "source_snapshot"
     snapshot.mkdir(mode=0o2770)
     snapshots = {}
@@ -439,7 +437,9 @@ def main() -> None:
         if snapshots[copy.name] != sha(source):
             raise RuntimeError("candidate source snapshot SHA mismatch")
     qc["source_snapshots_sha256"] = snapshots
-    (out / "qc.json").write_text(json.dumps(qc, sort_keys=True, indent=2) + "\n")
+    with (out / "qc.json").open("x", encoding="utf8") as stream:
+        json.dump(qc, stream, sort_keys=True, indent=2)
+        stream.write("\n")
     (out/"source_commit.txt").write_text(args.source_head+"\n")
     print(json.dumps({"stage":"ENTRY_NATIVE_REPLAY_QC_PASS","mode":args.mode,
                       "symbol":args.symbol,"raw_rows":qc["raw_rows"],
