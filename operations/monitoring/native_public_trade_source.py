@@ -172,7 +172,15 @@ def _status(state: str, *, session: str = "", reason: str = "") -> None:
         "state": state, "reason": reason,
         "session": session, "source_commit": RELEASE,
         "observed_at": datetime.now(UTC).isoformat(),
-        "closed_klines_enabled": _source_feature_enabled(_KLINE_CAPTURE_FLAG),
+        "closed_klines_enabled": (
+            _source_feature_enabled(_KLINE_CAPTURE_FLAG)
+            or _source_feature_enabled(_UNION_CAPTURE_FLAG)
+        ),
+        "closed_gap_repair_mode": (
+            "ASYNC_SOURCE_NETWORK_ONLY_ONE_PG_WRITER"
+            if _source_feature_enabled(_UNION_CAPTURE_FLAG)
+            else "INERT"
+        ),
         "publication_enabled": _source_feature_enabled(_PUBLICATION_FLAG),
         "trading_effect": "NONE",
     }
