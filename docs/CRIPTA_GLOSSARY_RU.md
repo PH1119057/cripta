@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.17
-**Дата:** 2026-11-07
+**Версия:** 3.18
+**Дата:** 2026-11-10
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -1252,3 +1252,17 @@ ARCH §55/§60, OBS §7.10, TC §4.18.
 Статус изменений: OWNER DECISION; CANON AFTER MERGE;
 новый durable native store / новый scoped adapter NOT IMPLEMENTED;
 финансовый LIVE state не изменяется документацией.
+
+## 45. Общая торговая витрина MarketSource — OWNER DECISION 2026-11-10 (#470)
+
+**Единый публичный producer / Single Public MarketSource Capture Owner** — один уполномоченный физический сервис/owner, который получает утверждённые public Bybit market feeds по нужным topics и InstrumentIdentity и один раз записывает каждый уникальный market fact в соответствующее canonical хранилище CRIPTA PostgreSQL. Не означает одно TCP-соединение, один Bybit REST request в секунду или смешение spot/linear разных источников. Не может существовать конкурентного Entry-owned/Exit-owned publicTrade/kline collector для той же trade-decision identity. Owner: ARCH §60.5, OBS §7.10.5.
+
+**Общая торговая витрина / MarketPublication** — согласованная PostgreSQL transaction-visible read-model publication с неизменяемой версией `publication_id`, точным `MarketSource + InstrumentIdentity + UTC as_of`, per-feed source epoch/cursor/watermark, native event interval, ссылками на canonical `analytics.native_public_trade_*`, `analytics.closed_candles`/effective correction и other registered market datasets, field-level coverage/freshness/quality/lineage. Витрина **не второй независимый массив сырых рыночных данных** и не биржевой account snapshot. Для event-driven processing требуется исходная durable sequence, а не только последняя цена.
+
+**Секундный срез / Per-second publication target** — целевая частота обновления общей текущей витрины около одной секунды или после confirmed committed event, отдельно от частоты Bybit source messages. Не допускает прореживание оригинальных `publicTrade` или подделку отсутствующего тика, свечи, OI/ликвидации. У разных полей свой `observed_at`, TTL, presence и signed-off source contract.
+
+**Единый market read consumer** — любой утверждённый Entry/Exit/Execution Strategy-validity/аналитический потребитель, читающий **только PostgreSQL MarketPublication и referenced immutable market facts** данного approved source. Не владеет вторым Public WS/REST для рыночного решения; recovery request адресуется общему producer. Это не отменяет независимых signed Bybit Private аккаунтных reads, Exchange safety/admissibility proof и реального order mutation.
+
+**Dual market truth (запрещённое состояние после cutover)** — самостоятельное получение одной Strategy/Exit/Execution/Position/analytics текущей цены/свечей/native trades из прямого Bybit Public WS/REST при параллельно работающем общем PG источнике, так что один и тот же decision boundary видит разные исходные факты или timestamps. До доказанной замены старый путь — именованный migration finding, не источник права удалить незаменённую capability. Owner: TC §4.19, DEV §59.
+
+Текущий статус: `OWNER_DECISION=YES`; `CANON=AFTER_MERGE`; `IMPLEMENTED=NO`; `LIVE_CHANGE=NO`.

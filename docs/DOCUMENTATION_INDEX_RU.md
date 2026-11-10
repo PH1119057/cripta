@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.50
-**Дата:** 2026-11-07
+**Версия:** 3.51
+**Дата:** 2026-11-10
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1759,3 +1759,15 @@ authorization, source routing, Project Source or bootstrap.
 ## 71. 2026-11-09 — release deployment authorization separated from financial ARM
 
 OWNER DECISION: remove the second per-commit Issue #291 approval for an authenticated maintenance Release Controller invocation. DEV §50.5/§50.5.1 owns the changed process: exact protected GitHub main/CI/scope, verified baseline and actor, backup/rollback, durable audit, no automatic source-sync deploy, native writer one-writer/GAP/cutover guarantees. Financial OWNER ARM/LIVE and Exchange mutation gates remain separately owner-controlled. `CANON=AFTER_MERGE`; `IMPLEMENTED=NO`; `DEPLOYED=NO`; `RUNTIME_BEHAVIOR_VERIFIED=NO`. No documentation topology or Project Source change.
+
+## 72. Единый MarketSource и согласованная PostgreSQL-витрина для всех торговых потребителей — OWNER DECISION 2026-11-10 (Issue #470)
+
+Владелец **уточнил уже утверждённый вариант Б**: не достаточно хранить raw trade и closed candles в PG, пока Entry/Exit/Execution/Position/MAYAK независимо получают текущие рыночные факты другими public Bybit соединениями. Один общий физический MarketSource producer собирает approved union of required public market facts, persist-once, публикует один transaction-consistent `publication_id`/as-of slice с точными per-feed epochs/watermarks/quality/coverage; все внутренние trading-decision consumers читают его и immutable referenced факты из production PostgreSQL. Цель ~1 секунда на обновление витрины, но **не прореживание** отдельных publicTrade и не принудительное каждосекундное обновление закрытых candles/OI/funding. Approved REST gap repair принадлежит producer. Signed Bybit Private account/position/fill/protection truth остаётся отдельным независимым источником Exchange safety.
+
+**Authority/routing:** ARCH §60.5 — единственная архитектурная owner/consumer и snapshot identity; TC §4.19 — Entry/Exit/Execution market-decision semantics; OBS §7.10.5 — acquisition/journal/publication/freshness; GLOSSARY §45 — термины; DEV §59 — phased migration, verification and release; CURRENT_PROJECT_MAP 2026-11-10 — service-by-service BEFORE→AFTER plan and current observed status. Existing ARCH §48.4/§60.1–60.4, TC §4.13/§4.18, OBS §7.10 и DEV §50.4/§58 продолжают действовать.
+
+Existing Issue #470 remains the task, its owner-stated 7-item priority and already started native PG delivery are preserved. This documentation revision does not supersede unfinished original OPEN-position Exit/MFE recovery or allow competing deployment, Strategy version changes, auto-arm, removal of safety owners, or blind disable of old public capture before equivalent PG consumer path is proven.
+
+**Source topology:** no new docs, no path changes, same 11-file Project Source bundle, same base/routed pre-read, same root README/AGENTS entrypoints and Project Instructions bootstrap. `OWNER_DECISION=YES`, `CANON=AFTER_MERGE`, `IMPLEMENTED=NO`, `DEPLOYED=NO`, `LIVE_CHANGE=NO`.
+
+**Постоянный readiness roadmap (2026-11-10):** `CURRENT_PROJECT_MAP` содержит стабильные ID **R00–R14**, поимённые market/trading service BEFORE→AFTER, PASS blockers, milestones MS0–MS6 и начальные доказанные статусы. DEV §59.1 владеет шестиколоночным `C/M/I/T/D/R` отчётом в каждом последующем owner status update; проверенная смена статуса должна иметь fresh evidence, а не память. Это **не** новый документ/Project Source файл, не отдельный Issue и не утверждение, что future deployment состоялся.

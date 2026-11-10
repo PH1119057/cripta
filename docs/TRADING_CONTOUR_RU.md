@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.7
-**Дата:** 2026-11-07
+**Версия:** 3.8
+**Дата:** 2026-11-10
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -2130,3 +2130,25 @@ P90L90 остаются прежними, новые Strategy и настрой�
 
 Статус: `OWNER_DECISION=YES`; `CANON=YES AFTER MERGE`;
 `IMPLEMENTED=NO`; `DEPLOYED=NO`; `LIVE_ARM=NO`.
+
+## 4.19 Единый опубликованный market snapshot для Entry и Exit — OWNER DECISION 2026-11-10 (#470)
+
+Каждый центр **торгового решения** (Entry Engine, Exit Engine, разрешённая Execution-side validity/safety часть) берёт рыночные цены, publicTrade и подтверждённую свечную геометрию **только из одной согласованной PostgreSQL market publication** по ARCH §60.5. Факт публикации задаёт source/instrument/UTC/epoch/watermark/immutable provenance; один Engine не вправе переподключаться к Bybit Public WebSocket либо Public REST, чтобы получить свою альтернативную текущую цену, свечу или пересчитать ту же Strategy geometry.
+
+| Decision consumer | Рыночный вход только из общей PG publication | Иные обязательные факты |
+|---|---|---|
+| Entry geometry и EntrySignal | Exact fully closed 5m/15m/прочие candles и требуемый lookback/ATR seed; исходные publicTrade с native identity и точкой касания | Immutable EntryPlan, разрешённые context features, scoped admission/permissions |
+| Exit geometry, TP/SL/runner observation | Те же подтверждённые candles/source identity/current market facts с собственной точной UTC границей | Immutable ExitPlan, StrategyPosition и initial protection |
+| Exit first-fill / MFE | Original native publicTrade после фактического fill с verified coverage/seq/execId по требованию ExitPlan; никакого independent Observer mirror как второй торговой истины | Signed actual fill, position/SL/TP, pending mutations, persisted Exit/MFE state от account owner |
+| Execution-side Strategy validity | Тот же market publication и source time/freshness; невозможно получать другую L5-3 geometry от прямого REST | Исполнение и current account/venue admissibility, exact price/tick/quantity, initial protection и независимый signed Bybit readback |
+| Дополнительные consumer data | Общий PG producer/feature dataset по registered required-data manifest | Отсутствие необязательного поля не является blanket veto |
+
+Непрерывный Bybit Public WS у единственного MarketSource producer принимает каждый оригинальный trade немедленно. Общая витрина обновляется ориентировочно каждую секунду/по committed event; это **не** разрешает семплировать source publicTrade с частотой 1 Hz. Свеча включается лишь после подтверждения close, а не по синтетическому промежуточному значению. Нужная история должна быть уже доступна в PG; только producer выполняет bounded approved upstream gap repair.
+
+Уменьшение времени реакции не требует обхода PG: consumer awaken/notification и acknowledgement опираются на durable commit+cursor, а не на in-memory-only WS. До релиза измерить `exchange_event_at → WS_receive → PG_commit → publication → Entry/Exit_decision → command` отдельно по инструменту, включая p95/p99, backlog и negative tests. При неприемлемых измеренных задержках требуется новое owner decision, а не скрытый второй источник.
+
+**Exchange truth — отдельная обязательная граница:** подписанные Bybit Private REST/WS для реальных позиций, ордеров, fill, SL/TP/trailing, баланса и mutation reconciliation могут оставаться прямыми. Независимый safety readback подтверждает биржевое состояние, не заменяет public market snapshot для Strategy. Missing current safety evidence — BLOCKED, не разрешение торговать по устаревшей базе. Уже открытые позиции защищаются на стороне биржи; Entry DISARM не прекращает обязательный Exit.
+
+До доказанной замены current standalone public readers считаются migration findings; этот канон не удаляет код, не разрешает выкинуть capability или снять P90 OPEN Exit blocker. Физический план и приемка — DEV §59 / CURRENT_PROJECT_MAP.
+
+`OWNER_DECISION=YES`; `CANON=AFTER_MERGE`; `IMPLEMENTED=NO`; `LIVE_ARM=NO`.
