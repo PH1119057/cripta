@@ -7,6 +7,7 @@ or native-trade cursor, no per-Strategy storage or Exchange access.
 """
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -71,6 +72,13 @@ def cache_approved_bybit_history(
     from Strategy ID, account balance, a coin name or a fabricated market source.
     It resolves the one active registered Bybit MarketSource/Instrument pair.
     """
+    # R03 protected OPEN Exit source-replay keeps its immutable, hash-pinned
+    # source implementation. All Observer calls, including that protected
+    # replay, become read-only when the explicitly reviewed native candle
+    # ownership unit flag is active; a missing native bar must fail closed.
+    if os.environ.get("CRIPTA_R03_NATIVE_CANDLE_READER") == "ENABLED":
+        verify_only = True
+        source_wait_seconds = max(source_wait_seconds, 5.0)
     matches = connection.execute(
         """SELECT s.market_source_id,s.venue_id,i.instrument_id,
                   i.external_symbol,i.product_category
