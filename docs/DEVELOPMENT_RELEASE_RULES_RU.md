@@ -2469,7 +2469,7 @@ Acceptance phases с отдельными объективными evidence и S
 `OWNER_DECISION_REQUIRED=YES`; не объявлять зависимость PASS фиктивно.
 
 **R01 implementation contract (owner-approved 2026-11-11):** OBS
-§7.10.5.1 и `config/market_source/required_public_feeds.json` задают
+§7.10.5.1 и `operations/monitoring/required_public_feeds.json` задают
 ровно 120 five-symbol per-consumer требований и source-only TTL/quality.
 Его `M=PASS` требует exact checked-in source contract и полноту
 BEFORE-анкет; `I/T=PASS` — valid parser/union/history/negative CI.
