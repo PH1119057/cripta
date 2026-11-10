@@ -83,7 +83,8 @@ def test_required_manifest_subscribes_one_topic_per_product() -> None:
 
 
 @pytest.mark.parametrize("addition,reason", [
-    (_required("POSITION", "LINEAR", "BTCUSDT", "FORMING_KLINE"), "ADAPTER_NOT_READY"),
+    (_required("POSITION", "SPOT", "BTCUSDT", "FORMING_KLINE", interval="1"), "FORMING_SCOPE_UNSUPPORTED"),
+    (_required("POSITION", "LINEAR", "BTCUSDT", "FORMING_KLINE", interval="5"), "FORMING_SCOPE_UNSUPPORTED"),
     (_required("MAYAK", "SPOT", "BTCUSDT", "CLOSED_KLINE"), "SPOT_KLINE_NOT_READY"),
 ])
 def test_missing_required_physical_adapter_blocks_source_activation(
@@ -115,6 +116,26 @@ def test_public_rest_feeds_are_deduplicated_without_new_websocket_topics() -> No
     assert all(
         "REST:" not in item.dataset_topic for item in union.websocket_topics
     )
+
+
+def test_exact_linear_one_minute_forming_shares_existing_physical_kline_topic() -> None:
+    requirements = json.loads(_manifest())
+    requirements.extend((
+        _required("ENTRY", "LINEAR", "LTCUSDT", "FORMING_KLINE", interval="1"),
+        _required("EXIT", "LINEAR", "LTCUSDT", "FORMING_KLINE", interval="1"),
+        _required("ENTRY", "LINEAR", "LTCUSDT", "CLOSED_KLINE", interval="1"),
+    ))
+    union = parse_explicit_source_manifest(
+        json.dumps(requirements), native_symbols=P90,
+    )
+    assert sum(
+        1 for topic in union.websocket_topics
+        if topic.product == "LINEAR"
+        and topic.dataset_topic == "kline.1.LTCUSDT"
+    ) == 1
+    assert sum(
+        1 for fact in union.requirements if fact.dataset == "FORMING_KLINE"
+    ) == 2
 
 
 def test_missing_original_p90_native_subscription_fails_closed() -> None:
