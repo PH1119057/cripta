@@ -98,8 +98,6 @@ def verify_and_load(side: str, source_head: str):
         raise ValueError("2025 original Bybit source QC failed")
     if sha(SOURCE / ORIGINAL_REL) != acq["source_snapshot_sha256"][ORIGINAL_REL]:
         raise ValueError("original P90L90 Exit code differs from frozen 2025 snapshot")
-    if sha(SOURCE / unit.SELF_REL) != sha(SOURCE / unit.SELF_REL):
-        raise ValueError("impossible Exit source identity")
     geom = json.loads((RESULTS / "l53_geometry_full_2025_v1/qc.json").read_text())
     if geom.get("status") != "QC_PASS_FULL_2025_GEOMETRY_NOT_TRADING":
         raise ValueError("2025 geometry failed")
