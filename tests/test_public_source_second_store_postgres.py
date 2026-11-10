@@ -15,10 +15,20 @@ import pytest
 from bybit_workbench.market_data.public_source_event_codec import (
     decode_bybit_public_frame,
 )
+from bybit_workbench.market_data.market_publication import (
+    publish_market_source_second,
+)
 from bybit_workbench.market_data.public_source_second_store import (
     PublicSecondAccumulator,
     PublicSourceSecondUnavailable,
     persist_compact_source_seconds,
+)
+from bybit_workbench.market_data.source_required_feed_manifest import (
+    RequiredPublicFeed,
+)
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    bybit_instrument_id,
 )
 from operations.monitoring import native_public_trade_source as source
 
@@ -127,3 +137,113 @@ def test_pg16_source_compact_writer_is_insert_only() -> None:
                    'cripta','analytics.public_market_source_seconds','DELETE')
             """
         ).fetchone() == (True, True, False, False)
+
+
+def test_pg16_one_publication_pins_spot_and_linear_compact_source_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Full pipeline: one producer epoch -> immutable seconds -> one PG slice."""
+    monkeypatch.setattr(source, "RELEASE", RELEASE)
+    session = uuid4().hex
+    event_at = (datetime.now(UTC) - timedelta(seconds=3)).replace(
+        microsecond=500000,
+    )
+    stamp_ms = int(event_at.timestamp() * 1000)
+    aggregator = PublicSecondAccumulator(session=session)
+    requirements: list[RequiredPublicFeed] = []
+
+    for product in ("SPOT", "LINEAR"):
+        native = decode_bybit_public_frame(
+            {
+                "topic": "publicTrade.LTCUSDT", "ts": stamp_ms,
+                "data": [{
+                    "s": "LTCUSDT", "T": stamp_ms,
+                    "seq": 900, "i": f"publication-{product}-{session}",
+                    "p": "51.7", "v": "0.1", "S": "Buy",
+                }],
+            },
+            product=product, allowed_symbols=frozenset({"LTCUSDT"}),
+            received_at=event_at,
+        )
+        for fact in native:
+            aggregator.accept(fact, received_at=event_at)
+        requirements.append(RequiredPublicFeed(
+            consumer_id="MAYAK",
+            market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
+            instrument_id=bybit_instrument_id(product.lower(), "LTCUSDT"),
+            product=product,
+            symbol="LTCUSDT",
+            dataset="PUBLIC_TRADE", freshness_seconds=10,
+        ))
+    ticker = decode_bybit_public_frame(
+        {
+            "topic": "tickers.LTCUSDT", "ts": stamp_ms,
+            "type": "snapshot",
+            "data": {"symbol": "LTCUSDT", "lastPrice": "51.7"},
+        },
+        product="LINEAR", allowed_symbols=frozenset({"LTCUSDT"}),
+        received_at=event_at,
+    )
+    for fact in ticker:
+        aggregator.accept(fact, received_at=event_at)
+    requirements.append(RequiredPublicFeed(
+        consumer_id="EXIT",
+        market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
+        instrument_id=bybit_instrument_id("linear", "LTCUSDT"),
+        product="LINEAR",
+        symbol="LTCUSDT", dataset="TICKER", freshness_seconds=10,
+    ))
+    rows = aggregator.ready_seconds(before=datetime.now(UTC))
+    assert len(rows) == 2
+
+    with _db() as conn:
+        conn.execute(
+            """INSERT INTO identity.instruments
+               (instrument_id,venue_id,product_category,external_symbol)
+               VALUES ('inst-bybit-spot-ltcusdt','venue-bybit','SPOT','LTCUSDT')
+               ON CONFLICT (instrument_id) DO NOTHING"""
+        )
+        conn.execute(
+            """INSERT INTO identity.instruments
+               (instrument_id,venue_id,product_category,external_symbol)
+               VALUES ('inst-bybit-linear-ltcusdt','venue-bybit',
+                       'LINEAR','LTCUSDT')
+               ON CONFLICT (instrument_id) DO NOTHING"""
+        )
+        source._session_start(conn, session)
+        assert persist_compact_source_seconds(
+            conn, rows=rows, producer_release_commit=RELEASE,
+        ) == 2
+        now = datetime.now(UTC)
+        publication = publish_market_source_second(
+            conn, source_session_id=session,
+            producer_release_commit=RELEASE,
+            symbols=("LTCUSDT",), timeframes=("5",),
+            public_requirements=tuple(requirements),
+            observed_at=now,
+        )
+        assert publication is not None
+        compact_refs, compact_quality, publication_status = conn.execute(
+            """SELECT compact_second_refs,compact_field_coverage,
+                      publication_status
+                 FROM analytics.market_publications
+                WHERE publication_id=%s""",
+            (publication,),
+        ).fetchone()
+        spot = bybit_instrument_id("spot", "LTCUSDT")
+        linear = bybit_instrument_id("linear", "LTCUSDT")
+        assert compact_refs[spot]["PUBLIC_TRADE"]["product_category"] == "SPOT"
+        assert compact_refs[linear]["PUBLIC_TRADE"]["product_category"] == "LINEAR"
+        assert compact_refs[linear]["TICKER"]["source_session_id"] == session
+        assert compact_quality[linear]["TICKER"]["fields"]["lastPrice"] == "FRESH"
+        assert compact_quality[spot]["PUBLIC_TRADE"]["status"] == (
+            "COMPACT_ONLY_NOT_NATIVE"
+        )
+        assert publication_status == "WATERMARKS_ONLY"
+        # This read-model does not invent an exact P90 native trade from a
+        # lower-fidelity spot/linear compact second.
+        assert conn.execute(
+            """SELECT count(*) FROM analytics.native_public_trade_source_events
+                WHERE source_session_id=%s""",
+            (session,),
+        ).fetchone() == (0,)
