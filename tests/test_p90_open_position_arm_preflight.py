@@ -54,6 +54,7 @@ def test_signed_flat_preflight_is_only_for_a_fresh_source(
         "p90_real_live": mode != "source_only", "connection": object(),
         # AST harness executes a slice after epoch-mode composition.
         "p90_repair_ingest_only": False,
+        "R03_NATIVE_CANDLE_READER": False,
         "observer_split": SimpleNamespace(p90_real=("main", "sub")),
         "p90l90_symbols": {"LTCUSDT"}, "LOADED_COMMIT": "a" * 40,
         "MIRROR_READY_TIMEOUT_SECONDS": 10, "ContinuityNotProvable": RuntimeError,
