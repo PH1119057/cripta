@@ -1,4 +1,4 @@
-"""Bounded, producer-owned repair of exact missing Bybit LINEAR closed bars.
+"""Bounded, producer-owned repair of exact missing Bybit closed spot/linear bars.
 
 Source-only R03 capability. The existing Native MarketSource caller must hold
 its one-producer lock; this module creates no independent job/service/socket,
