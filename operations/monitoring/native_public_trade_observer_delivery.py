@@ -36,6 +36,27 @@ class NativeObserverDeliveryBlocked(RuntimeError):
     """Original source or transport delivery is missing; never waive it."""
 
 
+
+
+def validate_technical_native_receipt(event: OrderedNativeTrade) -> None:
+    """Validate one immutable source row without any Strategy/Exit dispatch.
+
+    The surrounding consume_native_observer_batch() transaction may ACK the
+    dedicated technical transport cursor only AFTER this decoder accepts the
+    original provider identity. It cannot imply Strategy/Exit delivery, MFE,
+    position protection or permission to open a financial Entry.
+    """
+    from bybit_workbench.universal_entry.p90l90_scoped_native_codec import (
+        original_native_fact,
+    )
+
+    try:
+        original_native_fact(event)
+    except (NativeSourceProofUnavailable, ValueError) as exc:
+        raise NativeObserverDeliveryBlocked(
+            "NATIVE_OBSERVER_TECHNICAL_ORIGINAL_ROW_UNVERIFIED"
+        ) from exc
+
 @dataclass(frozen=True, slots=True)
 class NativeObserverDeliveryResult:
     source_session_id: str
