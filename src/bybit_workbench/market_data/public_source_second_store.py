@@ -8,7 +8,7 @@ No consumer, Strategy, account or Exchange authorization can be inferred.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
