@@ -14,14 +14,29 @@ import json
 import queue
 import threading
 import time
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+from collections.abc import Callable
+
+from bybit_workbench.domain.models import Candle
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    bybit_instrument_id,
+)
 
 import psycopg
 import websocket
 
 from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
+)
+from bybit_workbench.market_data.public_closed_kline_gap_repair import (
+    ClosedGapPage,
+    ClosedGapRepairUnavailable,
+    commit_verified_closed_gap_pages,
+    fetch_verified_bybit_closed_page,
+    plan_missing_closed_pages,
 )
 from bybit_workbench.market_data.public_forming_minute_source import (
     persist_forming_minute_fact,
@@ -43,6 +58,7 @@ from bybit_workbench.market_data.public_source_second_store import (
     PublicSourceSecondUnavailable,
     persist_compact_source_seconds,
 )
+from bybit_workbench.market_data.shared_closed_candles import MarketCandleKey
 from bybit_workbench.market_data.source_required_feed_manifest import (
     PublicFeedUnion,
     RequiredPublicFeed,
@@ -55,6 +71,10 @@ _PUBLIC_WS = {
     "LINEAR": "wss://stream.bybit.kz/v5/public/linear",
 }
 _MAX_QUEUE = 8192
+_REPAIR_PAGES_PER_WINDOW = 20
+_REPAIR_RESCAN_SECONDS = 900
+_REPAIR_PROVIDER_SPACING_SECONDS = 0.30
+_REPAIR_PROVIDER_SETTLE_SECONDS = 10
 
 
 def parse_explicit_source_manifest(
@@ -186,6 +206,84 @@ def _connect_subscribe(
         raise
 
 
+
+
+@dataclass(frozen=True, slots=True)
+class _ClosedRepairWindow:
+    key: MarketCandleKey
+    required: int
+
+
+@dataclass(frozen=True, slots=True)
+class _ClosedRepairTask:
+    window: _ClosedRepairWindow
+    through: datetime
+    pages: tuple[ClosedGapPage, ...]
+
+
+def _closed_repair_windows(
+    union: PublicFeedUnion, *, native_symbols: tuple[str, ...],
+) -> tuple[_ClosedRepairWindow, ...]:
+    """One real repair horizon per product/instrument/timeframe, not per consumer.
+
+    The horizon must be explicit in each required consumer manifest. It is
+    NEVER guessed from a Strategy name; optional-only feeds remain optional.
+    """
+    horizons: dict[tuple[str, str, str], int] = {}
+    for item in union.requirements:
+        if item.dataset != "CLOSED_KLINE" or not item.required:
+            continue
+        if (
+            item.symbol not in native_symbols
+            or not 1 <= item.lookback_bars <= 3000
+        ):
+            raise SourceManifestInvalid("SOURCE_REPAIR_WINDOW_NOT_DECLARED")
+        k = (item.product, item.symbol, item.timeframe)
+        horizons[k] = max(horizons.get(k, 0), item.lookback_bars)
+    return tuple(
+        _ClosedRepairWindow(
+            key=MarketCandleKey(
+                market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                venue_id="venue-bybit",
+                instrument_id=bybit_instrument_id(product.lower(), symbol),
+                external_symbol=symbol,
+                product_category=product,
+                timeframe=interval,
+            ),
+            required=required,
+        )
+        for (product, symbol, interval), required in sorted(horizons.items())
+    )
+
+
+def _last_settled_close(now: datetime, timeframe: str) -> datetime:
+    """Avoid pretending a candle at a just-reached boundary is provider-ready."""
+    if now.tzinfo is None or now.utcoffset() != timedelta(0):
+        raise ClosedGapRepairUnavailable("CLOSED_REPAIR_CLOCK_UNVERIFIED")
+    step_seconds = int(timeframe) * 60
+    settled = int((now - timedelta(seconds=_REPAIR_PROVIDER_SETTLE_SECONDS)).timestamp())
+    return datetime.fromtimestamp(
+        settled - settled % step_seconds, UTC,
+    )
+
+
+def _fetch_repair_task(
+    task: _ClosedRepairTask, *,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    fetch_page: Callable[..., tuple[Candle, ...]] = fetch_verified_bybit_closed_page,
+    between_pages: Callable[[float], bool] = lambda _duration: False,
+) -> tuple[tuple[Candle, ...], ...]:
+    """Network-only: no PostgreSQL connection, service, Strategy or financial API."""
+    result: list[tuple[Candle, ...]] = []
+    for page in task.pages:
+        if between_pages(0.0):
+            raise ClosedGapRepairUnavailable("CLOSED_REPAIR_SOURCE_STOPPED")
+        result.append(fetch_page(task.window.key, page, received_at=clock()))
+        if between_pages(_REPAIR_PROVIDER_SPACING_SECONDS):
+            raise ClosedGapRepairUnavailable("CLOSED_REPAIR_SOURCE_STOPPED")
+    return tuple(result)
+
+
 def run_source_union(
     connection: psycopg.Connection[Any], *,
     p90_symbols: tuple[str, ...],
@@ -246,6 +344,14 @@ def run_source_union(
         if item.dataset == "FORMING_KLINE"
     })
     last_received = {k: time.monotonic() for k in sock}
+    # R03: bounded restoration uses a separate network-only worker. All PG
+    # planning, original trade journaling and candle writes stay on THIS
+    # advisory-lock-owning source thread. Work/results each have one slot.
+    repair_windows = _closed_repair_windows(union, native_symbols=p90_symbols)
+    repair_jobs: queue.Queue[_ClosedRepairTask] = queue.Queue(maxsize=1)
+    repair_results: queue.Queue[
+        tuple[_ClosedRepairTask, tuple[tuple[Candle, ...], ...], str]
+    ] = queue.Queue(maxsize=1)
 
     def read(product: str) -> None:
         try:
@@ -323,6 +429,36 @@ def run_source_union(
 
     if rest_needs:
         workers.append(threading.Thread(target=read_rest, daemon=True))
+
+    def read_closed_gap_repair() -> None:
+        # Strictly no DB session/connection in network workers. A failed
+        # provider page is a scoped R03 repair fault, not a reason to stop
+        # original native publicTrade.
+        while not done.is_set() and not native.stopping:
+            try:
+                task = repair_jobs.get(timeout=0.20)
+            except queue.Empty:
+                continue
+            try:
+                batches = _fetch_repair_task(
+                    task, between_pages=done.wait,
+                )
+                reason = ""
+            except (ClosedGapRepairUnavailable, OSError, ValueError) as exc:
+                batches, reason = (), str(exc)
+            except Exception:
+                batches, reason = (), "CLOSED_REPAIR_PROVIDER_UNVERIFIED"
+            while not done.is_set() and not native.stopping:
+                try:
+                    repair_results.put((task, batches, reason), timeout=0.20)
+                    break
+                except queue.Full:
+                    continue
+
+    if repair_windows:
+        workers.append(threading.Thread(
+            target=read_closed_gap_repair, daemon=True,
+        ))
     for worker in workers:
         worker.start()
 
@@ -338,6 +474,8 @@ def run_source_union(
     )
     frame_index = 0
     last_published_second: datetime | None = None
+    repair_index = 0
+    next_repair_scan_at = 0.0
     try:
         while not done.is_set() and not native.stopping:
             try:
@@ -399,6 +537,80 @@ def run_source_union(
                     producer_release_commit=producer_release_commit,
                     fact=rest_fact,
                 )
+            # Preserve original native WS priority: only after processing
+            # its frame and REST receipts can one complete gap result commit.
+            if repair_windows:
+                try:
+                    task, batches, repair_reason = repair_results.get_nowait()
+                except queue.Empty:
+                    pass
+                else:
+                    if repair_reason:
+                        native._status(
+                            "ACTIVE", session=session,
+                            reason="CLOSED_REPAIR_BLOCKED:" + repair_reason[:120],
+                        )
+                    else:
+                        try:
+                            commit_verified_closed_gap_pages(
+                                connection, key=task.window.key,
+                                native_symbols=p90_symbols,
+                                source_session_id=session,
+                                producer_release_commit=producer_release_commit,
+                                through=task.through,
+                                required=task.window.required,
+                                pages=task.pages, batches=batches,
+                                observed_at=datetime.now(UTC),
+                            )
+                        except (ClosedGapRepairUnavailable, RuntimeError) as exc:
+                            # Not a false green history claim, and never a
+                            # global trading/MarketSource shutdown for a
+                            # scoped closed-bar source-quality fault.
+                            native._status(
+                                "ACTIVE", session=session,
+                                reason=(
+                                    "CLOSED_REPAIR_BLOCKED:"
+                                    + str(exc)[:120]
+                                ),
+                            )
+            # Schedule at most one PG-only gap plan per loop iteration.
+            # Upstream REST is always asynchronous and finite.
+            if (
+                repair_windows
+                and time.monotonic() >= next_repair_scan_at
+                and repair_jobs.empty() and repair_results.empty()
+            ):
+                window = repair_windows[repair_index]
+                repair_index += 1
+                if repair_index == len(repair_windows):
+                    repair_index = 0
+                    next_repair_scan_at = (
+                        time.monotonic() + _REPAIR_RESCAN_SECONDS
+                    )
+                current_utc = datetime.now(UTC)
+                through = _last_settled_close(
+                    current_utc, window.key.timeframe,
+                )
+                try:
+                    pages = plan_missing_closed_pages(
+                        connection, key=window.key,
+                        native_symbols=p90_symbols,
+                        through=through, required=window.required,
+                        observed_at=current_utc,
+                    )
+                    if len(pages) > _REPAIR_PAGES_PER_WINDOW:
+                        raise ClosedGapRepairUnavailable(
+                            "CLOSED_REPAIR_PAGE_BUDGET_EXCEEDED"
+                        )
+                    if pages:
+                        repair_jobs.put_nowait(
+                            _ClosedRepairTask(window, through, pages)
+                        )
+                except (ClosedGapRepairUnavailable, queue.Full) as exc:
+                    native._status(
+                        "ACTIVE", session=session,
+                        reason="CLOSED_REPAIR_BLOCKED:" + str(exc)[:120],
+                    )
             # Commit only completed seconds and their source provenance.
             current = datetime.now(UTC)
             ready = aggregate.ready_seconds(before=current)
