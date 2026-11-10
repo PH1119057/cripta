@@ -205,9 +205,21 @@ def decode_bybit_public_frame(
             raise PublicSourceFrameInvalid(
                 "PUBLIC_FORMING_EXPIRED_OR_FUTURE_SOURCE"
             )
+        match_ms = row.get("timestamp")
+        if (
+            type(match_ms) is not int or not start <= match_ms <= end
+            or match_ms > int(observed.timestamp() * 1000) + 5000
+        ):
+            raise PublicSourceFrameInvalid(
+                "PUBLIC_FORMING_LAST_MATCH_TIMESTAMP_INVALID"
+            )
         values = {
-            name: _decimal(row.get(name), zero=name == "volume")
-            for name in ("open", "high", "low", "close", "volume")
+            name: _decimal(
+                row.get(name), zero=name in ("volume", "turnover"),
+            )
+            for name in (
+                "open", "high", "low", "close", "volume", "turnover",
+            )
         }
         if (
             Decimal(values["low"]) > Decimal(values["high"])
@@ -226,6 +238,7 @@ def decode_bybit_public_frame(
             "opened_at": opened_at.isoformat(),
             "closed_at": closed_at.isoformat(),
             "observed_at": observed.isoformat(),
+            "provider_last_match_at": _milliseconds(match_ms).isoformat(),
             **values,
         }))
     elif kind == "tickers":
