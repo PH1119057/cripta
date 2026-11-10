@@ -2,18 +2,18 @@
 from __future__ import annotations
 
 import ast
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal as D
 from pathlib import Path
 
-from scripts.research import p90l90_exit_90d_v2 as old
 from scripts.research import p90l90_bull2025_exit_unit_v1 as new
+from scripts.research import p90l90_exit_90d_v2 as old
 
 
 def test_2025_window_and_only_frozen_cohort() -> None:
     assert (new.EVAL_END - new.EVAL_START).days == 183
-    assert new.EVAL_START == datetime(2025, 4, 1, tzinfo=timezone.utc)
-    assert new.EVAL_END == datetime(2025, 10, 1, tzinfo=timezone.utc)
+    assert new.EVAL_START == datetime(2025, 4, 1, tzinfo=UTC)
+    assert new.EVAL_END == datetime(2025, 10, 1, tzinfo=UTC)
     assert new.END_TS - new.START_TS == 183 * 86400
     assert len(new.SYMBOLS) == 5
     assert set(new.SYMBOLS) == {
@@ -33,18 +33,18 @@ def test_original_exit_semantics_never_copied_or_modified() -> None:
     assert "initial_position" not in names
     assert "take_profit_eligible" not in names
     assert "trade_record" not in names
-    assert "original.on_trade(" in source
-    assert "original.initial_position(" in source
-    assert "original.gross_and_net(" in source
-    assert "original.trade_record(" in source
-    assert "original.take_profit_eligible(" in source
-    assert "entry.load_frozen_period(" in source
-    assert "for side in SIDES:" in source
-    assert '"PREV7D"' in source
-    assert '"TRAIL035"' in source
-    assert "2026-05-18" not in source
-    assert "complete_90d_input" not in source
-    assert "NO_PAUSE/SECOND48/W7H24" in source
+    assert source.find("original.on_trade(") >= 0
+    assert source.find("original.initial_position(") >= 0
+    assert source.find("original.gross_and_net(") >= 0
+    assert source.find("original.trade_record(") >= 0
+    assert source.find("original.take_profit_eligible(") >= 0
+    assert source.find("entry.load_frozen_period(") >= 0
+    assert source.find("for side in SIDES:") >= 0
+    assert source.find('"PREV7D"') >= 0
+    assert source.find('"TRAIL035"') >= 0
+    assert source.find("2026-05-18") < 0
+    assert source.find("complete_90d_input") < 0
+    assert source.find("NO_PAUSE/SECOND48/W7H24") >= 0
 
 
 def _pos(side: str = "LONG"):
