@@ -44,6 +44,7 @@ def collect_instrument_closed_candle_references(
         )
     grouped: dict[tuple[str, str], RequiredPublicFeed] = {}
     historical: dict[tuple[str, str], int] = {}
+    is_required: dict[tuple[str, str], bool] = {}
     for need in requirements:
         if (
             need.dataset != "CLOSED_KLINE"
@@ -58,6 +59,7 @@ def collect_instrument_closed_candle_references(
         if old is None or need.freshness_seconds < old.freshness_seconds:
             grouped[key] = need
         historical[key] = max(historical.get(key, 0), need.lookback_bars)
+        is_required[key] = is_required.get(key, False) or need.required
     if not grouped:
         return {}, {}
     if len(grouped) > 400:
@@ -84,7 +86,7 @@ def collect_instrument_closed_candle_references(
         if row is None:
             quality.setdefault(instrument, {})[tf] = {
                 "status": "MISSING_OR_STALE",
-                "required": need.required,
+                "required": is_required[(instrument, tf)],
                 "freshness_seconds": need.freshness_seconds,
                 "history_required_bars": historical[(instrument, tf)],
                 "history_window": "NOT_VERIFIED",
@@ -108,7 +110,7 @@ def collect_instrument_closed_candle_references(
         )
         quality.setdefault(instrument, {})[tf] = {
             "status": status, "age_seconds": age,
-            "required": need.required,
+            "required": is_required[(instrument, tf)],
             "freshness_seconds": need.freshness_seconds,
             "history_required_bars": historical[(instrument, tf)],
             "history_window": "NOT_VERIFIED",
