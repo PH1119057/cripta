@@ -13,8 +13,7 @@ daily checkpoints are restartable only after a fresh explicit launch/preflight.
 from __future__ import annotations
 
 import argparse
-import fcntl
-import hashlib
+import importlib
 import json
 import os
 import shutil
@@ -153,8 +152,9 @@ def launch(source_head: str) -> None:
     # This only writes under data-disk research; process remains UID107.
     ensure_controller_dirs()
     lock = LOCK.open("a+", encoding="utf-8")
+    flock = importlib.import_module("fcntl")  # Linux host only
     try:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        flock.flock(lock.fileno(), flock.LOCK_EX | flock.LOCK_NB)
     except BlockingIOError as exc:
         lock.close()
         raise RuntimeError("2025 LONG autonomous controller already active") from exc
@@ -203,7 +203,8 @@ def worker(source_head: str, lock_fd: int, started_at: str) -> None:
         raise PermissionError("inherited research controller lock inode differs")
     if os.fstat(lock_fd).st_dev != LOCK.stat().st_dev:
         raise PermissionError("inherited research controller lock device differs")
-    fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    flock = importlib.import_module("fcntl")  # Linux host only
+    flock.flock(lock_fd, flock.LOCK_EX | flock.LOCK_NB)
     validate_actor_and_path()
     if chunk.old.entry.git_head() != source_head:
         raise RuntimeError("source HEAD changed during controller startup")
@@ -221,6 +222,10 @@ def worker(source_head: str, lock_fd: int, started_at: str) -> None:
                 return
             if shutil.disk_usage(chunk.ROOT).free < 16 * 2**30:
                 raise RuntimeError("research data free below reserved 16GiB")
+            if chunk.old.sha(SOURCE / CONTROLLER_REL) != (
+                json.loads(LAUNCH.read_text(encoding="utf-8"))["controller_sha256"]
+            ):
+                raise RuntimeError("effective autonomous controller source bytes changed")
             live_head = chunk.old.entry.git_head()
             status("BATCH_RUNNING", started_at,
                    batch_number=batch_no, previous_days=before["completed_days"])
