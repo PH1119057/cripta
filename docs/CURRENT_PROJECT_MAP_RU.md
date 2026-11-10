@@ -5163,3 +5163,38 @@ Read-only production PostgreSQL statistics and bounded sample comparisons revise
 **CAPABILITY GAP / HANDOFF:** Earlier R01 found active MAYAK context for 20 symbols. Its physical old capture/feature path cannot be silently stopped or treated as fully replaced by the newly bounded five-symbol producer; this is not R11/R14 readiness. Migration/retirement of that broad observational capability requires explicit owner-level resolution and audited BEFORE→AFTER owner/consumer/replacement evidence under ARCH §13 and DEV §59. Until then `MIGRATION_COMPLETE=NO`, `OLD_CAPABILITY_DECOMMISSION_ALLOWED=NO`. No new future symbols added. The original five-symbol native journal, independent signed account/Execution protection and already OPEN positions stay protected by existing fail-closed gates.
 
 **Roadmap delta:** R00 canon updated via this scoped documentation changeset after its protected merge; R01 manifest PARTIAL (five-symbol focus; broader old MAYAK separately inventoried), R02–R05 code portions merged/tested but not deployed and not fully quality verified; R06–R14 no new publication consumer cutover. Next allowed task: five-symbol exact required feeds/quality-gap/TTL and physical footprint READ ONLY, then bounded source-only code/PG16 tests, with no production producer restart or LIVE change.
+
+
+#### R01 approved five-symbol manifest, Git-first source checkpoint — 2026-11-11 (#470)
+
+Владелец разрешил самостоятельную верифицированную разработку per-consumer
+`freshness_seconds`, required/optional и cadence и их каноническое
+утверждение **до** production установки; см. OBS §7.10.5.1,
+DEV §59.2, INDEX §74 и machine-readable
+`operations/monitoring/required_public_feeds.json`.
+120 exact requirements / 5 symbols / 45 unique WS topics /
+15 REST symbol+category+dataset inputs. Context TTL не является
+новым торговым параметром Strategy, native original trade
+retention не меняется. Active MAYAK 20-symbol feeds остаются.
+
+**Before code work CHECKED HERE (2026-11-11 ~02:30 Asia/Almaty):**
+`REMOTE_HEAD=SOURCE_HEAD=e528338d1d5868888596a8ddaa2822162c6d9e6d`,
+clean server source mirror; exact native PID 1221814 active with
+old deleted release cwd `2e31ca84a67bc1b161af04a8f86d91e48a026b90`;
+`INSTALLED_COMMIT=f666dfc16d0a70b12cb371edbaad8826606dee27`.
+Actual `cripta` actor `os.stat` confirmed
+`/etc/cripta/market-source/required_public_feeds.json`
+`ENOENT`; parent directory likewise absent.
+Active P90 v2 MAIN `INJ,LTC` and SUB `APT,ARB,DOT` were
+read from real strategy entry plans, not inferred from source defaults.
+No new server service/DB/Exchange mutations from this R01 review.
+
+**RELEASE STATUS:** source branch
+`core/market-source-r01-approved-feed-contract-470-20261111`
+contains approved manifest, source parser negative/identity tests and
+canonical OBS/DEV/INDEX integration, subject to protected PR/CI.
+`R00=CLOSED`, `R01` current; `R01.M=SOURCE_PREPARED`,
+`R01.D=NOT_STARTED`, `R01.R=NOT_CHECKED_HERE` pending real
+operator config installation/actor readback. `R02–R14` not
+advanced. R01 RUNTIME check means inert operator config
+readback, not live producer union. Finances/ARM unchanged.

@@ -1780,3 +1780,24 @@ Existing Issue #470 remains the task, its owner-stated 7-item priority and alrea
 Существующий MAYAK в прежней R01 инвентаризации физически обслуживал 20-symbol observational context. Эта историческая capability **не объявляется удалённой** и не отключается данным пятисимвольным scope clarification: прежде полного R11/R14 нужна доказанная BEFORE→AFTER замена либо отдельное owner-approved сокращение с сохранением нужных потребителей. Five-symbol source code/CI ≠ full-universe runtime migration. Mainnet, Exchange, signed private state, OPEN Exit/SL/TP, original native journal, source-gap/recovery и release/ARM gates не изменяются.
 
 **Documentation maintenance:** current document set/paths, base/routed pre-read, root README/AGENTS, Project Instructions и Source file count (11) не меняются; новый отдельный canonical file не создаётся. Исторические MAP/Issue R01 checkpoints сохраняются как датированные evidence, приоритет нового intent отслеживается здесь и в Issue #470. `OWNER_DECISION=YES`; `CANON=AFTER_PROTECTED_MERGE`; `NEW_PRODUCER_FIVE_SCOPE_ONLY=YES`; `MAYAK_BROAD_REPLACEMENT_VERIFIED=NO`; `DEPLOYED=NO`; `LIVE_CHANGE=NO`.
+
+
+## 74. R01 exact MarketSource feed quality contract и порядок roadmap — OWNER DECISION 2026-11-11 (Issue #470)
+
+Владелец разрешил инженерно определить для **действующих пяти symbols**
+точные `freshness_seconds`, `required`/optional, обновление и
+bounded lookback из проверенных действующих consumer/readers; не переносить
+старые R1/P90/Strategy торговые TTL или параметры в новую policy.
+Канонический owner quality/retention/capture — OBS §7.10.5.1,
+машинный source-controlled contract —
+`operations/monitoring/required_public_feeds.json`; DEV §59.2
+владеет строгим этапным R00–R14 execution gate и отличием
+GitHub source artifact от установленного operator readback.
+Историческое evidence/current runtime — MAP/Issue #470. Это
+изменение **не** расширяет approved five-symbol capture scope,
+не замещает existing MAYAK 20 symbols, не устанавливает config
+автоматически, не запускает WS/REST/PG writes и не разрешает
+финансовый ARM/Exchange mutation. Readiness требует отдельной
+physical filesystem и release/rollback приёмки. Current docs
+set, active source bundle (11), mandatory pre-read, root README/AGENTS
+routes и Project Instructions не меняются.
