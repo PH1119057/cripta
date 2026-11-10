@@ -12,6 +12,12 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from bybit_workbench.market_data.publication_compact_refs import (
+    collect_compact_public_references,
+)
+from bybit_workbench.market_data.source_required_feed_manifest import (
+    RequiredPublicFeed,
+)
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 
 _RELEASE = re.compile(r"^[a-f0-9]{40}$")
@@ -28,6 +34,7 @@ def publish_market_source_second(
     producer_release_commit: str,
     symbols: tuple[str, ...],
     timeframes: tuple[str, ...] = ("1", "5", "15"),
+    public_requirements: tuple[RequiredPublicFeed, ...] = (),
     observed_at: datetime | None = None,
 ) -> int | None:
     """Publish at most ONE frozen snapshot per UTC second and source epoch.
@@ -138,20 +145,29 @@ def publish_market_source_second(
             }
             for symbol in symbols
         }
+        # Compact spot/linear references belong to the *same source epoch*.
+        # Capture only finalized, committed source seconds preceding this
+        # publication boundary; absence/staleness is explicit, never invented.
+        compact_refs, compact_coverage = collect_compact_public_references(
+            connection, source_session_id=source_session_id,
+            as_of_second=second, requirements=public_requirements,
+        )
         from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
 
         row = connection.execute(
             """INSERT INTO analytics.market_publications
                 (market_source_id,source_session_id,producer_release_commit,
                  as_of_second,native_watermarks,closed_candle_watermarks,
-                 field_coverage,publication_status)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,'WATERMARKS_ONLY')
+                 field_coverage,compact_second_refs,compact_field_coverage,
+                 publication_status)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'WATERMARKS_ONLY')
                ON CONFLICT (market_source_id,source_session_id,as_of_second)
                DO NOTHING RETURNING publication_id""",
             (
                 BYBIT_PUBLIC_MARKET_SOURCE_ID, source_session_id,
                 producer_release_commit, second, Jsonb(native),
                 Jsonb(candle_refs), Jsonb(coverage),
+                Jsonb(compact_refs), Jsonb(compact_coverage),
             ),
         ).fetchone()
     return int(row[0]) if row is not None else None

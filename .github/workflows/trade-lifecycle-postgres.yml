@@ -108,6 +108,7 @@ jobs:
             operations/sql/20261109_native_public_trade_source_event_order.sql
             operations/sql/20261110_market_source_publication.sql
             operations/sql/20261110_public_source_compact_seconds.sql
+            operations/sql/20261110_market_publication_compact_links.sql
             operations/sql/20261109_p90_scoped_native_consumer_checkpoint.sql
             operations/sql/20261101_owner_full_contour_diagnostic.sql
             operations/sql/20261101_subordinate_diagnostic_binding.sql
