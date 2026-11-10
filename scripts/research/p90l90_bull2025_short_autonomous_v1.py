@@ -123,6 +123,23 @@ def ensure_controller_dirs() -> None:
     chunk.writer_dir(CTRL)
 
 
+def active_portfolio_command(raw: bytes) -> bool:
+    if b"python3 -c" in raw:
+        return False
+    # The sudo launcher's argv mentions the controller file but it is NOT
+    # another research worker. Only a real detached --worker is counted.
+    return (
+        b"/scripts/research/p90l90_bull2025_portfolio_" in raw
+        or (
+            b" --worker" in raw
+            and (
+                b"p90l90_bull2025_long_autonomous_v1.py" in raw
+                or b"p90l90_bull2025_short_autonomous_v1.py" in raw
+            )
+        )
+    )
+
+
 def active_portfolio_workers() -> list[int]:
     """Do not start a controller next to an earlier manual research replay."""
     workers = []
@@ -133,19 +150,7 @@ def active_portfolio_workers() -> list[int]:
             raw = (p / "cmdline").read_bytes().replace(b"\0", b" ")
         except OSError:
             continue
-        if (
-            b"python3 -c" not in raw
-            and (
-                b"/scripts/research/p90l90_bull2025_portfolio_" in raw
-                or (
-                    b" --worker" in raw
-                    and (
-                        b"p90l90_bull2025_long_autonomous_v1.py" in raw
-                        or b"p90l90_bull2025_short_autonomous_v1.py" in raw
-                    )
-                )
-            )
-        ):
+        if active_portfolio_command(raw):
             workers.append(int(p.name))
     return workers
 
