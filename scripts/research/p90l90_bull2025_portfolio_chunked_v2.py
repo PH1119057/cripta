@@ -15,8 +15,8 @@ from __future__ import annotations
 import argparse
 import csv
 import dataclasses
-import fcntl
 import gzip
+import importlib
 import hashlib
 import heapq
 import json
@@ -171,6 +171,9 @@ def writer_dir(path: Path) -> None:
 
 
 def fsync_dir(path: Path) -> None:
+    # Windows CI can exercise pure resume tests; production writer is Linux.
+    if not hasattr(os, "O_DIRECTORY"):
+        return
     fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
     try:
         os.fsync(fd)
@@ -559,8 +562,9 @@ def run(side: str, source_head: str, max_days: int = 5) -> dict:
     writer_dir(folder)
     lock_path = folder / ".writer.lock"
     with lock_path.open("a+", encoding="utf-8") as lock:
+        flock = importlib.import_module("fcntl")  # Linux server only
         try:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            flock.flock(lock.fileno(), flock.LOCK_EX | flock.LOCK_NB)
         except BlockingIOError as exc:
             raise RuntimeError("another active 2025 portfolio writer owns this side") from exc
         state, last_manifest, last_sha = load_parts(folder)
