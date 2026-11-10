@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import ast
-from datetime import UTC, datetime
 from decimal import Decimal as D
 from pathlib import Path
 
@@ -12,8 +11,8 @@ from scripts.research import p90l90_exit_90d_v2 as old
 
 def test_2025_window_and_only_frozen_cohort() -> None:
     assert (new.EVAL_END - new.EVAL_START).days == 183
-    assert new.EVAL_START == datetime(2025, 4, 1, tzinfo=UTC)
-    assert new.EVAL_END == datetime(2025, 10, 1, tzinfo=UTC)
+    assert new.EVAL_START.isoformat() == "2025-04-01T00:00:00+00:00"
+    assert new.EVAL_END.isoformat() == "2025-10-01T00:00:00+00:00"
     assert new.END_TS - new.START_TS == 183 * 86400
     assert len(new.SYMBOLS) == 5
     assert set(new.SYMBOLS) == {
