@@ -111,6 +111,8 @@ jobs:
             operations/sql/20261110_market_publication_compact_links.sql
             operations/sql/20261110_public_market_rest_observations.sql
             operations/sql/20261110_market_publication_rest_links.sql
+            operations/sql/20261110_public_forming_minute_observations.sql
+            operations/sql/20261110_market_publication_forming_links.sql
             operations/sql/20261109_p90_scoped_native_consumer_checkpoint.sql
             operations/sql/20261101_owner_full_contour_diagnostic.sql
             operations/sql/20261101_subordinate_diagnostic_binding.sql
