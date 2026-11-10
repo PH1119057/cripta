@@ -1,0 +1,12 @@
+[Unit]
+Description=CRIPTA 24h HOT full telemetry retention every 10 minutes
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+RandomizedDelaySec=30
+AccuracySec=30s
+Unit=cripta-market-hot-retention.service
+
+[Install]
+WantedBy=timers.target

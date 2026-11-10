@@ -143,7 +143,10 @@ def main() -> None:
             (since, until),
         ).fetchone()
         liquidation_quality = db.execute(
-            """SELECT coalesce(payload->'liquidations'->>'status','NO_DATA') AS status,
+            """SELECT CASE WHEN payload->>'_cripta_hot_telemetry'='EXPIRED_24H'
+                       THEN 'EXPIRED_HOT_TELEMETRY'
+                       ELSE coalesce(payload->'liquidations'->>'status','NO_DATA')
+                  END AS status,
                       count(*)
                FROM mayak_v2.snapshots
                WHERE snapshot_kind='REGULAR' AND observed_at BETWEEN %s AND %s
