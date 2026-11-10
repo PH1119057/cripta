@@ -248,7 +248,7 @@ class OrderbookContinuity:
         snap = event.frame_type == "snapshot"
         if not snap and not self._ready:
             raise PublicSourceFrameInvalid("PUBLIC_BOOK_DELTA_WITHOUT_SNAPSHOT")
-        if not snap and event.exchange_sequence <= (self._sequence or -1):
+        if not snap and self._sequence is not None and event.exchange_sequence <= self._sequence:
             self.invalidate()
             raise PublicSourceFrameInvalid("PUBLIC_BOOK_SEQUENCE_REGRESSION")
         if snap:
