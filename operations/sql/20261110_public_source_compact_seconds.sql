@@ -8,8 +8,8 @@ SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '20s';
 
 CREATE TABLE IF NOT EXISTS analytics.public_market_source_seconds (
-    market_source_id text NOT NULL
-      REFERENCES identity.market_sources(market_source_id),
+    market_source_id text NOT NULL,
+    venue_id text NOT NULL,
     source_session_id text NOT NULL
       REFERENCES analytics.native_public_trade_source_sessions(source_session_id),
     instrument_id text NOT NULL
@@ -27,11 +27,13 @@ CREATE TABLE IF NOT EXISTS analytics.public_market_source_seconds (
     ),
     committed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (source_session_id,instrument_id,observed_second),
+    FOREIGN KEY (market_source_id,venue_id)
+      REFERENCES identity.market_sources(market_source_id,venue_id),
     FOREIGN KEY (
-      instrument_id,market_source_id,product_category,external_symbol
+      instrument_id,venue_id,product_category,external_symbol
     ) REFERENCES identity.instruments (
-      instrument_id,market_source_id,product_category,external_symbol
-    ) DEFERRABLE INITIALLY IMMEDIATE,
+      instrument_id,venue_id,product_category,external_symbol
+    ),
     CHECK (date_trunc('second',observed_second)=observed_second),
     CHECK (source_time_min<=source_time_max)
 );
