@@ -33,7 +33,10 @@ def _tiny_native_data(tmp_path: Path, days: int = 2):
             with gzip.open(path, "wt", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=("timestamp", "price", "trdMatchID"))
                 writer.writeheader()
-                writer.writerow({"timestamp": str(t), "price": price, "trdMatchID": f"{symbol}-{index}"})
+                writer.writerow({
+                    "timestamp": str(t), "price": price,
+                    "trdMatchID": f"{symbol}-{index}",
+                })
             inputs.append({"rows": 1, "file": path.name, "sha256": chunk.old.sha(path)})
             states[int(t // 300) * 300] = (D("90"), D("110"), D("1"))
         first_ts = chunk.old.START_TS + 60
