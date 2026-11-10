@@ -19,7 +19,7 @@ from operations.monitoring.public_market_source_union_capture import (
 
 _MANIFEST = (
     Path(__file__).resolve().parents[1]
-    / "config" / "market_source" / "required_public_feeds.json"
+    / "operations" / "monitoring" / "required_public_feeds.json"
 )
 _SYMBOLS = ("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT")
 
