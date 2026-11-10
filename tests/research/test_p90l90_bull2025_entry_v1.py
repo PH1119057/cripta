@@ -74,7 +74,7 @@ def test_frozen_market_window_cohort_source_gates() -> None:
     assert "if os.geteuid() != 107" in source
     assert "if not q.is_file()" in source
     assert "if manifest[\"events_sha256\"] != reference[\"events_sha256\"]" in source
-    assert str(NEW.relative_to(REPO)) == "scripts/research/p90l90_bull2025_entry_v1.py"
+    assert NEW.relative_to(REPO).as_posix() == "scripts/research/p90l90_bull2025_entry_v1.py"
 
 
 def test_period_aware_prev7d_frozen_width_is_caused_by_prior_days(
