@@ -158,10 +158,10 @@ def collect_public_rest_references(
         ).fetchall()
         by_id = {str(row[1]): row for row in rows}
         for need in needs:
-            item = quality.setdefault(need.instrument_id, {})
+            quality_item = quality.setdefault(need.instrument_id, {})
             row = by_id.get(need.instrument_id)
             if row is None:
-                item[dataset] = {
+                quality_item[dataset] = {
                     "status": "MISSING_OR_STALE",
                     "required": need.required,
                     "freshness_seconds": need.freshness_seconds,
@@ -185,7 +185,7 @@ def collect_public_rest_references(
                 )
             age = (as_of_second - source_at).total_seconds()
             if age > need.freshness_seconds:
-                item[dataset] = {
+                quality_item[dataset] = {
                     "status": "STALE",
                     "age_seconds": age,
                     "required": need.required,
