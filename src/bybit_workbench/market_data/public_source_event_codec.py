@@ -235,20 +235,33 @@ class OrderbookContinuity:
         self._bids: dict[Decimal, Decimal] = {}
         self._asks: dict[Decimal, Decimal] = {}
         self._sequence: int | None = None
+        self._update_id: int | None = None
         self._ready = False
 
     def invalidate(self) -> None:
         self._bids.clear()
         self._asks.clear()
         self._sequence = None
+        self._update_id = None
         self._ready = False
 
     def apply(self, event: PublicSourceFact) -> Mapping[str, object]:
         if event.kind != "BOOK" or event.exchange_sequence is None:
             raise PublicSourceFrameInvalid("PUBLIC_BOOK_NOT_AN_EVENT")
         snap = event.frame_type == "snapshot"
+        update = event.payload.get("update_id")
+        if type(update) is not int:
+            raise PublicSourceFrameInvalid("PUBLIC_BOOK_UPDATE_ID_INVALID")
         if not snap and not self._ready:
             raise PublicSourceFrameInvalid("PUBLIC_BOOK_DELTA_WITHOUT_SNAPSHOT")
+        # Bybit explicitly uses update_id=1 for orderbook source restart.
+        # The old ladder must never be combined with this new epoch.
+        if not snap and update == 1:
+            self.invalidate()
+            raise PublicSourceFrameInvalid("PUBLIC_BOOK_RESET_REQUIRES_SNAPSHOT")
+        if not snap and self._update_id is not None and update <= self._update_id:
+            self.invalidate()
+            raise PublicSourceFrameInvalid("PUBLIC_BOOK_UPDATE_REGRESSION")
         if not snap and self._sequence is not None and event.exchange_sequence <= self._sequence:
             self.invalidate()
             raise PublicSourceFrameInvalid("PUBLIC_BOOK_SEQUENCE_REGRESSION")
@@ -265,6 +278,7 @@ class OrderbookContinuity:
                 else:
                     side[price] = qty
         self._sequence = event.exchange_sequence
+        self._update_id = update
         if not self._bids or not self._asks:
             self.invalidate()
             raise PublicSourceFrameInvalid("PUBLIC_BOOK_SIDE_EMPTY")
