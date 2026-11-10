@@ -7,7 +7,7 @@ the compact trade stream never becomes P90 original execId/seq evidence.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from bybit_workbench.market_data.source_required_feed_manifest import (
