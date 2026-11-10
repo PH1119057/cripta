@@ -32,7 +32,8 @@ SIDE = "LONG_ONLY"
 
 
 def strict_case(key: str, saved: dict, result: dict,
-                rows: list[dict], dust: dict) -> dict:
+                rows: list[dict], dust: dict,
+                last_prices: dict) -> dict:
     """Arithmetically independent of Book.finish or finalizer implementation."""
     gross = sum((D(t["gross_usdt"]) for t in rows), D(0))
     entry = sum((D(t["entry_fee_usdt"]) for t in rows), D(0))
@@ -72,7 +73,8 @@ def strict_case(key: str, saved: dict, result: dict,
             D(r["margin"]) != saved["margin"][symbol]
             or D(r["entry_fee_already_debited"]) != saved["open_fee"][symbol]
             or D(r["entry_price"]) != position.entry
-            or px != D(r["last_price"])
+            or px != last_prices[symbol]
+            or r["entry_ts"] != repr(position.entry_ts)
             or r["side"] != "LONG"
         ):
             raise ValueError("censored position identity mismatch: " + key)
@@ -217,9 +219,13 @@ def validate(source_head: str) -> tuple[dict, str]:
             ]
             if rows != state["books"][internal]["trades"]:
                 raise ValueError("published ledger differs from immutable day183 " + public)
+            if (report["results"][public]["scenario"] != scenario
+                    or report["results"][public]["cash_model"] != mode):
+                raise ValueError("scenario/cash publication identity mismatch")
             cases[public] = strict_case(
                 public, state["books"][internal],
                 report["results"][public], rows, evidence[public],
+                state["prices"],
             )
     details = {
         "research": RESEARCH,
