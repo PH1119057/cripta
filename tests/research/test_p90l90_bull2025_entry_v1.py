@@ -1,4 +1,4 @@
-"""Old P90L90 2026 causal Entry -> 2025 period port identity tests."""
+"""Frozen P90L90 strategy identity and independent 2025 causal replay checks."""
 from __future__ import annotations
 
 import ast
@@ -72,7 +72,9 @@ def test_frozen_market_window_cohort_source_gates() -> None:
     assert "EXACT_2026_CANDIDATE_LEDGER_PARITY_PASS" in source
     assert "QC_PASS_2025_ENTRY_CANDIDATE_ONLY_NO_EXITS" in source
     assert "if os.geteuid() != 107" in source
-    assert "if not q.is_file()" in source
+    assert "five-coin 2026 Entry reference parity not complete" not in source
+    assert "2025 frozen geometry cohort incomplete" in source
+    assert "2025 causal geometry day/state coverage incomplete" in source
     assert "if manifest[\"events_sha256\"] != reference[\"events_sha256\"]" in source
     assert NEW.relative_to(REPO).as_posix() == "scripts/research/p90l90_bull2025_entry_v1.py"
 
