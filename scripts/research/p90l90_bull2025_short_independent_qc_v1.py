@@ -41,7 +41,7 @@ def strict_case(key: str, saved: dict, result: dict,
     net = sum((D(t["net_usdt"]) for t in rows), D(0))
     for row in rows:
         if row["side"] != "SHORT":
-            raise ValueError("non-LONG trade in final 2025 ledger: " + key)
+            raise ValueError("non-SHORT trade in final 2025 ledger: " + key)
         if (
             D(row["gross_usdt"]) - D(row["entry_fee_usdt"])
             - D(row["exit_fee_usdt"]) != D(row["net_usdt"])
