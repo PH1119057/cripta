@@ -7,17 +7,21 @@ import csv
 import gzip
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal as D, getcontext
+from decimal import Decimal, getcontext
 from pathlib import Path
 from statistics import median
 
+D = Decimal
 REPO = Path(__file__).resolve().parents[2]
 OLD = REPO / "scripts/research/p90l90_entry_90d_v2.py"
 NEW = REPO / "scripts/research/p90l90_bull2025_entry_v1.py"
 
 
 def _named(tree: ast.AST, name: str) -> ast.FunctionDef:
-    funcs = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == name]
+    funcs = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == name
+    ]
     assert len(funcs) == 1
     return funcs[0]
 
@@ -58,7 +62,10 @@ def test_frozen_market_window_cohort_source_gates() -> None:
     assert '"2025-03-22", "2025-09-30"' in source
     assert "LTCUSDT" in source and "DOTUSDT" in source
     assert "ARBUSDT" in source and "APTUSDT" in source and "INJUSDT" in source
-    assert 'sha(SOURCE / ORIGINAL_REL) != acquisition["source_snapshot_sha256"][ORIGINAL_REL]' in source
+    assert (
+        'sha(SOURCE / ORIGINAL_REL) != acquisition["source_snapshot_sha256"][ORIGINAL_REL]'
+        in source
+    )
     assert "EXACT_2026_CANDIDATE_LEDGER_PARITY_PASS" in source
     assert "QC_PASS_2025_ENTRY_CANDIDATE_ONLY_NO_EXITS" in source
     assert "if os.geteuid() != 107" in source
