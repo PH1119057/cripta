@@ -137,8 +137,13 @@ def active_portfolio_workers() -> list[int]:
             b"python3 -c" not in raw
             and (
                 b"/scripts/research/p90l90_bull2025_portfolio_" in raw
-                or b"p90l90_bull2025_long_autonomous_v1.py" in raw
-                or b"p90l90_bull2025_short_autonomous_v1.py" in raw
+                or (
+                    b" --worker" in raw
+                    and (
+                        b"p90l90_bull2025_long_autonomous_v1.py" in raw
+                        or b"p90l90_bull2025_short_autonomous_v1.py" in raw
+                    )
+                )
             )
         ):
             workers.append(int(p.name))
