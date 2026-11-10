@@ -395,3 +395,26 @@ def test_r03_network_worker_never_receives_a_postgres_connection() -> None:
     assert len(result) == 1
     assert calls == [(window.key, page)]
     assert result[0][0].closed_at == boundary
+
+
+
+def test_native_producer_release_identity_exposes_r03_capability_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Old/native-only mode stays INERT; no switch silently activates repair."""
+    monkeypatch.setattr(native, "STATE_ROOT", tmp_path)
+    monkeypatch.setattr(native, "STATUS_PATH", tmp_path / "status.json")
+    monkeypatch.setattr(native, "_UNION_CAPTURE_FLAG", "0")
+    native._status("ACTIVE", session="a" * 32)
+    inert = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert inert["closed_gap_repair_mode"] == "INERT"
+    assert inert["trading_effect"] == "NONE"
+
+    monkeypatch.setattr(native, "_UNION_CAPTURE_FLAG", "1")
+    native._status("ACTIVE", session="a" * 32)
+    visible = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert visible["closed_gap_repair_mode"] == (
+        "ASYNC_SOURCE_NETWORK_ONLY_ONE_PG_WRITER"
+    )
+    assert visible["closed_klines_enabled"] is True
+    assert visible["trading_effect"] == "NONE"
