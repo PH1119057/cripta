@@ -690,6 +690,9 @@ migration_files=(
   # Inert shared public-data publication schema: no consumers or writer
   # switch until independently approved MarketSource source/capability cutover.
   operations/sql/20261110_market_source_publication.sql
+  # Additive compact SPOT+LINEAR public feed facts, inactive until exact
+  # producer/retention cutover and no duplicate raw archive.
+  operations/sql/20261110_public_source_compact_seconds.sql
   # Technical Observer delivery only: no P90 Exit/Entry or SOURCE_LIVE_IDENTITY.
   operations/sql/20261110_native_public_trade_observer_delivery.sql
 )
