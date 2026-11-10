@@ -3677,7 +3677,6 @@ def _run_observer_epoch(
                         fetch_recent_trades=_fetch_recent_trade_snapshot,
                         fetch_closed_candles=_fetch_gap_candles,
                         bind_restart_bridge=source_ports.bind_restart_bridge,
-                        native_closed_only=R03_NATIVE_CANDLE_READER,
                     )
                     if restart_recovery.trail035_late_arm_blocked:
                         raise RuntimeError(
