@@ -243,6 +243,7 @@ def run_source_union(
         )
     )
     frame_index = 0
+    last_published_second: datetime | None = None
     try:
         while not done.is_set() and not native.stopping:
             try:
@@ -285,13 +286,19 @@ def run_source_union(
                 )
                 aggregate.mark_committed(ready)
             if publish_seconds:
-                publish_market_source_second(
-                    connection, source_session_id=session,
-                    producer_release_commit=producer_release_commit,
-                    symbols=p90_symbols, timeframes=intervals or ("1", "5", "15"),
-                    public_requirements=compact_requirements,
-                    observed_at=current,
-                )
+                # A single immutable publication per UTC second; not a
+                # redundant DB scan/ON CONFLICT every 100ms of idle polling.
+                current_second = current.replace(microsecond=0)
+                if current_second != last_published_second:
+                    publish_market_source_second(
+                        connection, source_session_id=session,
+                        producer_release_commit=producer_release_commit,
+                        symbols=p90_symbols,
+                        timeframes=intervals or ("1", "5", "15"),
+                        public_requirements=compact_requirements,
+                        observed_at=current_second,
+                    )
+                    last_published_second = current_second
         if failures:
             raise PublicSourceSecondUnavailable(
                 "PUBLIC_FEED_TRANSPORT_FAILED"
