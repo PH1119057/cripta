@@ -235,6 +235,13 @@ def run_source_union(
         worker.start()
 
     aggregate = PublicSecondAccumulator(session=session)
+    # R05 publication keeps per-consumer TTL but one physical feed/ref;
+    # native P90 original publicTrade remains the separate exact journal.
+    compact_requirements = tuple(
+        item for item in union.requirements if item.dataset in (
+            "PUBLIC_TRADE", "TICKER", "ORDERBOOK_50", "LIQUIDATION",
+        )
+    )
     frame_index = 0
     try:
         while not done.is_set() and not native.stopping:
@@ -282,6 +289,7 @@ def run_source_union(
                     connection, source_session_id=session,
                     producer_release_commit=producer_release_commit,
                     symbols=p90_symbols, timeframes=intervals or ("1", "5", "15"),
+                    public_requirements=compact_requirements,
                     observed_at=current,
                 )
         if failures:
