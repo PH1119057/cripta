@@ -7,8 +7,8 @@ or native-trade cursor, no per-Strategy storage or Exchange access.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
 import time
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Any
 
