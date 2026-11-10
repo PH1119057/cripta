@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
+from bybit_workbench.market_data.source_required_feed_manifest import (
+    SourceManifestInvalid,
+)
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
-)
-from bybit_workbench.market_data.source_required_feed_manifest import (
-    SourceManifestInvalid,
 )
 from operations.monitoring import native_public_trade_source as native
 from operations.monitoring.public_market_source_union_capture import (
