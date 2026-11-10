@@ -206,7 +206,9 @@ def commit_bundle(parent: Path, name: str, payloads: dict[str, str]) -> Path:
     return dest
 
 
-def load_parts(folder: Path, data: dict | None = None) -> tuple[dict | None, dict | None, str | None]:
+def load_parts(
+    folder: Path, data: dict | None = None,
+) -> tuple[dict | None, dict | None, str | None]:
     """Verify every immutable manifest chain and the final state SHA."""
     if not folder.exists():
         return None, None, None
