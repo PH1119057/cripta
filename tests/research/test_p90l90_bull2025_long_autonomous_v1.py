@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -31,7 +32,7 @@ def fake_worker(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setattr(ctl.chunk.old, "sha", lambda _: "fake-sha")
     monkeypatch.setattr(ctl, "validate_actor_and_path", lambda: None)
     monkeypatch.setattr(ctl.chunk.old.entry, "git_head", lambda: "f" * 40)
-    monkeypatch.setattr(ctl.shutil, "disk_usage", lambda _: (100, 0, 20 * 2**30))
+    monkeypatch.setattr(ctl.shutil, "disk_usage", lambda _: SimpleNamespace(free=20 * 2**30))
     statuses = []
     monkeypatch.setattr(
         ctl, "status",
