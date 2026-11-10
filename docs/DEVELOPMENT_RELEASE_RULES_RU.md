@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.8 · 2026-11-10
+**Версия:** 2.9 · 2026-11-10
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2411,6 +2411,8 @@ terms; INDEX §69 — routing. Эта секция управляет **проц
 ## 59. Поэтапная консолидация MarketSource и всех trading consumers — OWNER DECISION 2026-11-10 (#470)
 
 **Scope / order:** реализация ARCH §60.5 / OBS §7.10.5 / TC §4.19 в существующем Issue #470 **после** документационной ревизии. Операционная матрица конкретных сервисов — CURRENT_PROJECT_MAP checkpoint 2026-11-10. Не создавать параллельную ветку/повторный job для уже выполняемого #470/1; DEV §50.4 task discovery обязателен перед каждым scoped patch.
+
+**Owner scope correction 2026-11-10:** R01–R05 текущее source-only implementation universe = ровно пять торгуемых `APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT`; не требовать 20-symbol producer/REST/WS/PG coverage и не запускать второй сбор «на перспективу». Все нужные feed families для этих пяти определяются manifest фактических потребителей, а не универсальным дефолтом. Старый MAYAK 20-symbol контур — отдельный существующий BEFORE consumer/capability: не выключать его, не урезать и не объявлять R11/R14 PASS до доказанного переноса или нового явного решения владельца. Эта коррекция не разрешает server ABI cutover, data purge, restart, owner ARM или Exchange mutation. Source-authoring и disposable tests допустимы без физического включения нового сбора.
 
 Acceptance phases с отдельными объективными evidence и STOP при недоказанном replacement:
 1. **Inventory BEFORE:** точные GitHub/source/installed/loaded/operational-delta SHA; systemd service → physical public/private Bybit connections → PostgreSQL read/write tables → decision consumers; active StrategyPlan/ExitPlan per symbol/timeframe/source manifest; pending and OPEN positions/Exchange protection from authorized signed owner; stage/dirty worktrees and existing PR/jobs.
