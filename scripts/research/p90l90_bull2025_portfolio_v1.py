@@ -471,7 +471,6 @@ def run(side: str, source_head: str, smoke_hours: int = 0) -> dict:
         if t >= limit:
             break
         s = SYMBOLS[priority]
-        prices[s] = px
         events = data[s]["events"].get(seq, ())
         state = data[s]["states"].get(int(t // 300) * 300)
         if state is None:
@@ -482,6 +481,9 @@ def run(side: str, source_head: str, smoke_hours: int = 0) -> dict:
                 for b in books.values():
                     b.mark(previous_day * 86400 + 86400, prices)
             previous_day = day
+        # Mark the prior UTC day strictly from ticks already seen; the first
+        # current-day print must never leak into the previous EOD equity.
+        prices[s] = px
         current = shadow_positions[s]
         just_closed = False
         if current is not None:
