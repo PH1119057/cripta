@@ -11,7 +11,6 @@ No consumer cutover, Strategy, account, Exchange, private API or LIVE right.
 from __future__ import annotations
 
 import json
-import os
 import queue
 import threading
 import time
@@ -64,6 +63,16 @@ def parse_explicit_source_manifest(
             "SOURCE_UNION_MANIFEST_PARSE_INVALID"
         ) from exc
     feeds = union_public_feed_requirements(required)
+    # Do not advertise a physical capability that this source has not
+    # implemented. REST-only facts and forming bar payload require their own
+    # source adapters; spot kline is not yet stored by this producer.
+    if any(item.required and item.dataset in (
+        "ACCOUNT_RATIO", "INSTRUMENT_INFO", "FORMING_KLINE",
+    ) for item in required):
+        raise SourceManifestInvalid("SOURCE_REQUIRED_INPUT_ADAPTER_NOT_READY")
+    if any(item.required and item.product == "SPOT"
+           and item.dataset == "CLOSED_KLINE" for item in required):
+        raise SourceManifestInvalid("SOURCE_REQUIRED_SPOT_KLINE_NOT_READY")
     linear = {
         entry.dataset_topic
         for entry in feeds.websocket_topics if entry.product == "LINEAR"
