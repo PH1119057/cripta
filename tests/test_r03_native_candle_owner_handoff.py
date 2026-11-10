@@ -191,3 +191,25 @@ def test_r03_missing_native_close_fails_without_observer_insert(
             producer_release_commit="a" * 40,
             verify_only=True, source_wait_seconds=0.0,
         )
+
+
+def test_r03_all_active_observer_recovery_writers_become_read_only() -> None:
+    observer = (
+        _ROOT / "operations/monitoring/universal_entry_shadow.py"
+    ).read_text(encoding="utf-8")
+    prepare = (
+        _ROOT / "operations/monitoring/observer_preparation.py"
+    ).read_text(encoding="utf-8")
+    recovery = (
+        _ROOT / "src/bybit_workbench/universal_entry/p90l90_real_restart_recovery.py"
+    ).read_text(encoding="utf-8")
+    assert "verify_only=R03_NATIVE_CANDLE_READER" in observer
+    assert observer.count(
+        "verify_native_source_only=R03_NATIVE_CANDLE_READER"
+    ) == 2
+    assert "native_closed_only=R03_NATIVE_CANDLE_READER" in observer
+    assert "verify_only=verify_native_source_only" in prepare
+    assert "verify_only=native_closed_only" in recovery
+    assert "CANDLE_IMMUTABLE_SOURCE_CONFLICT" in (
+        _ROOT / "src/bybit_workbench/market_data/shared_closed_candles.py"
+    ).read_text(encoding="utf-8")
