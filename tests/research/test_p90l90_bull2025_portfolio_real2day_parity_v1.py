@@ -24,6 +24,20 @@ def test_reject_unexplained_wallet_credit():
         parity.assert_finances(book, "altered wallet")
 
 
+def test_accept_below_quantum_decimal_reserve_roundoff():
+    book = make_book()
+    # Observed in actual original 2025 compound margin after close.
+    book.reserved = D("-3E-47")
+    parity.assert_finances(book, "bounded decimal context roundoff")
+
+
+def test_reject_material_reserved_margin_gap():
+    book = make_book()
+    book.reserved = parity.old.original.MONEY_QUANTUM
+    with pytest.raises(ValueError, match="fee/wallet/reserved"):
+        parity.assert_finances(book, "material reserve gap")
+
+
 def test_reject_bad_closed_trade_fee_arithmetic():
     book = make_book()
     book.trades.append({
