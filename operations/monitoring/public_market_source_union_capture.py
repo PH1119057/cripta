@@ -15,13 +15,22 @@ import queue
 import threading
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import psycopg
 import websocket
 
 from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
+)
+from bybit_workbench.market_data.public_market_rest_source import (
+    Dataset as RestDataset,
+    PublicMarketRestFact,
+    PublicMarketRestInvalid,
+    fetch_public_market_rest,
+)
+from bybit_workbench.market_data.public_rest_observations import (
+    persist_public_rest_fact,
 )
 from bybit_workbench.market_data.public_source_event_codec import (
     decode_bybit_public_frame,
@@ -63,12 +72,11 @@ def parse_explicit_source_manifest(
             "SOURCE_UNION_MANIFEST_PARSE_INVALID"
         ) from exc
     feeds = union_public_feed_requirements(required)
-    # Do not advertise a physical capability that this source has not
-    # implemented. REST-only facts and forming bar payload require their own
-    # source adapters; spot kline is not yet stored by this producer.
-    if any(item.required and item.dataset in (
-        "ACCOUNT_RATIO", "INSTRUMENT_INFO", "FORMING_KLINE",
-    ) for item in required):
+    # The PUBLIC REST adapters are source-owned. Forming bar snapshots
+    # still require a separate validated source policy, and spot kline
+    # persistence has not yet been implemented by this producer.
+    if any(item.required and item.dataset == "FORMING_KLINE"
+           for item in required):
         raise SourceManifestInvalid("SOURCE_REQUIRED_INPUT_ADAPTER_NOT_READY")
     if any(item.required and item.product == "SPOT"
            and item.dataset == "CLOSED_KLINE" for item in required):
@@ -190,6 +198,14 @@ def run_source_union(
     pipe: queue.Queue[tuple[str, dict[str, object], datetime]] = queue.Queue(
         maxsize=_MAX_QUEUE,
     )
+    # Network workers cannot write PG, so the source session/PG advisory lock
+    # remains the single writer across public WS and REST.
+    rest_pipe: queue.Queue[PublicMarketRestFact] = queue.Queue(maxsize=256)
+    rest_needs = tuple(sorted({
+        (item.product, item.symbol, item.dataset)
+        for item in union.requirements
+        if item.dataset in ("ACCOUNT_RATIO", "INSTRUMENT_INFO")
+    }))
     last_received = {k: time.monotonic() for k in sock}
 
     def read(product: str) -> None:
@@ -231,15 +247,53 @@ def run_source_union(
         threading.Thread(target=read, args=(product,), daemon=True)
         for product in ("SPOT", "LINEAR")
     ]
+
+    def read_rest() -> None:
+        # No implicit burst retry: one source-owned bounded poll cadence per
+        # explicit physical REST feed. A failure leaves missing/stale evidence
+        # in the shared publication. The original WS reader is uninterrupted.
+        due = {feed: 0.0 for feed in rest_needs}
+        while not done.is_set() and not native.stopping:
+            for product, symbol, dataset in rest_needs:
+                if done.is_set() or native.stopping:
+                    return
+                key = (product, symbol, dataset)
+                now = time.monotonic()
+                if now < due[key]:
+                    continue
+                due[key] = now + (
+                    300.0 if dataset == "ACCOUNT_RATIO" else 900.0
+                )
+                try:
+                    fact = fetch_public_market_rest(
+                        dataset=cast(RestDataset, dataset),
+                        product=product, symbol=symbol,
+                    )
+                    rest_pipe.put(fact, timeout=0.25)
+                except PublicMarketRestInvalid:
+                    # An unverified public REST response is never persisted
+                    # and never becomes an implicit success/zero observation.
+                    continue
+                except (OSError, TimeoutError):
+                    continue
+                except queue.Full:
+                    failures.append("REST:PUBLIC_REST_PIPE_OVERFLOW")
+                    done.set()
+                    return
+            done.wait(0.20)
+
+    if rest_needs:
+        workers.append(threading.Thread(target=read_rest, daemon=True))
     for worker in workers:
         worker.start()
 
     aggregate = PublicSecondAccumulator(session=session)
     # R05 publication keeps per-consumer TTL but one physical feed/ref;
     # native P90 original publicTrade remains the separate exact journal.
-    compact_requirements = tuple(
+    public_requirements = tuple(
         item for item in union.requirements if item.dataset in (
             "PUBLIC_TRADE", "TICKER", "ORDERBOOK_50", "LIQUIDATION",
+            "ACCOUNT_RATIO", "INSTRUMENT_INFO",
         )
     )
     frame_index = 0
@@ -276,6 +330,18 @@ def run_source_union(
                     received_at=received,
                 ):
                     aggregate.accept(event, received_at=received)
+            # Handle bounded REST receipts only on the one PG source writer.
+            # Never insert the REST fact directly from its network worker.
+            for _ in range(8):
+                try:
+                    rest_fact = rest_pipe.get_nowait()
+                except queue.Empty:
+                    break
+                persist_public_rest_fact(
+                    connection, source_session_id=session,
+                    producer_release_commit=producer_release_commit,
+                    fact=rest_fact,
+                )
             # Commit only completed seconds and their source provenance.
             current = datetime.now(UTC)
             ready = aggregate.ready_seconds(before=current)
@@ -295,7 +361,7 @@ def run_source_union(
                         producer_release_commit=producer_release_commit,
                         symbols=p90_symbols,
                         timeframes=intervals or ("1", "5", "15"),
-                        public_requirements=compact_requirements,
+                        public_requirements=public_requirements,
                         observed_at=current_second,
                     )
                     last_published_second = current_second
