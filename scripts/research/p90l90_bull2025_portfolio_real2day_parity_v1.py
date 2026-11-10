@@ -52,7 +52,11 @@ def assert_finances(book: old.Book, label: str) -> None:
         or book.counts["accepted"] != (
             book.counts["closed"] + sum(v is not None for v in book.pos.values())
         )
-        or book.reserved != sum(book.margin.values(), D(0))
+        # Decimal context can leave sub-money-quantum dust after
+        # subtracting compound margins. This is not a cash credit.
+        # Exact Book field parity with v2 is checked separately.
+        or abs(book.reserved - sum(book.margin.values(), D(0)))
+        >= old.original.MONEY_QUANTUM
         or book.wallet - old.START_WALLET != (
             gross - m.get("all_entry_fee_usdt", D(0)) - closed_exit
         )
