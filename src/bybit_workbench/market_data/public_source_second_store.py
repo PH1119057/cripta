@@ -185,8 +185,31 @@ def persist_compact_source_seconds(
 
     from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
 
+    # A compact market row belongs to exactly one verified ACTIVE producer
+    # epoch. Never use a source session from another release/venue or mix
+    # transport epochs in a single durability transaction.
+    sessions = {item.get("source_session_id") for item in rows}
+    if len(sessions) != 1 or any(
+        item.get("market_source_id") != BYBIT_PUBLIC_MARKET_SOURCE_ID
+        or item.get("venue_id") != "venue-bybit"
+        for item in rows
+    ):
+        raise PublicSourceSecondUnavailable("PUBLIC_FEED_EPOCH_SOURCE_MISMATCH")
+    session = next(iter(sessions))
     inserted = 0
     with connection.transaction():
+        source_epoch = connection.execute(
+            """SELECT state,market_source_id,producer_release_commit
+                 FROM analytics.native_public_trade_source_sessions
+                WHERE source_session_id=%s""",
+            (session,),
+        ).fetchone()
+        if source_epoch != (
+            "ACTIVE", BYBIT_PUBLIC_MARKET_SOURCE_ID, producer_release_commit,
+        ):
+            raise PublicSourceSecondUnavailable(
+                "PUBLIC_FEED_SOURCE_EPOCH_NOT_ACTIVE"
+            )
         for item in rows:
             for name in ("market_source_id", "venue_id", "instrument_id", "product",
                          "symbol", "second", "source_session_id",
