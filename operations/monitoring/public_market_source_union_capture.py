@@ -14,20 +14,15 @@ import json
 import queue
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
-from collections.abc import Callable
-
-from bybit_workbench.domain.models import Candle
-from bybit_workbench.market_identity import (
-    BYBIT_PUBLIC_MARKET_SOURCE_ID,
-    bybit_instrument_id,
-)
 
 import psycopg
 import websocket
 
+from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
 )
@@ -64,6 +59,10 @@ from bybit_workbench.market_data.source_required_feed_manifest import (
     RequiredPublicFeed,
     SourceManifestInvalid,
     union_public_feed_requirements,
+)
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    bybit_instrument_id,
 )
 
 _PUBLIC_WS = {
