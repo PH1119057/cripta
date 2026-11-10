@@ -481,7 +481,9 @@ def main() -> int:
     if _source_feature_enabled(_UNION_CAPTURE_FLAG):
         # The native producer itself remains the only process/lock owner.
         # No guessed topics and no silently ignored required REST facts.
-        if not _UNION_MANIFEST_FILE.startswith("/etc/cripta/market-source/"):
+        if _UNION_MANIFEST_FILE != (
+            "/etc/cripta/market-source/required_public_feeds.json"
+        ):
             raise NativeSourceInputUnverified(
                 "NATIVE_SOURCE_UNION_MANIFEST_PATH_UNAPPROVED"
             )
