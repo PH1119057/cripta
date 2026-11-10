@@ -273,6 +273,7 @@ def _closed_replay(
     live_anchor: TradeCursor,
     received_at: datetime,
     fetch_closed_candles: FetchClosedCandles,
+    native_closed_only: bool = False,
 ) -> list[P90TransportEvent]:
     events: list[P90TransportEvent] = []
     for timeframe, old in (
@@ -316,6 +317,8 @@ def _closed_replay(
                 observed_at=received_at,
                 producer_release_commit=source_commit,
                 source_transport="BYBIT_REST_KLINE_REAL_RESTART",
+                verify_only=native_closed_only,
+                source_wait_seconds=(5.0 if native_closed_only else 0.0),
             )
             events.append(encode_p90l90_fact(_candle_fact(candle, received_at)))
     return events
@@ -368,6 +371,7 @@ def recover_p90_real_open_source(
     loaded_release_commit: str | None = None,
     fetch_verified_native_source: FetchVerifiedNativeSource | None = None,
     verify_native_source_coverage: VerifyNativeSourceCoverage | None = None,
+    native_closed_only: bool = False,
 ) -> P90RealOpenSourceRecovery:
     """Recover old epoch through current live mirror with zero replay actions."""
     if (
@@ -539,6 +543,7 @@ def recover_p90_real_open_source(
                 live_anchor=recovery.live_anchor,
                 received_at=received_at,
                 fetch_closed_candles=fetch_closed_candles,
+                native_closed_only=native_closed_only,
             ):
                 # Completed 5m precedes 15m at one exact boundary.
                 priority = 0 if event.timeframe == "5" else 1
