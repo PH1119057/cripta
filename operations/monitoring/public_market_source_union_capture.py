@@ -140,6 +140,45 @@ def parse_explicit_source_manifest(
     return feeds
 
 
+def r03_closed_only_feed_union(
+    approved: PublicFeedUnion, *, native_symbols: tuple[str, ...],
+) -> PublicFeedUnion:
+    """R03 stage: only native LINEAR original trades and confirmed 1/5/15.
+
+    R04 spot/ticker/book/liquidation/REST and R05 publication remain inert.
+    The exact input still comes from the full reviewed R01 operator contract.
+    """
+    if len(native_symbols) != 5 or len(set(native_symbols)) != 5:
+        raise SourceManifestInvalid("R03_EXACT_FIVE_SYMBOL_SCOPE_REQUIRED")
+    selected = tuple(
+        item for item in approved.requirements
+        if item.product == "LINEAR"
+        and item.symbol in native_symbols
+        and item.dataset in ("PUBLIC_TRADE", "CLOSED_KLINE")
+    )
+    physical = union_public_feed_requirements(selected)
+    expected = {
+        (symbol, dataset, timeframe)
+        for symbol in native_symbols
+        for dataset, timeframe in (
+            ("PUBLIC_TRADE", ""), ("CLOSED_KLINE", "1"),
+            ("CLOSED_KLINE", "5"), ("CLOSED_KLINE", "15"),
+        )
+    }
+    actual = {
+        (item.symbol, item.dataset, item.timeframe)
+        for item in selected if item.required
+    }
+    if (
+        not expected <= actual
+        or physical.rest_inputs
+        or physical.websocket_batches("SPOT")
+        or len(physical.websocket_topics) != 20
+    ):
+        raise SourceManifestInvalid("R03_EXACT_CLOSED_ONLY_FEEDS_INVALID")
+    return physical
+
+
 def _connect_subscribe(
     *, product: str,
     union: PublicFeedUnion,
@@ -289,8 +328,21 @@ def run_source_union(
     union: PublicFeedUnion,
     producer_release_commit: str,
     publish_seconds: bool,
+    closed_only: bool = False,
 ) -> None:
-    """Exact source-scope opt-in; all PG writes occur in this one source process."""
+    """Exact stage-scoped source; all PG writes remain in one native process."""
+    if closed_only and (
+        publish_seconds
+        or any(
+            item.product != "LINEAR"
+            or item.dataset not in ("PUBLIC_TRADE", "CLOSED_KLINE")
+            for item in union.requirements
+        )
+        or union.rest_inputs
+        or union.websocket_batches("SPOT")
+    ):
+        raise SourceManifestInvalid("R03_CLOSED_ONLY_SOURCE_SCOPE_DRIFT")
+    products = ("LINEAR",) if closed_only else ("SPOT", "LINEAR")
     # Avoid a second producer: the native module already owns the PostgreSQL
     # exclusive session lock. The only caller is its main() branch.
     from operations.monitoring import native_public_trade_source as native
@@ -301,7 +353,7 @@ def run_source_union(
             for item in union.websocket_topics
             if item.product == product
         )
-        for product in ("SPOT", "LINEAR")
+        for product in products
     }
     intervals = tuple(sorted({
         item.dataset_topic.split(".")[1]
@@ -320,7 +372,7 @@ def run_source_union(
     repair_windows = _closed_repair_windows(union, native_symbols=p90_symbols)
     sock: dict[str, Any] = {}
     buffer: dict[str, list[dict[str, object]]] = {}
-    for product in ("SPOT", "LINEAR"):
+    for product in products:
         sock[product], buffer[product] = _connect_subscribe(
             product=product, union=union,
         )
@@ -391,7 +443,7 @@ def run_source_union(
 
     workers = [
         threading.Thread(target=read, args=(product,), daemon=True)
-        for product in ("SPOT", "LINEAR")
+        for product in products
     ]
 
     def read_rest() -> None:
@@ -477,6 +529,10 @@ def run_source_union(
     last_published_second: datetime | None = None
     repair_index = 0
     next_repair_scan_at = 0.0
+    # A worker can consume its queued job before posting its result; both
+    # queue.empty() values then appear true. The owner thread must retain
+    # a separate causal inflight gate until that precise result is handled.
+    repair_inflight = False
     try:
         while not done.is_set() and not native.stopping:
             try:
@@ -509,11 +565,11 @@ def run_source_union(
                         ),
                         product=product,
                     )
-                for event in decode_bybit_public_frame(
+                for event in (() if closed_only else decode_bybit_public_frame(
                     item, product=product,
                     allowed_symbols=symbols[product],
                     received_at=received,
-                ):
+                )):
                     if event.kind == "FORMING_KLINE":
                         if (
                             event.product, event.symbol,
@@ -546,6 +602,7 @@ def run_source_union(
                 except queue.Empty:
                     pass
                 else:
+                    repair_inflight = False
                     if repair_reason:
                         native._status(
                             "ACTIVE", session=session,
@@ -579,6 +636,7 @@ def run_source_union(
             if (
                 repair_windows
                 and time.monotonic() >= next_repair_scan_at
+                and not repair_inflight
                 and repair_jobs.empty() and repair_results.empty()
             ):
                 window = repair_windows[repair_index]
@@ -607,6 +665,7 @@ def run_source_union(
                         repair_jobs.put_nowait(
                             _ClosedRepairTask(window, through, pages)
                         )
+                        repair_inflight = True
                 except (ClosedGapRepairUnavailable, queue.Full) as exc:
                     native._status(
                         "ACTIVE", session=session,
