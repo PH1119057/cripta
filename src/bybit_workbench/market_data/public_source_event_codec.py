@@ -19,7 +19,7 @@ from bybit_workbench.market_identity import (
 )
 
 Product = Literal["SPOT", "LINEAR"]
-Kind = Literal["TRADE", "BOOK", "TICKER", "LIQUIDATION"]
+Kind = Literal["TRADE", "BOOK", "TICKER", "LIQUIDATION", "FORMING_KLINE"]
 _ALLOWED_FIELDS = frozenset({
     "lastPrice", "markPrice", "indexPrice", "bid1Price", "ask1Price",
     "bid1Size", "ask1Size", "openInterest", "openInterestValue",
@@ -54,6 +54,8 @@ class PublicSourceFact:
             return f"tickers.{self.symbol}"
         if self.kind == "LIQUIDATION":
             return f"allLiquidation.{self.symbol}"
+        if self.kind == "FORMING_KLINE":
+            return f"kline.{self.payload['timeframe']}.{self.symbol}"
         return f"orderbook.50.{self.symbol}"
 
 
@@ -118,6 +120,8 @@ def decode_bybit_public_frame(
         kind, symbol = parts
     elif len(parts) == 3 and parts[:2] == ["orderbook", "50"]:
         kind, symbol = "orderbook.50", parts[2]
+    elif len(parts) == 3 and parts[:2] == ["kline", "1"]:
+        kind, symbol = "kline.1", parts[2]
     else:
         return ()
     if symbol not in allowed_symbols:
@@ -170,6 +174,60 @@ def decode_bybit_public_frame(
                     "side": side,
                 }, when=_milliseconds(row.get("T")), seq=seq, eid=eid,
             ))
+    elif kind == "kline.1":
+        # NEVER insert forming data into the immutable closed candle journal.
+        # Only provider-confirmed bars follow _persist_closed_kline_frame().
+        if product != "LINEAR":
+            raise PublicSourceFrameInvalid(
+                "PUBLIC_FORMING_SOURCE_SPOT_UNSUPPORTED"
+            )
+        if frame_type != "snapshot" or not isinstance(data, list):
+            raise PublicSourceFrameInvalid("PUBLIC_FORMING_FRAME_INVALID")
+        if len(data) != 1 or not isinstance(data[0], dict):
+            raise PublicSourceFrameInvalid("PUBLIC_FORMING_ROW_INVALID")
+        row = data[0]
+        if type(row.get("confirm")) is not bool:
+            raise PublicSourceFrameInvalid(
+                "PUBLIC_FORMING_CONFIRM_FLAG_INVALID"
+            )
+        if row["confirm"]:
+            return ()  # only confirmed closed-candle owner persists this
+        start, end = row.get("start"), row.get("end")
+        if (
+            type(start) is not int or type(end) is not int
+            or start % 60000 != 0 or end != start + 59999
+            or row.get("interval") != "1"
+        ):
+            raise PublicSourceFrameInvalid("PUBLIC_FORMING_BOUNDARY_INVALID")
+        opened_at = _milliseconds(start)
+        closed_at = _milliseconds(start + 60000)
+        if not opened_at <= observed < closed_at:
+            raise PublicSourceFrameInvalid(
+                "PUBLIC_FORMING_EXPIRED_OR_FUTURE_SOURCE"
+            )
+        values = {
+            name: _decimal(row.get(name), zero=name == "volume")
+            for name in ("open", "high", "low", "close", "volume")
+        }
+        if (
+            Decimal(values["low"]) > Decimal(values["high"])
+            or not (
+                Decimal(values["low"]) <= Decimal(values["open"])
+                <= Decimal(values["high"])
+            )
+            or not (
+                Decimal(values["low"]) <= Decimal(values["close"])
+                <= Decimal(values["high"])
+            )
+        ):
+            raise PublicSourceFrameInvalid("PUBLIC_FORMING_OHLC_INVALID")
+        facts.append(fact("FORMING_KLINE", {
+            "timeframe": "1", "confirmed": False,
+            "opened_at": opened_at.isoformat(),
+            "closed_at": closed_at.isoformat(),
+            "observed_at": observed.isoformat(),
+            **values,
+        }))
     elif kind == "tickers":
         if not isinstance(data, dict) or data.get("symbol") != symbol:
             raise PublicSourceFrameInvalid("PUBLIC_SOURCE_TICKER_SYMBOL")
