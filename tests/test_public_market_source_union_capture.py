@@ -83,7 +83,6 @@ def test_required_manifest_subscribes_one_topic_per_product() -> None:
 
 
 @pytest.mark.parametrize("addition,reason", [
-    (_required("MAYAK", "LINEAR", "BTCUSDT", "ACCOUNT_RATIO"), "ADAPTER_NOT_READY"),
     (_required("POSITION", "LINEAR", "BTCUSDT", "FORMING_KLINE"), "ADAPTER_NOT_READY"),
     (_required("MAYAK", "SPOT", "BTCUSDT", "CLOSED_KLINE"), "SPOT_KLINE_NOT_READY"),
 ])
@@ -94,6 +93,28 @@ def test_missing_required_physical_adapter_blocks_source_activation(
     manifest.append(addition)
     with pytest.raises(SourceManifestInvalid, match=reason):
         parse_explicit_source_manifest(json.dumps(manifest), native_symbols=P90)
+
+
+def test_public_rest_feeds_are_deduplicated_without_new_websocket_topics() -> None:
+    requirements = json.loads(_manifest())
+    requirements.extend((
+        _required("MAYAK", "LINEAR", "LTCUSDT", "ACCOUNT_RATIO"),
+        _required("ENTRY", "LINEAR", "LTCUSDT", "ACCOUNT_RATIO"),
+        _required("MAYAK", "SPOT", "BTCUSDT", "INSTRUMENT_INFO"),
+    ))
+    union = parse_explicit_source_manifest(
+        json.dumps(requirements), native_symbols=P90,
+    )
+    assert len(union.rest_inputs) == 2
+    assert {
+        tuple(sorted(x.consumers)): x.dataset_topic for x in union.rest_inputs
+    } == {
+        ("ENTRY", "MAYAK"): "REST:market/account-ratio:LTCUSDT",
+        ("MAYAK",): "REST:market/instruments-info:BTCUSDT",
+    }
+    assert all(
+        "REST:" not in item.dataset_topic for item in union.websocket_topics
+    )
 
 
 def test_missing_original_p90_native_subscription_fails_closed() -> None:
