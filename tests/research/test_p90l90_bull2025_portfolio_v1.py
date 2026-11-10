@@ -29,8 +29,8 @@ def test_exact_six_month_window_and_new_2025_model_identity() -> None:
         "W7H24_B250", "W7H24_B300", "W7H24_B350", "W7H24_B400"
     )
     assert p.CASH_MODES == ("fixed", "compound_capped")
-    assert p.FIXED_MARGIN * p.LEVERAGE == D("1000")
-    assert p.START_WALLET == D("1000")
+    assert str(p.FIXED_MARGIN * p.LEVERAGE) == "1000"
+    assert str(p.START_WALLET) == "1000"
     source = Path(p.__file__).read_text(encoding="utf8")
     compile(ast.parse(source), str(p.__file__), "exec")
     assert source.find("original.on_trade(") >= 0
