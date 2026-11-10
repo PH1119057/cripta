@@ -110,6 +110,7 @@ def no_other_work() -> None:
             continue
         if (
             b"p90l90_bull2025_long_autonomous_v1.py" in cmd
+            or b"p90l90_bull2025_short_autonomous_v1.py" in cmd
             or b"p90l90_bull2025_portfolio_chunked_v2.py" in cmd
             or b"p90l90_bull2025_portfolio_v1.py" in cmd
         ):
