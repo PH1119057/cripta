@@ -1790,7 +1790,7 @@ bounded lookback из проверенных действующих consumer/rea
 старые R1/P90/Strategy торговые TTL или параметры в новую policy.
 Канонический owner quality/retention/capture — OBS §7.10.5.1,
 машинный source-controlled contract —
-`config/market_source/required_public_feeds.json`; DEV §59.2
+`operations/monitoring/required_public_feeds.json`; DEV §59.2
 владеет строгим этапным R00–R14 execution gate и отличием
 GitHub source artifact от установленного operator readback.
 Историческое evidence/current runtime — MAP/Issue #470. Это
