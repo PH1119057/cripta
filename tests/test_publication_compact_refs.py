@@ -33,6 +33,7 @@ def _need(
         product=product,
         symbol=SYMBOL,
         dataset=dataset,
+        timeframe="1" if dataset in ("CLOSED_KLINE", "FORMING_KLINE") else "",
         freshness_seconds=ttl,
     )
 
@@ -133,11 +134,11 @@ def test_zero_liquidation_is_unverified_not_invented_zero() -> None:
 
 def test_spot_linear_same_symbol_never_merge_or_rename_instrument() -> None:
     spot = _need("MAYAK", "ORDERBOOK_50", product="SPOT")
-    db = RowsDB({
-        "ORDERBOOK_50": _row(
-            "LINEAR", AT - timedelta(seconds=1), book=True,
-        ),
-    })
+    # Corrupt a retrieved row to carry a SPOT instrument key but a LINEAR
+    # category; this cannot happen under a valid registry/PG FK.
+    wrong = list(_row("LINEAR", AT - timedelta(seconds=1), book=True))
+    wrong[0] = bybit_instrument_id("spot", SYMBOL)
+    db = RowsDB({"ORDERBOOK_50": tuple(wrong)})
     with pytest.raises(CompactPublicationUnverified, match="ROW_CONFLICT"):
         collect_compact_public_references(
             db, source_session_id=SESSION, as_of_second=AT,
