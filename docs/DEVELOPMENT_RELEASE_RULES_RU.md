@@ -2443,3 +2443,48 @@ Acceptance phases с отдельными объективными evidence и S
 **Порядок milestone:** MS0 docs published → MS1 full consumer manifest/source parity → MS2 one common producer+PG-publication → MS3 independently protected P90 OPEN/Exit, other Exit → MS4 Entry and Execution → MS5 MAYAK/Dispatcher/Position/analytics/UI → MS6 no duplicate public decision readers and independent runtime/rollback proof. Последовательность не отменяет исходный приоритет семи задач Issue #470; самостоятельный технический shadow proof может выполняться раньше, но live Entry financial ARM запрещён до обязательного Exit.
 
 При смене состояния компонента обновлять только после фактического evidence, с датой, точной release/SQL/query/log/proof и состоянием rollback. Unverified/degraded outcome остаётся `BLOCKED` либо `NOT_CHECKED_HERE`, не «почти PASS». No background promise: отчёт по обращению пользователя или через реально созданный отдельный notification/automation contract, без заявления о самопроизвольной отправке сообщений.
+
+
+### 59.2 Поэтапное исполнение утверждённого roadmap без перескоков — OWNER DECISION 2026-11-11 (#470)
+
+Для roadmap `UNIFIED_MARKET_PUBLICATION_20261110` владелец устанавливает
+**строго последовательное продвижение R00 → R01 → … → R14**.
+Текущий этап — первый этап, для которого не выполнена хотя бы одна
+применимая приёмка. Предварительно подготовленный/merged код будущего
+компонента остаётся технической заготовкой, не продвигает статус.
+Один этап завершён только после доказанных C/M/I/T/D/R, либо обоснованного
+`N/A` для конкретных gates. Запрещено переходить к следующему до
+отдельного checkpoint закрытия предыдущего; при блокировке —
+`HARD_STOP` на текущем этапе с точным вопросом владельцу.
+Результаты фиксируются в единственном Issue #470, не создавая
+параллельный tracker. Каждый owner-facing рабочий отчёт — полная компактная
+матрица R00–R14 и точные изменения статуса, не только один/два пункта.
+
+Это **правило управления задачей**, не изменение физической последовательности
+работы собственного сервиса. Требования независимой защиты уже открытой
+позиции по TC/ARCH/DEV и signed Exchange safety применяются в любой момент.
+Техническая приёмка R07 не включает допуск новых финансовых Entry, если
+обязательная R09/Exit protection ещё не проверена. При настоящей циклической
+зависимости и конфликте с каноном — `CANON_CONFLICT=YES`,
+`OWNER_DECISION_REQUIRED=YES`; не объявлять зависимость PASS фиктивно.
+
+**R01 implementation contract (owner-approved 2026-11-11):** OBS
+§7.10.5.1 и `config/market_source/required_public_feeds.json` задают
+ровно 120 five-symbol per-consumer требований и source-only TTL/quality.
+Его `M=PASS` требует exact checked-in source contract и полноту
+BEFORE-анкет; `I/T=PASS` — valid parser/union/history/negative CI.
+`D=PASS` означает проверенную **установку неактивного operator-owned
+конфигурационного файла** в exact approved path, а `R=PASS` —
+read-only parser/readback со стороны реального `cripta` actor,
+с exact байтами и file identity; R01 не требует запускать R02–R05
+producer union для физической приёмки конфигурации. При этом
+`CRIPTA_SOURCE_UNION_CAPTURE=0`, source session/PID и LIVE остаются
+неизменёнными. До установки: exact actor/path permissions, parent create,
+atomic replace, ownership/mode, backup/recovery и approved management rail
+по §5.1/§19.1–19.6, плюс affected security/Exits preflight.
+
+Фактический проход R02 и native producer code upgrade остаётся отдельным
+`NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE` по §50.5.1: original
+5-symbol native cursors, GAP/rollback, independent signed OPEN protection,
+loaded identity. Ни один R01 quality TTL не даёт права автоматически
+менять Strategy Entry TTL/Exit action, MARКET prices or Bybit exchange.
