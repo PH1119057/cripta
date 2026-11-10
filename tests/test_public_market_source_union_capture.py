@@ -418,3 +418,31 @@ def test_native_producer_release_identity_exposes_r03_capability_only(
     )
     assert visible["closed_klines_enabled"] is True
     assert visible["trading_effect"] == "NONE"
+
+
+
+def test_invalid_r03_horizon_never_starts_socket_or_pg_epoch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import operations.monitoring.public_market_source_union_capture as source
+
+    rows = json.loads(_manifest())
+    for row in rows:
+        if row["dataset"] == "CLOSED_KLINE" and row["symbol"] == "LTCUSDT":
+            row["lookback_bars"] = 0
+    union = parse_explicit_source_manifest(
+        json.dumps(rows), native_symbols=P90,
+    )
+    opened: list[str] = []
+
+    def should_never_connect(*_args: object, **_kw: object) -> None:
+        opened.append("socket")
+        raise AssertionError("source must fail before any socket")
+
+    monkeypatch.setattr(source, "_connect_subscribe", should_never_connect)
+    with pytest.raises(SourceManifestInvalid, match="REPAIR_WINDOW_NOT_DECLARED"):
+        source.run_source_union(
+            Mock(), p90_symbols=P90, union=union,
+            producer_release_commit="a" * 40, publish_seconds=False,
+        )
+    assert not opened
