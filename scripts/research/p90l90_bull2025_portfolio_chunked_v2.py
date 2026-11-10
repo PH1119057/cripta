@@ -17,6 +17,7 @@ import csv
 import dataclasses
 import fcntl
 import gzip
+import hashlib
 import heapq
 import json
 import os
@@ -123,7 +124,7 @@ def new_books(side: str, schedule: dict) -> dict:
 
 def freeze_books(books: dict) -> dict:
     return {
-        k: {field: encode(getattr(book, field)) for field in BOOK_KEYS}
+        k: {field: getattr(book, field) for field in BOOK_KEYS}
         for k, book in books.items()
     }
 
@@ -135,7 +136,7 @@ def restore_books(books: dict, saved: dict) -> None:
         if set(saved[k]) != set(BOOK_KEYS):
             raise ValueError("checkpoint book schema mismatch")
         for field in BOOK_KEYS:
-            setattr(book, field, decode(saved[k][field]))
+            setattr(book, field, saved[k][field])
 
 
 def day_date(index: int) -> str:
@@ -402,7 +403,6 @@ def make_part(
         for s in old.SYMBOLS
     }
     # The state hash is computed on the exact bytes that will be published.
-    import hashlib
     state_hash = hashlib.sha256(state_text.encode("utf-8")).hexdigest()
     manifest = {
         "research": "P90L90_BULL2025_PORTFOLIO_CHUNKED_V2",
