@@ -1,6 +1,6 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.10
+**Версия:** 3.11
 **Дата:** 2026-11-10
 **Статус:** верхний канонический архитектурный контракт
 
@@ -1782,6 +1782,10 @@ replacement; documentation alone does not repair Observer or clear SUB latch.
 - MAYAK/Dispatcher/Position Supervisor/analytics, если поставляют в торговлю objective facts, должны потреблять общий producer dataset либо производные версии в PG. Собственный parallel market capture нельзя удалить до проверки сохранения его spot, linear, OI, orderbook, liquidation, funding, context и audit capabilities. Новая Strategy не создаёт новый public socket.
 
 **Отказы / restart:** complete required-data manifest указывает exact publication, underlying fact keys, history/seed, freshness, per-field producer and quality/coverage; missing обязательного факта блокирует **только affected decision**, а необязательного — не блокирует unrelated consumers. Новый verified WS epoch не восстанавливает историю старого OPEN Exit; independent signed account/position/protection/MFE и original native gap-repair обязательны. Source corruption не маскируется «свежей последней ценой» или повторным альтернативным REST чтением в Engine. База остаётся долговременной памятью, биржа — external fact origin.
+
+**OWNER SCOPE CORRECTION 2026-11-10, Issue #470 — текущий набор = ровно пять:** ближайшая source-first реализация и новый общий MarketSource capture/MarketPublication охватывают только реально торгуемые `APTUSDT`, `ARBUSDT`, `DOTUSDT`, `INJUSDT`, `LTCUSDT` (нужные SPOT/LINEAR feeds лишь по exact manifest этих пяти). Ранее указанное в операционном roadmap «20 обязательных монет» **не является разрешением** расширять новый сбор: новые symbols включаются только после отдельного прямого распоряжения владельца. Возможность системы принимать больше инструментов сохраняется как архитектурная, а не как запущенный сбор.
+
+Исторически действующий MAYAK имел собственное наблюдение 20 symbols. Пока не определены новый owner/эквивалентная замена или отдельное owner-approved сокращение этой capability, старые источники и потребители MAYAK не отключать, их данные не удалять. Это явно **частичный пятисимвольный rollout**, а не завершённая глобальная консолидация всех публичных feeds. R11/R14, выключение дублирующих сетевых подключений и полное обещание single-source readiness остаются BLOCKED по затронутым broader consumer scopes. Существующие пять original native tapes и Private Exchange evidence сохраняются. `CANON_CONFLICT=RESOLVED_FOR_FIVE_SOURCE_AUTHORING`; `MIGRATION_COMPLETE=NO`; `OLD_CAPABILITY_DECOMMISSION_ALLOWED=NO`; `LIVE_CHANGE=NO`.
 
 **Migration gate:** сначала точная инвентаризация physical current producer→consumer, включая Observer mirror, MAYAK, Exit Shadow REST, R1/P90 Execution market rechecks, Position Supervisor, P90 postfill IPC и private account paths. Затем single-producer capture / PG versioned read-model / all consumer parity / gap+restart+OPEN Exit+MAIN/SUB / latency benchmark / scoped rollout. Старые market feed capabilities удалять или disable только после verified replacement; private Exchange truth, credentials, SL/TP, release/arm gates не переносить в public MarketSource. Реализация, статус и сервисный поэтапный план — DEV §59 и CURRENT_PROJECT_MAP (2026-11-10 checkpoint). Никакого автоматического LIVE.
 

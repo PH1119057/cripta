@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.51
+**Версия:** 3.52
 **Дата:** 2026-11-10
 **Статус:** канонический индекс документации
 
@@ -1771,3 +1771,12 @@ Existing Issue #470 remains the task, its owner-stated 7-item priority and alrea
 **Source topology:** no new docs, no path changes, same 11-file Project Source bundle, same base/routed pre-read, same root README/AGENTS entrypoints and Project Instructions bootstrap. `OWNER_DECISION=YES`, `CANON=AFTER_MERGE`, `IMPLEMENTED=NO`, `DEPLOYED=NO`, `LIVE_CHANGE=NO`.
 
 **Постоянный readiness roadmap (2026-11-10):** `CURRENT_PROJECT_MAP` содержит стабильные ID **R00–R14**, поимённые market/trading service BEFORE→AFTER, PASS blockers, milestones MS0–MS6 и начальные доказанные статусы. DEV §59.1 владеет шестиколоночным `C/M/I/T/D/R` отчётом в каждом последующем owner status update; проверенная смена статуса должна иметь fresh evidence, а не память. Это **не** новый документ/Project Source файл, не отдельный Issue и не утверждение, что future deployment состоялся.
+
+
+## 73. Текущий пятисимвольный MarketSource scope — OWNER DECISION 2026-11-10 (Issue #470)
+
+Владелец исправил прежнее ошибочное расширение до 20: **сейчас только пять торгуемых symbols** `APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT` должны включаться в *новый* общий публичный capture/ingest/publication и R01–R05 source-only работы. Будущие инструменты — исключительно после нового прямого owner instruction. Архитектурная масштабируемость не является разрешением заранее запрашивать, хранить или расширять raw/compact data. ARCH §60.5 владеет целевым owner/consumer contract и scope correction; OBS §7.10.5 — capture/quality; DEV §59 — staged migration/verification; MAP — dated identity, R01–R14 operational delta. TC §4.19 trading semantics без изменений.
+
+Существующий MAYAK в прежней R01 инвентаризации физически обслуживал 20-symbol observational context. Эта историческая capability **не объявляется удалённой** и не отключается данным пятисимвольным scope clarification: прежде полного R11/R14 нужна доказанная BEFORE→AFTER замена либо отдельное owner-approved сокращение с сохранением нужных потребителей. Five-symbol source code/CI ≠ full-universe runtime migration. Mainnet, Exchange, signed private state, OPEN Exit/SL/TP, original native journal, source-gap/recovery и release/ARM gates не изменяются.
+
+**Documentation maintenance:** current document set/paths, base/routed pre-read, root README/AGENTS, Project Instructions и Source file count (11) не меняются; новый отдельный canonical file не создаётся. Исторические MAP/Issue R01 checkpoints сохраняются как датированные evidence, приоритет нового intent отслеживается здесь и в Issue #470. `OWNER_DECISION=YES`; `CANON=AFTER_PROTECTED_MERGE`; `NEW_PRODUCER_FIVE_SCOPE_ONLY=YES`; `MAYAK_BROAD_REPLACEMENT_VERIFIED=NO`; `DEPLOYED=NO`; `LIVE_CHANGE=NO`.

@@ -1,6 +1,6 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 2.3
+**Версия:** 2.4
 **Дата:** 2026-11-10
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
@@ -1098,6 +1098,8 @@ scoped read-model parity. Owner LIVE-arm/permissions не выдаются.
 ### 7.10.5 Один публичный сбор и одна согласованная витрина для всех consumers — OWNER DECISION 2026-11-10
 
 ARCH §60.5 владеет архитектурой, TC §4.19 — торговой семантикой. Observer/MarketSource реализует **один physical acquisition owner** для публичных raw/normalized market facts всех утверждённых потребителей, а не отдельный WebSocket для Entry, другой для Exit и третий для отдельной Strategy.
+
+**Пятисимвольная стадия (owner correction 2026-11-10, Issue #470):** новый capture/publication сейчас только по `APTUSDT / ARBUSDT / DOTUSDT / INJUSDT / LTCUSDT`. Подписки, REST polling и PostgreSQL ingest для иных symbols не включать автоматически ради общей архитектуры или исторического MAYAK universe. На этом этапе не объявлять full consumer parity: существовавшие 20-symbol MAYAK market-monitoring feed и его consumers сохраняют старую capability до документированного безопасного решения о её новом owner/сокращении. Это не разрешает удалять публичный сбор или полные доказательства открытых позиций. Конечный принцип единого producer остаётся целью, но частичный пять-symbol source не равен завершённой миграции R11/R14.
 
 1. **Collect:** независимо от числа/типа consumers один общий MarketSource capture service собирает необходимые approved topics Bybit Public WS (native `publicTrade` с каждым `seq/execId`; confirmed closed kline; остальные event/ticker/book/OI/liquidation data только по consumer manifest). Разные необходимые биржевые подключения spot/linear являются внутренними transport instances того же owner; producer отдельного вида факта может иметь module/adapter, но не конкурентный самостоятельный owner/write path. Получение событий идёт непрерывно по факту прихода, не один REST GET раз в секунду.
 2. **Journal:** исходные native rows сохраняются вместе с source session/watermark и idempotent checkpoint в production PostgreSQL прежде доставки; `analytics.closed_candles` остаётся единственным хранилищем подтверждённых OHLCV; производные features сохраняют свои typed tables/source refs. Допускаются отдельные таблицы для разных grains; не допускается два самостоятельных writer для того же market fact либо вторая копия raw candles в каждой Strategy.
