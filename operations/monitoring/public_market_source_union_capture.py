@@ -15,7 +15,7 @@ import queue
 import threading
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import psycopg
 import websocket
@@ -24,6 +24,7 @@ from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
 )
 from bybit_workbench.market_data.public_market_rest_source import (
+    Dataset as RestDataset,
     PublicMarketRestFact,
     PublicMarketRestInvalid,
     fetch_public_market_rest,
@@ -265,7 +266,8 @@ def run_source_union(
                 )
                 try:
                     fact = fetch_public_market_rest(
-                        dataset=dataset, product=product, symbol=symbol,
+                        dataset=cast(RestDataset, dataset),
+                        product=product, symbol=symbol,
                     )
                     rest_pipe.put(fact, timeout=0.25)
                 except PublicMarketRestInvalid:
