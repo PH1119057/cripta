@@ -12,8 +12,8 @@ import pytest
 
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.public_closed_kline_gap_repair import (
-    ClosedGapRepairUnavailable,
     ClosedGapPage,
+    ClosedGapRepairUnavailable,
     fetch_verified_bybit_closed_page,
     plan_missing_closed_pages,
     repair_source_closed_history,
