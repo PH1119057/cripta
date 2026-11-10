@@ -84,7 +84,7 @@ def parse_explicit_source_manifest(
         for item in required
     ):
         raise SourceManifestInvalid("SOURCE_REQUIRED_FORMING_SCOPE_UNSUPPORTED")
-     linear = {
+    linear = {
         entry.dataset_topic
         for entry in feeds.websocket_topics if entry.product == "LINEAR"
     }
