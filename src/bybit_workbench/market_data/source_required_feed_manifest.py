@@ -91,6 +91,9 @@ class PublicFeedUnion:
     websocket_topics: tuple[PhysicalFeedTopic, ...]
     rest_inputs: tuple[PhysicalFeedTopic, ...]
     consumer_requirements: int
+    # Retain the exact read-model capability claims, not only subscribed topics.
+    # Multiple consumers may share one physical topic yet require different TTL.
+    requirements: tuple[RequiredPublicFeed, ...] = ()
 
     def websocket_batches(self, product: Product) -> tuple[tuple[str, ...], ...]:
         """Limits are those already proven in MAYAK: spot=10, linear=30."""
@@ -161,4 +164,5 @@ def union_public_feed_requirements(
         websocket_topics=tuple(ws),
         rest_inputs=tuple(rest),
         consumer_requirements=len(requirements),
+        requirements=requirements,
     )
