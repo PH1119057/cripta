@@ -551,6 +551,7 @@ def main() -> int:
                         producer_release_commit=RELEASE,
                         publish_seconds=_source_feature_enabled(_PUBLICATION_FLAG),
                         closed_only=capture_closed,
+                        should_stop=lambda: stopping,
                     )
             except (websocket.WebSocketException, OSError, TimeoutError,
                     NativeSourceInputUnverified):
