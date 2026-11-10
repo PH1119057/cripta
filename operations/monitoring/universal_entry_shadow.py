@@ -4019,12 +4019,8 @@ def _run_observer_epoch(
                     NativeObserverDeliveryBlocked,
                     active_native_observer_source,
                     consume_native_observer_batch,
+                    validate_technical_native_receipt,
                 )
-
-                def _validate_technical_native(event: Any) -> None:
-                    # Decode full original provider identity, but NEVER pass
-                    # this passive receipt to Entry/Exit/Execution engines.
-                    original_native_fact(event)
 
                 try:
                     pg_source = active_native_observer_source(
@@ -4054,7 +4050,7 @@ def _run_observer_epoch(
                                 *original_native_fact(event)
                             ))
                             if native_pg_delivery_only
-                            else _validate_technical_native
+                            else validate_technical_native_receipt
                         ),
                         limit=256,
                     )
