@@ -696,6 +696,9 @@ migration_files=(
   # Link the compact source-second PK in the same immutable public snapshot.
   # The read-model stays WATERMARKS_ONLY until full source capability proof.
   operations/sql/20261110_market_publication_compact_links.sql
+  # Native MarketSource public-only REST facts; additive/insert-only.
+  operations/sql/20261110_public_market_rest_observations.sql
+  operations/sql/20261110_market_publication_rest_links.sql
   # Technical Observer delivery only: no P90 Exit/Entry or SOURCE_LIVE_IDENTITY.
   operations/sql/20261110_native_public_trade_observer_delivery.sql
 )
