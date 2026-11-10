@@ -88,7 +88,7 @@ def verify_day(
 
     if v1_report["status"] != "SMOKE_PASS_2025_NO_OUTPUT":
         raise ValueError("original 2025 v1 replay did not pass")
-    if len(captured) != len(old.SCENARIOS) * len(old.CASH_MODES) != 16:
+    if len(captured) != 16:
         raise ValueError("original 2025 v1 16-book collection mismatch")
 
     folder = checkpoint_folder / chunk.part_name(day - 1)
