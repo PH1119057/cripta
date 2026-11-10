@@ -12,11 +12,11 @@ from uuid import uuid4
 import psycopg
 import pytest
 
-from bybit_workbench.market_data.public_source_event_codec import (
-    decode_bybit_public_frame,
-)
 from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
+)
+from bybit_workbench.market_data.public_source_event_codec import (
+    decode_bybit_public_frame,
 )
 from bybit_workbench.market_data.public_source_second_store import (
     PublicSecondAccumulator,
