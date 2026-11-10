@@ -100,7 +100,7 @@ def _time_ms(value: object, observed_at: datetime) -> datetime:
 def _result(
     raw: Mapping[str, object], *, category: Product,
 ) -> Mapping[str, object]:
-    if raw.get("retCode") != 0:
+    if type(raw.get("retCode")) is not int or raw["retCode"] != 0:
         raise PublicMarketRestInvalid("PUBLIC_REST_PROVIDER_NOT_OK")
     data = raw.get("result")
     if not isinstance(data, dict):
@@ -165,7 +165,7 @@ def decode_public_rest_response(
                     "PUBLIC_REST_INSTRUMENT_SYMBOL_INVALID"
                 )
             status = row.get("status")
-            if status not in _ALLOWED_STATES:
+            if not isinstance(status, str) or status not in _ALLOWED_STATES:
                 raise PublicMarketRestInvalid(
                     "PUBLIC_REST_INSTRUMENT_STATUS_INVALID"
                 )
