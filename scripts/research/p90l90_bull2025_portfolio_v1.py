@@ -133,6 +133,9 @@ def verify_and_load(side: str, source_head: str):
             raise ValueError("2025 Entry/frozen source SHA mismatch " + symbol)
         if sha(up / "result.json") != uq["result_sha256"]:
             raise ValueError("2025 unit result SHA mismatch " + symbol)
+        for rel in (unit.SELF_REL, unit.ENTRY_REL, ORIGINAL_REL):
+            if sha(SOURCE / rel) != ur["source_sha256"][Path(rel).name]:
+                raise ValueError("2025 unit source snapshot no longer matches published code " + rel)
         ul = up / f"trade_ledger_{side.split('_')[0].lower()}.jsonl"
         if sha(ul) != uq["ledgers"][side.split("_")[0]]:
             raise ValueError("2025 unit ledger SHA mismatch " + symbol)
