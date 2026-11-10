@@ -198,7 +198,7 @@ def collect_public_rest_references(
                     status = "NOT_LISTED"
                 elif values.get("status") != "Trading":
                     status = "NON_TRADING_STATUS"
-            item[dataset] = {
+            quality_item[dataset] = {
                 "status": status, "age_seconds": age,
                 "required": need.required,
                 "freshness_seconds": need.freshness_seconds,
