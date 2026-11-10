@@ -79,7 +79,8 @@ def test_period_aware_prev7d_frozen_width_is_caused_by_prior_days(
         return datetime.fromtimestamp(ts, UTC).date()
     namespace = {
         "D": D, "gzip": gzip, "csv": csv, "defaultdict": defaultdict,
-        "timedelta": timedelta, "median": median, "utc_day": utc_day
+        "timedelta": timedelta, "median": median, "utc_day": utc_day,
+        "Path": Path, "datetime": datetime
     }
     exec(compile(snippet, "<pure source-extracted loader>", "exec"), namespace)
     start = datetime(2025, 4, 1, tzinfo=UTC)
