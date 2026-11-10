@@ -196,6 +196,8 @@ def fetch_verified_bybit_closed_page(
         or not isinstance(payload.get("result"), dict)
     ):
         raise ClosedGapRepairUnavailable("CLOSED_REPAIR_PROVIDER_ATTESTATION_INVALID")
+    if not 946684800000 <= payload["time"] < 4102444800000:
+        raise ClosedGapRepairUnavailable("CLOSED_REPAIR_PROVIDER_CLOCK_INVALID")
     provider_time = datetime.fromtimestamp(payload["time"] / 1000, UTC)
     if (
         provider_time < page.last_closed_at
