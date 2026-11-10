@@ -168,6 +168,37 @@ def test_native_source_candle_write_uses_shared_canonical_store(
     assert details[1]["transport"] == "BYBIT_WS_KLINE"
 
 
+def test_spot_closed_bar_uses_same_canonical_store_with_spot_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    writes: list[object] = []
+
+    class Store:
+        def __init__(self, _db: object, key: object) -> None:
+            self.key = key
+
+        def ingest(self, bars: tuple[object, ...], **_kw: object) -> int:
+            writes.append((self.key, bars))
+            return 1
+
+    monkeypatch.setattr(native, "SharedClosedCandleStore", Store)
+    monkeypatch.setattr(native, "RELEASE", RELEASE)
+    assert native._persist_closed_kline_frame(
+        object(), message=_kline(), symbols=SYMBOLS,
+        intervals=("5",), product="SPOT",
+    ) == 1
+    assert len(writes) == 1
+    key = writes[0][0]
+    assert key.product_category == "SPOT"
+    assert key.instrument_id == "inst-bybit-spot-ltcusdt"
+
+    with pytest.raises(native.NativeSourceInputUnverified, match="CATEGORY"):
+        native._persist_closed_kline_frame(
+            object(), message=_kline(), symbols=SYMBOLS,
+            intervals=("5",), product="PRIVATE",
+        )
+
+
 def test_source_capture_and_publication_both_default_off() -> None:
     assert native._source_feature_enabled("0") is False
     assert native._source_feature_enabled("1") is True

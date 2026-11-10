@@ -12,6 +12,9 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from bybit_workbench.market_data.public_closed_candle_refs import (
+    collect_instrument_closed_candle_references,
+)
 from bybit_workbench.market_data.public_forming_minute_source import (
     collect_forming_minute_references,
 )
@@ -118,6 +121,7 @@ def publish_market_source_second(
                       external_symbol,timeframe,closed_at
                FROM analytics.closed_candles_effective
                WHERE market_source_id=%s
+                 AND product_category='LINEAR'
                  AND external_symbol=ANY(%s)
                  AND timeframe=ANY(%s)
                  AND closed_at<=%s
@@ -177,6 +181,15 @@ def publish_market_source_second(
                 if item.dataset == "FORMING_KLINE"
             ),
         )
+        closed_instrument_refs, closed_instrument_coverage = (
+            collect_instrument_closed_candle_references(
+                connection, as_of_second=second,
+                requirements=tuple(
+                    item for item in public_requirements
+                    if item.dataset == "CLOSED_KLINE"
+                ),
+            )
+        )
         from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
 
         row = connection.execute(
@@ -185,8 +198,10 @@ def publish_market_source_second(
                  as_of_second,native_watermarks,closed_candle_watermarks,
                  field_coverage,compact_second_refs,compact_field_coverage,
                  rest_observation_refs,rest_field_coverage,
-                 forming_minute_refs,forming_field_coverage,publication_status)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'WATERMARKS_ONLY')
+                 forming_minute_refs,forming_field_coverage,
+                 closed_instrument_refs,closed_instrument_coverage,
+                 publication_status)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'WATERMARKS_ONLY')
                ON CONFLICT (market_source_id,source_session_id,as_of_second)
                DO NOTHING RETURNING publication_id""",
             (
@@ -196,6 +211,7 @@ def publish_market_source_second(
                 Jsonb(compact_refs), Jsonb(compact_coverage),
                 Jsonb(rest_refs), Jsonb(rest_coverage),
                 Jsonb(forming_refs), Jsonb(forming_coverage),
+                Jsonb(closed_instrument_refs), Jsonb(closed_instrument_coverage),
             ),
         ).fetchone()
     return int(row[0]) if row is not None else None

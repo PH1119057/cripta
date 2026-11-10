@@ -93,7 +93,6 @@ def test_required_manifest_subscribes_one_topic_per_product() -> None:
                   "FORMING_KLINE", interval="5"),
         "FORMING_SCOPE_UNSUPPORTED",
     ),
-    (_required("MAYAK", "SPOT", "BTCUSDT", "CLOSED_KLINE"), "SPOT_KLINE_NOT_READY"),
 ])
 def test_missing_required_physical_adapter_blocks_source_activation(
     addition: dict[str, object], reason: str,
@@ -102,6 +101,26 @@ def test_missing_required_physical_adapter_blocks_source_activation(
     manifest.append(addition)
     with pytest.raises(SourceManifestInvalid, match=reason):
         parse_explicit_source_manifest(json.dumps(manifest), native_symbols=P90)
+
+
+def test_spot_closed_kline_subscribes_once_in_same_source_process() -> None:
+    requirements = json.loads(_manifest())
+    requirements.extend((
+        _required("MAYAK", "SPOT", "BTCUSDT", "CLOSED_KLINE", interval="1"),
+        _required("POSITION", "SPOT", "BTCUSDT", "CLOSED_KLINE", interval="1"),
+        _required("MAYAK", "LINEAR", "BTCUSDT", "CLOSED_KLINE", interval="1"),
+    ))
+    union = parse_explicit_source_manifest(
+        json.dumps(requirements), native_symbols=P90,
+    )
+    assert sum(
+        x.product == "SPOT" and x.dataset_topic == "kline.1.BTCUSDT"
+        for x in union.websocket_topics
+    ) == 1
+    assert sum(
+        x.product == "LINEAR" and x.dataset_topic == "kline.1.BTCUSDT"
+        for x in union.websocket_topics
+    ) == 1
 
 
 def test_public_rest_feeds_are_deduplicated_without_new_websocket_topics() -> None:
