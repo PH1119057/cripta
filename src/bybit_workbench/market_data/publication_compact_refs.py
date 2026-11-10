@@ -78,14 +78,14 @@ def collect_compact_public_references(
         ]
         instrument_ids = sorted({x.instrument_id for x in wanted})
         horizon = max(x.freshness_seconds for x in wanted)
-        key = _JSON_KEYS[dataset]
+        json_key = _JSON_KEYS[dataset]
         # This expression is a hard-coded dataset selector, not a caller SQL
         # interpolation. Query is bounded by manifest TTL and original epoch.
         if dataset in _EVENT_STREAMS:
-            present_sql = f"(compact_features->>'{key}')::bigint > 0"
+            present_sql = f"(compact_features->>'{json_key}')::bigint > 0"
         else:
             present_sql = (
-                f"jsonb_typeof(compact_features->'{key}')='object'"
+                f"jsonb_typeof(compact_features->'{json_key}')='object'"
             )
         rows = connection.execute(
             f"""SELECT DISTINCT ON (instrument_id)
