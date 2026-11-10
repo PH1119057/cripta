@@ -75,6 +75,8 @@ class RequiredPublicFeed:
             raise SourceManifestInvalid("SOURCE_NONKLINE_HORIZON_INVALID")
         if self.dataset == "LIQUIDATION" and self.product != "LINEAR":
             raise SourceManifestInvalid("SOURCE_SPOT_LIQUIDATION_INVALID")
+        if self.dataset == "ACCOUNT_RATIO" and self.product != "LINEAR":
+            raise SourceManifestInvalid("SOURCE_SPOT_RATIO_INVALID")
 
 
 @dataclass(frozen=True, slots=True)
