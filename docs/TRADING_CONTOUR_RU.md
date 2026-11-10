@@ -2145,10 +2145,10 @@ P90L90 остаются прежними, новые Strategy и настрой�
 
 Непрерывный Bybit Public WS у единственного MarketSource producer принимает каждый оригинальный trade немедленно. Общая витрина обновляется ориентировочно каждую секунду/по committed event; это **не** разрешает семплировать source publicTrade с частотой 1 Hz. Свеча включается лишь после подтверждения close, а не по синтетическому промежуточному значению. Нужная история должна быть уже доступна в PG; только producer выполняет bounded approved upstream gap repair.
 
-Уменьшение времени реакции не требует обхода PG: consumer awaken/notification и acknowledgement опираются на durable commit+cursor, а не на in-memory-only WS. До релиза измерить \`exchange_event_at → WS_receive → PG_commit → publication → Entry/Exit_decision → command\` отдельно по инструменту, включая p95/p99, backlog и negative tests. При неприемлемых измеренных задержках требуется новое owner decision, а не скрытый второй источник.
+Уменьшение времени реакции не требует обхода PG: consumer awaken/notification и acknowledgement опираются на durable commit+cursor, а не на in-memory-only WS. До релиза измерить `exchange_event_at → WS_receive → PG_commit → publication → Entry/Exit_decision → command` отдельно по инструменту, включая p95/p99, backlog и negative tests. При неприемлемых измеренных задержках требуется новое owner decision, а не скрытый второй источник.
 
 **Exchange truth — отдельная обязательная граница:** подписанные Bybit Private REST/WS для реальных позиций, ордеров, fill, SL/TP/trailing, баланса и mutation reconciliation могут оставаться прямыми. Независимый safety readback подтверждает биржевое состояние, не заменяет public market snapshot для Strategy. Missing current safety evidence — BLOCKED, не разрешение торговать по устаревшей базе. Уже открытые позиции защищаются на стороне биржи; Entry DISARM не прекращает обязательный Exit.
 
 До доказанной замены current standalone public readers считаются migration findings; этот канон не удаляет код, не разрешает выкинуть capability или снять P90 OPEN Exit blocker. Физический план и приемка — DEV §59 / CURRENT_PROJECT_MAP.
 
-\`OWNER_DECISION=YES\`; \`CANON=AFTER_MERGE\`; \`IMPLEMENTED=NO\`; \`LIVE_ARM=NO\`.
+`OWNER_DECISION=YES`; `CANON=AFTER_MERGE`; `IMPLEMENTED=NO`; `LIVE_ARM=NO`.
