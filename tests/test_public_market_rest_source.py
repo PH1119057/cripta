@@ -89,6 +89,7 @@ def test_nontrading_provider_metadata_not_misclassified_trading() -> None:
     (_ratio(timestamp="foo"), "TIME"),
     (_ratio(timestamp=str(int((NOW + timedelta(minutes=3)).timestamp() * 1000))), "FUTURE"),
     ({"retCode": 10001, "result": {"list": []}}, "NOT_OK"),
+    ({"retCode": False, "result": {"list": []}}, "NOT_OK"),
     ({"retCode": 0, "result": {"list": []}}, "RATIO_MISSING"),
 ])
 def test_invalid_ratio_provider_response_is_not_evidence(payload, reason) -> None:
@@ -102,6 +103,11 @@ def test_ratio_is_not_spot_and_metadata_never_silently_assumes_status() -> None:
     with pytest.raises(PublicMarketRestInvalid, match="STATUS"):
         _decode(
             _info("linear", status=None),
+            dataset="INSTRUMENT_INFO",
+        )
+    with pytest.raises(PublicMarketRestInvalid, match="STATUS"):
+        _decode(
+            _info("linear", status=["Trading"]),
             dataset="INSTRUMENT_INFO",
         )
 
