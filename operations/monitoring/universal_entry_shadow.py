@@ -3377,12 +3377,14 @@ def _run_observer_epoch(
                 connection, symbols=tuple(sorted(p90l90_symbols)),
                 source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
                 progress=preparation_progress,
+                verify_native_source_only=R03_NATIVE_CANDLE_READER,
             )
         elif p90_real_live and preflight_restart_epoch_id is None:
             prepare_p90_closed_tails(
                 connection, symbols=tuple(sorted(p90l90_symbols)),
                 source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
                 progress=preparation_progress,
+                verify_native_source_only=R03_NATIVE_CANDLE_READER,
             )
         sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
         # Source proof is issued ONLY in this epoch, after real Bybit
