@@ -101,7 +101,7 @@ def test_wrong_product_on_same_instrument_fails_closed() -> None:
         )
 
 
-def test_unapproved_future_timeframe_cannot_claim_ready() -> None:
+def test_unrelated_public_dataset_cannot_claim_closed_candle_ready() -> None:
     with pytest.raises(ClosedCandleReferenceUnverified, match="UNSUPPORTED"):
         collect_instrument_closed_candle_references(
             DB([]), as_of_second=NOW,
@@ -109,7 +109,7 @@ def test_unapproved_future_timeframe_cannot_claim_ready() -> None:
                 consumer_id="MAYAK",
                 market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
                 instrument_id=bybit_instrument_id("spot", "LTCUSDT"),
-                product="SPOT", symbol="LTCUSDT", dataset="ACCOUNT_RATIO",
+                product="SPOT", symbol="LTCUSDT", dataset="INSTRUMENT_INFO",
                 freshness_seconds=60,
             ),),
         )
