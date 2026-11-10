@@ -83,8 +83,16 @@ def test_required_manifest_subscribes_one_topic_per_product() -> None:
 
 
 @pytest.mark.parametrize("addition,reason", [
-    (_required("POSITION", "SPOT", "BTCUSDT", "FORMING_KLINE", interval="1"), "FORMING_SCOPE_UNSUPPORTED"),
-    (_required("POSITION", "LINEAR", "BTCUSDT", "FORMING_KLINE", interval="5"), "FORMING_SCOPE_UNSUPPORTED"),
+    (
+        _required("POSITION", "SPOT", "BTCUSDT",
+                  "FORMING_KLINE", interval="1"),
+        "FORMING_SCOPE_UNSUPPORTED",
+    ),
+    (
+        _required("POSITION", "LINEAR", "BTCUSDT",
+                  "FORMING_KLINE", interval="5"),
+        "FORMING_SCOPE_UNSUPPORTED",
+    ),
     (_required("MAYAK", "SPOT", "BTCUSDT", "CLOSED_KLINE"), "SPOT_KLINE_NOT_READY"),
 ])
 def test_missing_required_physical_adapter_blocks_source_activation(
