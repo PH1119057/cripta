@@ -121,6 +121,31 @@ def test_orderbook_delta_continuity_and_reset_without_forged_levels() -> None:
     assert restored["best_bid"] == "100"
 
 
+def test_provider_u1_reset_cannot_merge_new_source_epoch_with_old_book() -> None:
+    continuity = OrderbookContinuity()
+    continuity.apply(_decode(_book(snapshot=True, seq=100, update=50))[0])
+    with pytest.raises(PublicSourceFrameInvalid, match="RESET_REQUIRES_SNAPSHOT"):
+        continuity.apply(
+            _decode(_book(snapshot=False, seq=101, update=1))[0]
+        )
+    with pytest.raises(PublicSourceFrameInvalid, match="WITHOUT_SNAPSHOT"):
+        continuity.apply(
+            _decode(_book(snapshot=False, seq=102, update=2))[0]
+        )
+    assert continuity.apply(
+        _decode(_book(snapshot=True, seq=10, update=1))[0]
+    )["best_ask"] == "101"
+
+
+def test_nonincreasing_book_update_id_invalidates_ladder() -> None:
+    continuity = OrderbookContinuity()
+    continuity.apply(_decode(_book(snapshot=True, seq=100, update=51))[0])
+    with pytest.raises(PublicSourceFrameInvalid, match="UPDATE_REGRESSION"):
+        continuity.apply(
+            _decode(_book(snapshot=False, seq=101, update=51))[0]
+        )
+
+
 @pytest.mark.parametrize("event,product,reason", [
     (_event("tickers.LTCUSDT", {"symbol": "LTCUSDT"}), "SPOT", "CATEGORY"),
     (_event("allLiquidation.BTCUSDT", []), "SPOT", "CATEGORY"),
