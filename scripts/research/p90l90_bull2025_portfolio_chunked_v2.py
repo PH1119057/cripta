@@ -182,7 +182,7 @@ def fsync_dir(path: Path) -> None:
 
 
 def write_sync(path: Path, content: str) -> None:
-    with path.open("x", encoding="utf-8") as f:
+    with path.open("x", encoding="utf-8", newline="\n") as f:
         f.write(content)
         f.flush()
         os.fsync(f.fileno())
