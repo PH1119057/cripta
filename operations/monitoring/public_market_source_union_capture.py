@@ -329,6 +329,7 @@ def run_source_union(
     producer_release_commit: str,
     publish_seconds: bool,
     closed_only: bool = False,
+    should_stop: Callable[[], bool] | None = None,
 ) -> None:
     """Exact stage-scoped source; all PG writes remain in one native process."""
     if closed_only and (
@@ -347,6 +348,10 @@ def run_source_union(
     # exclusive session lock. The only caller is its main() branch.
     from operations.monitoring import native_public_trade_source as native
 
+    # The physical producer is launched as __main__ by systemd; importing
+    # it as a package creates a separate (inert) module stopping variable.
+    # The active signal owner must be consulted before an explicit GAP.
+    source_stopping = should_stop or (lambda: native.stopping)
     symbols = {
         product: frozenset(
             item.dataset_topic.rsplit(".", 1)[-1]
@@ -410,7 +415,7 @@ def run_source_union(
         try:
             pending = list(buffer[product])
             last_ping = time.monotonic()
-            while not done.is_set() and not native.stopping:
+            while not done.is_set() and not source_stopping():
                 if pending:
                     item = pending.pop(0)
                 else:
@@ -451,9 +456,9 @@ def run_source_union(
         # explicit physical REST feed. A failure leaves missing/stale evidence
         # in the shared publication. The original WS reader is uninterrupted.
         due = {feed: 0.0 for feed in rest_needs}
-        while not done.is_set() and not native.stopping:
+        while not done.is_set() and not source_stopping():
             for product, symbol, dataset in rest_needs:
-                if done.is_set() or native.stopping:
+                if done.is_set() or source_stopping():
                     return
                 key = (product, symbol, dataset)
                 now = time.monotonic()
@@ -487,7 +492,7 @@ def run_source_union(
         # Strictly no DB session/connection in network workers. A failed
         # provider page is a scoped R03 repair fault, not a reason to stop
         # original native publicTrade.
-        while not done.is_set() and not native.stopping:
+        while not done.is_set() and not source_stopping():
             try:
                 task = repair_jobs.get(timeout=0.20)
             except queue.Empty:
@@ -501,7 +506,7 @@ def run_source_union(
                 batches, reason = (), str(exc)
             except Exception:
                 batches, reason = (), "CLOSED_REPAIR_PROVIDER_UNVERIFIED"
-            while not done.is_set() and not native.stopping:
+            while not done.is_set() and not source_stopping():
                 try:
                     repair_results.put((task, batches, reason), timeout=0.20)
                     break
@@ -534,7 +539,7 @@ def run_source_union(
     # a separate causal inflight gate until that precise result is handled.
     repair_inflight = False
     try:
-        while not done.is_set() and not native.stopping:
+        while not done.is_set() and not source_stopping():
             try:
                 product, item, received = pipe.get(timeout=0.10)
             except queue.Empty:
