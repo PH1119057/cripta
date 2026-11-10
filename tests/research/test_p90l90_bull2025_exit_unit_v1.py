@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import ast
+import subprocess
 from decimal import Decimal as D
 from pathlib import Path
+
+import pytest
 
 from scripts.research import p90l90_bull2025_exit_unit_v1 as new
 from scripts.research import p90l90_exit_90d_v2 as old
@@ -95,3 +98,60 @@ def test_exit_unit_is_not_portfolio_pnl() -> None:
     assert new.ROOT == new.entry.ROOT
     assert new.ORIGINAL_REL.endswith("p90l90_exit_90d_v2.py")
     assert new.QUANTUM == old.MONEY_QUANTUM
+
+
+def test_fastforward_of_unrelated_main_files_preserves_exact_research_bytes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    for rel in new.PINNED_SOURCE_PATHS:
+        target = tmp_path / rel
+        target.parent.mkdir(exist_ok=True, parents=True)
+        target.write_text("immutable-pinned-research")
+    pins = {rel: new.sha(tmp_path / rel) for rel in new.PINNED_SOURCE_PATHS}
+    monkeypatch.setattr(new, "SOURCE", tmp_path)
+    monkeypatch.setattr(new.entry, "git_head", lambda: "2" * 40)
+    seen = []
+
+    def clean_git_ancestor(*args, **kwargs):
+        seen.append((args, kwargs))
+        return subprocess.CompletedProcess(args=args[0], returncode=0)
+
+    monkeypatch.setattr(new.subprocess, "run", clean_git_ancestor)
+    assert new.verify_source_fast_forward("1" * 40, pins) == "2" * 40
+    assert len(seen) == 1
+    assert seen[0][0][0][-4:] == ["merge-base", "--is-ancestor", "1" * 40, "2" * 40]
+    assert "GIT_OPTIONAL_LOCKS" in seen[0][1]["env"]
+
+
+def test_fastforward_altered_research_source_bytes_is_hard_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    for rel in new.PINNED_SOURCE_PATHS:
+        p = tmp_path / rel
+        p.parent.mkdir(exist_ok=True, parents=True)
+        p.write_text("source")
+    pins = {rel: new.sha(tmp_path / rel) for rel in new.PINNED_SOURCE_PATHS}
+    monkeypatch.setattr(new, "SOURCE", tmp_path)
+    monkeypatch.setattr(new.entry, "git_head", lambda: "1" * 40)
+    (tmp_path / new.ORIGINAL_REL).write_text("ALGORITHM CHANGED")
+    with pytest.raises(RuntimeError, match="source bytes changed"):
+        new.verify_source_fast_forward("1" * 40, pins)
+
+
+def test_nonancestor_source_movement_is_hard_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    for rel in new.PINNED_SOURCE_PATHS:
+        p = tmp_path / rel
+        p.parent.mkdir(exist_ok=True, parents=True)
+        p.write_text("immutable")
+    pins = {rel: new.sha(tmp_path / rel) for rel in new.PINNED_SOURCE_PATHS}
+    monkeypatch.setattr(new, "SOURCE", tmp_path)
+    monkeypatch.setattr(new.entry, "git_head", lambda: "2" * 40)
+
+    def reject_nonancestor(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, args[0])
+
+    monkeypatch.setattr(new.subprocess, "run", reject_nonancestor)
+    with pytest.raises(RuntimeError, match="not descendant"):
+        new.verify_source_fast_forward("1" * 40, pins)
