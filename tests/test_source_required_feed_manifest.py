@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import pytest
 
-from bybit_workbench.market_identity import (
-    BYBIT_PUBLIC_MARKET_SOURCE_ID,
-    bybit_instrument_id,
-)
 from bybit_workbench.market_data.source_required_feed_manifest import (
     RequiredPublicFeed,
     SourceManifestInvalid,
     union_public_feed_requirements,
+)
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    bybit_instrument_id,
 )
 from operations.monitoring.mayak_v2 import DEFAULT_SYMBOLS
 
