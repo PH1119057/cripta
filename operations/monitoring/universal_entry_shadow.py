@@ -3301,9 +3301,16 @@ def _run_observer_epoch(
         EXTERNAL_NATIVE_SOURCE and p90_repair_ingest_only
         and not observer_split.ordinary
     )
+    # R02: the original native PG transport ACK is a technical checkpoint,
+    # NOT a Strategy/Exit ACK. Keep that passive receipt independently alive
+    # in a normally flat/disarmed P90 Observer epoch, without executing
+    # another Entry/Exit callback or changing any existing WS decision owner.
+    native_pg_transport_probe = (
+        EXTERNAL_NATIVE_SOURCE and bool(observer_split.p90_real)
+    )
     native_pg_delivery_session: str | None = None
     native_pg_delivery_state = (
-        "PREPARING" if native_pg_delivery_only else "NOT_ENABLED"
+        "PREPARING" if native_pg_transport_probe else "NOT_ENABLED"
     )
 
     try:
@@ -3999,11 +4006,12 @@ def _run_observer_epoch(
                     )
                 for fact in oi_result.facts:
                     process_fact(fact)
-            if native_pg_delivery_only:
-                # Never replay native historical events into financial/Strategy
-                # owners. In this guarded source-only mode process each saved
-                # original trade then durably ACK its transport cursor in ONE
-                # PostgreSQL transaction (including nested fact savepoints).
+            if native_pg_transport_probe:
+                # R02 technical delivery always validates original PG rows and
+                # atomically ACKs their actual transport cursor. In normal
+                # Observer epochs this is a PASSIVE decoder only: Strategy/Exit
+                # still own their separate source+decision checkpoints, and
+                # existing WS listeners are not removed at this stage.
                 from bybit_workbench.universal_entry.p90l90_scoped_native_codec import (
                     original_native_fact,
                 )
@@ -4012,6 +4020,11 @@ def _run_observer_epoch(
                     active_native_observer_source,
                     consume_native_observer_batch,
                 )
+
+                def _validate_technical_native(event: Any) -> None:
+                    # Decode full original provider identity, but NEVER pass
+                    # this passive receipt to Entry/Exit/Execution engines.
+                    original_native_fact(event)
 
                 try:
                     pg_source = active_native_observer_source(
@@ -4022,12 +4035,13 @@ def _run_observer_epoch(
                         observed_at=datetime.now(UTC),
                     )
                     if (
-                        native_pg_delivery_session is not None
+                        native_pg_delivery_only
+                        and native_pg_delivery_session is not None
                         and pg_source.session_id != native_pg_delivery_session
                     ):
-                        # An actual WS producer reconnect is a NEW source
-                        # session/GAP. Reset only technical transport state;
-                        # never treat it as an original P90 Exit rewind.
+                        # The dedicated OPEN-repair path resets only its
+                        # transport state at a real producer GAP. A passive
+                        # diagnostic must NOT reset active WS Strategy state.
                         trade_cursors.clear()
                         trade_current_seq_exec_ids.clear()
                         trade_proof_monotonic.clear()
@@ -4035,20 +4049,29 @@ def _run_observer_epoch(
                         connection,
                         source=pg_source,
                         observed_at=datetime.now(UTC),
-                        on_trade=lambda event: process_fact(
-                            *original_native_fact(event)
+                        on_trade=(
+                            (lambda event: process_fact(
+                                *original_native_fact(event)
+                            ))
+                            if native_pg_delivery_only
+                            else _validate_technical_native
                         ),
                         limit=256,
                     )
                     native_pg_delivery_session = pg_result.source_session_id
                     native_pg_delivery_state = (
-                        "CATCHING_UP" if len(pg_result.events) == 256
-                        else "CAUGHT_UP"
+                        ("CATCHING_UP" if len(pg_result.events) == 256
+                         else "CAUGHT_UP")
+                        if native_pg_delivery_only
+                        else (
+                            "TECHNICAL_CATCHING_UP"
+                            if len(pg_result.events) == 256
+                            else "TECHNICAL_CAUGHT_UP"
+                        )
                     )
                 except NativeObserverDeliveryBlocked as blocked:
-                    # Keep MarketSource transport alive. Missing real native
-                    # proof is a typed, visible source-only diagnosis, never
-                    # a hidden skip or permission to fall back to self-WS.
+                    # Do not pretend stale native events are current, and do
+                    # not withhold unrelated ordinary source/Exit duties.
                     native_pg_delivery_state = "BLOCKED:" + str(blocked)
             message: dict[str, Any] | None = None
             received_at = datetime.now(UTC)
@@ -4136,7 +4159,11 @@ def _run_observer_epoch(
                         **sensor_status(datetime.now(UTC)),
                         "native_pg_delivery": native_pg_delivery_state,
                         "native_pg_session_id": native_pg_delivery_session,
-                    } if native_pg_delivery_only else sensor_status(datetime.now(UTC)),
+                        "native_pg_delivery_scope": (
+                            "OPEN_REPAIR_SOURCE_ONLY" if native_pg_delivery_only
+                            else "PASSIVE_ORIGINAL_TRANSPORT_ONLY"
+                        ),
+                    } if native_pg_transport_probe else sensor_status(datetime.now(UTC)),
                     strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
                     p90_owner_arm_stage=(
                         "READY" if p90_real_staged and running
