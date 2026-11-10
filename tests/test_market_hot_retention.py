@@ -147,3 +147,16 @@ def test_release_installs_inert_units_and_preserves_activation_state():
         '/usr/local/libexec/cripta-market-hot-retention.py' in installer
     )
     assert "/usr/local/libexec/cripta-market-hot-retention.py /etc/cripta/release.env" in installer
+
+
+def test_retention_installer_merge_preserves_native_source_safety():
+    """The current production installer source cutover must survive adding retention."""
+    installer = (ROOT / "operations/infrastructure/install_verified_release.sh").read_text()
+    assert (
+        "operations/systemd/cripta-native-public-trade-source.service|"
+        "cripta-native-public-trade-source.service|runtime"
+    ) in installer
+    assert "INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS" in installer
+    assert "NATIVE_SOURCE_EXACT_CODE_CUTOVER=PASS" in installer
+    assert "cripta-market-hot-retention.timer" in installer
+    assert "systemctl enable cripta-market-hot-retention.timer" not in installer
