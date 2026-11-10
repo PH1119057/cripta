@@ -68,11 +68,11 @@ def _validate_scope(
         set(native_symbols) != _FIVE
         or len(native_symbols) != len(_FIVE)
         or key.external_symbol not in _FIVE
-        or key.product_category != "LINEAR"
+        or key.product_category not in ("LINEAR", "SPOT")
         or key.venue_id != "venue-bybit"
         or key.market_source_id != BYBIT_PUBLIC_MARKET_SOURCE_ID
         or key.instrument_id
-        != bybit_instrument_id("linear", key.external_symbol)
+        != bybit_instrument_id(key.product_category.lower(), key.external_symbol)
         or key.timeframe not in _INTERVALS
         or type(required) is not int or not 1 <= required <= _MAX_BARS
     ):
@@ -167,7 +167,7 @@ def fetch_verified_bybit_closed_page(
     opened_first = page.first_closed_at - step
     opened_last = page.last_closed_at - step
     params = urllib.parse.urlencode({
-        "category": "linear", "symbol": key.external_symbol,
+        "category": key.product_category.lower(), "symbol": key.external_symbol,
         "interval": key.timeframe,
         "start": int(opened_first.timestamp() * 1000),
         "end": int(opened_last.timestamp() * 1000),
@@ -206,7 +206,7 @@ def fetch_verified_bybit_closed_page(
         raise ClosedGapRepairUnavailable("CLOSED_REPAIR_PROVIDER_CLOCK_INVALID")
     result = payload["result"]
     if (
-        result.get("category") != "linear"
+        result.get("category") != key.product_category.lower()
         or result.get("symbol") != key.external_symbol
         or not isinstance(result.get("list"), list)
     ):
@@ -293,5 +293,73 @@ def repair_source_closed_history(
         store.history(through=through, required=required)
     return ClosedGapRepairResult(
         required, sum(len(bars) for bars in fetched),
+        inserted, len(pages), through,
+    )
+
+
+def commit_verified_closed_gap_pages(
+    connection: Any, *, key: MarketCandleKey, native_symbols: tuple[str, ...],
+    source_session_id: str, producer_release_commit: str,
+    through: datetime, required: int,
+    pages: tuple[ClosedGapPage, ...],
+    batches: tuple[tuple[Candle, ...], ...],
+    observed_at: datetime,
+) -> ClosedGapRepairResult:
+    """Only the original advisory-lock-owning source writer calls this.
+
+    Network workers pass immutable verified batches, NEVER a PostgreSQL
+    connection. Recheck the real epoch and atomic final window inside the one
+    writer transaction. A failed page leaves no partial database restoration.
+    """
+    _validate_scope(
+        key, native_symbols=native_symbols, through=through,
+        required=required, observed_at=observed_at,
+    )
+    if (
+        not pages or len(pages) != len(batches)
+        or len(pages) > 20
+        or _SESSION.fullmatch(source_session_id) is None
+        or _SHA.fullmatch(producer_release_commit) is None
+    ):
+        raise ClosedGapRepairUnavailable("CLOSED_REPAIR_COMMIT_MANIFEST_INVALID")
+    for page, batch in zip(pages, batches, strict=True):
+        try:
+            verified = verify_closed_window(
+                key, batch, minimum=page.count,
+                through=page.last_closed_at,
+            )
+        except RuntimeError as exc:
+            raise ClosedGapRepairUnavailable(
+                "CLOSED_REPAIR_COMMIT_BAR_INVALID"
+            ) from exc
+        if (
+            len(verified) != page.count
+            or verified[0].closed_at != page.first_closed_at
+            or verified[-1].closed_at > observed_at
+        ):
+            raise ClosedGapRepairUnavailable(
+                "CLOSED_REPAIR_COMMIT_PAGE_MISMATCH"
+            )
+    store = SharedClosedCandleStore(connection, key)
+    inserted = 0
+    with connection.transaction():
+        active = connection.execute(
+            """SELECT state,market_source_id,producer_release_commit
+                 FROM analytics.native_public_trade_source_sessions
+                WHERE source_session_id=%s""",
+            (source_session_id,),
+        ).fetchone()
+        if active != ("ACTIVE", key.market_source_id, producer_release_commit):
+            raise ClosedGapRepairUnavailable(
+                "CLOSED_REPAIR_SOURCE_EPOCH_NOT_ACTIVE"
+            )
+        for batch in batches:
+            inserted += store.ingest(
+                batch, producer_release_commit=producer_release_commit,
+                transport="BYBIT_REST_KLINE", observed_at=observed_at,
+            )
+        store.history(through=through, required=required)
+    return ClosedGapRepairResult(
+        required, sum(len(x) for x in batches),
         inserted, len(pages), through,
     )
