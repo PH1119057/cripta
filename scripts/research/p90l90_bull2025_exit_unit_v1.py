@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -46,6 +47,11 @@ SIDES = ("LONG", "SHORT")
 ORIGINAL_REL = "scripts/research/p90l90_exit_90d_v2.py"
 SELF_REL = "scripts/research/p90l90_bull2025_exit_unit_v1.py"
 ENTRY_REL = "scripts/research/p90l90_bull2025_entry_v1.py"
+PINNED_SOURCE_PATHS = (
+    ORIGINAL_REL, SELF_REL, ENTRY_REL,
+    "scripts/research/p90l90_entry_90d_v2.py",
+    "scripts/research/p90l90_l53_clean_v2.py",
+)
 QUANTUM = original.MONEY_QUANTUM
 CASH_KEYS = (
     "gross_usdt", "entry_fees_usdt", "exit_fees_usdt",
@@ -59,6 +65,30 @@ def sha(path: Path) -> str:
         for b in iter(lambda: f.read(4 * 1024 * 1024), b""):
             h.update(b)
     return h.hexdigest()
+
+
+def verify_source_fast_forward(source_head: str, pinned: dict[str, str]) -> str:
+    """Accept ONLY forward-only main sync with identical research source bytes.
+
+    A moving checkout HEAD is not by itself a different loaded Python research
+    algorithm. Exact unchanged SHA256 of every imported research dependency
+    and original source pin is mandatory; no bypass on divergence or edits.
+    """
+    current = entry.git_head()
+    if current != source_head:
+        try:
+            subprocess.run(
+                ["git", "-C", str(SOURCE), "merge-base", "--is-ancestor",
+                 source_head, current],
+                check=True, capture_output=True, text=True,
+                env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+            )
+        except subprocess.CalledProcessError as ex:
+            raise RuntimeError("source HEAD is not descendant of pinned research start commit") from ex
+    actual = {rel: sha(SOURCE / rel) for rel in PINNED_SOURCE_PATHS}
+    if actual != pinned:
+        raise RuntimeError("effective 2025 P90L90 research source bytes changed during calculation")
+    return current
 
 
 def preflight(symbol: str, source_head: str) -> tuple[dict, Path, Path, Path]:
@@ -123,6 +153,7 @@ def preflight(symbol: str, source_head: str) -> tuple[dict, Path, Path, Path]:
 
 def calculate(symbol: str, source_head: str, smoke_hours: int = 0) -> dict:
     manifest, candidates_path, states_path, out = preflight(symbol, source_head)
+    pinned = {rel: sha(SOURCE / rel) for rel in PINNED_SOURCE_PATHS}
     states, _, med7, meta = entry.load_frozen_period(states_path, EVAL_START, EVAL_END)
     if len(states) != 52704 or len(med7) != 183 or meta["prior_complete_days"] != 7:
         raise ValueError("2025 closed-only PREV7D geometry not complete")
@@ -261,8 +292,7 @@ def calculate(symbol: str, source_head: str, smoke_hours: int = 0) -> dict:
             or sum((D(r["net_usdt"]) for r in ledgers[side]), D(0)) != cash["net_usdt"]
         ):
             raise ValueError("2025 10-USDT unit fee/ledger reconciliation failed")
-    if entry.git_head() != source_head:
-        raise RuntimeError("source HEAD moved during 2025 Exit computation")
+    end_head = verify_source_fast_forward(source_head, pinned)
     # The output is created exactly once after all original-source and ledger checks.
     if out.exists() or out.is_symlink():
         raise FileExistsError("2025 unit Exit immutable output collided during calculation")
@@ -293,20 +323,22 @@ def calculate(symbol: str, source_head: str, smoke_hours: int = 0) -> dict:
     snapshot = out / "source_snapshot"
     snapshot.mkdir(mode=0o2770)
     source_hashes = {}
-    for rel in (ORIGINAL_REL, SELF_REL, ENTRY_REL):
+    for rel in PINNED_SOURCE_PATHS:
         original_file = SOURCE / rel
         captured = snapshot / Path(rel).name
         shutil.copyfile(original_file, captured)
         source_hashes[Path(rel).name] = sha(captured)
-        if sha(original_file) != source_hashes[Path(rel).name]:
-            raise RuntimeError("source snapshot SHA mismatch")
+        if source_hashes[Path(rel).name] != pinned[rel] or sha(original_file) != pinned[rel]:
+            raise RuntimeError("pinned source snapshot SHA mismatch at publication")
     result = {
         "research": "P90L90_BULL2025_EXIT_UNIT_V1",
         "status": "QC_PASS_UNIT_EXIT_ONLY_NOT_PORTFOLIO_2025",
         "symbol": symbol, "evaluation_utc": [EVAL_START.isoformat(), EVAL_END.isoformat()],
         "evaluation_days": 183, "source_days": 193,
         "native_ticks_all_days": last_seq, "native_candidate_events": seen_events,
-        "source_head": source_head, "source_sha256": source_hashes,
+        "source_head": source_head, "source_head_at_publication": end_head,
+        "source_pin_files_sha256": pinned, "source_fastforward_only": True,
+        "source_sha256": source_hashes,
         "exit_original_unchanged": True,
         "trade_model": "same original TRAIL035/opposite RAW L5-3 TP/gross -10% stop",
         "directions_independent": True, "entry_cohort": "causal PREV7D",
@@ -324,6 +356,8 @@ def calculate(symbol: str, source_head: str, smoke_hours: int = 0) -> dict:
     (out / "result.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n")
     with (out / "qc.json").open("x") as f:
         json.dump({"status": result["status"], "source_head": source_head,
+                   "source_head_at_publication": end_head,
+                   "source_fastforward_only": True,
                    "result_sha256": sha(out / "result.json"),
                    "ledgers": {s: results[s]["ledger_sha256"] for s in SIDES},
                    "source_sha256": source_hashes,
