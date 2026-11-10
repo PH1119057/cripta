@@ -138,7 +138,7 @@ def publish_market_source_second(
             }
             for symbol in symbols
         }
-        from psycopg.types.json import Jsonb
+        from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
 
         row = connection.execute(
             """INSERT INTO analytics.market_publications
