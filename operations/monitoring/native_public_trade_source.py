@@ -67,6 +67,11 @@ _SYMBOL = re.compile(r"^[A-Z0-9]{2,32}$")
 # cutover with a registered canonical writer and consumer/data manifest.
 _KLINE_CAPTURE_FLAG = os.environ.get("CRIPTA_SOURCE_CLOSED_KLINES", "0")
 _PUBLICATION_FLAG = os.environ.get("CRIPTA_SOURCE_PUBLICATION", "0")
+# R04 stays INERT. Existing 5-symbol original native producer has priority;
+# enabling the union requires an exact operator-reviewed manifest on disk,
+# dedicated release preflight and one-producer identity verification.
+_UNION_CAPTURE_FLAG = os.environ.get("CRIPTA_SOURCE_UNION_CAPTURE", "0")
+_UNION_MANIFEST_FILE = os.environ.get("CRIPTA_SOURCE_UNION_MANIFEST_FILE", "")
 _KLINE_INTERVALS = frozenset(
     part.strip()
     for part in os.environ.get(
@@ -472,6 +477,26 @@ def main() -> int:
     if not _SHA.fullmatch(RELEASE):
         raise NativeSourceInputUnverified("NATIVE_SOURCE_RELEASE_INVALID")
     symbols = _checked_symbols(_ALLOWED_SYMBOLS)
+    union = None
+    if _source_feature_enabled(_UNION_CAPTURE_FLAG):
+        # The native producer itself remains the only process/lock owner.
+        # No guessed topics and no silently ignored required REST facts.
+        if not _UNION_MANIFEST_FILE.startswith("/etc/cripta/market-source/"):
+            raise NativeSourceInputUnverified(
+                "NATIVE_SOURCE_UNION_MANIFEST_PATH_UNAPPROVED"
+            )
+        from operations.monitoring.public_market_source_union_capture import (
+            parse_explicit_source_manifest,
+        )
+        manifest_path = Path(_UNION_MANIFEST_FILE)
+        if not manifest_path.is_file() or manifest_path.is_symlink():
+            raise NativeSourceInputUnverified(
+                "NATIVE_SOURCE_UNION_MANIFEST_NOT_REGULAR"
+            )
+        union = parse_explicit_source_manifest(
+            manifest_path.read_text(encoding="utf-8"),
+            native_symbols=symbols,
+        )
     os.umask(0o027)
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
@@ -480,7 +505,17 @@ def main() -> int:
         _acquire_exclusive_producer(connection)
         while not stopping:
             try:
-                _run_stream(connection, symbols)
+                if union is None:
+                    _run_stream(connection, symbols)
+                else:
+                    from operations.monitoring.public_market_source_union_capture import (
+                        run_source_union,
+                    )
+                    run_source_union(
+                        connection, p90_symbols=symbols, union=union,
+                        producer_release_commit=RELEASE,
+                        publish_seconds=_source_feature_enabled(_PUBLICATION_FLAG),
+                    )
             except (websocket.WebSocketException, OSError, TimeoutError,
                     NativeSourceInputUnverified):
                 if stopping:
