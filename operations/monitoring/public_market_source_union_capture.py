@@ -100,6 +100,22 @@ def parse_explicit_source_manifest(
     for symbol in native_symbols:
         if f"publicTrade.{symbol}" not in linear:
             raise SourceManifestInvalid("SOURCE_P90_NATIVE_TOPIC_MISSING")
+    # The five current P90 source consumers require exact confirmed LINEAR
+    # 5m/15m close boundaries. A PUBLIC_TRADE or forming kline topic is not
+    # a replacement, and an optional feed cannot claim a required window.
+    # This only validates the declared feed contract: lookback/ATR/gap
+    # readiness must still be proven by PostgreSQL at consumption time.
+    confirmed = {
+        (item.symbol, item.timeframe)
+        for item in required
+        if item.dataset == "CLOSED_KLINE"
+        and item.product == "LINEAR" and item.required
+    }
+    if any(
+        (symbol, timeframe) not in confirmed
+        for symbol in native_symbols for timeframe in ("5", "15")
+    ):
+        raise SourceManifestInvalid("SOURCE_P90_REQUIRED_CLOSED_KLINE_MISSING")
     if not feeds.websocket_batches("SPOT"):
         raise SourceManifestInvalid("SOURCE_SPOT_TRANSPORT_MISSING")
     return feeds
