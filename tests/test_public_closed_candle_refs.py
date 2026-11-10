@@ -1,7 +1,7 @@
 """R05: same symbol on SPOT and LINEAR is never one MarketSource candle."""
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 
@@ -18,7 +18,7 @@ from bybit_workbench.market_identity import (
 )
 
 NOW = datetime(2026, 11, 10, 8, 5, 30, tzinfo=UTC)
-CLOSE = NOW.replace(second=0) - timedelta(seconds=30)
+CLOSE = NOW.replace(second=0)
 
 
 def _need(
