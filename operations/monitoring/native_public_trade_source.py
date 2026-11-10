@@ -26,6 +26,16 @@ from bybit_workbench.market_data.native_public_trade_journal import (
     NativePublicTradeJournal,
     NativeTradeEvidence,
 )
+from bybit_workbench.market_data.market_source_public_candles import (
+    decode_confirmed_bybit_klines,
+)
+from bybit_workbench.market_data.market_publication import (
+    publish_market_source_second,
+)
+from bybit_workbench.market_data.shared_closed_candles import (
+    MarketCandleKey,
+    SharedClosedCandleStore,
+)
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
@@ -52,6 +62,17 @@ _ALLOWED_SYMBOLS = frozenset(
 )
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _SYMBOL = re.compile(r"^[A-Z0-9]{2,32}$")
+# Both optional paths are INERT in the existing installed source and default
+# OFF in any future release. Enabling either is a separate, proven source
+# cutover with a registered canonical writer and consumer/data manifest.
+_KLINE_CAPTURE_FLAG = os.environ.get("CRIPTA_SOURCE_CLOSED_KLINES", "0")
+_PUBLICATION_FLAG = os.environ.get("CRIPTA_SOURCE_PUBLICATION", "0")
+_KLINE_INTERVALS = frozenset(
+    part.strip()
+    for part in os.environ.get(
+        "CRIPTA_SOURCE_KLINE_INTERVALS", "1,5,15",
+    ).split(",") if part.strip()
+)
 stopping = False
 
 
@@ -66,6 +87,20 @@ def _checked_symbols(symbols: frozenset[str]) -> tuple[str, ...]:
     ):
         raise NativeSourceInputUnverified("NATIVE_SOURCE_SYMBOL_MANIFEST_INVALID")
     return tuple(sorted(symbols))
+
+
+def _source_feature_enabled(raw: str) -> bool:
+    if raw not in ("0", "1"):
+        raise NativeSourceInputUnverified("NATIVE_SOURCE_FEATURE_FLAG_INVALID")
+    return raw == "1"
+
+
+def _checked_kline_intervals(intervals: frozenset[str]) -> tuple[str, ...]:
+    if not intervals or len(intervals) > 4 or not intervals <= {
+        "1", "5", "15", "60",
+    }:
+        raise NativeSourceInputUnverified("NATIVE_SOURCE_KLINE_MANIFEST_INVALID")
+    return tuple(sorted(intervals, key=int))
 
 
 def decode_native_trades(
@@ -132,6 +167,8 @@ def _status(state: str, *, session: str = "", reason: str = "") -> None:
         "state": state, "reason": reason,
         "session": session, "source_commit": RELEASE,
         "observed_at": datetime.now(UTC).isoformat(),
+        "closed_klines_enabled": _source_feature_enabled(_KLINE_CAPTURE_FLAG),
+        "publication_enabled": _source_feature_enabled(_PUBLICATION_FLAG),
         "trading_effect": "NONE",
     }
     tmp = STATUS_PATH.with_suffix(".tmp")
@@ -261,13 +298,52 @@ def _persist_frame(
         )
 
 
-def _subscribe(symbols: tuple[str, ...]) -> tuple[Any, tuple[dict[str, object], ...]]:
+def _persist_closed_kline_frame(
+    connection: psycopg.Connection[Any], *,
+    message: dict[str, object],
+    symbols: tuple[str, ...],
+    intervals: tuple[str, ...],
+) -> int:
+    """The existing Native MarketSource also owns closed candle acquisition.
+
+    This is one transport/source owner, not an Observer-specific writer. The
+    shared canonical store rejects a conflict instead of masking it.
+    """
+    observed = datetime.now(UTC)
+    candles = decode_confirmed_bybit_klines(
+        message,
+        symbols=frozenset(symbols),
+        intervals=frozenset(intervals),
+        received_at=observed,
+    )
+    inserted = 0
+    for bar in candles:
+        key = MarketCandleKey(
+            market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
+            venue_id="venue-bybit",
+            instrument_id=bybit_instrument_id("linear", bar.symbol),
+            external_symbol=bar.symbol,
+            product_category="LINEAR",
+            timeframe=bar.timeframe,
+        )
+        inserted += SharedClosedCandleStore(connection, key).ingest(
+            (bar,), producer_release_commit=RELEASE,
+            transport="BYBIT_WS_KLINE", observed_at=observed,
+        )
+    return inserted
+
+
+def _subscribe(
+    symbols: tuple[str, ...], *,
+    extra_topics: tuple[str, ...] = (),
+) -> tuple[Any, tuple[dict[str, object], ...]]:
     sock = websocket.create_connection(PUBLIC_WS, timeout=10.0)
     sock.settimeout(1.0)
     request_id = "cripta-native-source-v1"
+    topics = tuple("publicTrade." + symbol for symbol in symbols) + extra_topics
     sock.send(json.dumps({
         "op": "subscribe", "req_id": request_id,
-        "args": ["publicTrade." + symbol for symbol in symbols],
+        "args": list(topics),
     }, separators=(",", ":")))
     buffered: list[dict[str, object]] = []
     deadline = time.monotonic() + 12.0
@@ -291,7 +367,7 @@ def _subscribe(symbols: tuple[str, ...]) -> tuple[Any, tuple[dict[str, object], 
                 return sock, tuple(buffered)
             sock.close()
             raise NativeSourceInputUnverified("NATIVE_SOURCE_SUBSCRIBE_REJECTED")
-        if str(message.get("topic") or "").startswith("publicTrade."):
+        if str(message.get("topic") or "") in topics:
             buffered.append(message)
     sock.close()
     raise NativeSourceInputUnverified("NATIVE_SOURCE_SUBSCRIBE_TIMEOUT")
@@ -300,13 +376,20 @@ def _subscribe(symbols: tuple[str, ...]) -> tuple[Any, tuple[dict[str, object], 
 def _run_stream(
     connection: psycopg.Connection[Any], symbols: tuple[str, ...],
 ) -> None:
-    sock, initial = _subscribe(symbols)
+    capture_kline = _source_feature_enabled(_KLINE_CAPTURE_FLAG)
+    publish_source = _source_feature_enabled(_PUBLICATION_FLAG)
+    intervals = _checked_kline_intervals(_KLINE_INTERVALS) if capture_kline else ()
+    extra_topics = tuple(
+        f"kline.{tf}.{sym}" for sym in symbols for tf in intervals
+    )
+    sock, initial = _subscribe(symbols, extra_topics=extra_topics)
     session = uuid4().hex
     _session_start(connection, session)
     _status("ACTIVE", session=session)
     last_provider_frame = time.monotonic()
     last_ping = last_provider_frame
     frame_number = 0
+    last_published_second: datetime | None = None
     try:
         pending = list(initial)
         while not stopping:
@@ -333,7 +416,8 @@ def _run_stream(
                     or str(message.get("topic") or "").startswith("publicTrade.")
                 ):
                     last_provider_frame = now
-                if str(message.get("topic") or "").startswith("publicTrade."):
+                topic = str(message.get("topic") or "")
+                if topic.startswith("publicTrade."):
                     frame_number += 1
                     facts = decode_native_trades(
                         message, symbols=frozenset(symbols), release=RELEASE,
@@ -342,6 +426,24 @@ def _run_stream(
                         connection, session=session,
                         frame_number=frame_number, facts=facts,
                     )
+                elif capture_kline and topic.startswith("kline."):
+                    _persist_closed_kline_frame(
+                        connection, message=message,
+                        symbols=symbols, intervals=intervals,
+                    )
+            # Publish only after native and closed-candle transactions commit.
+            # The immutable one-second row stores *references*, never a
+            # second copy of native events or OHLCV.
+            if publish_source:
+                current_second = datetime.now(UTC).replace(microsecond=0)
+                if current_second != last_published_second:
+                    publish_market_source_second(
+                        connection, source_session_id=session,
+                        producer_release_commit=RELEASE, symbols=symbols,
+                        timeframes=intervals or ("1", "5", "15"),
+                        observed_at=current_second,
+                    )
+                    last_published_second = current_second
             if now - last_ping >= 20.0:
                 sock.send('{"op":"ping"}')
                 last_ping = now
