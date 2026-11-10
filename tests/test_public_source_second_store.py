@@ -120,6 +120,8 @@ def test_commit_writer_fails_closed_on_conflicting_immutable_bucket() -> None:
             return self
 
         def fetchone(self):
+            if "FROM analytics.native_public_trade_source_sessions" in calls[-1]:
+                return ("ACTIVE", "ms-bybit-mainnet-public-v1", RELEASE)
             return (AT,)
 
     assert persist_compact_source_seconds(
