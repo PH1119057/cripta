@@ -48,8 +48,10 @@ def test_entry_fee_exit_cash_in_different_utc_weeks_and_open_fee():
 def test_original_183day_week_boundaries():
     w = cash.group_weeks()
     assert len(w) == 27
-    assert w[0][:4] == ("2025-W14", "2025-04-01", "2025-04-06", 6)
-    assert w[-1][:4] == ("2025-W40", "2025-09-29", "2025-09-30", 2)
+    first_expected = ("2025-W14", "2025-04-01", "2025-04-06", 6)
+    last_expected = ("2025-W40", "2025-09-29", "2025-09-30", 2)
+    assert w[0][:4] == first_expected
+    assert w[-1][:4] == last_expected
 
 
 def test_weekly_16_books_exactly_equal_wallet_checkpoints():
