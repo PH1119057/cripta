@@ -251,8 +251,22 @@ def worker(source_head: str, lock_fd: int, started_at: str) -> None:
         try:
             status("FAILED_STOPPED_CHECKPOINTS_PRESERVED", started_at,
                    failure=err[-10000:])
-        except Exception:
-            print("controller status write failed", file=sys.stderr, flush=True)
+        except Exception as status_error:
+            # A corrupt checkpoint must not leave a stale RUNNING status.
+            # Preserve the failure without treating partial state as verified.
+            try:
+                atomic_json(STATUS, {
+                    "controller": ID,
+                    "stage": "FAILED_STOPPED_CHECKPOINTS_UNVERIFIED",
+                    "pid": os.getpid(), "actor_uid": os.geteuid(),
+                    "started_utc": started_at, "updated_utc": utc_now(),
+                    "source_head_at_failure": chunk.old.entry.git_head(),
+                    "checkpoint_verified": False,
+                    "failure": err[-10000:],
+                    "status_failure": str(status_error),
+                })
+            except Exception:
+                print("controller status write failed", file=sys.stderr, flush=True)
         print(err, file=sys.stderr, flush=True)
         raise
 
