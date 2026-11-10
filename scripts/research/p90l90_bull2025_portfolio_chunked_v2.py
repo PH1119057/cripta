@@ -206,7 +206,7 @@ def commit_bundle(parent: Path, name: str, payloads: dict[str, str]) -> Path:
     return dest
 
 
-def load_parts(folder: Path) -> tuple[dict | None, dict | None, str | None]:
+def load_parts(folder: Path, data: dict | None = None) -> tuple[dict | None, dict | None, str | None]:
     """Verify every immutable manifest chain and the final state SHA."""
     if not folder.exists():
         return None, None, None
@@ -226,6 +226,8 @@ def load_parts(folder: Path) -> tuple[dict | None, dict | None, str | None]:
     last_manifest = None
     prev_hash = None
     state = None
+    first_source = None
+    first_head = None
     for i, path in enumerate(parts):
         if i >= TOTAL_DAYS or path.name != part_name(i) or path.is_symlink():
             raise ValueError("missing/reordered/symlink checkpoint day")
@@ -237,8 +239,28 @@ def load_parts(folder: Path) -> tuple[dict | None, dict | None, str | None]:
             or m["day"] != day_date(i)
             or m["previous_manifest_sha256"] != prev_hash
             or m["state_sha256"] != old.sha(s_path)
+            or (data is not None and m["side"] != folder.name.upper())
         ):
             raise ValueError("corrupt checkpoint identity/chain/state hash")
+        if data is not None:
+            expected = {
+                s: data[s]["manifest"]["inputs"][10 + i]["sha256"]
+                for s in old.SYMBOLS
+            }
+            expected_rows = {
+                s: int(data[s]["manifest"]["inputs"][10 + i]["rows"])
+                for s in old.SYMBOLS
+            }
+            if m["day_input_sha256"] != expected or m["day_rows"] != expected_rows:
+                raise ValueError("completed-day input hash/row provenance mismatch")
+            if first_source is None:
+                first_source = m["source_pin_sha256"]
+                first_head = m["source_head_first"]
+            elif (
+                m["source_pin_sha256"] != first_source
+                or m["source_head_first"] != first_head
+            ):
+                raise ValueError("checkpoint chain mixed research source versions")
         prev_hash = old.sha(m_path)
         last_manifest = m
         if i == len(parts) - 1:
@@ -369,11 +391,19 @@ def replay_day(index: int, state: dict, data: dict, books: dict, side: str) -> d
         state["seen_events"][symbol] += len(events)
         if time.monotonic() - last_beat >= 20:
             elapsed = time.monotonic() - started
+            processed = sum(day_rows.values())
+            total = sum(int(data[s]["manifest"]["inputs"][10 + index]["rows"])
+                        for s in old.SYMBOLS)
+            eta = elapsed * (total - processed) / processed if processed else None
             print(json.dumps({
                 "stage": "2025_PORTFOLIO_DAY_HEARTBEAT", "side": side,
                 "day": day_date(index), "day_index": index + 1,
-                "days_total": TOTAL_DAYS, "processed_today": sum(day_rows.values()),
-                "processed_total": state["ticks"], "elapsed_sec": round(elapsed, 1),
+                "days_total": TOTAL_DAYS,
+                "processed_today": processed, "total_today": total,
+                "percent_today": round(100 * processed / total, 3),
+                "processed_total": state["ticks"],
+                "elapsed_sec": round(elapsed, 1),
+                "eta_day_sec": round(eta, 1) if eta is not None else None,
             }), flush=True)
             last_beat = time.monotonic()
         nxt = next(streams[symbol], None)
@@ -567,7 +597,7 @@ def run(side: str, source_head: str, max_days: int = 5) -> dict:
             flock.flock(lock.fileno(), flock.LOCK_EX | flock.LOCK_NB)
         except BlockingIOError as exc:
             raise RuntimeError("another active 2025 portfolio writer owns this side") from exc
-        state, last_manifest, last_sha = load_parts(folder)
+        state, last_manifest, last_sha = load_parts(folder, data)
         source_pins = current_pins if last_manifest is None else last_manifest["source_pin_sha256"]
         first_head = source_head if last_manifest is None else last_manifest["source_head_first"]
         if current_pins != source_pins:
@@ -597,6 +627,8 @@ def run(side: str, source_head: str, max_days: int = 5) -> dict:
                 folder, i, state, rows, data, last_sha,
                 first_head, source_pins, unit_pins, end_head,
             )
+            if shutil.disk_usage(ROOT).free < 16 * 2**30:
+                raise RuntimeError("research data disk fell below 16GiB reserve")
             elapsed = time.monotonic() - started
             total_done = state["next_day"]
             print(json.dumps({
