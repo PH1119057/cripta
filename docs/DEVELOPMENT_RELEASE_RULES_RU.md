@@ -2425,3 +2425,19 @@ Acceptance phases с отдельными объективными evidence и S
 **Must-not-remove capabilities:** independent credential-owning Private Runtime MAIN/SUB and signed Exchange truth; universal Entry/Exit decision ownership; durable command/execution ledger; account-scoped Lifecycle/Safety; strategy context producer MAYAK until its full market+feature capability has a proven replacement; and exact source/position/restart evidence. A daemon may become redundant only after BEFORE→AFTER producer/consumer accounting and runtime acceptance. \`systemctl active\` and PG source ingestion alone are insufficient.
 
 \`OWNER_DECISION=YES\`; \`CANON=AFTER_MERGE\`; \`SERVICES_REWRITTEN=NO\`; \`DEPLOYED=NO\`; \`RUNTIME_BEHAVIOR_VERIFIED=NO\`; \`LIVE_ARM=NO\`.
+
+### 59.1 Операционный roadmap R00–R14 и доказательный отчёт готовности
+
+Канонический список стабильных этапов и поимённых сервисов — \`CURRENT_PROJECT_MAP\`, секция «Roadmap R00–R14: единая витрина». Точный GitHub task tracker: Issue #470; docs PR #557. Нельзя создавать второй аналогичный roadmap/status owner в GitHub или отдельный конфликтующий рабочий workflow.
+
+Каждый последующий owner-facing статус миграции содержит:
+- \`CHECKED_AT_UTC\`, exact \`REMOTE_HEAD\`, \`SOURCE_HEAD\`, \`INSTALLED_COMMIT\`, \`LOADED_COMMIT\` (если физически проверен), operational deltas и действительные Issue/PR/job IDs;
+- компактную строку для **каждого R00–R14**, без пропусков, по шести колонкам: \`C\` canon в current GitHub main, \`M\` manifest/owner-consumer contract, \`I\` implemented and source reviewed, \`T\` targeted/CI tests, \`D\` exact installed release, \`R\` runtime behavior; статусы \`PASS / PARTIAL / BLOCKED / NOT_STARTED / NOT_CHECKED_HERE / N/A\`;
+- один проверенный основной blocker и одно следующее разрешённое действие для каждого неготового критичного этапа. Если объём мешает, дополнительные объяснения только к изменившимся или заблокированным пунктам; **все идентификаторы R00–R14 показывать каждый раз**;
+- всё ещё открытые реальные позиции и обязательства Exit/protection в отдельном current proof gate, без спекулятивных signed Bybit account reads или повторения ранее запрещённого upstream call.
+
+Только \`C=M=I=T=D=R=PASS\` для *применимых* ворот и действительных upstream dependencies означает \`READY\`. Наличие старого функционального сервиса (\`systemctl active\`) не означает \`I/T/D/R PASS\` для нового MarketPublication consumer path. Текущий CI green на docs PR не означает торговую реализацию.
+
+**Порядок milestone:** MS0 docs published → MS1 full consumer manifest/source parity → MS2 one common producer+PG-publication → MS3 independently protected P90 OPEN/Exit, other Exit → MS4 Entry and Execution → MS5 MAYAK/Dispatcher/Position/analytics/UI → MS6 no duplicate public decision readers and independent runtime/rollback proof. Последовательность не отменяет исходный приоритет семи задач Issue #470; самостоятельный технический shadow proof может выполняться раньше, но live Entry financial ARM запрещён до обязательного Exit.
+
+При смене состояния компонента обновлять только после фактического evidence, с датой, точной release/SQL/query/log/proof и состоянием rollback. Unverified/degraded outcome остаётся \`BLOCKED\` либо \`NOT_CHECKED_HERE\`, не «почти PASS». No background promise: отчёт по обращению пользователя или через реально созданный отдельный notification/automation contract, без заявления о самопроизвольной отправке сообщений.
