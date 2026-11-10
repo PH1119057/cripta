@@ -1119,7 +1119,7 @@ ARCH §60.5 владеет архитектурой, TC §4.19 — торгов�
 проверенных текущих producers/readers и утвердить **операционную политику
 качества источника**, не изменяя торговую Strategy/Exit/Execution policy.
 Source-controlled machine-readable contract:
-`config/market_source/required_public_feeds.json` (120 отдельных
+`operations/monitoring/required_public_feeds.json` (120 отдельных
 consumer requirements, 5 symbols, 45 уникальных WS topic identities,
 15 REST symbol/category/dataset inputs). Installed destination:
 `/etc/cripta/market-source/required_public_feeds.json`; **наличие файла
