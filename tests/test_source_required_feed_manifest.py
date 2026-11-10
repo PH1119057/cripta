@@ -49,6 +49,13 @@ def test_physically_one_feed_serves_multiple_entry_exit_and_mayak_consumers() ->
     )
     union = union_public_feed_requirements(needs)
     assert union.consumer_requirements == 9
+    # The one physical topic is reused, but distinct consumer TTL remains
+    # recoverable for source-owned publication quality/coverage metadata.
+    assert len(union.requirements) == 9
+    assert {
+        item.consumer_id for item in union.requirements
+        if item.dataset == "PUBLIC_TRADE" and item.product == "LINEAR"
+    } == {"ENTRY", "EXIT", "MAYAK"}
     linear = [r for r in union.websocket_topics if r.product == "LINEAR"]
     assert {x.dataset_topic for x in linear} == {
         "publicTrade.LTCUSDT", "kline.5.LTCUSDT",
