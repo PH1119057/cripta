@@ -74,6 +74,15 @@ def parse_explicit_source_manifest(
         raise SourceManifestInvalid(
             "SOURCE_UNION_MANIFEST_PARSE_INVALID"
         ) from exc
+    # Current capture activation cannot expand beyond the independently
+    # reviewed native producer symbol set. Different SPOT/LINEAR products
+    # of the SAME symbol remain valid; no new symbol can be silently
+    # subscribed or REST-polled by an optional consumer requirement.
+    approved = frozenset(native_symbols)
+    if not approved or len(approved) != len(native_symbols):
+        raise SourceManifestInvalid("SOURCE_NATIVE_SYMBOL_SCOPE_INVALID")
+    if any(item.symbol not in approved for item in required):
+        raise SourceManifestInvalid("SOURCE_OUTSIDE_ACTIVE_TRADING_UNIVERSE")
     feeds = union_public_feed_requirements(required)
     # Only the explicitly validated LINEAR one-minute forming adapter is
     # implemented. Confirmed SPOT closed bars use the *same canonical*

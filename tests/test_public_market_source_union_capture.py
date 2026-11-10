@@ -44,10 +44,10 @@ def _required(
 
 def _manifest() -> str:
     requirements = [
-        _required("MAYAK", "SPOT", "BTCUSDT", "PUBLIC_TRADE"),
-        _required("MAYAK", "SPOT", "BTCUSDT", "ORDERBOOK_50"),
-        _required("MAYAK", "LINEAR", "BTCUSDT", "TICKER"),
-        _required("MAYAK", "LINEAR", "BTCUSDT", "LIQUIDATION"),
+        _required("MAYAK", "SPOT", "APTUSDT", "PUBLIC_TRADE"),
+        _required("MAYAK", "SPOT", "APTUSDT", "ORDERBOOK_50"),
+        _required("MAYAK", "LINEAR", "APTUSDT", "TICKER"),
+        _required("MAYAK", "LINEAR", "APTUSDT", "LIQUIDATION"),
         _required("ENTRY", "LINEAR", "LTCUSDT", "CLOSED_KLINE"),
         _required("EXIT", "LINEAR", "LTCUSDT", "CLOSED_KLINE"),
     ]
@@ -70,10 +70,10 @@ def test_required_manifest_subscribes_one_topic_per_product() -> None:
         x.dataset_topic for x in union.websocket_topics if x.product == "LINEAR"
     }
     assert spot_topics == {
-        "publicTrade.BTCUSDT", "orderbook.50.BTCUSDT",
+        "publicTrade.APTUSDT", "orderbook.50.APTUSDT",
     }
-    assert "allLiquidation.BTCUSDT" in linear_topics
-    assert "tickers.BTCUSDT" in linear_topics
+    assert "allLiquidation.APTUSDT" in linear_topics
+    assert "tickers.APTUSDT" in linear_topics
     assert "kline.5.LTCUSDT" in linear_topics
     assert all(
         sum(x.dataset_topic == f"publicTrade.{s}"
@@ -84,12 +84,12 @@ def test_required_manifest_subscribes_one_topic_per_product() -> None:
 
 @pytest.mark.parametrize("addition,reason", [
     (
-        _required("POSITION", "SPOT", "BTCUSDT",
+        _required("POSITION", "SPOT", "APTUSDT",
                   "FORMING_KLINE", interval="1"),
         "FORMING_SCOPE_UNSUPPORTED",
     ),
     (
-        _required("POSITION", "LINEAR", "BTCUSDT",
+        _required("POSITION", "LINEAR", "APTUSDT",
                   "FORMING_KLINE", interval="5"),
         "FORMING_SCOPE_UNSUPPORTED",
     ),
@@ -106,19 +106,19 @@ def test_missing_required_physical_adapter_blocks_source_activation(
 def test_spot_closed_kline_subscribes_once_in_same_source_process() -> None:
     requirements = json.loads(_manifest())
     requirements.extend((
-        _required("MAYAK", "SPOT", "BTCUSDT", "CLOSED_KLINE", interval="1"),
-        _required("POSITION", "SPOT", "BTCUSDT", "CLOSED_KLINE", interval="1"),
-        _required("MAYAK", "LINEAR", "BTCUSDT", "CLOSED_KLINE", interval="1"),
+        _required("MAYAK", "SPOT", "APTUSDT", "CLOSED_KLINE", interval="1"),
+        _required("POSITION", "SPOT", "APTUSDT", "CLOSED_KLINE", interval="1"),
+        _required("MAYAK", "LINEAR", "APTUSDT", "CLOSED_KLINE", interval="1"),
     ))
     union = parse_explicit_source_manifest(
         json.dumps(requirements), native_symbols=P90,
     )
     assert sum(
-        x.product == "SPOT" and x.dataset_topic == "kline.1.BTCUSDT"
+        x.product == "SPOT" and x.dataset_topic == "kline.1.APTUSDT"
         for x in union.websocket_topics
     ) == 1
     assert sum(
-        x.product == "LINEAR" and x.dataset_topic == "kline.1.BTCUSDT"
+        x.product == "LINEAR" and x.dataset_topic == "kline.1.APTUSDT"
         for x in union.websocket_topics
     ) == 1
 
@@ -128,7 +128,7 @@ def test_public_rest_feeds_are_deduplicated_without_new_websocket_topics() -> No
     requirements.extend((
         _required("MAYAK", "LINEAR", "LTCUSDT", "ACCOUNT_RATIO"),
         _required("ENTRY", "LINEAR", "LTCUSDT", "ACCOUNT_RATIO"),
-        _required("MAYAK", "SPOT", "BTCUSDT", "INSTRUMENT_INFO"),
+        _required("MAYAK", "SPOT", "APTUSDT", "INSTRUMENT_INFO"),
     ))
     union = parse_explicit_source_manifest(
         json.dumps(requirements), native_symbols=P90,
@@ -138,7 +138,7 @@ def test_public_rest_feeds_are_deduplicated_without_new_websocket_topics() -> No
         tuple(sorted(x.consumers)): x.dataset_topic for x in union.rest_inputs
     } == {
         ("ENTRY", "MAYAK"): "REST:market/account-ratio:LTCUSDT",
-        ("MAYAK",): "REST:market/instruments-info:BTCUSDT",
+        ("MAYAK",): "REST:market/instruments-info:APTUSDT",
     }
     assert all(
         "REST:" not in item.dataset_topic for item in union.websocket_topics
@@ -175,6 +175,37 @@ def test_missing_original_p90_native_subscription_fails_closed() -> None:
     ]
     with pytest.raises(SourceManifestInvalid, match="P90_NATIVE_TOPIC_MISSING"):
         parse_explicit_source_manifest(json.dumps(manifest), native_symbols=P90)
+
+
+@pytest.mark.parametrize("product,dataset", [
+    ("SPOT", "ORDERBOOK_50"),
+    ("LINEAR", "TICKER"),
+    ("LINEAR", "ACCOUNT_RATIO"),
+])
+def test_extra_unapproved_symbol_never_enters_source_capture(
+    product: str, dataset: str,
+) -> None:
+    rows = json.loads(_manifest())
+    extra = _required("MAYAK", product, "BTCUSDT", dataset)
+    extra["required"] = False  # Optional still must not subscribe/poll.
+    rows.append(extra)
+    with pytest.raises(
+        SourceManifestInvalid, match="SOURCE_OUTSIDE_ACTIVE_TRADING_UNIVERSE",
+    ):
+        parse_explicit_source_manifest(json.dumps(rows), native_symbols=P90)
+
+
+def test_invalid_native_scope_fails_before_subscribing() -> None:
+    with pytest.raises(
+        SourceManifestInvalid, match="SOURCE_NATIVE_SYMBOL_SCOPE_INVALID",
+    ):
+        parse_explicit_source_manifest(_manifest(), native_symbols=())
+    with pytest.raises(
+        SourceManifestInvalid, match="SOURCE_NATIVE_SYMBOL_SCOPE_INVALID",
+    ):
+        parse_explicit_source_manifest(
+            _manifest(), native_symbols=P90 + ("LTCUSDT",),
+        )
 
 
 def test_existing_source_remains_default_off_and_legacy_is_unmodified() -> None:
