@@ -12,6 +12,9 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from bybit_workbench.market_data.public_forming_minute_source import (
+    collect_forming_minute_references,
+)
 from bybit_workbench.market_data.public_rest_observations import (
     collect_public_rest_references,
 )
@@ -167,6 +170,13 @@ def publish_market_source_second(
                 if item.dataset in ("ACCOUNT_RATIO", "INSTRUMENT_INFO")
             ),
         )
+        forming_refs, forming_coverage = collect_forming_minute_references(
+            connection, source_session_id=source_session_id,
+            as_of_second=second, requirements=tuple(
+                item for item in public_requirements
+                if item.dataset == "FORMING_KLINE"
+            ),
+        )
         from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
 
         row = connection.execute(
@@ -174,8 +184,9 @@ def publish_market_source_second(
                 (market_source_id,source_session_id,producer_release_commit,
                  as_of_second,native_watermarks,closed_candle_watermarks,
                  field_coverage,compact_second_refs,compact_field_coverage,
-                 rest_observation_refs,rest_field_coverage,publication_status)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'WATERMARKS_ONLY')
+                 rest_observation_refs,rest_field_coverage,
+                 forming_minute_refs,forming_field_coverage,publication_status)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'WATERMARKS_ONLY')
                ON CONFLICT (market_source_id,source_session_id,as_of_second)
                DO NOTHING RETURNING publication_id""",
             (
@@ -184,6 +195,7 @@ def publish_market_source_second(
                 Jsonb(candle_refs), Jsonb(coverage),
                 Jsonb(compact_refs), Jsonb(compact_coverage),
                 Jsonb(rest_refs), Jsonb(rest_coverage),
+                Jsonb(forming_refs), Jsonb(forming_coverage),
             ),
         ).fetchone()
     return int(row[0]) if row is not None else None

@@ -23,6 +23,9 @@ import websocket
 from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
 )
+from bybit_workbench.market_data.public_forming_minute_source import (
+    persist_forming_minute_fact,
+)
 from bybit_workbench.market_data.public_market_rest_source import (
     Dataset as RestDataset,
     PublicMarketRestFact,
@@ -72,12 +75,15 @@ def parse_explicit_source_manifest(
             "SOURCE_UNION_MANIFEST_PARSE_INVALID"
         ) from exc
     feeds = union_public_feed_requirements(required)
-    # The PUBLIC REST adapters are source-owned. Forming bar snapshots
-    # still require a separate validated source policy, and spot kline
-    # persistence has not yet been implemented by this producer.
-    if any(item.required and item.dataset == "FORMING_KLINE"
-           for item in required):
-        raise SourceManifestInvalid("SOURCE_REQUIRED_INPUT_ADAPTER_NOT_READY")
+    # Only the explicitly validated LINEAR one-minute forming adapter is
+    # implemented. Other forming intervals and SPOT closed kline still fail
+    # closed until independent physical evidence and source ABI are ready.
+    if any(
+        item.dataset == "FORMING_KLINE"
+        and (item.product != "LINEAR" or item.timeframe != "1")
+        for item in required
+    ):
+        raise SourceManifestInvalid("SOURCE_REQUIRED_FORMING_SCOPE_UNSUPPORTED")
     if any(item.required and item.product == "SPOT"
            and item.dataset == "CLOSED_KLINE" for item in required):
         raise SourceManifestInvalid("SOURCE_REQUIRED_SPOT_KLINE_NOT_READY")
@@ -206,6 +212,11 @@ def run_source_union(
         for item in union.requirements
         if item.dataset in ("ACCOUNT_RATIO", "INSTRUMENT_INFO")
     }))
+    forming_needs = frozenset({
+        (item.product, item.symbol, item.timeframe)
+        for item in union.requirements
+        if item.dataset == "FORMING_KLINE"
+    })
     last_received = {k: time.monotonic() for k in sock}
 
     def read(product: str) -> None:
@@ -293,7 +304,7 @@ def run_source_union(
     public_requirements = tuple(
         item for item in union.requirements if item.dataset in (
             "PUBLIC_TRADE", "TICKER", "ORDERBOOK_50", "LIQUIDATION",
-            "ACCOUNT_RATIO", "INSTRUMENT_INFO",
+            "ACCOUNT_RATIO", "INSTRUMENT_INFO", "FORMING_KLINE",
         )
     )
     frame_index = 0
@@ -329,7 +340,18 @@ def run_source_union(
                     allowed_symbols=symbols[product],
                     received_at=received,
                 ):
-                    aggregate.accept(event, received_at=received)
+                    if event.kind == "FORMING_KLINE":
+                        if (
+                            event.product, event.symbol,
+                            event.payload["timeframe"],
+                        ) in forming_needs:
+                            persist_forming_minute_fact(
+                                connection, source_session_id=session,
+                                producer_release_commit=producer_release_commit,
+                                fact=event, received_at=received,
+                            )
+                    else:
+                        aggregate.accept(event, received_at=received)
             # Handle bounded REST receipts only on the one PG source writer.
             # Never insert the REST fact directly from its network worker.
             for _ in range(8):

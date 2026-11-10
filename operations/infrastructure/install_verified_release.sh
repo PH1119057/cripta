@@ -699,6 +699,9 @@ migration_files=(
   # Native MarketSource public-only REST facts; additive/insert-only.
   operations/sql/20261110_public_market_rest_observations.sql
   operations/sql/20261110_market_publication_rest_links.sql
+  # Source-only unconfirmed one-minute evidence. Not canonical closed OHLCV.
+  operations/sql/20261110_public_forming_minute_observations.sql
+  operations/sql/20261110_market_publication_forming_links.sql
   # Technical Observer delivery only: no P90 Exit/Entry or SOURCE_LIVE_IDENTITY.
   operations/sql/20261110_native_public_trade_observer_delivery.sql
 )
