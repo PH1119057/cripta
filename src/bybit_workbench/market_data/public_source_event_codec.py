@@ -178,9 +178,10 @@ def decode_bybit_public_frame(
         # NEVER insert forming data into the immutable closed candle journal.
         # Only provider-confirmed bars follow _persist_closed_kline_frame().
         if product != "LINEAR":
-            raise PublicSourceFrameInvalid(
-                "PUBLIC_FORMING_SOURCE_SPOT_UNSUPPORTED"
-            )
+            # SPOT kline.1 carries provider-confirmed closed candles
+            # through the canonical candle adapter. SPOT forming-minute
+            # observations are NOT an approved capability in this codec.
+            return ()
         if frame_type != "snapshot" or not isinstance(data, list):
             raise PublicSourceFrameInvalid("PUBLIC_FORMING_FRAME_INVALID")
         if len(data) != 1 or not isinstance(data[0], dict):
