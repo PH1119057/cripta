@@ -26,8 +26,8 @@ from operations.monitoring import native_public_trade_source as native
 RELEASE = "a" * 40
 SESSION = "a" * 32
 SYMBOLS = ("APTUSDT", "LTCUSDT")
-AT = datetime(2026, 11, 10, 11, 0, 1, tzinfo=UTC)
-START = 1794308100000  # 2026-11-10T10:55:00Z
+AT = datetime(2026, 11, 9, 11, 0, 1, tzinfo=UTC)
+START = 1794221700000  # 2026-11-09T10:55:00Z
 TF_MS = 300000
 
 
@@ -222,7 +222,7 @@ class PublicationDB:
                 if "FROM analytics.closed_candles_effective" in sql:
                     return [(
                         "LTCUSDT", "5",
-                        datetime(2026, 11, 10, 11, 0, tzinfo=UTC),
+                        datetime(2026, 11, 9, 11, 0, tzinfo=UTC),
                     )]
                 raise AssertionError(sql)
 
