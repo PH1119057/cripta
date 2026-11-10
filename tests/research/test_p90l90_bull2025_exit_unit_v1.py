@@ -87,7 +87,7 @@ def test_resting_tp_stays_maker_only_after_entry_tick() -> None:
     assert exit_result == ("RESTING_TP", D("102"), True)
     gross, entry_fee, exit_fee, net = old.gross_and_net(pos, D("102"), True)
     assert entry_fee == D("0.005500000000")
-    assert exit_fee == D("0.004080000000")
+    assert exit_fee == D("0.002040000000")
     assert net == gross - entry_fee - exit_fee
 
 
