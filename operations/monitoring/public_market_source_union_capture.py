@@ -76,18 +76,15 @@ def parse_explicit_source_manifest(
         ) from exc
     feeds = union_public_feed_requirements(required)
     # Only the explicitly validated LINEAR one-minute forming adapter is
-    # implemented. Other forming intervals and SPOT closed kline still fail
-    # closed until independent physical evidence and source ABI are ready.
+    # implemented. Confirmed SPOT closed bars use the *same canonical*
+    # closed-candle store as LINEAR, never this forming adapter.
     if any(
         item.dataset == "FORMING_KLINE"
         and (item.product != "LINEAR" or item.timeframe != "1")
         for item in required
     ):
         raise SourceManifestInvalid("SOURCE_REQUIRED_FORMING_SCOPE_UNSUPPORTED")
-    if any(item.required and item.product == "SPOT"
-           and item.dataset == "CLOSED_KLINE" for item in required):
-        raise SourceManifestInvalid("SOURCE_REQUIRED_SPOT_KLINE_NOT_READY")
-    linear = {
+     linear = {
         entry.dataset_topic
         for entry in feeds.websocket_topics if entry.product == "LINEAR"
     }
@@ -188,6 +185,12 @@ def run_source_union(
         item.dataset_topic.split(".")[1]
         for item in union.websocket_topics
         if item.product == "LINEAR"
+        and item.dataset_topic.startswith("kline.")
+    }, key=int))
+    spot_intervals = tuple(sorted({
+        item.dataset_topic.split(".")[1]
+        for item in union.websocket_topics
+        if item.product == "SPOT"
         and item.dataset_topic.startswith("kline.")
     }, key=int))
     sock: dict[str, Any] = {}
@@ -305,6 +308,7 @@ def run_source_union(
         item for item in union.requirements if item.dataset in (
             "PUBLIC_TRADE", "TICKER", "ORDERBOOK_50", "LIQUIDATION",
             "ACCOUNT_RATIO", "INSTRUMENT_INFO", "FORMING_KLINE",
+            "CLOSED_KLINE",
         )
     )
     frame_index = 0
@@ -329,11 +333,17 @@ def run_source_union(
                             connection, session=session,
                             frame_number=frame_index, facts=facts,
                         )
-                if product == "LINEAR" and topic.startswith("kline."):
+                if topic.startswith("kline.") and product in (
+                    "LINEAR", "SPOT",
+                ):
                     native._persist_closed_kline_frame(
                         connection, message=item,
-                        symbols=tuple(sorted(symbols["LINEAR"])),
-                        intervals=intervals,
+                        symbols=tuple(sorted(symbols[product])),
+                        intervals=(
+                            intervals if product == "LINEAR"
+                            else spot_intervals
+                        ),
+                        product=product,
                     )
                 for event in decode_bybit_public_frame(
                     item, product=product,
