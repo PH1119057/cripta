@@ -6,8 +6,8 @@ from decimal import Decimal as D
 import pytest
 
 from scripts.research import p90l90_bull2025_finalize_saved_v1 as fin
-from scripts.research import p90l90_bull2025_saved_independent_qc_v1 as qc
 from scripts.research import p90l90_bull2025_portfolio_chunked_v2 as chunk
+from scripts.research import p90l90_bull2025_saved_independent_qc_v1 as qc
 
 
 def new_book():
@@ -17,7 +17,7 @@ def new_book():
 def test_exact_reserved_book_unchanged():
     book = new_book()
     evidence = fin.normalize_final_reserve(book)
-    assert book.reserved == D(0)
+    assert book.reserved.is_zero()
     assert evidence["reserve_roundoff_usdt"] == "0"
     assert evidence["in_memory_adjusted"] is False
 
@@ -32,7 +32,7 @@ def test_real_2025_decimal_dust_only_normalized_in_memory():
     assert evidence["reserve_roundoff_usdt"] == "-5.3E-47"
     assert evidence["in_memory_adjusted"] is True
     assert book.reserved == D(0)
-    assert book.wallet == D("71.431565921052")
+    assert str(book.wallet) == "71.431565921052"
     assert frozen_original["b"]["reserved"] == {"$decimal": "-5.3E-47"}
 
 
@@ -101,8 +101,8 @@ def test_evaluation_scope_unchanged():
     assert len(fin.PINNED) == len(chunk.PINNED) + 1
     assert fin.RESEARCH != qc.RESEARCH
     assert qc.RESEARCH == "P90L90_BULL2025_SAVED_INDEPENDENT_QC_V1"
-    assert fin.old.Q == D("1E-12")
-    assert fin.old.START_WALLET == D("1000")
+    assert str(fin.old.Q) == "1E-12"
+    assert str(fin.old.START_WALLET) == "1000"
     assert fin.old.SYMBOLS == (
         "LTCUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT", "INJUSDT",
     )
