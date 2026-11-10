@@ -84,8 +84,8 @@ def test_long_controller_fails_closed_without_losing_committed_days(
     monkeypatch.setattr(ctl, "snapshot", lambda: state(done["days"]))
 
     def fail_after_first(side: str, head: str, max_days: int):
-        done["days"] += 5
-        if done["days"] == 12:
+        if done["days"] == 7:
+            done["days"] += 5
             return {"status": "PARTIAL_DURABLE_RESUME_READY_NOT_FINAL"}
         raise ValueError("actual native day SHA changed")
 
