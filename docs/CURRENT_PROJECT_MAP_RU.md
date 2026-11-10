@@ -5171,7 +5171,7 @@ Read-only production PostgreSQL statistics and bounded sample comparisons revise
 `freshness_seconds`, required/optional и cadence и их каноническое
 утверждение **до** production установки; см. OBS §7.10.5.1,
 DEV §59.2, INDEX §74 и machine-readable
-`config/market_source/required_public_feeds.json`.
+`operations/monitoring/required_public_feeds.json`.
 120 exact requirements / 5 symbols / 45 unique WS topics /
 15 REST symbol+category+dataset inputs. Context TTL не является
 новым торговым параметром Strategy, native original trade
