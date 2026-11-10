@@ -482,7 +482,10 @@ def publish_final(
     results = {}
     hashes = {}
     for k, book in books.items():
-        results[k] = book.finish(state["prices"], old.END_TS)
+        # Preserve v1 public scenario names; only in-memory map uses "__".
+        results[f"{book.scenario}_{book.mode}"] = book.finish(
+            state["prices"], old.END_TS
+        )
     end_head = pin_current(source_pins, first_head)
     writer_dir(FINAL)
     leaf = FINAL / side.lower()
@@ -490,14 +493,15 @@ def publish_final(
         raise FileExistsError("existing 2025 immutable portfolio result")
     tmp = Path(tempfile.mkdtemp(prefix=".pending_", dir=str(FINAL)))
     for k, book in books.items():
-        ledger = tmp / f"ledger_{k}.jsonl"
+        public_key = f"{book.scenario}_{book.mode}"
+        ledger = tmp / f"ledger_{public_key}.jsonl"
         with ledger.open("x", encoding="utf-8") as f:
             for item in book.trades:
                 f.write(json.dumps(item, sort_keys=True, separators=(",", ":")) + "\n")
             f.flush()
             os.fsync(f.fileno())
-        hashes[k] = old.sha(ledger)
-        if len(book.trades) != results[k]["ledger_rows"]:
+        hashes[public_key] = old.sha(ledger)
+        if len(book.trades) != results[public_key]["ledger_rows"]:
             raise ValueError("final ledger row parity failure")
     snap = tmp / "source_snapshot"
     snap.mkdir(mode=0o2770)
