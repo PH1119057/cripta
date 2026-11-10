@@ -1119,54 +1119,54 @@ ARCH §60.5 владеет архитектурой, TC §4.19 — торгов�
 проверенных текущих producers/readers и утвердить **операционную политику
 качества источника**, не изменяя торговую Strategy/Exit/Execution policy.
 Source-controlled machine-readable contract:
-\`config/market_source/required_public_feeds.json\` (120 отдельных
+`config/market_source/required_public_feeds.json` (120 отдельных
 consumer requirements, 5 symbols, 45 уникальных WS topic identities,
 15 REST symbol/category/dataset inputs). Installed destination:
-\`/etc/cripta/market-source/required_public_feeds.json\`; **наличие файла
+`/etc/cripta/market-source/required_public_feeds.json`; **наличие файла
 в GitHub не означает его установку на сервере или активацию source union**.
 Current native producer holds one advisory lock. Consumers remain unchanged
 until separately accepted roadmap stages.
 
-Точный approved source universe: \`APTUSDT, ARBUSDT, DOTUSDT, INJUSDT,
-LTCUSDT\`; each instrument has separate \`SPOT\`/\`LINEAR\` identity.
-\`RequiredPublicFeed.freshness_seconds\` означает **максимальный возраст
+Точный approved source universe: `APTUSDT, ARBUSDT, DOTUSDT, INJUSDT,
+LTCUSDT`; each instrument has separate `SPOT`/`LINEAR` identity.
+`RequiredPublicFeed.freshness_seconds` означает **максимальный возраст
 последнего опубликованного факта**, не обещание периодичности trade/liquidation
 и не доказательство непрерывности original source epoch. При отсутствии
 торговли новый event не синтезируется; freshness как таковая не заменяет
 heartbeat/seq/coverage/gap audit. Required/optional действует **только
 внутри указанного consumer**. Отсутствие optional liquidation/OI/book
-не является глобальным отказом Entry/Exit. \`NOT LISTED\`, отсутствующий
+не является глобальным отказом Entry/Exit. `NOT LISTED`, отсутствующий
 факт, stale, непроверенная история и источник GAP не становятся READY.
 
-| Consumer / точный fact | \`freshness_seconds\` | История / cadence | \`required\` |
+| Consumer / точный fact | `freshness_seconds` | История / cadence | `required` |
 | --- | ---: | --- | --- |
-| \`ENTRY_P90\` / \`EXIT_P90\` LINEAR original \`PUBLIC_TRADE\` | 90 | Каждый raw \`seq/execId\` → native journal; не 1Hz сэмпл, continuity отдельно | true |
-| \`ENTRY_P90\` / \`EXIT_P90\` LINEAR confirmed \`CLOSED_KLINE 5/15\` | 315 / 915 | 2600 / 999 баров: точный текущий полный preparation/ATR seed | true |
-| \`EXIT_SHADOW\` LINEAR confirmed \`5\` / ticker | 315 / 5 | 240 closed bars; независимый диагностический lastPrice | true |
-| \`EXECUTION_R1\` LINEAR confirmed \`5\` / ticker | 315 / 2 | 240 closed bars в source; фактический per-request history_limit 205–240 обязателен; no independent REST geometry cutover до parity | true |
-| \`EXECUTION_P90\` LINEAR ticker | 2 | Current public pre-mutation lastPrice; separate signed Exchange truth | true |
-| \`POSITION\` LINEAR forming \`1\` / confirmed \`1\` | 8 / 75 | Forming current minute + 6 completed for bounded 1m feature; forming НЕ равен immutable confirmed close | true |
-| \`POSITION\` LINEAR ticker / orderbook.50 | 2 / 3 | Восстановленный top-25 snapshot по original book-50 delta + seq; без фактического resync parity consumer cutover запрещён | true |
-| \`MAYAK\` LINEAR ticker / trade | 5 / 90 | Original full events; per-minute feature snapshot остаётся отдельным MAYAK owner | true |
-| \`MAYAK\` SPOT trade / book-50 | 90 / 5 | Optional для конкретного символа: физически SPOT может быть NOT_LISTED; не добавлять новую монету | false |
-| \`MAYAK\` LINEAR book-50 / liquidation | 5 / 3600 | Book optional analytics; ликвидации event-driven, отсутствие события не «0 ликвидаций» | false |
-| \`MAYAK\` LINEAR account ratio \`5min\` | 650 | Source-owned public REST poll 300 секунд; две пропущенные попытки → stale | false |
-| \`MAYAK\` SPOT+LINEAR instrument-info | 1800 | Source-owned exact-symbol REST poll 900 секунд; \`NOT_LISTED\` сохраняется как quality | false |
+| `ENTRY_P90` / `EXIT_P90` LINEAR original `PUBLIC_TRADE` | 90 | Каждый raw `seq/execId` → native journal; не 1Hz сэмпл, continuity отдельно | true |
+| `ENTRY_P90` / `EXIT_P90` LINEAR confirmed `CLOSED_KLINE 5/15` | 315 / 915 | 2600 / 999 баров: точный текущий полный preparation/ATR seed | true |
+| `EXIT_SHADOW` LINEAR confirmed `5` / ticker | 315 / 5 | 240 closed bars; независимый диагностический lastPrice | true |
+| `EXECUTION_R1` LINEAR confirmed `5` / ticker | 315 / 2 | 240 closed bars в source; фактический per-request history_limit 205–240 обязателен; no independent REST geometry cutover до parity | true |
+| `EXECUTION_P90` LINEAR ticker | 2 | Current public pre-mutation lastPrice; separate signed Exchange truth | true |
+| `POSITION` LINEAR forming `1` / confirmed `1` | 8 / 75 | Forming current minute + 6 completed for bounded 1m feature; forming НЕ равен immutable confirmed close | true |
+| `POSITION` LINEAR ticker / orderbook.50 | 2 / 3 | Восстановленный top-25 snapshot по original book-50 delta + seq; без фактического resync parity consumer cutover запрещён | true |
+| `MAYAK` LINEAR ticker / trade | 5 / 90 | Original full events; per-minute feature snapshot остаётся отдельным MAYAK owner | true |
+| `MAYAK` SPOT trade / book-50 | 90 / 5 | Optional для конкретного символа: физически SPOT может быть NOT_LISTED; не добавлять новую монету | false |
+| `MAYAK` LINEAR book-50 / liquidation | 5 / 3600 | Book optional analytics; ликвидации event-driven, отсутствие события не «0 ликвидаций» | false |
+| `MAYAK` LINEAR account ratio `5min` | 650 | Source-owned public REST poll 300 секунд; две пропущенные попытки → stale | false |
+| `MAYAK` SPOT+LINEAR instrument-info | 1800 | Source-owned exact-symbol REST poll 900 секунд; `NOT_LISTED` сохраняется как quality | false |
 
 Временные допуски closed bars: один полный boundary interval плюс
 15 секунд provider settling/grace; это только stale-quality, не
-разрешение использовать незакрытую свечу. Для \`1m\` +15 секунд, для
-\`5m\` +15 секунд, для \`15m\` +15 секунд. Position source использует
+разрешение использовать незакрытую свечу. Для `1m` +15 секунд, для
+`5m` +15 секунд, для `15m` +15 секунд. Position source использует
 latest forming+completed одновременно, их источники нельзя смешивать.
-Для \`MAYAK\` REST свежесть выбрана как 2× текущая source cadence
+Для `MAYAK` REST свежесть выбрана как 2× текущая source cadence
 плюс ограниченный запас: 300→650, 900→1800. Эти интервалы не изменяют
 частоту торговли, параметры Strategy или ограничения Execution.
 
 **Retention и роль писателей:** уже существующий original native
 journal, source sessions/cursors, confirmed OHLCV, correction/replay и
 OPEN-position causal evidence **не подвергаются TTL-delete** при R01.
-Для \`5m\` необходимо 2600 последовательных подтвердившихся баров,
-для \`15m\` 999, для \`1m\` 6; historical row count, quality и epoch
+Для `5m` необходимо 2600 последовательных подтвердившихся баров,
+для `15m` 999, для `1m` 6; historical row count, quality и epoch
 проверяются независимо от freshness. Native raw history и private audit
 сохраняются до отдельного доказанного consumer/OPEN-position
 retention/архивного решения. R01 не создаёт новую PG-таблицу,
@@ -1177,7 +1177,7 @@ PG/WAL/backup+rollback capacity gate до R02–R05 физических writes
 **Ограничение пятисимвольного этапа:** старый MAYAK 20 symbols, его
 SPOT/LINEAR transports и analytical context остаются неизменёнными,
 пока R11/R14 не предъявят полный BEFORE→AFTER и owner decision.
-\`ENTRY_P90\` и \`EXIT_P90\` P90 v2 per-symbol MAIN/SUB lineage
+`ENTRY_P90` и `EXIT_P90` P90 v2 per-symbol MAIN/SUB lineage
 не эквивалентны новым финансовым ARM. Ни одна optional публичная
 серия не подменяет независимые signed Bybit позиции/SL/TP/first-fill
 и OPEN Exit obligations.
@@ -1186,7 +1186,7 @@ SPOT/LINEAR transports и analytical context остаются неизменён
 operator config installation must separately verify file source
 SHA/content, intended management installer/writer, parents+ACL/mode,
 backup/rollback and loaded consumer's **read-only** parser acceptance.
-It must remain inert (\`CRIPTA_SOURCE_UNION_CAPTURE=0\`) until the
+It must remain inert (`CRIPTA_SOURCE_UNION_CAPTURE=0`) until the
 approved one-producer native cutover and independent signed
 Exit/protection preflight. Do not claim R01 DEPLOYED or RUNTIME VERIFIED
 from GitHub merge or a test fixture.
