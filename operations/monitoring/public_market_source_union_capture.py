@@ -79,7 +79,7 @@ def parse_explicit_source_manifest(
     # implemented. Other forming intervals and SPOT closed kline still fail
     # closed until independent physical evidence and source ABI are ready.
     if any(
-        item.required and item.dataset == "FORMING_KLINE"
+        item.dataset == "FORMING_KLINE"
         and (item.product != "LINEAR" or item.timeframe != "1")
         for item in required
     ):
