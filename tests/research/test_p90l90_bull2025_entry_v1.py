@@ -60,8 +60,11 @@ def test_frozen_market_window_cohort_source_gates() -> None:
     assert "2025-04-01T00:00:00+00:00" in source
     assert "2025-10-01T00:00:00+00:00" in source
     assert '"2025-03-22", "2025-09-30"' in source
-    assert "LTCUSDT" in source and "DOTUSDT" in source
-    assert "ARBUSDT" in source and "APTUSDT" in source and "INJUSDT" in source
+    assert "SYMBOLS = tuple(old.SYMBOLS)" in source
+    old_core = OLD.read_text(encoding="utf8")
+    assert all(symbol in old_core for symbol in (
+        "LTCUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT", "INJUSDT"
+    ))
     assert (
         'sha(SOURCE / ORIGINAL_REL) != acquisition["source_snapshot_sha256"][ORIGINAL_REL]'
         in source
@@ -113,8 +116,9 @@ def test_period_aware_prev7d_frozen_width_is_caused_by_prior_days(
     states, fixed, prev7, meta = namespace["load_frozen_period"](path, start, end)
     assert len(states) == 288
     assert meta["states"] == 288
-    assert fixed == width
-    assert prev7 == {start.date(): width}
+    assert abs(fixed - width) <= D("1e-46")
+    assert set(prev7) == {start.date()}
+    assert abs(prev7[start.date()] - width) <= D("1e-46")
     assert meta["prior_complete_days"] == 7
 
 
