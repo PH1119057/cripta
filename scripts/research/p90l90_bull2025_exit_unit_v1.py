@@ -328,8 +328,8 @@ def calculate(symbol: str, source_head: str, smoke_hours: int = 0) -> dict:
         captured = snapshot / Path(rel).name
         shutil.copyfile(original_file, captured)
         source_hashes[Path(rel).name] = sha(captured)
-        if sha(original_file) != source_hashes[Path(rel).name]:
-            raise RuntimeError("source snapshot SHA mismatch")
+        if source_hashes[Path(rel).name] != pinned[rel] or sha(original_file) != pinned[rel]:
+            raise RuntimeError("pinned source snapshot SHA mismatch at publication")
     result = {
         "research": "P90L90_BULL2025_EXIT_UNIT_V1",
         "status": "QC_PASS_UNIT_EXIT_ONLY_NOT_PORTFOLIO_2025",
