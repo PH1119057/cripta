@@ -48,13 +48,15 @@ def _manifest() -> str:
         _required("MAYAK", "SPOT", "APTUSDT", "ORDERBOOK_50"),
         _required("MAYAK", "LINEAR", "APTUSDT", "TICKER"),
         _required("MAYAK", "LINEAR", "APTUSDT", "LIQUIDATION"),
-        _required("ENTRY", "LINEAR", "LTCUSDT", "CLOSED_KLINE"),
-        _required("EXIT", "LINEAR", "LTCUSDT", "CLOSED_KLINE"),
     ]
     for s in P90:
         requirements.extend((
             _required("ENTRY", "LINEAR", s, "PUBLIC_TRADE"),
             _required("EXIT", "LINEAR", s, "PUBLIC_TRADE"),
+            _required("ENTRY", "LINEAR", s, "CLOSED_KLINE", interval="5"),
+            _required("ENTRY", "LINEAR", s, "CLOSED_KLINE", interval="15"),
+            _required("EXIT", "LINEAR", s, "CLOSED_KLINE", interval="5"),
+            _required("EXIT", "LINEAR", s, "CLOSED_KLINE", interval="15"),
         ))
     return json.dumps(requirements)
 
@@ -163,6 +165,61 @@ def test_exact_linear_one_minute_forming_shares_existing_physical_kline_topic() 
     assert sum(
         1 for fact in union.requirements if fact.dataset == "FORMING_KLINE"
     ) == 2
+
+
+def test_five_symbol_native_manifest_has_mandatory_5m_15m_closes() -> None:
+    union = parse_explicit_source_manifest(_manifest(), native_symbols=P90)
+    assert {
+        (topic.product, topic.dataset_topic)
+        for topic in union.websocket_topics
+        if topic.dataset_topic.startswith("kline.")
+    } >= {
+        ("LINEAR", f"kline.{timeframe}.{symbol}")
+        for symbol in P90 for timeframe in ("5", "15")
+    }
+    assert sum(
+        topic.dataset_topic == "kline.5.LTCUSDT"
+        for topic in union.websocket_topics if topic.product == "LINEAR"
+    ) == 1
+
+
+@pytest.mark.parametrize("symbol,timeframe", [
+    ("APTUSDT", "5"),
+    ("DOTUSDT", "15"),
+    ("LTCUSDT", "5"),
+])
+def test_missing_one_required_closed_source_blocks_activation(
+    symbol: str, timeframe: str,
+) -> None:
+    manifest = [
+        row for row in json.loads(_manifest())
+        if not (
+            row["product"] == "LINEAR"
+            and row["dataset"] == "CLOSED_KLINE"
+            and row["symbol"] == symbol
+            and row["timeframe"] == timeframe
+        )
+    ]
+    with pytest.raises(
+        SourceManifestInvalid, match="SOURCE_P90_REQUIRED_CLOSED_KLINE_MISSING",
+    ):
+        parse_explicit_source_manifest(json.dumps(manifest), native_symbols=P90)
+
+
+def test_optional_only_close_does_not_satisfy_required_p90_feed() -> None:
+    manifest = json.loads(_manifest())
+    for row in manifest:
+        if (
+            row["product"] == "LINEAR"
+            and row["dataset"] == "CLOSED_KLINE"
+            and row["symbol"] == "INJUSDT"
+            and row["timeframe"] == "15"
+        ):
+            row["required"] = False
+    with pytest.raises(
+        SourceManifestInvalid, match="SOURCE_P90_REQUIRED_CLOSED_KLINE_MISSING",
+    ):
+        parse_explicit_source_manifest(json.dumps(manifest), native_symbols=P90)
 
 
 def test_missing_original_p90_native_subscription_fails_closed() -> None:
