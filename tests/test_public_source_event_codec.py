@@ -114,7 +114,7 @@ def test_orderbook_delta_continuity_and_reset_without_forged_levels() -> None:
     assert updated["best_ask"] == "101"
     assert Decimal(updated["bid_50bps_usd"]) >= Decimal(0)
     with pytest.raises(PublicSourceFrameInvalid, match="SEQUENCE_REGRESSION"):
-        continuity.apply(_decode(_book(snapshot=False, seq=1235))[0])
+        continuity.apply(_decode(_book(snapshot=False, seq=1235, update=102))[0])
     with pytest.raises(PublicSourceFrameInvalid, match="WITHOUT_SNAPSHOT"):
         continuity.apply(_decode(_book(snapshot=False, seq=1236))[0])
     restored = continuity.apply(_decode(_book(snapshot=True, seq=1, update=1))[0])
