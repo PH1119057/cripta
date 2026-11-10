@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import ast
+
+import pytest
 from datetime import UTC, datetime
 from decimal import Decimal as D
 from pathlib import Path
@@ -126,3 +128,42 @@ def test_previous_day_equity_mark_never_uses_first_next_day_tick() -> None:
     shadow_update = source.find("current = shadow_positions[s]", marker)
     assert marker >= 0
     assert marker < price_update < shadow_update
+
+
+def test_portfolio_source_gate_accepts_unrelated_advance_with_exact_pins(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    source = tmp_path / p.SELF_REL
+    source.parent.mkdir(parents=True)
+    source.write_text("unchanged portfolio source", encoding="utf-8")
+    pins = {rel: "1" * 64 for rel in p.unit.PINNED_SOURCE_PATHS}
+    pins[p.SELF_REL] = p.sha(source)
+    called = []
+
+    def checked_unit_gate(head: str, original_pins: dict[str, str]) -> str:
+        called.append((head, original_pins))
+        return "2" * 40
+
+    monkeypatch.setattr(p, "SOURCE", tmp_path)
+    monkeypatch.setattr(p.unit, "verify_source_fast_forward", checked_unit_gate)
+    assert p.verify_portfolio_source_fast_forward("1" * 40, pins) == "2" * 40
+    assert called == [
+        ("1" * 40, {rel: pins[rel] for rel in p.unit.PINNED_SOURCE_PATHS})
+    ]
+
+
+def test_portfolio_source_gate_rejects_own_code_change_after_launch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    source = tmp_path / p.SELF_REL
+    source.parent.mkdir(parents=True)
+    source.write_text("original bytes", encoding="utf-8")
+    pins = {rel: "1" * 64 for rel in p.unit.PINNED_SOURCE_PATHS}
+    pins[p.SELF_REL] = p.sha(source)
+    monkeypatch.setattr(p, "SOURCE", tmp_path)
+    monkeypatch.setattr(
+        p.unit, "verify_source_fast_forward", lambda _head, _pins: "2" * 40
+    )
+    source.write_text("different portfolio bytes", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="portfolio source bytes changed"):
+        p.verify_portfolio_source_fast_forward("1" * 40, pins)
