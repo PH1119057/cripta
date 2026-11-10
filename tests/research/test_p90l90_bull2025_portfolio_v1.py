@@ -117,3 +117,12 @@ def test_w7_simultaneous_symbol_tick_cannot_see_future_signal() -> None:
     b.advance_signals(key)
     assert b.signal_index == 1
     assert b.pause_until == key[0] + 86400
+
+
+def test_previous_day_equity_mark_never_uses_first_next_day_tick() -> None:
+    source = Path(p.__file__).read_text(encoding="utf8")
+    marker = source.find("if day != previous_day:")
+    price_update = source.find("prices[s] = px", marker)
+    shadow_update = source.find("current = shadow_positions[s]", marker)
+    assert marker >= 0
+    assert marker < price_update < shadow_update
