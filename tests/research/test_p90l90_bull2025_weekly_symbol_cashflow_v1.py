@@ -82,9 +82,11 @@ def test_weekly_16_books_exactly_equal_wallet_checkpoints():
 
 
 def test_short_and_long_require_independent_full_portfolio_qc():
-    assert cash.SIDE_NAMES == {"LONG_ONLY", "SHORT_ONLY"}
+    expected_sides = {"LONG_ONLY", "SHORT_ONLY"}
+    expected_wallet = D("1000")
+    assert expected_sides == cash.SIDE_NAMES
     assert (
         cash.STATUS_NAMES["SHORT_ONLY"]
         == "INDEPENDENT_QC_PASS_SAVED_2025_SHORT_16_CASES"
     )
-    assert cash.ch.old.START_WALLET == D("1000")
+    assert expected_wallet == cash.ch.old.START_WALLET
