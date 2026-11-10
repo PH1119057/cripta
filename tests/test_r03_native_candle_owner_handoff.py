@@ -136,19 +136,20 @@ def test_r03_observer_history_never_writes_and_enforces_exact_parity(
             calls.append("history")
             assert through == original.closed_at and required == 1
             if bad:
-                return (replace(original, close=Decimal("99")),)
+                return (replace(original, close=Decimal("101")),)
             return expected
 
         def ingest(self, *_args: object, **_kwargs: object) -> None:
             raise AssertionError("R03 Observer MUST NOT INSERT canonical candles")
 
     monkeypatch.setattr(candle_warmup, "SharedClosedCandleStore", Store)
+    monkeypatch.setenv("CRIPTA_R03_NATIVE_CANDLE_READER", "ENABLED")
+
     def invoke() -> dict[str, tuple[Candle, ...]]:
         return candle_warmup.cache_approved_bybit_history(
             DB(), symbol="LTCUSDT", history={"5": expected},
             observed_at=original.closed_at + timedelta(seconds=1),
             producer_release_commit="a" * 40,
-            verify_only=True, source_wait_seconds=0.0,
         )
 
     if bad:
@@ -207,9 +208,12 @@ def test_r03_all_active_observer_recovery_writers_become_read_only() -> None:
     assert observer.count(
         "verify_native_source_only=R03_NATIVE_CANDLE_READER"
     ) == 2
-    assert "native_closed_only=R03_NATIVE_CANDLE_READER" in observer
+    assert "native_closed_only=R03_NATIVE_CANDLE_READER" not in observer
     assert "verify_only=verify_native_source_only" in prepare
-    assert "verify_only=native_closed_only" in recovery
+    assert "BYBIT_REST_KLINE_REAL_RESTART" in recovery
+    assert "CRIPTA_R03_NATIVE_CANDLE_READER" in (
+        _ROOT / "src/bybit_workbench/market_data/candle_warmup.py"
+    ).read_text(encoding="utf-8")
     assert "CANDLE_IMMUTABLE_SOURCE_CONFLICT" in (
         _ROOT / "src/bybit_workbench/market_data/shared_closed_candles.py"
     ).read_text(encoding="utf-8")
