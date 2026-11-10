@@ -69,6 +69,15 @@ def test_one_producer_publishes_exact_source_reference_not_second_tape(
     }
 
     with _db() as conn:
+        # Disposable test bootstrap intentionally does not register every
+        # instrument: source/candle validation requires exact registry ID.
+        conn.execute(
+            """INSERT INTO identity.instruments
+                 (instrument_id,venue_id,product_category,external_symbol)
+               VALUES ('inst-bybit-linear-ltcusdt','venue-bybit',
+                       'LINEAR','LTCUSDT')
+               ON CONFLICT (instrument_id) DO NOTHING"""
+        )
         source._session_start(conn, session)
         source._persist_frame(
             conn, session=session, frame_number=1, facts=(evidence,),
