@@ -124,7 +124,7 @@ def test_orderbook_delta_continuity_and_reset_without_forged_levels() -> None:
 @pytest.mark.parametrize("event,product,reason", [
     (_event("tickers.LTCUSDT", {"symbol": "LTCUSDT"}), "SPOT", "CATEGORY"),
     (_event("allLiquidation.BTCUSDT", []), "SPOT", "CATEGORY"),
-    (_event("orderbook.50.BTCUSDT", {"s": "BTCUSDT"}), "LINEAR", "TYPE"),
+    (_event("orderbook.50.BTCUSDT", {"s": "BTCUSDT"}), "LINEAR", "SEQUENCE"),
     (_event("tickers.BTCUSDT",
             {"symbol": "BTCUSDT", "openInterest": "NaN"}), "LINEAR", "NUMBER"),
     (_event("tickers.BTCUSDT",
