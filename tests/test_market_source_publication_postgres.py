@@ -89,18 +89,22 @@ def test_one_producer_publishes_exact_source_reference_not_second_tape(
             intervals=("5",),
         )
 
+        # The immutable publication clock must be AFTER the actual PG commit;
+        # the historical closed bar is permitted but a future accepted cursor
+        # is correctly forbidden, even in disposable integration tests.
+        publish_at = datetime.now(UTC)
         publication = publish_market_source_second(
             conn, source_session_id=session,
             producer_release_commit=RELEASE,
             symbols=("LTCUSDT",), timeframes=("5",),
-            observed_at=OBSERVED,
+            observed_at=publish_at,
         )
         assert isinstance(publication, int)
         assert publish_market_source_second(
             conn, source_session_id=session,
             producer_release_commit=RELEASE,
             symbols=("LTCUSDT",), timeframes=("5",),
-            observed_at=OBSERVED,
+            observed_at=publish_at,
         ) is None
 
         row = conn.execute(
@@ -110,7 +114,7 @@ def test_one_producer_publishes_exact_source_reference_not_second_tape(
                WHERE publication_id=%s""", (publication,),
         ).fetchone()
         assert row is not None
-        assert row[0] == session and row[1] == OBSERVED.replace(microsecond=0)
+        assert row[0] == session and row[1] == publish_at.replace(microsecond=0)
         assert row[2]["LTCUSDT"]["exec_id"] == evidence.exec_id
         assert row[2]["LTCUSDT"]["exchange_sequence"] == 123456
         assert row[3]["LTCUSDT"]["5"] == "2026-11-09T11:00:00+00:00"
