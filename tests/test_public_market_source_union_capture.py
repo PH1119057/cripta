@@ -5,7 +5,9 @@ No real connections are made in the test; no consumer is rewired or LIVE arm.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -18,7 +20,11 @@ from bybit_workbench.market_identity import (
 )
 from operations.monitoring import native_public_trade_source as native
 from operations.monitoring.public_market_source_union_capture import (
+    _closed_repair_windows,
+    _ClosedRepairTask,
     _connect_subscribe,
+    _fetch_repair_task,
+    _last_settled_close,
     parse_explicit_source_manifest,
 )
 
@@ -313,3 +319,130 @@ def test_single_websocket_per_category_batches_and_acks(
     assert socket in sockets
     assert early == []
     assert len(sockets) == 1
+
+
+
+def test_r03_repair_windows_reuse_exact_consumer_horizons_and_product() -> None:
+    manifest = json.loads(_manifest())
+    manifest.extend((
+        _required("MAYAK", "SPOT", "DOTUSDT", "CLOSED_KLINE", interval="1"),
+        _required("POSITION", "SPOT", "DOTUSDT", "CLOSED_KLINE", interval="1"),
+    ))
+    union = parse_explicit_source_manifest(
+        json.dumps(manifest), native_symbols=P90,
+    )
+    windows = _closed_repair_windows(union, native_symbols=P90)
+    assert len(windows) == 11  # 5 symbols × LINEAR 5m/15m + one SPOT 1m.
+    assert len({(w.key.instrument_id, w.key.timeframe) for w in windows}) == 11
+    assert all(w.required == 2600 for w in windows)
+    assert any(
+        w.key.product_category == "SPOT"
+        and w.key.external_symbol == "DOTUSDT"
+        for w in windows
+    )
+
+
+def test_missing_explicit_required_history_horizon_never_guessed() -> None:
+    rows = json.loads(_manifest())
+    for row in rows:
+        if (
+            row["dataset"] == "CLOSED_KLINE"
+            and row["symbol"] == "APTUSDT"
+            and row["timeframe"] == "15"
+        ):
+            row["lookback_bars"] = 0
+    union = parse_explicit_source_manifest(
+        json.dumps(rows), native_symbols=P90,
+    )
+    with pytest.raises(SourceManifestInvalid, match="REPAIR_WINDOW_NOT_DECLARED"):
+        _closed_repair_windows(union, native_symbols=P90)
+
+
+def test_settled_close_never_claims_a_just_finished_provider_bar() -> None:
+    at = datetime(2026, 11, 10, 18, 25, 4, tzinfo=UTC)
+    assert _last_settled_close(at, "5") == at.replace(
+        minute=20, second=0,
+    )
+    assert _last_settled_close(at + timedelta(seconds=10), "5") == at.replace(
+        second=0,
+    )
+
+
+def test_r03_network_worker_never_receives_a_postgres_connection() -> None:
+    now = datetime(2026, 11, 10, 18, 30, tzinfo=UTC)
+    union = parse_explicit_source_manifest(
+        _manifest(), native_symbols=P90,
+    )
+    window = _closed_repair_windows(union, native_symbols=P90)[0]
+    from bybit_workbench.market_data.public_closed_kline_gap_repair import (
+        ClosedGapPage,
+    )
+
+    boundary = _last_settled_close(now, window.key.timeframe)
+    page = ClosedGapPage(boundary, boundary, 1)
+    task = _ClosedRepairTask(window, boundary, (page,))
+    calls: list[tuple[object, object]] = []
+
+    def verified_page(source_key: object, requested: object, *, received_at: datetime):
+        calls.append((source_key, requested))
+        return (Mock(closed_at=boundary),)
+
+    result = _fetch_repair_task(
+        task, clock=lambda: now,
+        fetch_page=verified_page,
+        between_pages=lambda _delay: False,
+    )
+    assert len(result) == 1
+    assert calls == [(window.key, page)]
+    assert result[0][0].closed_at == boundary
+
+
+
+def test_native_producer_release_identity_exposes_r03_capability_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Old/native-only mode stays INERT; no switch silently activates repair."""
+    monkeypatch.setattr(native, "STATE_ROOT", tmp_path)
+    monkeypatch.setattr(native, "STATUS_PATH", tmp_path / "status.json")
+    monkeypatch.setattr(native, "_UNION_CAPTURE_FLAG", "0")
+    native._status("ACTIVE", session="a" * 32)
+    inert = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert inert["closed_gap_repair_mode"] == "INERT"
+    assert inert["trading_effect"] == "NONE"
+
+    monkeypatch.setattr(native, "_UNION_CAPTURE_FLAG", "1")
+    native._status("ACTIVE", session="a" * 32)
+    visible = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert visible["closed_gap_repair_mode"] == (
+        "ASYNC_SOURCE_NETWORK_ONLY_ONE_PG_WRITER"
+    )
+    assert visible["closed_klines_enabled"] is True
+    assert visible["trading_effect"] == "NONE"
+
+
+
+def test_invalid_r03_horizon_never_starts_socket_or_pg_epoch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import operations.monitoring.public_market_source_union_capture as source
+
+    rows = json.loads(_manifest())
+    for row in rows:
+        if row["dataset"] == "CLOSED_KLINE" and row["symbol"] == "LTCUSDT":
+            row["lookback_bars"] = 0
+    union = parse_explicit_source_manifest(
+        json.dumps(rows), native_symbols=P90,
+    )
+    opened: list[str] = []
+
+    def should_never_connect(*_args: object, **_kw: object) -> None:
+        opened.append("socket")
+        raise AssertionError("source must fail before any socket")
+
+    monkeypatch.setattr(source, "_connect_subscribe", should_never_connect)
+    with pytest.raises(SourceManifestInvalid, match="REPAIR_WINDOW_NOT_DECLARED"):
+        source.run_source_union(
+            Mock(), p90_symbols=P90, union=union,
+            producer_release_commit="a" * 40, publish_seconds=False,
+        )
+    assert not opened

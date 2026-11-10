@@ -14,6 +14,7 @@ from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.public_closed_kline_gap_repair import (
     ClosedGapPage,
     ClosedGapRepairUnavailable,
+    commit_verified_closed_gap_pages,
     fetch_verified_bybit_closed_page,
     plan_missing_closed_pages,
     repair_source_closed_history,
@@ -252,7 +253,7 @@ def test_epoch_changed_during_network_fetch_blocks_all_writes() -> None:
 @pytest.mark.parametrize("symbols,product,required", [
     (FIVE + ("BTCUSDT",), "LINEAR", 3),
     (("LTCUSDT",), "LINEAR", 3),
-    (FIVE, "SPOT", 3),
+    (FIVE, "LINEAR", 0),
     (FIVE, "LINEAR", 3001),
 ])
 def test_unapproved_or_unbounded_scope_fails_before_sql_or_network(
@@ -294,3 +295,89 @@ def test_page_must_contain_exact_expected_confirmed_utc_bars() -> None:
             key(), page, received_at=missing - STEP,
             opener=Mock(side_effect=AssertionError("no early fetch")),
         )
+
+
+
+def test_spot_kline_history_uses_distinct_market_identity() -> None:
+    close = THROUGH - STEP
+    response = payload((close,)).replace(
+        b'"category": "linear"', b'"category": "spot"',
+    )
+    opener = Mock(return_value=RESTResponse(response))
+    bars = fetch_verified_bybit_closed_page(
+        key(product="SPOT"), ClosedGapPage(close, close, 1),
+        received_at=NOW, opener=opener,
+    )
+    assert len(bars) == 1 and bars[0].closed_at == close
+    query = urllib.parse.parse_qs(urllib.parse.urlsplit(
+        opener.call_args.args[0].full_url,
+    ).query)
+    assert query["category"] == ["spot"]
+
+
+def test_preverified_batches_commit_once_from_one_source_epoch() -> None:
+    missing = THROUGH - STEP
+    db = FakeDB((THROUGH - 2 * STEP, THROUGH))
+    store = Mock()
+    store.ingest.return_value = 1
+    store.history.return_value = (
+        candle(THROUGH - 2 * STEP), candle(missing), candle(THROUGH),
+    )
+    with patch(
+        "bybit_workbench.market_data.public_closed_kline_gap_repair."
+        "SharedClosedCandleStore", return_value=store,
+    ):
+        result = commit_verified_closed_gap_pages(
+            db, key=key(), native_symbols=FIVE,
+            source_session_id=SOURCE_SESSION,
+            producer_release_commit=RELEASE,
+            through=THROUGH, required=3,
+            pages=(ClosedGapPage(missing, missing, 1),),
+            batches=((candle(missing),),), observed_at=NOW,
+        )
+    assert (result.inserted_bars, result.fetched_bars) == (1, 1)
+    assert db.epoch_reads == 1
+    store.ingest.assert_called_once()
+    store.history.assert_called_once_with(
+        through=THROUGH, required=3,
+    )
+
+
+def test_commit_changed_epoch_does_not_write_any_closed_bars() -> None:
+    missing = THROUGH - STEP
+    db = FakeDB(
+        (THROUGH - 2 * STEP, THROUGH),
+        epochs=(("GAP", BYBIT_PUBLIC_MARKET_SOURCE_ID, RELEASE),),
+    )
+    store = Mock()
+    with patch(
+        "bybit_workbench.market_data.public_closed_kline_gap_repair."
+        "SharedClosedCandleStore", return_value=store,
+    ), pytest.raises(ClosedGapRepairUnavailable, match="EPOCH_NOT_ACTIVE"):
+        commit_verified_closed_gap_pages(
+            db, key=key(), native_symbols=FIVE,
+            source_session_id=SOURCE_SESSION,
+            producer_release_commit=RELEASE,
+            through=THROUGH, required=3,
+            pages=(ClosedGapPage(missing, missing, 1),),
+            batches=((candle(missing),),), observed_at=NOW,
+        )
+    store.ingest.assert_not_called()
+
+
+def test_commit_rejects_partial_or_extra_provider_batches_before_sql() -> None:
+    missing = THROUGH - STEP
+    db = FakeDB(())
+    with pytest.raises(
+        ClosedGapRepairUnavailable, match="COMMIT_BAR_INVALID|COMMIT_PAGE_MISMATCH",
+    ):
+        commit_verified_closed_gap_pages(
+            db, key=key(), native_symbols=FIVE,
+            source_session_id=SOURCE_SESSION,
+            producer_release_commit=RELEASE,
+            through=THROUGH, required=3,
+            pages=(ClosedGapPage(missing, missing, 1),),
+            batches=((candle(missing), candle(THROUGH)),),
+            observed_at=NOW,
+        )
+    assert not db.queries
