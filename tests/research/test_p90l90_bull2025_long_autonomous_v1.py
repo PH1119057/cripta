@@ -89,9 +89,11 @@ def test_long_controller_fails_closed_without_losing_committed_days(
         raise ValueError("actual native day SHA changed")
 
     monkeypatch.setattr(ctl.chunk, "run", fail_after_first)
-    with lock_file.open("a+") as f:
-        with pytest.raises(ValueError, match="native day SHA changed"):
-            ctl.worker("f" * 40, f.fileno(), "2026-11-11T00:00:00Z")
+    with (
+        lock_file.open("a+") as f,
+        pytest.raises(ValueError, match="native day SHA changed"),
+    ):
+        ctl.worker("f" * 40, f.fileno(), "2026-11-11T00:00:00Z")
     assert done["days"] == 12
     assert statuses[-1][0] == "FAILED_STOPPED_CHECKPOINTS_PRESERVED"
     assert "native day SHA changed" in statuses[-1][1]["failure"]
