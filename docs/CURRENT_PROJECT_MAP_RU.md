@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.41
+**Версия:** 12.42
 **Дата:** 2026-11-10
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -5152,3 +5152,14 @@ Read-only production PostgreSQL statistics and bounded sample comparisons revise
 **Historical proof:** Issue #454 reported one-time owner-approved emergency truncate 2026-11-07: DB 16,573,840,407 B → 4,637,490,199 B, system free ~317 MiB → ~12 GiB. This was not automatic retention. Re-growth in the new three-day MAYAK/Dispatcher full-JSON tables is directly consistent with the current unbounded producer behavior. Original backup/restore evidence and previous owner waiver remain historical, NOT permission for new destructive work.
 
 **Revised conclusion:** `R01.STORAGE_BLOAT_CONFIRMED=YES`; `TRIPLE_JSON_DUPLICATION_SAMPLE=PASS`; `24H_RETENTION_EXISTS_IN_SOURCE_PR=YES`; `24H_RETENTION_DEPLOYED=NO`; `REAL_RECLAIMED_BYTES_THIS_REVIEW=0`; `CANON_ARCH_48=EXISTING`; `CAPACITY_EXPANSION_PREPARED=NO`. Before new 5→20 native producer rollout, prioritize existing #454/#482 retention + compact consumer parity, then measure steady-state WAL/heap/index growth and required P90 Exit raw retention. Current 7.1 GiB free is a *budget gate*, not a proof that more storage is intrinsically needed. Do NOT attempt PG cleanup/actor change on this read-only finding.
+
+
+### R01–R05 owner scope correction — CHECKED HERE 2026-11-10, Issue #470
+
+**OWNER DECISION:** текущий новый единый MarketSource собирает только пять реально торгуемых `APTUSDT / ARBUSDT / DOTUSDT / INJUSDT / LTCUSDT`. Ни 15, ни 20, ни все биржевые instruments не становятся производственным source universe без нового прямого указания владельца. Предыдущие датированные инвентаризации 20 MAYAK symbols остаются достоверными *историческими evidence существовавшего широкого наблюдения*, но не заказом расширить новый MarketSource. R01 exact manifest и R02–R05 current implementation scope теперь ограничены этими пятью; перечень необходимых SPOT/LINEAR topic/REST facts и cadence/TTL внутри пяти обязан быть проверен по real consumers, без пропусков.
+
+**READ-ONLY VERIFIED at correction checkpoint:** protected GitHub main and clean source mirror both `204f4039374ccfacb2be238c904f4c15b35ff7b5`; server runtime/current symlink points to release `f666dfc16d0a70b12cb371edbaad8826606dee27`. `cripta-native-public-trade-source.service` active PID 1221814, NRestarts=0; `cripta-universal-entry-observer.service` active PID 1641004, NRestarts=0. Process liveness is not source gap/Exit behavior proof. PR #571 closed-candle source code in GitHub main; the new source module/publication/PG migration are **NOT DEPLOYED**. Actual signed Exchange state, per-PID loaded file hashes, runtime market feed coverage, retention writer and full dataset QC NOT CHECKED HERE. No code/server/Exchange mutation at this checkpoint.
+
+**CAPABILITY GAP / HANDOFF:** Earlier R01 found active MAYAK context for 20 symbols. Its physical old capture/feature path cannot be silently stopped or treated as fully replaced by the newly bounded five-symbol producer; this is not R11/R14 readiness. Migration/retirement of that broad observational capability requires explicit owner-level resolution and audited BEFORE→AFTER owner/consumer/replacement evidence under ARCH §13 and DEV §59. Until then `MIGRATION_COMPLETE=NO`, `OLD_CAPABILITY_DECOMMISSION_ALLOWED=NO`. No new future symbols added. The original five-symbol native journal, independent signed account/Execution protection and already OPEN positions stay protected by existing fail-closed gates.
+
+**Roadmap delta:** R00 canon updated via this scoped documentation changeset after its protected merge; R01 manifest PARTIAL (five-symbol focus; broader old MAYAK separately inventoried), R02–R05 code portions merged/tested but not deployed and not fully quality verified; R06–R14 no new publication consumer cutover. Next allowed task: five-symbol exact required feeds/quality-gap/TTL and physical footprint READ ONLY, then bounded source-only code/PG16 tests, with no production producer restart or LIVE change.
