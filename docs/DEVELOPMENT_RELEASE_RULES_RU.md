@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.9 · 2026-11-10
+**Версия:** 2.10 · 2026-11-11
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2488,3 +2488,11 @@ atomic replace, ownership/mode, backup/recovery и approved management rail
 5-symbol native cursors, GAP/rollback, independent signed OPEN protection,
 loaded identity. Ни один R01 quality TTL не даёт права автоматически
 менять Strategy Entry TTL/Exit action, MARКET prices or Bybit exchange.
+
+### 59.3 R04 сопутствующее сокращение MAYAK 20→7 — owner-approved release boundaries (2026-11-11, #470)
+
+Действующий **MAYAK v2** допускается переключить со старого 20-symbol observation universe на ровно `APTUSDT,ARBUSDT,DOTUSDT,INJUSDT,LTCUSDT,BTCUSDT,ETHUSDT`. Пять native/R04 symbols не расширять; R05 publication остаётся inert до своей отдельной приёмки. Implemented config/code обязаны брать один exact validated symbol set; избыточные default/EnvironmentFile/overrides и duplicate subscriptions не должны молча возвращать 20 symbols.
+
+До физического изменения: DEV §50.4 сверить branch/job/dirty/worktree; current actual `cripta-mayak-v2.service` unit/environment и `MAYAK_V2_SYMBOLS`, code load/release identity, 20→7 consumer dependency matrix, source/fault epoch, last immutable snapshot and BTC/ETH anchors. RED→GREEN тесты exact seven/13 exclusions, duplicate/unknown symbol rejected, source subscription budgets (SPOT 10 and LINEAR 30), first WARMUP and Dispatcher context/coverage. Controlled management release/rollback, observed PG/status/quality and independent signed Exit obligations mandatory; no direct unreviewed unit edit, restart or new writer. Changing a running native producer in the same full release still requires §50.5.1 source GAP/cursor evidence.
+
+Owner tolerates finite storage growth and authorizes a smaller incoming panel, **not** corruption or unbounded disk exhaustion: production PostgreSQL/WAL/backup capacity, actual new R04 write rate and safe bounded retention remain real preflight gates. No speculative deletion of already stored context/irreplaceable trade records; separate provenance-preserving archive/purge after checked readers and backup only. No release invocation from mere documentation/source sync. `OWNER_DECISION=YES`; `MAYAK_SCOPE_AFTER=SEVEN`; `SOURCE_NATIVE_SCOPE=FIVE`; `DEPLOYED=NOT_VERIFIED`; `LIVE_ARM=NO`.
