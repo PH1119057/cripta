@@ -23,8 +23,6 @@ Server actor/path contract (DEV §5.1):
 from __future__ import annotations
 
 import argparse
-import fcntl
-import hashlib
 import json
 import os
 import pathlib
@@ -222,6 +220,8 @@ def independent_qc(side: str) -> dict:
 
 
 def worker(source_head: str) -> None:
+    import fcntl  # Linux research worker only, never imported by Windows CI
+
     prepare(source_head)
     with (OUT / "worker.lock").open("a+") as lock:
         fcntl.flock(lock.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
