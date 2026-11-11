@@ -54,11 +54,19 @@ class PublicSecondAccumulator:
             raise PublicSourceSecondUnavailable("PUBLIC_FEED_RECEIVER_NOT_UTC")
         return at.replace(microsecond=0)
 
-    def invalidate_market(self, instrument_id: str) -> None:
-        """Transport reconnect invalidates book and ticker; never stale READY."""
+    def invalidate_book(self, instrument_id: str) -> None:
+        """A book delta/sequence fault must not erase independent ticker facts."""
         self._books.pop(instrument_id, None)
+
+    def invalidate_ticker(self, instrument_id: str) -> None:
+        """Only an invalid ticker or a full transport reset clears ticker state."""
         self._ticker.pop(instrument_id, None)
         self._ticker_seen.pop(instrument_id, None)
+
+    def invalidate_market(self, instrument_id: str) -> None:
+        """Full transport reconnect invalidates all in-memory market fields."""
+        self.invalidate_book(instrument_id)
+        self.invalidate_ticker(instrument_id)
 
     def accept(self, event: PublicSourceFact, *, received_at: datetime) -> None:
         second = self._second(received_at)
