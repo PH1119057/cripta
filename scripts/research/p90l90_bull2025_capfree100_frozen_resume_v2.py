@@ -10,7 +10,6 @@ No trading, service, DB, or Exchange mutation.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import importlib
 import json
 import os
@@ -144,25 +143,38 @@ def resume(root: Path, expected: str, driver, engine) -> dict:
     launch_path = OUT / "resume_launch_v2.json"
     if launch_path.exists() or launch_path.is_symlink():
         raise FileExistsError("resume was already launched; reconcile existing job")
+    import fcntl  # Linux only; keeps Windows test discovery importable
+
     with (OUT / "worker.lock").open("a+") as lock:
         try:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise RuntimeError("CAPFREE100 worker already owns the lock") from exc
-        # Exact job spawn; the original worker acquires this same flock.
-        # The parent must release before the child attempts acquisition.
-        with (OUT / "controller.log").open("a", encoding="utf-8") as log:
-            cmd = [sys.executable, "-B", str(root / SOURCE_REL), "--worker",
-                   "--source-head", expected]
-            proc = subprocess.Popen(
-                cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                start_new_session=True, close_fds=True, cwd=str(root),
-            )
-        record = {**proof, "status": "RESUME_LAUNCHED_NOT_YET_VERIFIED",
-                  "pid": proc.pid, "log": str(OUT / "controller.log")}
+        # Publish durable single-launch intent BEFORE spawning. The worker lock
+        # is released before the child attempts to acquire its own lock.
+        intent = {**proof, "status": "RESUME_LAUNCH_INTENT", "pid": None}
         with launch_path.open("x", encoding="utf-8") as handle:
-            json.dump(record, handle, sort_keys=True, indent=2)
+            json.dump(intent, handle, sort_keys=True, indent=2)
             handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+
+    with (OUT / "controller.log").open("a", encoding="utf-8") as log:
+        cmd = [sys.executable, "-B", str(root / SOURCE_REL), "--worker",
+               "--source-head", expected]
+        proc = subprocess.Popen(
+            cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+            start_new_session=True, close_fds=True, cwd=str(root),
+        )
+    record = {**proof, "status": "RESUME_LAUNCHED_NOT_YET_VERIFIED",
+              "pid": proc.pid, "log": str(OUT / "controller.log")}
+    temporary = OUT / "resume_launch_v2.tmp"
+    with temporary.open("x", encoding="utf-8") as handle:
+        json.dump(record, handle, sort_keys=True, indent=2)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    temporary.replace(launch_path)
     return record
 
 
