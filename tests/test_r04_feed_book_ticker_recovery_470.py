@@ -15,13 +15,11 @@ from bybit_workbench.market_data.public_source_event_codec import (
 )
 from bybit_workbench.market_data.public_source_second_store import (
     PublicSecondAccumulator,
+    PublicSourceSecondUnavailable,
 )
 from operations.monitoring.public_market_source_union_capture import (
     _BookResubscribe,
     _invalidate_scoped_market,
-)
-from bybit_workbench.market_data.public_source_second_store import (
-    PublicSourceSecondUnavailable,
 )
 
 AT = datetime(2026, 11, 11, 10, 15, tzinfo=UTC)
