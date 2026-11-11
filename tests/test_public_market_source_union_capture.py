@@ -482,6 +482,18 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
     connect_order: list[str] = []
     progress: list[tuple[str, str]] = []
     gaps: list[str] = []
+    quality_rows: list[object] = []
+    writer_threads: list[int] = []
+
+    def persist_quality(_conn: object, *, events: tuple, **_kw: object) -> int:
+        import threading
+
+        writer_threads.append(threading.get_ident())
+        quality_rows.extend(events)
+        return len(events)
+
+    monkeypatch.setattr(source, "persist_public_source_quality_events",
+                        persist_quality)
 
     class Socket:
         def __init__(self, product: str) -> None:
@@ -546,6 +558,18 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
         state == "ACTIVE" and reason.startswith("R04_OPTIONAL:")
         for state, reason in progress
     )
+    assert quality_rows
+    assert all(getattr(event, "product") == "SPOT"
+               or failure_mode == "bad_linear_book"
+               for event in quality_rows)
+    assert any(
+        getattr(event, "quality") in ("GAP", "NO_DATA", "UNKNOWN")
+        for event in quality_rows
+    )
+    # No network worker is a PostgreSQL writer.
+    import threading
+
+    assert writer_threads and set(writer_threads) == {threading.get_ident()}
 
 
 def test_r04_cannot_isolate_a_required_spot_as_optional(
