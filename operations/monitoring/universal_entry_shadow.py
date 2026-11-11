@@ -2718,7 +2718,6 @@ def _run_observer_epoch(
         history = cache_approved_bybit_history(
             connection, symbol=symbol, history=history,
             observed_at=observed, producer_release_commit=LOADED_COMMIT,
-            verify_only=R03_NATIVE_CANDLE_READER,
             source_wait_seconds=(45.0 if R03_NATIVE_CANDLE_READER else 0.0),
         )
         oi_history = _fetch_oi_history(symbol) if required_oi_symbols else ()
@@ -3087,7 +3086,6 @@ def _run_observer_epoch(
                     observed_at=datetime.now(UTC),
                     producer_release_commit=LOADED_COMMIT,
                     source_transport="BYBIT_WS_KLINE",
-                    verify_only=R03_NATIVE_CANDLE_READER,
                     source_wait_seconds=(
                         5.0 if R03_NATIVE_CANDLE_READER else 0.0
                     ),

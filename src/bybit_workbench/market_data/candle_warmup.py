@@ -72,13 +72,16 @@ def cache_approved_bybit_history(
     from Strategy ID, account balance, a coin name or a fabricated market source.
     It resolves the one active registered Bybit MarketSource/Instrument pair.
     """
-    # R03 protected OPEN Exit source-replay keeps its immutable, hash-pinned
-    # source implementation. All Observer calls, including that protected
-    # replay, become read-only when the explicitly reviewed native candle
-    # ownership unit flag is active; a missing native bar must fail closed.
-    if os.environ.get("CRIPTA_R03_NATIVE_CANDLE_READER") == "ENABLED":
-        verify_only = True
-        source_wait_seconds = max(source_wait_seconds, 5.0)
+    # R03 transfers precisely these native LINEAR 1/5/15 candle keys.
+    # All other symbols and intervals retain their existing writer until the
+    # separately accepted roadmap scope; the service-wide env flag alone
+    # cannot silently revoke unrelated Observer source ownership.
+    r03_reader_enabled = (
+        os.environ.get("CRIPTA_R03_NATIVE_CANDLE_READER") == "ENABLED"
+    )
+    r03_symbols = frozenset((
+        "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+    ))
     matches = connection.execute(
         """SELECT s.market_source_id,s.venue_id,i.instrument_id,
                   i.external_symbol,i.product_category
@@ -94,6 +97,17 @@ def cache_approved_bybit_history(
         raise RuntimeError("CANDLE_APPROVED_BYBIT_MARKET_SOURCE_AMBIGUOUS")
     result: dict[str, tuple[Candle, ...]] = {}
     for tf, rows in history.items():
+        # Protected OPEN-restart code can remain byte-for-byte SHA-pinned:
+        # the common adapter owns the exact consumer writer/reader decision.
+        r03_native_owned = (
+            r03_reader_enabled
+            and symbol in r03_symbols
+            and tf in ("1", "5", "15")
+        )
+        read_only = verify_only or r03_native_owned
+        read_wait = max(
+            source_wait_seconds, 5.0 if r03_native_owned else 0.0,
+        )
         (source_id, venue_id, instrument_id, exact_symbol, product) = matches[0]
         key = MarketCandleKey(
             market_source_id=source_id, venue_id=venue_id,
@@ -104,15 +118,15 @@ def cache_approved_bybit_history(
         # strategy already has a cached subset of this source.
         full = verify_closed_window(key, rows)
         store = SharedClosedCandleStore(connection, key)
-        if verify_only:
+        if read_only:
             # R03 handoff: the Observer can still receive public REST/WS
             # candles for its existing Strategy transport, but must NEVER
             # be a second writer in the canonical MarketSource table.
             # Wait a small bounded interval for the separately committing
             # native source. Never synthesize, overwrite or accept a conflict.
-            if not 0.0 <= source_wait_seconds <= 120.0:
+            if not 0.0 <= read_wait <= 120.0:
                 raise ValueError("CANDLE_SOURCE_READER_WAIT_INVALID")
-            deadline = time.monotonic() + source_wait_seconds
+            deadline = time.monotonic() + read_wait
             while True:
                 try:
                     canonical = store.history(

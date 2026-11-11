@@ -32,6 +32,7 @@ from operations.monitoring import native_public_trade_source as source
 from operations.monitoring.native_public_trade_source import (
     NativeSourceInputUnverified,
     _acquire_exclusive_producer,
+    _enable_source_union_autocommit,
     _persist_frame,
     _session_start,
 )
@@ -438,3 +439,81 @@ def test_pg_513_plus_same_sequence_original_ids_preserve_atomic_frame_order() ->
                 WHERE source_session_id=%s AND external_symbol='LTCUSDT'""",
             (session,),
         ).fetchone() == (2, 0, 12121, next_event.exec_id)
+
+
+def test_r03_source_gap_select_cannot_hold_an_uncommitted_original_frame() -> None:
+    """Disposable PG: prove a second session sees the frame before shutdown.
+
+    R03 production failure previously held an implicit 6-minute outer
+    transaction after a SELECT and hid all native trades/cursors from
+    Observer. This exact test uses two independent PostgreSQL connections.
+    """
+    session = uuid4().hex
+    evidence = _event("ci-r03-committed-original-" + uuid4().hex)
+    with _db() as writer, _db() as independent_reader:
+        # Native source normally connects in default non-autocommit mode.
+        writer.autocommit = False
+        _acquire_exclusive_producer(writer)
+        _enable_source_union_autocommit(writer)
+        assert writer.autocommit is True
+        _session_start(writer, session)
+        assert independent_reader.execute(
+            "SELECT state FROM analytics.native_public_trade_source_sessions "
+            "WHERE source_session_id=%s", (session,),
+        ).fetchone() == ("ACTIVE",)
+
+        # This is the exact kind of source gap planner / coverage read
+        # that started a hidden outer transaction in the broken R03.
+        writer.execute(
+            "SELECT count(*) FROM analytics.closed_candles "
+            "WHERE external_symbol=%s", ("LTCUSDT",),
+        ).fetchone()
+        assert writer.info.transaction_status == psycopg.pq.TransactionStatus.IDLE
+
+        _persist_frame(
+            writer, session=session, frame_number=1, facts=(evidence,),
+        )
+        assert writer.info.transaction_status == psycopg.pq.TransactionStatus.IDLE
+        assert independent_reader.execute(
+            "SELECT count(*) FROM analytics.native_public_trade_source_events "
+            "WHERE source_session_id=%s", (session,),
+        ).fetchone() == (1,)
+        assert independent_reader.execute(
+            "SELECT frame_number,exec_id FROM "
+            "analytics.native_public_trade_source_cursors "
+            "WHERE source_session_id=%s AND external_symbol=%s",
+            (session, "LTCUSDT"),
+        ).fetchone() == (1, evidence.exec_id)
+
+        # Session advisory lock is still held across two independent COMMITs.
+        with pytest.raises(
+            NativeSourceInputUnverified, match="WRITER_ALREADY_OWNED",
+        ):
+            _acquire_exclusive_producer(independent_reader)
+        _persist_frame(
+            writer, session=session, frame_number=2,
+            facts=(replace(
+                evidence, exec_id="ci-r03-second-exec-" + uuid4().hex,
+                exchange_sequence=evidence.exchange_sequence + 1,
+                event_at=evidence.event_at + timedelta(milliseconds=10),
+            ),),
+        )
+        assert independent_reader.execute(
+            "SELECT count(*) FROM analytics.native_public_trade_source_events "
+            "WHERE source_session_id=%s", (session,),
+        ).fetchone() == (2,)
+        assert writer.info.transaction_status == psycopg.pq.TransactionStatus.IDLE
+
+
+def test_r03_autocommit_refuses_to_erase_a_dirty_outer_transaction() -> None:
+    with _db() as writer:
+        writer.autocommit = False
+        writer.execute("SELECT 1")
+        assert writer.info.transaction_status == psycopg.pq.TransactionStatus.INTRANS
+        with pytest.raises(
+            NativeSourceInputUnverified,
+            match="NATIVE_SOURCE_UNION_TRANSACTION_NOT_IDLE",
+        ):
+            _enable_source_union_autocommit(writer)
+        assert writer.autocommit is False
+        writer.rollback()
