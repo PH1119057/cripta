@@ -9,7 +9,6 @@ PG consumer BEFORE calling the writer. No root/background fallback.
 """
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -201,7 +200,7 @@ def bootstrap_future_entry_checkpoints(
     proof: R06FreshEntryProof,
     strategies: tuple[tuple[str, str, str, str], ...],
     consumer_release_commit: str,
-    verified_signed_flat_preflight: Callable[[], None],
+    active_p90_bundles: tuple[object, ...],
 ) -> tuple[str, ...]:
     """Atomically INITIALIZE the EXISTING P90 cursor at the future boundary.
 
@@ -220,15 +219,42 @@ def bootstrap_future_entry_checkpoints(
             or len(part[2]) != 64 or len(part[3]) != 64
             for part in strategies
         )
+        or len(active_p90_bundles) != 2
         or len(consumer_release_commit) != 40
         or any(c not in "0123456789abcdef" for c in consumer_release_commit)
-        or not callable(verified_signed_flat_preflight)
+        or {getattr(getattr(bundle, "card", None), "strategy_id", None)
+            for bundle in active_p90_bundles} != set(_IDS)
     ):
         raise R06FreshCutoverBlocked("R06_BOOTSTRAP_CONTRACT_INVALID")
 
-    # The authorized caller must invoke the real existing signed MAIN+SUB
-    # credential-local proof; the callback is deliberately not a boolean.
-    verified_signed_flat_preflight()
+    # The exact existing credential-local MAIN/SUB signed proof is required.
+    # No caller-provided bool, no-op lambda, status 0/0, or debug callback is
+    # admissible. It checks account routes, generations and private IPC.
+    from operations.monitoring.p90l90_real_source_bootstrap import (
+        preflight_p90_real_private_flat_source,
+    )
+
+    for name, version, entry_fp, exit_fp in strategies:
+        matches = [
+            bundle for bundle in active_p90_bundles
+            if getattr(getattr(bundle, "card", None), "strategy_id", None)
+            == name
+            and getattr(getattr(bundle, "card", None), "strategy_version", None)
+            == version
+            and getattr(
+                getattr(bundle, "entry_plan", None),
+                "entry_plan_fingerprint", None,
+            ) == entry_fp
+            and getattr(
+                getattr(bundle, "exit_plan", None),
+                "exit_plan_fingerprint", None,
+            ) == exit_fp
+        ]
+        if len(matches) != 1:
+            raise R06FreshCutoverBlocked("R06_SIGNED_P90_PLAN_SCOPE_UNVERIFIED")
+    preflight_p90_real_private_flat_source(
+        connection, bundles=active_p90_bundles,
+    )
 
     pin = proof.pin
     with connection.transaction():
