@@ -83,6 +83,16 @@ class PublicSecondAccumulator:
         if len({t for _, t in self._pending} | {second}) > self._max_pending:
             raise PublicSourceSecondUnavailable("PUBLIC_FEED_BACKPRESSURE_UNVERIFIED")
 
+        # Verify orderbook sequence/ladder BEFORE constructing any compact
+        # second or advancing its source-time range. A rejected delta is
+        # never a zero-trade/no-book market observation.
+        book_data: dict[str, object] | None = None
+        if event.kind == "BOOK":
+            book = self._books.setdefault(
+                event.instrument_id, OrderbookContinuity(),
+            )
+            book_data = dict(book.apply(event))
+
         key = (event.instrument_id, second)
         if key not in self._pending:
             self._pending[key] = {
@@ -144,8 +154,7 @@ class PublicSecondAccumulator:
             row["ticker"] = dict(ticker)
             row["ticker_field_times"] = dict(seen)
         else:
-            book = self._books.setdefault(event.instrument_id, OrderbookContinuity())
-            row["book"] = dict(book.apply(event))
+            row["book"] = book_data
 
     def ready_seconds(self, *, before: datetime) -> tuple[dict[str, Any], ...]:
         """Peek frozen second rows, do not drop on failed DB transaction."""
