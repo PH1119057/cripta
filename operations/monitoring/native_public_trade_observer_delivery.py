@@ -136,6 +136,39 @@ def active_native_observer_source(
     return source
 
 
+def acknowledge_native_technical_batch(
+    connection: Any,
+    *,
+    symbols: tuple[str, ...],
+    source_checkout: Path,
+    loaded_consumer_commit: str,
+    observed_at: datetime,
+    limit: int = 256,
+) -> NativeObserverDeliveryResult:
+    """Receipt-only PG transport on the same existing Observer checkpoint.
+
+    The caller may be in a separate financial BLOCKED state; this adapter
+    never checks, repairs or waives that state. It verifies the sole authentic
+    source epoch and original provider identity, and ACKs only its dedicated
+    technical transport cursor in the same transaction as decoding. No
+    Strategy/Exit/Execution callback can be passed through this API.
+    """
+    source = active_native_observer_source(
+        connection,
+        symbols=symbols,
+        source_checkout=source_checkout,
+        loaded_consumer_commit=loaded_consumer_commit,
+        observed_at=observed_at,
+    )
+    return consume_native_observer_batch(
+        connection,
+        source=source,
+        observed_at=observed_at,
+        on_trade=validate_technical_native_receipt,
+        limit=limit,
+    )
+
+
 def consume_native_observer_batch(
     connection: Any,
     *,
