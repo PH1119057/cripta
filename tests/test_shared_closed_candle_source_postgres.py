@@ -13,6 +13,7 @@ import psycopg
 import pytest
 
 from bybit_workbench.domain.models import Candle
+from bybit_workbench.market_data.candle_warmup import load_verified_r03_native_closed_seed
 from bybit_workbench.market_data.shared_closed_candles import (
     MarketCandleKey,
     SharedClosedCandleStore,
@@ -113,3 +114,55 @@ def test_pg16_shared_candle_one_row_per_source_not_per_strategy() -> None:
         # Failed equality check never silently changes original source.
         assert two.history(through=candles[-1].closed_at, required=2) == candles
         raise RuntimeError("ROLLBACK_SHARED_CANDLE")
+
+
+def test_pg16_r03_source_seed_reads_committed_window_without_new_insert() -> None:
+    """Real disposable PG16: exact native reader is no second candle writer."""
+    assert DSN is not None
+    with (
+        psycopg.connect(DSN) as conn,
+        pytest.raises(RuntimeError, match="ROLLBACK_R03_CLOSED_READER"),
+        conn.transaction(),
+    ):
+        conn.execute(
+            """INSERT INTO identity.instruments(
+                    instrument_id,venue_id,product_category,external_symbol)
+               VALUES(%s,%s,%s,%s)
+               ON CONFLICT (instrument_id) DO NOTHING""",
+            (KEY.instrument_id, KEY.venue_id,
+             KEY.product_category, KEY.external_symbol),
+        )
+        conn.execute("SET LOCAL ROLE cripta")
+        candles = tuple(_candle(i) for i in range(6))
+        store = SharedClosedCandleStore(conn, KEY)
+        assert store.ingest(
+            candles, producer_release_commit="a" * 40,
+            transport="BYBIT_WS_KLINE",
+            observed_at=T + timedelta(minutes=26),
+        ) == 6
+        prior_count = conn.execute(
+            """SELECT count(*) FROM analytics.closed_candles
+                WHERE market_source_id=%s AND instrument_id=%s
+                  AND timeframe='5'""",
+            (KEY.market_source_id, KEY.instrument_id),
+        ).fetchone()[0]
+        # +15s provider settling is mandatory. At T+25m+20s the
+        # latest fully settled 5m boundary is exactly T+25m.
+        rows = load_verified_r03_native_closed_seed(
+            conn, symbol="LTCUSDT", required_counts={"5": 6},
+            observed_at=T + timedelta(minutes=25, seconds=20),
+        )
+        assert rows == {"5": candles}
+        assert conn.execute(
+            """SELECT count(*) FROM analytics.closed_candles
+                WHERE market_source_id=%s AND instrument_id=%s
+                  AND timeframe='5'""",
+            (KEY.market_source_id, KEY.instrument_id),
+        ).fetchone()[0] == prior_count
+        # An advanced boundary with no native close must FAIL.
+        with pytest.raises(RuntimeError, match="CANDLE_WARMUP_END_NOT_PROVEN"):
+            load_verified_r03_native_closed_seed(
+                conn, symbol="LTCUSDT", required_counts={"5": 6},
+                observed_at=T + timedelta(minutes=30, seconds=20),
+            )
+        raise RuntimeError("ROLLBACK_R03_CLOSED_READER")
