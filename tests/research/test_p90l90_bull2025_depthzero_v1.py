@@ -1,8 +1,8 @@
 """Strict-zero 2025 research admission, lineage and fail-closed launch tests."""
 from __future__ import annotations
 
-from decimal import Decimal as D
 import json
+from decimal import Decimal as D
 from types import SimpleNamespace
 
 import pytest
