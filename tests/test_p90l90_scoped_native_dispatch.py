@@ -63,6 +63,7 @@ class DB:
     def __init__(self, now: datetime, *, initialized: bool = True):
         self.now = now
         self.initialized = initialized
+        self.checkpoint = (0, 0)
         self.events = []
         self.effects = []
         self.queries = []
@@ -108,7 +109,7 @@ class DB:
             return Rows(self.publication)
         if "FROM strategy_entry.p90_scoped_native_consumer_checkpoints" in sql:
             return Rows(
-                (0, 0, ENTRY_FP, EXIT_FP, SOURCE_RELEASE, CONSUMER_RELEASE)
+                (*self.checkpoint, ENTRY_FP, EXIT_FP, SOURCE_RELEASE, CONSUMER_RELEASE)
                 if self.initialized else None
             )
         if "FROM analytics.native_public_trade_source_events" in sql:
@@ -303,7 +304,7 @@ def test_pinned_path_never_initializes_missing_consumer_checkpoint():
     assert db.events == ["BEGIN", "ROLLBACK"]
 
 
-def test_pinned_publication_already_behind_checkpoint_is_blocked():
+def test_pinned_expired_watermark_does_not_dispatch_or_ack():
     now = datetime.now(UTC)
     db = DB(now)
     for native in db.publication_native.values():
@@ -312,3 +313,13 @@ def test_pinned_publication_already_behind_checkpoint_is_blocked():
     # Existing cursor at (0,0) is not beyond the pin: no new rows may run.
     assert pinned_call(db, lambda *_: db.events.append("ENGINE")) == ()
     assert db.events == ["BEGIN", "COMMIT"]
+
+
+def test_pinned_checkpoint_cannot_run_ahead_of_publication():
+    db = DB(datetime.now(UTC))
+    db.checkpoint = (2, 0)
+    with pytest.raises(
+        P90ScopedConsumerBlocked, match="BEHIND_DECISION_CHECKPOINT",
+    ):
+        pinned_call(db, lambda *_: db.events.append("ENGINE"))
+    assert db.events == ["BEGIN", "ROLLBACK"]
