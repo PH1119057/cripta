@@ -98,7 +98,8 @@ def _mode_source() -> tuple[bytes, os.stat_result]:
         or st.st_gid != expected_group or stat.S_IMODE(st.st_mode) != 0o640
         or CONFIG.parent.is_symlink() or parent.st_uid != 0
         or not stat.S_ISDIR(parent.st_mode)
-        or stat.S_IMODE(parent.st_mode) & 0o002
+        or parent.st_gid != expected_group
+        or stat.S_IMODE(parent.st_mode) != 0o750
     ):
         raise R06ModeSwitchBlocked("R06_ENV_ACTOR_OWNER_MODE_OR_PARENT_DRIFT")
     contents = CONFIG.read_bytes()
@@ -260,7 +261,9 @@ def _rollback_inner(*, automatic: bool) -> None:
         return
     if state not in ("PREPARED", "FLAG_WRITTEN", "STARTED", "WAITING", "ACTIVE"):
         raise R06ModeSwitchBlocked("R06_ROLLBACK_STATE_AMBIGUOUS")
-    _verify_release()
+    release = _verify_release()
+    if data.get("release") != release:
+        raise R06ModeSwitchBlocked("R06_ROLLBACK_RELEASE_LINEAGE_CHANGED")
     original, edited = data.get("original_sha"), data.get("edited_sha")
     if not isinstance(original, str) or not isinstance(edited, str):
         raise R06ModeSwitchBlocked("R06_ROLLBACK_HASHES_MISSING")

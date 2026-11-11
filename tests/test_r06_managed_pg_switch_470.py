@@ -166,7 +166,7 @@ def test_rollback_never_accepts_altered_config_or_backup(monkeypatch):
     altered = b"UNEXPECTED_MALICIOUS_EDIT=yes\n"
     modified = switch._new_config(original)
     marker = {
-        "state": "ACTIVE",
+        "state": "ACTIVE", "release": "a" * 40,
         "original_sha": switch._sha(original),
         "edited_sha": switch._sha(modified),
     }
@@ -196,7 +196,8 @@ def test_automatic_rollback_uses_local_off_gate_not_missing_signed_proof(
     original = b"R06_UNRELATED_SETTING=unchanged\n"
     modified = switch._new_config(original)
     marker = {
-        "state": "FLAG_WRITTEN", "original_sha": switch._sha(original),
+        "state": "FLAG_WRITTEN", "release": "a" * 40,
+        "original_sha": switch._sha(original),
         "edited_sha": switch._sha(modified),
     }
     backup = SimpleNamespace(
@@ -251,7 +252,7 @@ def test_existing_old_observer_does_not_get_restart_on_early_failure(
 ):
     original = b"R06_EXISTING=old\n"
     marker = {
-        "state": "PREPARED",
+        "state": "PREPARED", "release": "a" * 40,
         "original_sha": switch._sha(original),
         "edited_sha": switch._sha(switch._new_config(original)),
     }
@@ -289,3 +290,17 @@ def test_no_switch_if_source_mirror_has_a_different_commit(monkeypatch):
         probe.R06SwitchPreflightBlocked, match="SOURCE_INSTALLED_HEAD",
     ):
         probe.assert_source_mirror_matches_loaded("a" * 40)
+
+
+def test_rollback_cannot_reuse_foreign_release_state(monkeypatch):
+    monkeypatch.setattr(
+        switch, "_load_marker",
+        lambda: {"state": "FLAG_WRITTEN", "release": "b" * 40},
+    )
+    monkeypatch.setattr(switch, "_verify_release", lambda: "a" * 40)
+    monkeypatch.setattr(
+        switch, "_service",
+        lambda _mode: pytest.fail("wrong release cannot mutate Observer"),
+    )
+    with pytest.raises(switch.R06ModeSwitchBlocked, match="RELEASE_LINEAGE"):
+        switch._rollback_inner(automatic=True)
