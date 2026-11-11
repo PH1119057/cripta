@@ -12,6 +12,7 @@ from bybit_workbench.universal_entry.p90_r06_no_order_state import (
     R06NoOrderStateBlocked, advance_symbol, dump_symbol, restore_symbol,
 )
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS
 from bybit_workbench.universal_entry.p90l90_scoped_native_source import OrderedNativeTrade
 from operations.monitoring import r06_pg_only_entry as mod
 
@@ -20,11 +21,11 @@ BOUNDARY = BASE + timedelta(days=9)
 D = Decimal
 SYMBOL = "LTCUSDT"
 
-def candles(minutes: int, count: int) -> tuple[Candle, ...]:
+def candles(minutes: int, count: int, symbol: str = SYMBOL) -> tuple[Candle, ...]:
     delta = timedelta(minutes=minutes)
     return tuple(
         Candle(
-            symbol=SYMBOL,timeframe=str(minutes),
+            symbol=symbol,timeframe=str(minutes),
             opened_at=BASE + i*delta,
             closed_at=BASE + (i+1)*delta,
             open=D("100"),high=D("110"),low=D("90"),
@@ -130,7 +131,8 @@ class FakeWriter:
 def controlled():
     pin=SimpleNamespace(
         publication_id=45,source_session_id="a"*32,
-        closed_refs={SYMBOL:{"5":BOUNDARY.isoformat()}},
+        closed_refs={sym:{"5":BOUNDARY.isoformat()}
+                     for sym in ALLOWED_SYMBOLS[MAIN_ID]},
     )
     bundle=SimpleNamespace(
         card=SimpleNamespace(strategy_id=MAIN_ID),
@@ -138,6 +140,13 @@ def controlled():
         exit_plan=SimpleNamespace(exit_plan_fingerprint="c"*64),
     )
     return pin,bundle
+
+def scoped_history(history):
+    f,q=history
+    return {sym:{"5":f if sym==SYMBOL else candles(5,2592,sym),
+                 "15":q if sym==SYMBOL else candles(15,864,sym)}
+            for sym in ALLOWED_SYMBOLS[MAIN_ID]}
+
 
 def test_source_only_native_callback_and_cursor_share_publication_atomic_state(
     monkeypatch,history,controlled,
@@ -167,7 +176,7 @@ def test_source_only_native_callback_and_cursor_share_publication_atomic_state(
     engine=SimpleNamespace(process=lambda *_a,**_kw:(evaluated,))
     # Source-only test has no real execution side effects, just audit records.
     count=mod._observe_one(
-        writer,pin=pin,history={SYMBOL:{"5":f,"15":q}},
+        writer,pin=pin,history=scoped_history(history),
         source=object(),bundle=bundle,engine=engine,loaded="d"*40,
         at=BOUNDARY+timedelta(seconds=3),
     )
@@ -193,7 +202,7 @@ def test_idle_publication_advances_lineage_without_inventing_signal(
                         lambda *_a,**_kw: ())
     engine=SimpleNamespace(process=lambda *_a,**_kw:pytest.fail("ghost Entry"))
     assert mod._observe_one(
-        writer,pin=pin,history={SYMBOL:{"5":f,"15":q}},
+        writer,pin=pin,history=scoped_history(history),
         source=object(),bundle=bundle,engine=engine,loaded="d"*40,
         at=BOUNDARY+timedelta(seconds=3),
     ) == 0
@@ -226,7 +235,7 @@ def test_any_financial_effect_blocks_before_no_order_state_commit(
     )
     with pytest.raises(mod.R06PublishedEntryBlocked,match="FINANCIAL"):
         mod._observe_one(
-            writer,pin=pin,history={SYMBOL:{"5":f,"15":q}},
+            writer,pin=pin,history=scoped_history(history),
             source=object(),bundle=bundle,
             engine=SimpleNamespace(process=lambda *_a,**_kw:(unsafe,)),
             loaded="d"*40,at=BOUNDARY+timedelta(seconds=3),
