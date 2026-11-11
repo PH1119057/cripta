@@ -23,6 +23,29 @@ PLANS = (
 )
 
 
+def _bundles() -> tuple[object, ...]:
+    return tuple(
+        SimpleNamespace(
+            card=SimpleNamespace(strategy_id=name,strategy_version=version),
+            entry_plan=SimpleNamespace(entry_plan_fingerprint=entry_fp),
+            exit_plan=SimpleNamespace(exit_plan_fingerprint=exit_fp),
+        )
+        for name,version,entry_fp,exit_fp in PLANS
+    )
+
+
+@pytest.fixture(autouse=True)
+def signed_private_no_order_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+    from operations.monitoring import p90l90_real_source_bootstrap as private
+
+    # Disposable test only. Production import uses the exact real MAIN+SUB
+    # credential-local reader; no injectable callback is accepted there.
+    monkeypatch.setattr(
+        private, "preflight_p90_real_private_flat_source",
+        lambda *_args, **_kwargs: None,
+    )
+
+
 def _pin() -> SimpleNamespace:
     return SimpleNamespace(
         publication_id=15200,
@@ -201,18 +224,26 @@ class WriterDB:
         pytest.fail("unexpected SQL")
 
 
-def _bootstrap(db: WriterDB, signed=lambda: None) -> tuple[str, ...]:
+def _bootstrap(db: WriterDB) -> tuple[str, ...]:
     return mod.bootstrap_future_entry_checkpoints(
         db, proof=_proof(), strategies=PLANS,
         consumer_release_commit=CONSUMER_SHA,
-        verified_signed_flat_preflight=signed,
+        active_p90_bundles=_bundles(),
     )
 
 
-def test_one_signed_preflight_then_one_atomic_dual_strategy_bootstrap() -> None:
+def test_one_signed_preflight_then_one_atomic_dual_strategy_bootstrap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from operations.monitoring import p90l90_real_source_bootstrap as private
+
     db = WriterDB()
     auth: list[str] = []
-    result = _bootstrap(db, lambda: auth.append("SIGNED_MAIN_SUB"))
+    monkeypatch.setattr(
+        private, "preflight_p90_real_private_flat_source",
+        lambda *_a, **_k: auth.append("SIGNED_MAIN_SUB"),
+    )
+    result = _bootstrap(db)
     assert result == (mod.MAIN_ID, mod.SUB_ID)
     assert auth == ["SIGNED_MAIN_SUB"]
     assert db.inserted == [mod.MAIN_ID, mod.SUB_ID]
@@ -240,14 +271,21 @@ def test_pending_signed_disarmed_gates_prevent_any_bootstrap(
     assert "INSERT" not in db.calls
 
 
-def test_signed_proof_failure_does_not_open_a_transaction() -> None:
+def test_signed_proof_failure_does_not_open_a_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from operations.monitoring import p90l90_real_source_bootstrap as private
+
     db = WriterDB()
 
-    def missing() -> None:
+    def missing(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("SIGNED_MAIN_SUB_FLAT_PROOF_UNAVAILABLE")
 
+    monkeypatch.setattr(
+        private, "preflight_p90_real_private_flat_source", missing,
+    )
     with pytest.raises(RuntimeError, match="SIGNED_MAIN_SUB"):
-        _bootstrap(db, missing)
+        _bootstrap(db)
     assert db.calls == []
 
 
