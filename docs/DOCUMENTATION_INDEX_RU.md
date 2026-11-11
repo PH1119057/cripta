@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.55
+**Версия:** 3.54
 **Дата:** 2026-11-11
 **Статус:** канонический индекс документации
 
@@ -1815,7 +1815,3 @@ routes и Project Instructions не меняются.
 Это не добавляет BTC/ETH в **пятисимвольный native MarketSource R01–R05**, не отменяет обязательства независимых trading/Exit/Position/Safety consumers, не даёт права удалять исторические записи, архивы, WAL или audit по одному owner scope решению. Разрешение терпеть свободные 19 ГБ не заменяет проверку PostgreSQL+WAL+backup+rollback перед физической активацией R04. R05 и LIVE без изменений; source code/CI не равны DEPLOY/RUNTIME VERIFIED.
 
 No new current docs, changes to Project Source set (11), paths, pre-read, root README/AGENTS or Project Instructions bootstrap. `CANON=AFTER_PROTECTED_MERGE`; `MAYAK7_SOURCE_IMPLEMENTED=NO`; `MAYAK7_RUNTIME=NO`.
-
-## 77. R04 owner-approved bounded storage proof for physical source cutover — 2026-11-11 (#470)
-
-Прямое решение владельца разрешает R04 five-symbol full public union с bounded **пост-cutover** измерением нового PG/WAL/backup growth вместо неопределённого ожидания предрелизного суточного роста, при наличии текущего rollback, signed MAIN/SUB flat/protection, 10 GiB minimum data-disk safety reserve after backup и exact one-native-writer GAP/Observer gates. Единственный owner этого R04 исключения — OBS §7.10.5.4; storage/release actor gates по-прежнему ARCH §48 / DEV §50.5.1, §59. Если post-cutover rate/headroom или source/Observer parity не доказаны, R04 нельзя закрывать. OWNER DECISION не включает R05, LIVE, data purge или второй writer. Состав current docs/Project Source, pre-read/routing/bootstrap не меняются.
