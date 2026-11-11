@@ -2701,12 +2701,23 @@ def _run_observer_epoch(
             if p90_consumer is not None and symbol in p90l90_symbols
             else None
         )
-        history = _fetch_history(
-            symbol, observed, intervals,
+        # R03: the original native owner already persisted exact confirmed
+        # 5m/15m full history. Do not spend the whole 300s preparation budget
+        # fetching those same windows from Bybit REST per symbol. This fast
+        # path is scoped; P90 OPEN recovery watermarks remain untouched.
+        from operations.monitoring.r03_observer_closed_seed import (
+            prepare_initial_r03_observer_history,
+        )
+
+        history = prepare_initial_r03_observer_history(
+            connection, symbol=symbol, observed_at=observed,
+            intervals=intervals,
             p90l90_full_prev7d=(
                 symbol in p90l90_symbols and not p90_repair_ingest_only
             ),
             p90_gap_from=recovery_from,
+            native_candle_reader=R03_NATIVE_CANDLE_READER,
+            source_fetch=_fetch_history,
         )
         # One MarketSource OHLC repository, never per-Strategy/per-account
         # copies. Every startup checks current REST history and exact source

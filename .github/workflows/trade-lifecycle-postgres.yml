@@ -127,8 +127,17 @@ jobs:
           for migration in "${migrations[@]}"; do
             if [[ "$migration" == "operations/sql/20261026_account_scoped_physical_key_cutover.sql" ]]; then
               echo "DISPOSABLE_PRE_CUTOVER_BACKUP=START"
-              pg_dump -Fc -d cripta_integration -f "$RUNNER_TEMP/cripta_pre_cutover.dump"
-              pg_restore --list "$RUNNER_TEMP/cripta_pre_cutover.dump" > /dev/null
+              # The hosted ubuntu-latest PostgreSQL CLI can be newer than
+              # our actual postgres:16 disposable server. A PG17 pg_restore
+              # emits SET transaction_timeout (unsupported by PG16) and
+              # makes a valid rollback fail for an unrelated client mismatch.
+              # Use exact PG16 clients from the *already running* service.
+              docker exec "${{ job.services.postgres.id }}" \
+                pg_dump -U postgres -Fc -d cripta_integration \
+                > "$RUNNER_TEMP/cripta_pre_cutover.dump"
+              docker exec -i "${{ job.services.postgres.id }}" \
+                pg_restore --list < "$RUNNER_TEMP/cripta_pre_cutover.dump" \
+                > /dev/null
               echo "DISPOSABLE_PRE_CUTOVER_BACKUP=PASS"
             fi
             echo "APPLY=$migration"
@@ -139,8 +148,10 @@ jobs:
         run: |
           test -s "$RUNNER_TEMP/cripta_pre_cutover.dump"
           createdb cripta_cutover_rollback_ci
-          pg_restore --exit-on-error --no-owner --no-acl \
-            -d cripta_cutover_rollback_ci "$RUNNER_TEMP/cripta_pre_cutover.dump"
+          docker exec -i "${{ job.services.postgres.id }}" \
+            pg_restore -U postgres --exit-on-error --no-owner --no-acl \
+            -d cripta_cutover_rollback_ci \
+            < "$RUNNER_TEMP/cripta_pre_cutover.dump"
           before_pk_count="$(psql -X -v ON_ERROR_STOP=1 -d cripta_cutover_rollback_ci -Atqc             "SELECT count(*) FROM pg_constraint WHERE contype='p' AND conrelid IN (
                 'runtime.wallet_latest'::regclass,
                 'runtime.hot_positions'::regclass,

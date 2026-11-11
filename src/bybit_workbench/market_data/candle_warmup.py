@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import os
 import time
-from collections.abc import Callable, Sequence
-from datetime import datetime
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from bybit_workbench.domain.models import Candle
@@ -57,6 +57,68 @@ def ensure_closed_history(
     )
     return store.history(through=through, required=required)
 
+
+
+# Immutable owner set from approved R01/R03 scope. This is NOT a general
+# MarketPublication consumer replacement (that is roadmap R06).
+R03_NATIVE_CLOSED_SYMBOLS = frozenset((
+    "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+))
+_R03_NATIVE_CLOSED_INTERVALS = frozenset(("1", "5", "15"))
+_R03_SETTLE_GRACE = timedelta(seconds=15)
+
+
+def load_verified_r03_native_closed_seed(
+    connection: Any, *, symbol: str, required_counts: Mapping[str, int],
+    observed_at: datetime,
+) -> dict[str, tuple[Candle, ...]]:
+    """Read exact registered, committed R03 OHLCV; no REST and no INSERT.
+
+    One current source identity, closed-only UTC boundary (15-second
+    provider grace), exact full historical plan window and gap-free rows
+    are mandatory. Missing/stale native data is a failure, never a reason
+    to silently become an independent second candle writer.
+    """
+    if (
+        symbol not in R03_NATIVE_CLOSED_SYMBOLS
+        or not required_counts
+        or any(tf not in _R03_NATIVE_CLOSED_INTERVALS for tf in required_counts)
+        or any(not 1 <= count <= 10000 for count in required_counts.values())
+    ):
+        raise ValueError("R03_NATIVE_CLOSED_SEED_SCOPE_INVALID")
+    if observed_at.utcoffset() != timedelta(0):
+        raise ValueError("R03_NATIVE_CLOSED_SEED_CLOCK_NOT_UTC")
+    matches = connection.execute(
+        """SELECT s.market_source_id,s.venue_id,i.instrument_id,
+                  i.external_symbol,i.product_category
+             FROM identity.market_sources s
+             JOIN identity.instruments i ON i.venue_id=s.venue_id
+            WHERE s.venue_id='venue-bybit'
+              AND s.source_kind='DIRECT_PUBLIC_COMPOSITE'
+              AND s.status='ACTIVE'
+              AND i.external_symbol=%s AND i.product_category='LINEAR'""",
+        (symbol,),
+    ).fetchall()
+    if len(matches) != 1:
+        raise RuntimeError("CANDLE_APPROVED_BYBIT_MARKET_SOURCE_AMBIGUOUS")
+    source_id, venue_id, instrument_id, exact_symbol, product = matches[0]
+    if exact_symbol != symbol or product != "LINEAR":
+        raise RuntimeError("R03_NATIVE_CLOSED_SEED_IDENTITY_UNVERIFIED")
+    settled_at = observed_at - _R03_SETTLE_GRACE
+    result: dict[str, tuple[Candle, ...]] = {}
+    for tf, required in required_counts.items():
+        step = int(tf) * 60
+        end_seconds = int(settled_at.timestamp()) // step * step
+        through = datetime.fromtimestamp(end_seconds, tz=UTC)
+        key = MarketCandleKey(
+            source_id, venue_id, instrument_id, exact_symbol, product, tf,
+        )
+        # history() itself proves exact closed UTC bars, full length,
+        # adjacency and the requested end. No fallback or normalization.
+        result[tf] = SharedClosedCandleStore(connection, key).history(
+            through=through, required=required,
+        )
+    return result
 
 def cache_approved_bybit_history(
     connection: Any, *, symbol: str, history: dict[str, tuple[Candle, ...]],
