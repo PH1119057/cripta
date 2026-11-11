@@ -20,6 +20,7 @@ from bybit_workbench.market_data.public_source_second_store import (
 from operations.monitoring.public_market_source_union_capture import (
     _BookResubscribe,
     _invalidate_scoped_market,
+    _requires_source_recovery,
     _scoped_quality_reason,
 )
 
@@ -225,3 +226,164 @@ def test_bad_book_delta_cannot_fabricate_an_empty_second() -> None:
     assert agg.ready_seconds(before=AT + timedelta(seconds=1))[0][
         "book"
     ]["source_sequence"] == 200
+
+
+def test_late_book_second_keeps_verified_ladder_without_rewriting_past() -> None:
+    """Regression: a missed compact second is not a broken Bybit orderbook.
+
+    The late delta removes the old best bid. The future projected delta MUST
+    use that authentic late update, not a fabricated/obsolete book or reset.
+    """
+    agg = PublicSecondAccumulator(session=SESSION)
+    agg.accept(_book(seq=100, update=10), received_at=AT)
+    original = agg.ready_seconds(before=AT + timedelta(seconds=1))
+    assert len(original) == 1
+    agg.mark_committed(original)
+    late_delta = _decode(TOPIC, {
+        "s": SYMBOL, "seq": 101, "u": 11,
+        "b": [["100", "0"], ["99", "2"]], "a": [],
+    }, kind="delta")
+    omitted = agg.accept(
+        late_delta, received_at=AT + timedelta(milliseconds=700),
+    )
+    assert omitted == "PUBLIC_FEED_LATE_RECEIVE_SECOND"
+    assert not _requires_source_recovery(
+        PublicSourceSecondUnavailable(omitted),
+    )
+    assert agg.ready_seconds(before=AT + timedelta(seconds=2)) == ()
+    fresh = _decode(TOPIC, {
+        "s": SYMBOL, "seq": 102, "u": 12,
+        "b": [["99.5", "3"]], "a": [],
+    }, kind="delta")
+    assert agg.accept(fresh, received_at=AT + timedelta(seconds=2)) is None
+    rows = agg.ready_seconds(before=AT + timedelta(seconds=3))
+    assert len(rows) == 1
+    assert rows[0]["second"] == AT + timedelta(seconds=2)
+    assert rows[0]["book"]["best_bid"] == "99.5"
+    assert rows[0]["book"]["best_ask"] == "101"
+    assert rows[0]["book"]["source_sequence"] == 102
+    # Already committed original compact evidence was never mutated.
+    assert original[0]["book"]["best_bid"] == "100"
+
+
+def test_genuine_late_book_sequence_failure_still_requires_real_snapshot() -> None:
+    agg = PublicSecondAccumulator(session=SESSION)
+    agg.accept(_book(seq=100, update=10), received_at=AT)
+    agg.mark_committed(agg.ready_seconds(
+        before=AT + timedelta(seconds=1),
+    ))
+    # The projection is late AND the source sequence is non-increasing.
+    # Source validity dominates the projection rule; never claim continuity.
+    with pytest.raises(PublicSourceFrameInvalid, match="SEQUENCE_REGRESSION") as ex:
+        agg.accept(
+            _book(seq=100, update=11, kind="delta"),
+            received_at=AT + timedelta(milliseconds=800),
+        )
+    assert _requires_source_recovery(ex.value)
+    with pytest.raises(PublicSourceFrameInvalid, match="WITHOUT_SNAPSHOT"):
+        agg.accept(
+            _book(seq=102, update=12, kind="delta"),
+            received_at=AT + timedelta(seconds=2),
+        )
+    assert agg.ready_seconds(before=AT + timedelta(seconds=3)) == ()
+    assert agg.accept(
+        _book(seq=300, update=1),
+        received_at=AT + timedelta(seconds=3),
+    ) is None
+    assert agg.ready_seconds(before=AT + timedelta(seconds=4))[0][
+        "book"
+    ]["source_sequence"] == 300
+
+
+def test_receive_regression_drops_only_projection_not_book_ladder() -> None:
+    agg = PublicSecondAccumulator(session=SESSION)
+    agg.accept(_book(seq=100, update=10),
+               received_at=AT + timedelta(seconds=2))
+    result = agg.accept(
+        _book(seq=101, update=11, kind="delta"),
+        received_at=AT + timedelta(seconds=1),
+    )
+    assert result == "PUBLIC_FEED_RECEIVE_REGRESSION"
+    assert not _requires_source_recovery(
+        PublicSourceSecondUnavailable(result),
+    )
+    assert agg.accept(
+        _book(seq=102, update=12, kind="delta"),
+        received_at=AT + timedelta(seconds=3),
+    ) is None
+    rows = agg.ready_seconds(before=AT + timedelta(seconds=4))
+    assert [row["second"] for row in rows] == [
+        AT + timedelta(seconds=2), AT + timedelta(seconds=3),
+    ]
+    assert rows[-1]["book"]["source_sequence"] == 102
+
+
+def test_book_backpressure_cannot_forge_second_or_break_sequence() -> None:
+    agg = PublicSecondAccumulator(
+        session=SESSION, max_pending_seconds=2,
+    )
+    agg.accept(_book(seq=100, update=10), received_at=AT)
+    agg.accept(
+        _book(seq=101, update=11, kind="delta"),
+        received_at=AT + timedelta(seconds=1),
+    )
+    omitted = agg.accept(
+        _book(seq=102, update=12, kind="delta"),
+        received_at=AT + timedelta(seconds=2),
+    )
+    assert omitted == "PUBLIC_FEED_BACKPRESSURE_UNVERIFIED"
+    assert not _requires_source_recovery(
+        PublicSourceSecondUnavailable(omitted),
+    )
+    rows = agg.ready_seconds(before=AT + timedelta(seconds=3))
+    assert len(rows) == 2
+    assert [row["book"]["source_sequence"] for row in rows] == [100, 101]
+    agg.mark_committed(rows)
+    agg.accept(
+        _book(seq=103, update=13, kind="delta"),
+        received_at=AT + timedelta(seconds=3),
+    )
+    latest = agg.ready_seconds(before=AT + timedelta(seconds=4))
+    assert len(latest) == 1
+    assert latest[0]["book"]["source_sequence"] == 103
+
+
+def test_late_ticker_projection_cannot_erase_last_known_field_times() -> None:
+    agg = PublicSecondAccumulator(session=SESSION)
+    agg.accept(_decode(
+        "tickers.APTUSDT",
+        {"symbol": SYMBOL, "lastPrice": "100.3", "openInterest": "200"},
+    ), received_at=AT)
+    agg.mark_committed(
+        agg.ready_seconds(before=AT + timedelta(seconds=1)),
+    )
+    with pytest.raises(
+        PublicSourceSecondUnavailable, match="LATE_RECEIVE_SECOND",
+    ) as ex:
+        agg.accept(_decode(
+            "tickers.APTUSDT",
+            {"symbol": SYMBOL, "lastPrice": "100.4"},
+            kind="delta",
+        ), received_at=AT + timedelta(milliseconds=500))
+    assert not _requires_source_recovery(ex.value)
+    agg.accept(_decode(
+        "tickers.APTUSDT",
+        {"symbol": SYMBOL, "ask1Price": "101"},
+        kind="delta",
+    ), received_at=AT + timedelta(seconds=2))
+    row = agg.ready_seconds(before=AT + timedelta(seconds=3))[0]
+    assert row["ticker"] == {
+        "lastPrice": "100.3", "openInterest": "200",
+        "ask1Price": "101",
+    }
+    assert row["ticker_field_times"]["lastPrice"] == AT.isoformat()
+    # A late, unprojected ticker is not falsely presented as fresh.
+
+
+def test_identity_or_true_book_fault_still_has_recovery_authority() -> None:
+    for exc in (
+        PublicSourceFrameInvalid("PUBLIC_BOOK_CROSSED"),
+        PublicSourceSecondUnavailable("PUBLIC_FEED_IDENTITY_INVALID"),
+        PublicSourceFrameInvalid("PUBLIC_BOOK_DELTA_WITHOUT_SNAPSHOT"),
+    ):
+        assert _requires_source_recovery(exc)

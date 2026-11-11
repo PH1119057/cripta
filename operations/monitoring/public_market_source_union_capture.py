@@ -269,6 +269,21 @@ def _scoped_quality_reason(exc: Exception, fallback: str) -> str:
     return fallback
 
 
+_COMPACT_PROJECTION_ONLY = frozenset((
+    "PUBLIC_FEED_LATE_RECEIVE_SECOND",
+    "PUBLIC_FEED_RECEIVE_REGRESSION",
+    "PUBLIC_FEED_BACKPRESSURE_UNVERIFIED",
+))
+
+
+def _requires_source_recovery(exc: Exception) -> bool:
+    """A PG compact-second admission fault is NOT a Bybit book GAP."""
+    return not (
+        isinstance(exc, PublicSourceSecondUnavailable)
+        and str(exc) in _COMPACT_PROJECTION_ONLY
+    )
+
+
 def _invalidate_scoped_market(
     aggregate: PublicSecondAccumulator, *, topic: str, instrument_id: str,
 ) -> None:
@@ -1028,21 +1043,28 @@ def run_source_union(
                             )
                     else:
                         try:
-                            aggregate.accept(event, received_at=received)
+                            compact_projection_fault = aggregate.accept(
+                                event, received_at=received,
+                            )
                         except (PublicSourceFrameInvalid,
                                 PublicSourceSecondUnavailable) as exc:
                             if not scoped_topic:
                                 raise
-                            _invalidate_scoped_market(
-                                aggregate, topic=topic,
-                                instrument_id=event.instrument_id,
-                            )
-                            if event.kind == "BOOK":
-                                request_book_snapshot(
-                                    product, topic, received_at=received,
+                            # A missed immutable second is not evidence of
+                            # source-sequence or snapshot discontinuity. In
+                            # particular NEVER unsubscribe a valid LINEAR book
+                            # just because PostgreSQL already flushed a row.
+                            if _requires_source_recovery(exc):
+                                _invalidate_scoped_market(
+                                    aggregate, topic=topic,
+                                    instrument_id=event.instrument_id,
                                 )
-                            # Trade/liquidation faults cannot erase a good
-                            # ticker/book for the same InstrumentIdentity.
+                                if event.kind == "BOOK":
+                                    request_book_snapshot(
+                                        product, topic, received_at=received,
+                                    )
+                            # No fabricated compact row, no silent dropped
+                            # projection and no false market-source READY.
                             reason = _scoped_quality_reason(
                                 exc, "PUBLIC_TOPIC_ACCUMULATOR_UNVERIFIED",
                             )
@@ -1053,6 +1075,16 @@ def run_source_union(
                                 epoch=frame_epoch,
                             )
                         else:
+                            if compact_projection_fault is not None:
+                                # The valid BOOK delta advanced the native
+                                # in-memory ladder without changing a frozen
+                                # compact second; flag absent second quality.
+                                note_quality(
+                                    product=product, topic=topic,
+                                    symbol=event.symbol, quality="UNKNOWN",
+                                    reason=compact_projection_fault,
+                                    epoch=frame_epoch,
+                                )
                             if (
                                 event.kind == "BOOK"
                                 and event.frame_type == "snapshot"
