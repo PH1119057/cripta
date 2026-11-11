@@ -256,6 +256,17 @@ def _connect_subscribe(
 
 
 
+def _invalidate_scoped_market(
+    aggregate: PublicSecondAccumulator, *, topic: str, instrument_id: str,
+) -> None:
+    """No unrelated data-family reset from a scoped decoder/accumulator fault."""
+    if topic.startswith("orderbook.50."):
+        aggregate.invalidate_book(instrument_id)
+    elif topic.startswith("tickers."):
+        aggregate.invalidate_ticker(instrument_id)
+    # publicTrade, kline, and liquidation have no derived book/ticker rights.
+
+
 @dataclass(slots=True)
 class _BookResubscribe:
     """One topic-only provider unsubscribe/subscribe with exact ACK fencing.
@@ -958,13 +969,13 @@ def run_source_union(
                     instrument = bybit_instrument_id(
                         product.lower(), topic.rsplit(".", 1)[-1],
                     )
+                    _invalidate_scoped_market(
+                        aggregate, topic=topic, instrument_id=instrument,
+                    )
                     if topic.startswith("orderbook.50."):
-                        aggregate.invalidate_book(instrument)
                         request_book_snapshot(
                             product, topic, received_at=received,
                         )
-                    elif topic.startswith("tickers."):
-                        aggregate.invalidate_ticker(instrument)
                     # A stale/malformed FORMING_KLINE can NEVER destroy an
                     # unrelated valid book, ticker or original native trade.
                     reason = str(exc)
@@ -1001,13 +1012,14 @@ def run_source_union(
                                 PublicSourceSecondUnavailable) as exc:
                             if not scoped_topic:
                                 raise
+                            _invalidate_scoped_market(
+                                aggregate, topic=topic,
+                                instrument_id=event.instrument_id,
+                            )
                             if event.kind == "BOOK":
-                                aggregate.invalidate_book(event.instrument_id)
                                 request_book_snapshot(
                                     product, topic, received_at=received,
                                 )
-                            elif event.kind == "TICKER":
-                                aggregate.invalidate_ticker(event.instrument_id)
                             # Trade/liquidation faults cannot erase a good
                             # ticker/book for the same InstrumentIdentity.
                             reason = str(exc)
