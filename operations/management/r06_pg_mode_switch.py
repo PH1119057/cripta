@@ -201,21 +201,86 @@ def _require_units() -> int:
 
 
 def _probe(phase: str) -> dict[str, object]:
+    """Drop to the proven cripta runtime actor without a nested PAM session.
+
+    This root-only management unit is under NoNewPrivileges and has a
+    restricted systemd sandbox. A nested runuser/PAM login is neither the
+    documented runtime actor rail nor a successful proof of effective UID.
+    POSIX child credentials are set BEFORE exec, without granting new rights.
+    """
     if phase not in ("before", "detached", "after", "rollback_local"):
         raise R06ModeSwitchBlocked("R06_UNKNOWN_PROBE_PHASE")
-    command = (
-        "/usr/sbin/runuser", "-u", "cripta", "--",
-        "/usr/bin/env", "PYTHONDONTWRITEBYTECODE=1",
-        "PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current",
-        VENV, str(PROBE), phase,
-    )
-    result = _call(*command, timeout=65, checked=False)
-    try:
-        report = json.loads(result.stdout.strip().splitlines()[-1])
-    except (ValueError, IndexError) as exc:
-        raise R06ModeSwitchBlocked("R06_SIGNED_SOURCE_PROBE_OUTPUT_INVALID") from exc
+    import pwd
+
+    identity = pwd.getpwnam("cripta")
     if (
-        result.returncode != 0 or not isinstance(report, dict)
+        os.geteuid() != 0
+        or identity.pw_uid <= 0 or identity.pw_gid <= 0
+        or not Path(VENV).is_file() or not PROBE.is_file()
+    ):
+        raise R06ModeSwitchBlocked("R06_PROBE_ACTOR_OR_RELEASE_UNAVAILABLE")
+    group_ids = tuple(sorted(set(os.getgrouplist("cripta", identity.pw_gid))))
+    if identity.pw_gid not in group_ids or any(gid < 0 for gid in group_ids):
+        raise R06ModeSwitchBlocked("R06_PROBE_CRIPTA_GROUP_SCOPE_INVALID")
+
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "HOME": identity.pw_dir,
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH":
+            "/srv/cripta/runtime/current/src:/srv/cripta/runtime/current",
+        "LANG": "C.UTF-8",
+    }
+    try:
+        result = subprocess.run(
+            [VENV, str(PROBE), phase],
+            cwd="/srv/cripta/runtime/current",
+            user=identity.pw_uid,
+            group=identity.pw_gid,
+            extra_groups=group_ids,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=65,
+            check=False,
+        )
+    except OSError as exc:
+        # Never fall back to running the read-only Exchange proof as root.
+        raise R06ModeSwitchBlocked(
+            "R06_CRIPTA_DROP_OR_EXEC_DENIED:errno=" + str(exc.errno)
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise R06ModeSwitchBlocked("R06_CRIPTA_PROBE_TIMEOUT") from exc
+
+    lines = result.stdout.strip().splitlines()
+    if not lines:
+        # Do not echo stderr: provider/DB exceptions may contain credentials.
+        # The exit code plus a safe diagnostic category is sufficient to
+        # distinguish actor, interpreter, import and private proof failures.
+        stderr = result.stderr
+        cause = "UNKNOWN"
+        for token in (
+            "PermissionError", "ModuleNotFoundError", "ImportError",
+            "OperationalError", "CalledProcessError", "OSError",
+            "Traceback",
+        ):
+            if token in stderr:
+                cause = token
+                break
+        raise R06ModeSwitchBlocked(
+            f"R06_CRIPTA_PROBE_NO_RESULT:exit={result.returncode}:class={cause}"
+        )
+    try:
+        report = json.loads(lines[-1])
+    except (TypeError, ValueError) as exc:
+        raise R06ModeSwitchBlocked(
+            f"R06_CRIPTA_PROBE_NON_JSON:exit={result.returncode}"
+        ) from exc
+    if not isinstance(report, dict):
+        raise R06ModeSwitchBlocked("R06_CRIPTA_PROBE_RESULT_NOT_OBJECT")
+    if (
+        result.returncode != 0
         or report.get("trading_effect") != "NONE"
         or report.get("result") not in (
             "R06_PG_SWITCH_PREFLIGHT_PASS",
@@ -224,8 +289,8 @@ def _probe(phase: str) -> dict[str, object]:
         )
     ):
         raise R06ModeSwitchBlocked(
-            "R06_SIGNED_SOURCE_PROBE_BLOCKED:" +
-            str(report.get("reason", "UNKNOWN"))[:110]
+            "R06_CRIPTA_PROBE_BLOCKED:exit=" + str(result.returncode) +
+            ":kind=" + str(report.get("reason_type", "PROOF_UNVERIFIED"))[:45]
         )
     return report
 

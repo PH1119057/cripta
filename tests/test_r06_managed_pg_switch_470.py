@@ -304,3 +304,104 @@ def test_rollback_cannot_reuse_foreign_release_state(monkeypatch):
     )
     with pytest.raises(switch.R06ModeSwitchBlocked, match="RELEASE_LINEAGE"):
         switch._rollback_inner(automatic=True)
+
+
+
+def test_protected_probe_uses_explicit_cripta_uid_gid_and_no_pam_runuser(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+    import os
+
+    account = SimpleNamespace(
+        pw_uid=107, pw_gid=109, pw_dir="/var/lib/cripta",
+    )
+    import pwd
+    monkeypatch.setattr(pwd, "getpwnam", lambda _name: account)
+    monkeypatch.setattr(switch.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(switch.os, "getgrouplist", lambda *_args: [109, 250])
+    monkeypatch.setattr(switch.Path, "is_file", lambda _path: True)
+    observed = {}
+    def execute(command, **kwargs):
+        observed.update(kwargs)
+        observed["command"] = command
+        return SimpleNamespace(
+            returncode=0, stderr="",
+            stdout='{"result":"R06_PG_SWITCH_PREFLIGHT_PASS",'
+                   '"trading_effect":"NONE","mode":"before"}\n',
+        )
+    monkeypatch.setattr(switch.subprocess, "run", execute)
+    result = switch._probe("before")
+    assert result["result"] == "R06_PG_SWITCH_PREFLIGHT_PASS"
+    assert observed["user"] == 107
+    assert observed["group"] == 109
+    assert set(observed["extra_groups"]) == {109, 250}
+    assert observed["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert "runuser" not in str(observed["command"])
+    assert observed["command"] == [
+        switch.VENV, str(switch.PROBE), "before",
+    ]
+
+
+def test_missing_uid_drop_never_falls_back_to_root(monkeypatch):
+    from types import SimpleNamespace
+    import pwd
+    monkeypatch.setattr(
+        pwd, "getpwnam", lambda _name:
+        SimpleNamespace(pw_uid=107,pw_gid=109,pw_dir="/var/lib/cripta"),
+    )
+    monkeypatch.setattr(switch.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(switch.os, "getgrouplist", lambda *_a: [109])
+    monkeypatch.setattr(switch.Path, "is_file", lambda _p: True)
+    calls = []
+    def denied(_command, **kwargs):
+        calls.append(kwargs)
+        raise PermissionError(1, "setgroups denied")
+    monkeypatch.setattr(switch.subprocess, "run", denied)
+    with pytest.raises(
+        switch.R06ModeSwitchBlocked, match="R06_CRIPTA_DROP_OR_EXEC_DENIED",
+    ):
+        switch._probe("before")
+    assert len(calls) == 1
+    assert calls[0]["user"] == 107
+
+
+def test_missing_child_output_returns_sanitized_actor_diagnostics(monkeypatch):
+    from types import SimpleNamespace
+    import pwd
+    monkeypatch.setattr(
+        pwd, "getpwnam", lambda _name:
+        SimpleNamespace(pw_uid=107,pw_gid=109,pw_dir="/var/lib/cripta"),
+    )
+    monkeypatch.setattr(switch.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(switch.os, "getgrouplist", lambda *_a: [109])
+    monkeypatch.setattr(switch.Path, "is_file", lambda _p: True)
+    monkeypatch.setattr(
+        switch.subprocess, "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            stdout="", returncode=2,
+            stderr="PermissionError: secret=DO_NOT_LOG",
+        ),
+    )
+    with pytest.raises(switch.R06ModeSwitchBlocked) as exc:
+        switch._probe("before")
+    assert "exit=2:class=PermissionError" in str(exc.value)
+    assert "DO_NOT_LOG" not in str(exc.value)
+
+
+def test_probe_rejects_wrong_unix_actor_before_db_or_signed_exchange(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+    import pwd
+    from operations.management import r06_pg_switch_probe as probe
+    monkeypatch.setattr(
+        pwd, "getpwnam", lambda _name:
+        SimpleNamespace(pw_uid=107,pw_gid=109),
+    )
+    monkeypatch.setattr(probe.os, "getuid", lambda: 0)
+    with pytest.raises(
+        probe.R06SwitchPreflightBlocked,
+        match="R06_PROBE_WRONG_UNIX_CRIPTA_ACTOR",
+    ):
+        probe.verify("before")

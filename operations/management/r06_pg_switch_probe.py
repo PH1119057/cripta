@@ -111,6 +111,14 @@ def _require_after(conn: psycopg.Connection, sha: str, source: str) -> dict[str,
 def verify(mode: str) -> dict[str, object]:
     if mode not in ("before", "detached", "after", "rollback_local"):
         raise R06SwitchPreflightBlocked("R06_UNKNOWN_PROBE_MODE")
+    import pwd
+    identity = pwd.getpwnam("cripta")
+    if (
+        os.getuid() != identity.pw_uid
+        or os.geteuid() != identity.pw_uid
+        or os.getegid() != identity.pw_gid
+    ):
+        raise R06SwitchPreflightBlocked("R06_PROBE_WRONG_UNIX_CRIPTA_ACTOR")
     sha = current_release()
     assert_source_mirror_matches_loaded(sha)
     with psycopg.connect(
