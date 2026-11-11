@@ -86,7 +86,8 @@ def test_strict_cohorts_nested_for_every_depthzero_event():
 def test_six_new_bands_replayed_and_three_qc_baselines_reused():
     assert sweep.NEW == ("010", "020", "080", "090", "100", "150")
     assert sweep.REUSED == ("025", "050", "075")
-    assert sweep.WIDTHS == {
+    width_bands = sweep.WIDTHS  # local variable avoids SIM300 constant-attribute ordering
+    assert width_bands == {
         "010": D("0.10"), "020": D("0.20"), "025": D("0.25"),
         "050": D("0.50"), "075": D("0.75"), "080": D("0.80"),
         "090": D("0.90"), "100": D("1.00"), "150": D("1.50"),
