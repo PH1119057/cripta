@@ -842,23 +842,31 @@ def run_source_union(
                     producer_release_commit=producer_release_commit,
                     fact=rest_fact,
                 )
-                if rest_fact.values.get("status") == "NOT_LISTED":
-                    topic = (
-                        "REST:market/instruments-info:" + rest_fact.symbol
-                    )
-                    persist_public_source_quality_events(
-                        connection,
-                        events=(PublicSourceQualityEvent.create(
-                            source_session_id=session,
-                            transport_epoch_id=session,
-                            product=rest_fact.product,
-                            topic=topic, symbol=rest_fact.symbol,
-                            quality="NOT_LISTED",
-                            reason="PUBLIC_INSTRUMENT_NOT_LISTED",
-                            observed_at=rest_fact.received_at,
-                        ),),
-                        producer_release_commit=producer_release_commit,
-                    )
+                dataset_topic = (
+                    "REST:market/account-ratio:" + rest_fact.symbol
+                    if rest_fact.dataset == "ACCOUNT_RATIO"
+                    else "REST:market/instruments-info:" + rest_fact.symbol
+                )
+                is_not_listed = rest_fact.values.get("status") == "NOT_LISTED"
+                # A committed REST fact permits *scoped* causal recovery
+                # evidence. RECOVERING is intentionally not global READY;
+                # publication must still verify each consumer freshness TTL.
+                persist_public_source_quality_events(
+                    connection,
+                    events=(PublicSourceQualityEvent.create(
+                        source_session_id=session,
+                        transport_epoch_id=session,
+                        product=rest_fact.product, topic=dataset_topic,
+                        symbol=rest_fact.symbol,
+                        quality=("NOT_LISTED" if is_not_listed
+                                 else "RECOVERING"),
+                        reason=("PUBLIC_INSTRUMENT_NOT_LISTED"
+                                if is_not_listed
+                                else "PUBLIC_REST_FACT_COMMITTED"),
+                        observed_at=rest_fact.received_at,
+                    ),),
+                    producer_release_commit=producer_release_commit,
+                )
             # Preserve original native WS priority: only after processing
             # its frame and REST receipts can one complete gap result commit.
             if repair_windows:
