@@ -97,7 +97,7 @@ def test_six_new_bands_replayed_and_three_qc_baselines_reused():
     assert sweep.EXPECTED_COUNTS["150"] == {"LONG_ONLY": 4817, "SHORT_ONLY": 5780}
     assert sweep.CASES == ("NO_PAUSE", "SECOND48")
     assert sweep.SIDES == ("LONG_ONLY", "SHORT_ONLY")
-    assert "000" not in sweep.WIDTHS
+    assert sweep.WIDTHS.get("000") is None
 
 
 def test_source_and_outputs_new_and_scoped():
@@ -192,7 +192,7 @@ def test_frozen_depthzero_prepare_tuple_contract(monkeypatch):
 def test_exact_zero_band_is_not_replayed_but_causal_comparator_supported():
     assert sweep.eligible(event("1.0000"), "LONG", D("0"), medians())
     assert not sweep.eligible(event("1.0001"), "LONG", D("0"), medians())
-    assert "000" not in sweep.NEW
+    assert sweep.NEW.count("000") == 0
 
 
 def test_existing_prior_two_bands_must_be_verified_read_only():
