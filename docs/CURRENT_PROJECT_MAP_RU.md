@@ -5198,3 +5198,11 @@ canonical OBS/DEV/INDEX integration, subject to protected PR/CI.
 operator config installation/actor readback. `R02–R14` not
 advanced. R01 RUNTIME check means inert operator config
 readback, not live producer union. Finances/ARM unchanged.
+
+#### R04 owner-approved optional source isolation — documentation checkpoint 2026-11-11 (#470)
+
+**OWNER DECISION:** после завершённого R03 продолжить R04 по OBS §7.10.5.2; один физический native producer/writer, но optional SPOT/topic/REST failure не может GAP-ить исправную LINEAR original/candle source. Durable scoped quality/epoch/recovery и storage capacity gate обязательны. Не торговая Strategy/Exit/Execution policy.
+
+**CHECKED HERE (GitHub/server read-only, 2026-11-11):** GitHub main и фактический cripta source checkout HEAD равны b8959e9a2f01c5b4d5243e1be4bea59e055108ba; source checkout clean. Среди 113 зарегистрированных git worktrees нет R04/#470; четыре remote R04 branch расходятся с main. Release Controller inactive, Result=success, ExecMainStatus=0. /data/cripta 196G total, 168G used, 19G free (91%). Issue #470 ранее доказал global optional-SPOT-to-LINEAR-fatal current code path и inert R04 flag; его R03 signed runtime evidence не подменяется этим read-only source check.
+
+**NOT CHECKED HERE:** R04 failure isolation implementation tests, per-topic durable quality storage, measured PG/WAL/backup amplification, R04 rollback and new runtime behavior. R04.C=OWNER_APPROVED; R04.M=EXISTING_R01_PLUS_CANON; R04.I=PARTIAL_SOURCE; R04.T=PARTIAL; R04.D=NOT_STARTED; R04.R=NOT_CHECKED_HERE. Physical R04 activation remains HARD_STOP until gates PASS. Existing MAYAK 20, LIVE and Exchange unchanged. Exact next step: scoped R04 RED tests and implementation from verified main; no flag enable.
