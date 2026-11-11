@@ -454,7 +454,10 @@ def test_invalid_r03_horizon_never_starts_socket_or_pg_epoch(
         )
     assert not opened
 
-@pytest.mark.parametrize("failure_mode", ("subscribe_reject", "disconnect", "bad_book"))
+@pytest.mark.parametrize(
+    "failure_mode",
+    ("subscribe_reject", "disconnect", "bad_book", "bad_linear_book"),
+)
 def test_r04_optional_spot_failure_does_not_gap_required_linear(
     failure_mode: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -463,6 +466,12 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
     for row in manifest:
         if row["product"] == "SPOT":
             row["required"] = False
+    if failure_mode == "bad_linear_book":
+        # Position requires this LINEAR topic; Entry original publicTrade
+        # and R03 closed source must still remain independently live.
+        manifest.append(_required(
+            "POSITION", "LINEAR", "APTUSDT", "ORDERBOOK_50",
+        ))
     union = parse_explicit_source_manifest(
         json.dumps(manifest), native_symbols=P90,
     )
@@ -480,11 +489,14 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
             self.once = False
 
         def recv(self) -> str:
-            if self.product == "SPOT" and not self.once:
+            if not self.once and (
+                self.product == "SPOT"
+                or (self.product == "LINEAR" and failure_mode == "bad_linear_book")
+            ):
                 self.once = True
-                if failure_mode == "disconnect":
+                if self.product == "SPOT" and failure_mode == "disconnect":
                     return ""
-                if failure_mode == "bad_book":
+                if failure_mode in ("bad_book", "bad_linear_book"):
                     return json.dumps({
                         "topic": "orderbook.50.APTUSDT",
                         "ts": int(datetime.now(UTC).timestamp() * 1000),
