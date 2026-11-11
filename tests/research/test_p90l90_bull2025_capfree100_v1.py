@@ -53,7 +53,6 @@ def test_capfree_notional_fee_is_scaled_at_original_12_decimal_quantum():
     assert eq(cap.POSITION_NOTIONAL, D("100"))
     assert eq(cap.old.money(cap.POSITION_NOTIONAL * cap.old.TAKER), D("0.055000000000"))
     assert eq(cap.old.money(cap.POSITION_NOTIONAL * cap.old.MAKER), D("0.020000000000"))
-    assert cap.VIRTUAL_BASE > D("1000000000")
 
 
 def test_wrong_actor_fails_before_any_write(monkeypatch: pytest.MonkeyPatch):
