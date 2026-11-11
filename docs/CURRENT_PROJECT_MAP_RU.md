@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.43
+**Версия:** 12.44
 **Дата:** 2026-11-11
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -5206,3 +5206,11 @@ readback, not live producer union. Finances/ARM unchanged.
 **CHECKED HERE (GitHub/server read-only, 2026-11-11):** GitHub main и фактический cripta source checkout HEAD равны b8959e9a2f01c5b4d5243e1be4bea59e055108ba; source checkout clean. Среди 113 зарегистрированных git worktrees нет R04/#470; четыре remote R04 branch расходятся с main. Release Controller inactive, Result=success, ExecMainStatus=0. /data/cripta 196G total, 168G used, 19G free (91%). Issue #470 ранее доказал global optional-SPOT-to-LINEAR-fatal current code path и inert R04 flag; его R03 signed runtime evidence не подменяется этим read-only source check.
 
 **NOT CHECKED HERE:** R04 failure isolation implementation tests, per-topic durable quality storage, measured PG/WAL/backup amplification, R04 rollback and new runtime behavior. R04.C=OWNER_APPROVED; R04.M=EXISTING_R01_PLUS_CANON; R04.I=PARTIAL_SOURCE; R04.T=PARTIAL; R04.D=NOT_STARTED; R04.R=NOT_CHECKED_HERE. Physical R04 activation remains HARD_STOP until gates PASS. Existing MAYAK 20, LIVE and Exchange unchanged. Exact next step: scoped R04 RED tests and implementation from verified main; no flag enable.
+
+#### R04 owner-approved MAYAK seven-symbol reduction — 2026-11-11 (#470)
+
+**OWNER DECISION / BEFORE→AFTER:** current/previous independent `cripta-mayak-v2.service` source code defaults to 20: AAVE,ADA,APT,ARB,AVAX,BCH,BNB,DOT,HBAR,INJ,LINK,LTC,OP,SOL,SUI,TRX,UNI,XRP,BTC,ETH (all USDT). New owner-approved MAYAK observation AFTER = **APT/ARB/DOT/INJ/LTC/BTC/ETH** (7). Excluded 13: AAVE/ADA/AVAX/BCH/BNB/HBAR/LINK/OP/SOL/SUI/TRX/UNI/XRP; old rows and audit/history retained. Existing Dispatcher analytical consumer keeps its owner role; breadth and panel-relative features now explicitly cover seven, not silently 20. `BTC/ETH` are independent market anchors, not additional native/trading scope. R01–R05 new source publication remains exact five.
+
+**CHECKED HERE (2026-11-11):** GitHub main and server cripta source checkout SHA `ee22af3edfb74c95a698c6e04cfaa4e8d622ed37`, clean source; 113 server registered worktrees inspected, none matching #470/R04; open PR listing has no active MAYAK-7 task. `operations/monitoring/mayak_v2.py`: `DEFAULT_SYMBOLS` = above 20; `Collector` reads `MAYAK_V2_SYMBOLS` if specified. Current `systemctl show cripta-mayak-v2.service`: active PID 2229558, User=cripta, NRestarts=0, no explicit `MAYAK_V2_SYMBOLS` shown in Environment/EnvironmentFiles, restart not requested. Native producer active PID 2229442, five exact symbols with closed 1m/5m/15m, NRestarts=0. `/data/cripta` 196G total, 168G used, 19G free (91%); PGDATA size scoped sample 12G, latest two system backups 5.7G. Current running MAYAK status file and systemd unit content returned Unix Permission denied to SentinelX actor — therefore actual loaded `MAYAK_V2_SYMBOLS` / effective 20-symbol runtime **not independently read back** in this checkpoint. Approved `sudo -u cripta psql ...` read attempt returned SentinelX command_not_allowed; no retry or bypass was performed. Full installed/loaded release and signed Bybit private positions/SL/TP not freshly checked here.
+
+**Release gate:** current MAYAK-only change must not be conflated with mandatory native R04 producer ABI cutover already merged at `ee22...`. Do not silently combine releases without exact changed scope/one-writer/GAP/rollback and protection proof. Before physical scope cutover: consumer/Dispatcher coverage and health, BTC/ETH anchors/WARMUP, scoped quality, per-source source epoch, no stale 13-coin READY and no data deletion. Capacity and financial LIVE changes remain separately gated. `OWNER_DECISION=YES`; `CANON_PENDING_MERGE=YES`; `MAYAK7_CODE=NOT_STARTED`; `MAYAK7_DEPLOY=NO`; `LIVE_CHANGE=NO`.
