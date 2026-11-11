@@ -559,11 +559,11 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
         for state, reason in progress
     )
     assert quality_rows
-    assert all(getattr(event, "product") == "SPOT"
+    assert all(event.product == "SPOT"
                or failure_mode == "bad_linear_book"
                for event in quality_rows)
     assert any(
-        getattr(event, "quality") in ("GAP", "NO_DATA", "UNKNOWN")
+        event.quality in ("GAP", "NO_DATA", "UNKNOWN")
         for event in quality_rows
     )
     # No network worker is a PostgreSQL writer.
