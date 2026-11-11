@@ -68,7 +68,17 @@ class PublicSecondAccumulator:
         self.invalidate_book(instrument_id)
         self.invalidate_ticker(instrument_id)
 
-    def accept(self, event: PublicSourceFact, *, received_at: datetime) -> None:
+    def accept(
+        self, event: PublicSourceFact, *, received_at: datetime,
+    ) -> str | None:
+        """Accept a source fact; return a typed BOOK projection-only omission.
+
+        The compact second is immutable after commit. A delayed WebSocket
+        BOOK delta must still advance the independently verified ladder,
+        although the closed/overfull second can NEVER be rewritten. This is
+        not a lost provider snapshot or source-sequence GAP. The caller
+        persists an explicit quality event for the omitted compact second.
+        """
         second = self._second(received_at)
         if (
             event.market_source_id != BYBIT_PUBLIC_MARKET_SOURCE_ID
@@ -76,22 +86,27 @@ class PublicSecondAccumulator:
             or event.source_time > received_at + timedelta(seconds=5)
         ):
             raise PublicSourceSecondUnavailable("PUBLIC_FEED_IDENTITY_INVALID")
+        projection_fault: str | None = None
         if self._flushed_before is not None and second <= self._flushed_before:
-            raise PublicSourceSecondUnavailable("PUBLIC_FEED_LATE_RECEIVE_SECOND")
-        if self._pending and second < min(t for _, t in self._pending):
-            raise PublicSourceSecondUnavailable("PUBLIC_FEED_RECEIVE_REGRESSION")
-        if len({t for _, t in self._pending} | {second}) > self._max_pending:
-            raise PublicSourceSecondUnavailable("PUBLIC_FEED_BACKPRESSURE_UNVERIFIED")
+            projection_fault = "PUBLIC_FEED_LATE_RECEIVE_SECOND"
+        elif self._pending and second < min(t for _, t in self._pending):
+            projection_fault = "PUBLIC_FEED_RECEIVE_REGRESSION"
+        elif len({t for _, t in self._pending} | {second}) > self._max_pending:
+            projection_fault = "PUBLIC_FEED_BACKPRESSURE_UNVERIFIED"
 
-        # Verify orderbook sequence/ladder BEFORE constructing any compact
-        # second or advancing its source-time range. A rejected delta is
-        # never a zero-trade/no-book market observation.
+        # Authenticate source continuity independently of compact-second
+        # admission. Never fabricate an immutable row for a late delta.
+        # A truly invalid sequence still raises and requires a real snapshot.
         book_data: dict[str, object] | None = None
         if event.kind == "BOOK":
             book = self._books.setdefault(
                 event.instrument_id, OrderbookContinuity(),
             )
             book_data = dict(book.apply(event))
+            if projection_fault is not None:
+                return projection_fault
+        elif projection_fault is not None:
+            raise PublicSourceSecondUnavailable(projection_fault)
 
         key = (event.instrument_id, second)
         if key not in self._pending:
