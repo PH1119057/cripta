@@ -18,6 +18,7 @@ from bybit_workbench.universal_entry.p90l90_causal import (
     causal_entry_state,
 )
 
+
 class R06NoOrderStateBlocked(RuntimeError):
     """A durable current Entry automaton cannot be recovered exactly."""
 
