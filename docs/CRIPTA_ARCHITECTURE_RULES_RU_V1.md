@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.11
-**Дата:** 2026-11-10
+**Версия:** 3.12
+**Дата:** 2026-11-11
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -1791,3 +1791,9 @@ replacement; documentation alone does not repair Observer or clear SUB latch.
 
 `OWNER_DECISION=YES`; `CANON_UPDATE_REQUIRED=SATISFIED_AFTER_MERGE`;
 `IMPLEMENTED=NO`; `DEPLOYED=NO`; `RUNTIME_BEHAVIOR_VERIFIED=NO`; `LIVE_CHANGE=NO`.
+
+### 60.5.1 MAYAK observation-scope reduction, distinct from five-symbol native capture — OWNER DECISION 2026-11-11 (#470)
+
+Прямое последующее решение владельца разрешает сократить прежний **20-symbol MAYAK collector** до **7-symbol observational panel**: APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT, BTCUSDT, ETHUSDT, при сохранении существующих аналитических возможностей на выбранных инструментах и истории прежнего 20-symbol BEFORE. Это точное owner-approved исключение из исторического preservation gate §60.5; оно **не** является семисимвольным расширением native MarketSource R01–R05 (там ровно пять), не переносит MarketSource ownership в MAYAK, не разрешает удалить другие producers/consumers и не даёт права автоматически включать LIVE.
+
+Physical MAYAK source/consumer scope, качество BTC/ETH reference anchors, изменения cross-coin breadth и startup WARMUP — OBS §7.10.5.3; actor/retention/release/rollback — DEV §59 и ARCH §48; конкретный BEFORE→AFTER и статус — MAP/Issue #470. Не считать урезанную 7-symbol ширину статистически эквивалентной старой 20-symbol; все остальные требуемые trading/safety feed capabilities сохраняются независимо. `OWNER_DECISION=YES`; `CANON_AFTER_MERGE=YES`; `PHYSICAL_CUTOVER=NOT_VERIFIED`.
