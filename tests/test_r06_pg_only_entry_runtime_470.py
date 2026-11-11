@@ -66,10 +66,14 @@ def test_exact_first_crossing_durable_after_restart(history,previous,price,side)
     assert dump_symbol(restarted)["seen"]==[side]
 
 @pytest.mark.parametrize("bad",[
-    {"previous_price":"NaN","previous_at":BOUNDARY.isoformat(),"geometry_at":BOUNDARY.isoformat(),"seen":[]},
-    {"previous_price":"100","previous_at":BOUNDARY.isoformat(),"geometry_at":BOUNDARY.isoformat(),"seen":["LONG","LONG"]},
-    {"previous_price":"100","previous_at":"not-a-date","geometry_at":BOUNDARY.isoformat(),"seen":[]},
-    {"previous_price":"100","previous_at":BOUNDARY.isoformat(),"geometry_at":(BOUNDARY+timedelta(minutes=5)).isoformat(),"seen":[]},
+    {"previous_price":"NaN","previous_at":BOUNDARY.isoformat(),
+     "geometry_at":BOUNDARY.isoformat(),"seen":[]},
+    {"previous_price":"100","previous_at":BOUNDARY.isoformat(),
+     "geometry_at":BOUNDARY.isoformat(),"seen":["LONG","LONG"]},
+    {"previous_price":"100","previous_at":"not-a-date",
+     "geometry_at":BOUNDARY.isoformat(),"seen":[]},
+    {"previous_price":"100","previous_at":BOUNDARY.isoformat(),
+     "geometry_at":(BOUNDARY+timedelta(minutes=5)).isoformat(),"seen":[]},
 ])
 def test_corrupt_persisted_native_state_never_restores(history,bad):
     f,q=history
@@ -183,7 +187,10 @@ def test_source_only_native_callback_and_cursor_share_publication_atomic_state(
     assert count==1
     assert writer.last_pub==45
     assert writer.state["by_symbol"][SYMBOL]["seen"]==["LONG"]
-    assert sum("INSERT INTO strategy_entry.p90_r06_publication_observations" in s for s,_ in writer.queries)==1
+    assert sum(
+        "INSERT INTO strategy_entry.p90_r06_publication_observations" in sql
+        for sql, _ in writer.queries
+    ) == 1
     # A restart reconstructs current previous/seen; never reopens a crossing.
     recovered=restore_symbol(
         writer.state["by_symbol"][SYMBOL],five=f,fifteen=q,

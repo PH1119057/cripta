@@ -30,7 +30,11 @@ def _geometry(
     five: tuple[Candle, ...], fifteen: tuple[Candle, ...],
     boundary: datetime,
 ) -> P90L90EntryState:
-    if boundary.utcoffset() != timedelta(0) or boundary.second or boundary.microsecond or boundary.minute % 5:
+    if (
+        boundary.utcoffset() != timedelta(0)
+        or boundary.second or boundary.microsecond
+        or boundary.minute % 5
+    ):
         raise R06NoOrderStateBlocked("R06_ENTRY_EFFECTIVE_BOUNDARY_INVALID")
     f = tuple(c for c in five if c.closed_at <= boundary)
     q = tuple(c for c in fifteen if c.closed_at <= boundary)

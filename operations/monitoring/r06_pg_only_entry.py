@@ -25,12 +25,14 @@ from bybit_workbench.universal_entry.p90l90_crossing_fact import p90l90_crossing
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 from bybit_workbench.universal_entry.p90l90_scoped_native_codec import original_native_fact
-from bybit_workbench.universal_entry.p90l90_scoped_native_dispatch import consume_pinned_entry_native_batch
+from bybit_workbench.universal_entry.p90l90_scoped_native_dispatch import (
+    consume_pinned_entry_native_batch,
+)
 from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
     read_scoped_native_source, verify_native_producer_code_compatibility,
 )
 from bybit_workbench.universal_entry.p90_r06_no_order_state import (
-    R06NoOrderStateBlocked, advance_symbol, dump_symbol, restore_symbol,
+    advance_symbol, dump_symbol, restore_symbol,
 )
 from bybit_workbench.universal_entry.registry import ActivePlanRegistry
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
@@ -38,7 +40,7 @@ from operations.monitoring.r06_entry_publication_shadow_probe import (
     EXISTING_P90_COLD_COUNTS, FIVE, verify_current_entry_plan_scope,
 )
 from operations.monitoring.r06_fresh_entry_boundary import (
-    R06FreshCutoverBlocked, _require_no_exposure_or_requests,
+    _require_no_exposure_or_requests,
     bootstrap_future_entry_checkpoints, verify_r06_fresh_publication,
 )
 
@@ -146,7 +148,8 @@ def _observe_one(
 ) -> int:
     name = bundle.card.strategy_id
     saved = writer.execute(
-        "SELECT causal_state,last_publication_id FROM strategy_entry.p90_scoped_native_consumer_checkpoints "
+        "SELECT causal_state,last_publication_id FROM "
+        "strategy_entry.p90_scoped_native_consumer_checkpoints "
         "WHERE strategy_id=%s AND strategy_version=%s AND source_session_id=%s FOR UPDATE",
         (name, VERSION, pin.source_session_id),
     ).fetchone()
@@ -322,7 +325,9 @@ def run_pg_only(
                     prior_pub=0
                     continue
                 if any(r[3] != loaded_commit for r in checkpoints):
-                    raise R06PublishedEntryBlocked("R06_CURRENT_RELEASE_DIFFERS_FROM_DECISION_CURSOR")
+                    raise R06PublishedEntryBlocked(
+                        "R06_CURRENT_RELEASE_DIFFERS_FROM_DECISION_CURSOR"
+                    )
                 if pin.publication_id <= prior_pub:
                     time.sleep(0.15)
                     continue
