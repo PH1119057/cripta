@@ -4,9 +4,9 @@ No server archive required. Tests must not create any research artifacts.
 """
 from __future__ import annotations
 
+import os
 from decimal import Decimal as D
 from operator import eq
-import os
 
 import pytest
 
