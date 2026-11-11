@@ -2489,6 +2489,18 @@ atomic replace, ownership/mode, backup/recovery и approved management rail
 loaded identity. Ни один R01 quality TTL не даёт права автоматически
 менять Strategy Entry TTL/Exit action, MARКET prices or Bybit exchange.
 
+**R04 progression correction, OWNER DECISION 2026-11-11 (#470):**
+Для уже выполненного физического R04 действует более позднее точечное
+уточнение OBS §7.10.5.5: владелец принимает измеренный ресурсный риск
+под собственное операционное управление; дальнейшее расширение, очистка
+или перенос дисков **не входят** в поручение ChatGPT и root free-space
+forecast не является самостоятельным блокером закрытия R04. Собрать
+объективный R04 C/M/I/T/D/R checkpoint по выполненному source/quality/
+Observer/safety evidence и только после защищённого канонического merge
+снять старый дисковый STOP. Фактические ENOSPC/DB failures остаются
+fail-closed. R05 начинается отдельно и не активируется автоматически;
+полная приёмка R05, все consumer и LIVE gates сохраняются.
+
 ### 59.3 R04 сопутствующее сокращение MAYAK 20→7 — owner-approved release boundaries (2026-11-11, #470)
 
 Действующий **MAYAK v2** допускается переключить со старого 20-symbol observation universe на ровно `APTUSDT,ARBUSDT,DOTUSDT,INJUSDT,LTCUSDT,BTCUSDT,ETHUSDT`. Пять native/R04 symbols не расширять; R05 publication остаётся inert до своей отдельной приёмки. Implemented config/code обязаны брать один exact validated symbol set; избыточные default/EnvironmentFile/overrides и duplicate subscriptions не должны молча возвращать 20 symbols.
