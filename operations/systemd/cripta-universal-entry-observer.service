@@ -25,6 +25,7 @@ Environment=CRIPTA_UNIVERSAL_ENTRY_OBSERVER_STATE_ROOT=/var/lib/cripta/universal
 EnvironmentFile=/etc/cripta/universal_entry_observer.env
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/universal_entry_shadow.py
 Restart=on-failure
+RestartPreventExitStatus=42
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
