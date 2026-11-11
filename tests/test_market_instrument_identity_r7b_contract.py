@@ -118,7 +118,10 @@ def test_mayak_restart_restores_only_exact_linear_liquidation_identity() -> None
     assert "instrument_identity.product_category='LINEAR'" in source
     assert "instrument_identity.external_symbol=l.symbol" in source
     assert "WHERE l.market_source_id=%s" in source
-    assert "(BYBIT_VENUE_ID, BYBIT_PUBLIC_MARKET_SOURCE_ID)" in source
+    assert "WHERE l.market_source_id=%s" in source
+    assert "AND l.symbol = ANY(%s)" in source
+    assert "BYBIT_VENUE_ID, BYBIT_PUBLIC_MARKET_SOURCE_ID," in source
+    assert "list(self.symbols)" in source
 
 
 def test_scheduled_mayak_reports_use_only_proven_compact_public_identity() -> None:
