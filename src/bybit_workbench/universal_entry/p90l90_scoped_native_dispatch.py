@@ -92,7 +92,8 @@ def _verify_pinned_publication_bounds(
             not isinstance(ref, dict)
             or not isinstance(tf, dict)
             or native.get(symbol) != ref
-            or candles.get(symbol) != tf
+            or not isinstance(candles.get(symbol), dict)
+            or any(candles[symbol].get(k) != v for k, v in tf.items())
             or not all(k in tf for k in ("5", "15"))
         ):
             raise P90ScopedConsumerBlocked("P90_SCOPED_PUBLICATION_REF_DRIFT")

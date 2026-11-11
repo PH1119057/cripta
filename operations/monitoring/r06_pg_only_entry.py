@@ -120,9 +120,15 @@ def _checkpoints(writer: Any, *, pin: EntryPublicationPin) -> tuple[Any, ...]:
         "SELECT strategy_id,strategy_version,source_session_id,"
         "consumer_release_commit,bootstrap_publication_id,causal_state "
         "FROM strategy_entry.p90_scoped_native_consumer_checkpoints "
-        "ORDER BY strategy_id",
+        "WHERE source_session_id=%s ORDER BY strategy_id",
+        (pin.source_session_id,),
     ).fetchall()
     if not rows:
+        historical = writer.execute(
+            "SELECT count(*) FROM strategy_entry.p90_scoped_native_consumer_checkpoints"
+        ).fetchone()
+        if historical != (0,):
+            raise R06PublishedEntryBlocked("R06_OLD_ENTRY_EPOCH_REQUIRES_EXPLICIT_BRIDGE")
         return ()
     if (
         len(rows) != 2 or {r[0] for r in rows} != set(_STRATEGIES)
@@ -140,7 +146,7 @@ def _observe_one(
 ) -> int:
     name = bundle.card.strategy_id
     saved = writer.execute(
-        "SELECT causal_state FROM strategy_entry.p90_scoped_native_consumer_checkpoints "
+        "SELECT causal_state,last_publication_id FROM strategy_entry.p90_scoped_native_consumer_checkpoints "
         "WHERE strategy_id=%s AND strategy_version=%s AND source_session_id=%s FOR UPDATE",
         (name, VERSION, pin.source_session_id),
     ).fetchone()
@@ -211,7 +217,7 @@ def _observe_one(
                      item.signal.direction.value,event.event_at),
                 )
                 new_count += 1
-    consume_pinned_entry_native_batch(
+    consumed = consume_pinned_entry_native_batch(
         writer, publication_pin=pin, max_publication_age=_FRESH, source=source,
         strategy_id=name, strategy_version=VERSION,
         entry_plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
@@ -225,12 +231,17 @@ def _observe_one(
         "by_symbol": {sym: dump_symbol(state) for sym, state in automata.items()
                       if state.previous_price is not None},
     }
+    # Even an idle publication is an explicitly processed immutable view.
+    # Advancing its ID without moving native cursor is safe ONLY after the
+    # pinned dispatcher proved there were no published native rows to commit.
+    expected_id = pin.publication_id if consumed else saved[1]
     result = writer.execute(
         "UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints "
-        "SET causal_state=%s::jsonb,checked_at=clock_timestamp() "
+        "SET causal_state=%s::jsonb,last_publication_id=%s,checked_at=clock_timestamp() "
         "WHERE strategy_id=%s AND strategy_version=%s AND source_session_id=%s "
         "AND last_publication_id=%s",
-        (json.dumps(serialized,sort_keys=True),name,VERSION,pin.source_session_id,pin.publication_id),
+        (json.dumps(serialized,sort_keys=True),pin.publication_id,
+         name,VERSION,pin.source_session_id,expected_id),
     )
     if result.rowcount != 1:
         raise R06PublishedEntryBlocked("R06_ENTRY_ATOMIC_CAUSAL_STATE_CAS_FAILED")

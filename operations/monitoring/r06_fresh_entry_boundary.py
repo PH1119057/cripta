@@ -283,7 +283,10 @@ def bootstrap_future_entry_checkpoints(
             )
             or publication[3] != pin.native_watermarks
             or any(
-                publication[4].get(s) != pin.closed_refs[s] for s in FIVE
+                not isinstance(publication[4].get(s), dict)
+                or any(publication[4][s].get(k) != v
+                       for k, v in pin.closed_refs[s].items())
+                for s in FIVE
             )
             or now_row is None
             or not isinstance(now_row[0], datetime)
