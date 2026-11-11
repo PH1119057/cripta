@@ -26,6 +26,7 @@ from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
 )
 from operations.monitoring.native_public_trade_observer_delivery import (
     NativeObserverDeliveryBlocked,
+    acknowledge_native_technical_batch,
     active_native_observer_source,
     consume_native_observer_batch,
 )
@@ -137,6 +138,59 @@ def test_technical_observer_receives_exact_original_pg_order_and_commits_ack():
         "BEGIN", "SOURCE_LOCK", "CHECKPOINT_READ", "CHECKPOINT_INIT",
         "CHECKPOINT_READ", "SOURCE_ROWS", "CHECKPOINT_ACK", "COMMIT",
     ]
+
+
+def test_blocked_transport_adapter_ack_is_same_validated_original(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from operations.monitoring import native_public_trade_observer_delivery as mod
+
+    db = DB()
+    calls: list[tuple[str, ...]] = []
+
+    def verify_source(_db, **kwargs):
+        calls.append(kwargs["symbols"])
+        assert kwargs["loaded_consumer_commit"] == RELEASE
+        return proof()
+
+    monkeypatch.setattr(mod, "active_native_observer_source", verify_source)
+    result = acknowledge_native_technical_batch(
+        db, symbols=SYMS, source_checkout=Path("/source_checkout"),
+        loaded_consumer_commit=RELEASE, observed_at=NOW, limit=256,
+    )
+    assert calls == [SYMS]
+    assert result.source_session_id == SID
+    assert len(result.events) == 2
+    assert db.cursor == (7, 1, RELEASE)
+    assert db.operations[-1] == "COMMIT"
+    assert "CHECKPOINT_ACK" in db.operations
+
+
+def test_blocked_transport_adapter_does_not_ack_missing_original_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from operations.monitoring import native_public_trade_observer_delivery as mod
+
+    db = DB()
+    broken = list(db.trades[1])
+    broken[9] = None
+    broken[10] = None
+    db.trades[1] = tuple(broken)
+    monkeypatch.setattr(
+        mod, "active_native_observer_source",
+        lambda *_args, **_kwargs: proof(),
+    )
+    with pytest.raises(
+        NativeObserverDeliveryBlocked,
+        match="NATIVE_OBSERVER_DELIVERY_ORIGINAL_ROW_MISSING",
+    ):
+        acknowledge_native_technical_batch(
+            db, symbols=SYMS, source_checkout=Path("/source_checkout"),
+            loaded_consumer_commit=RELEASE, observed_at=NOW, limit=256,
+        )
+    assert db.rollback
+    assert db.cursor is None
+    assert "CHECKPOINT_ACK" not in db.operations
 
 
 def test_observer_callback_crash_cannot_ack_original_native_trades():
