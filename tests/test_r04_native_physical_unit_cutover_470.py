@@ -1,4 +1,4 @@
-"""R04 unit activation is an explicit native-producer ABI cutover, not R05.
+"""R04/R05 unit activation uses one native-producer ABI cutover, not a second writer.
 
 The tests are pure: no network, PostgreSQL, systemd or Exchange mutations.
 A GitHub/source merge alone never starts a service.
@@ -35,7 +35,7 @@ def test_r04_activates_one_native_union_not_two_competing_sources() -> None:
     assert env["CRIPTA_NATIVE_PUBLIC_TRADE_SYMBOLS"] == ",".join(P90)
     assert env["CRIPTA_SOURCE_CLOSED_KLINES"] == "0"
     assert env["CRIPTA_SOURCE_UNION_CAPTURE"] == "1"
-    assert env["CRIPTA_SOURCE_PUBLICATION"] == "0"
+    assert env["CRIPTA_SOURCE_PUBLICATION"] == "1"
     assert env["CRIPTA_SOURCE_KLINE_INTERVALS"] == "1,5,15"
     assert env["CRIPTA_SOURCE_UNION_MANIFEST_FILE"] == (
         "/etc/cripta/market-source/required_public_feeds.json"
@@ -71,9 +71,9 @@ def test_r04_full_manifest_is_five_symbols_and_only_spot_optional() -> None:
     }
 
 
-def test_r04_unit_does_not_activate_r05_or_second_mayak_writer() -> None:
+def test_r05_extends_r04_without_second_mayak_writer() -> None:
     text = UNIT.read_text(encoding="utf-8")
-    assert "CRIPTA_SOURCE_PUBLICATION=0" in text
+    assert "CRIPTA_SOURCE_PUBLICATION=1" in text
     assert "cripta-mayak-v2.service" not in text
     assert "Requires=postgresql.service" in text
     assert "StateDirectory=cripta/native_public_trade_source" in text
