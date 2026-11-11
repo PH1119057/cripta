@@ -71,6 +71,19 @@ def _bundles(connection: Any) -> tuple[Any, ...]:
         raise R06PublishedEntryBlocked("R06_PG_ONLY_LEGACY_OR_ORDINARY_OWNER_PRESENT")
     return tuple(sorted(rows, key=lambda b: b.card.strategy_id))
 
+def _exact_scope_identity(bundle: Any) -> tuple[object, ...]:
+    return (
+        bundle.card.strategy_id,
+        bundle.card.strategy_version,
+        bundle.card.strategy_config_fingerprint,
+        bundle.entry_plan.entry_plan_fingerprint,
+        bundle.exit_plan.exit_plan_fingerprint,
+        bundle.activation.activation_id,
+        bundle.activation.enabled,
+        bundle.activation.enabled_at,
+    )
+
+
 def _engines(bundles: tuple[Any, ...]) -> dict[str, UniversalEntryEngine]:
     engines = {}
     for b in bundles:
@@ -284,12 +297,15 @@ def run_pg_only(
                 raise R06PublishedEntryBlocked("R06_PG_ONLY_DECISION_OWNER_ALREADY_RUNNING")
             bundles = _bundles(writer)
             engines = _engines(bundles)
+            original_scope = tuple(_exact_scope_identity(b) for b in bundles)
             _require_no_exposure_or_requests(writer)
             prior_pub = 0
             last_status = 0.0
             while not stopping:
                 at = datetime.now(UTC)
                 _require_no_exposure_or_requests(writer)
+                if tuple(_exact_scope_identity(b) for b in _bundles(writer)) != original_scope:
+                    raise R06PublishedEntryBlocked("R06_ACTIVATION_OR_PLAN_IDENTITY_DRIFT")
                 pin, history, commits = _one_pin(reader,at=at,loaded=loaded_commit)
                 checkpoints = _checkpoints(writer,pin=pin)
                 if not checkpoints:
@@ -368,11 +384,12 @@ def run_pg_only(
                     last_status=time.monotonic()
                 time.sleep(0.15)
     except Exception as exc:
-        # Do not let Restart=on-failure spin on a permanent provenance fault.
-        # The old source consumer is not silently restarted either.
+        # Fixed exit status 42 is deliberately excluded from Restart=on-failure
+        # by the exact R06 systemd unit. A permanent provenance block must be
+        # visible as failure and may never cause an automatic old-path fallback.
         write_status(
             state="BLOCKED",epoch_id=None,active_bundles=(),symbols=FIVE,
             reason="R06_PG_ONLY_BLOCKED:"+type(exc).__name__+":"+str(exc)[:160],
             sensor_status={"native_pg_delivery_scope":"R06_BLOCKED_NO_ORDERS"},
         )
-        raise SystemExit(0) from exc
+        raise SystemExit(42) from exc

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -83,6 +84,19 @@ def test_corrupt_persisted_native_state_never_restores(history,bad):
     f,q=history
     with pytest.raises(R06NoOrderStateBlocked):
         restore_symbol(bad,five=f,fifteen=q,published_closed_at=BOUNDARY)
+
+def test_recovery_rejects_changed_historical_h9_bars(history):
+    f,q=history
+    state=restore_symbol(None,five=f,fifteen=q,published_closed_at=BOUNDARY)
+    advance_symbol(
+        state,price=D("91"),event_at=BOUNDARY+timedelta(seconds=1),
+        five=f,fifteen=q,published_closed_at=BOUNDARY,
+    )
+    saved=dump_symbol(state)
+    corrupt=f[:-1]+(replace(f[-1],high=D("110.25")),)
+    with pytest.raises(R06NoOrderStateBlocked,match="GEOMETRY_CHANGED"):
+        restore_symbol(saved,five=corrupt,fifteen=q,published_closed_at=BOUNDARY)
+
 
 def test_missing_prev7d_never_creates_causal_signal(history):
     f,q=history
