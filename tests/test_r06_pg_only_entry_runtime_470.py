@@ -175,10 +175,7 @@ def test_pg_only_cutover_cannot_be_launched_from_ordinary_shell(monkeypatch):
         mod.Path, "read_text",
         lambda _self, **_kw: "0::/user.slice/user-1000.slice",
     )
-    monkeypatch.setattr(
-        mod.pwd, "getpwnam",
-        lambda _name: SimpleNamespace(pw_uid=__import__("os").geteuid()),
-    )
+    monkeypatch.setattr(mod, "_runtime_actor_verified", lambda: True)
     monkeypatch.setenv("INVOCATION_ID", "test")
     with pytest.raises(mod.R06PublishedEntryBlocked,match="EXCLUSIVITY"):
         mod._require_exclusive_systemd_owner()
@@ -190,10 +187,7 @@ def test_same_unit_cgroup_is_required_before_source_only_start(monkeypatch):
         lambda _self, **_kw:
             "0::/system.slice/cripta-universal-entry-observer.service",
     )
-    monkeypatch.setattr(
-        mod.pwd, "getpwnam",
-        lambda _name: SimpleNamespace(pw_uid=__import__("os").geteuid()),
-    )
+    monkeypatch.setattr(mod, "_runtime_actor_verified", lambda: True)
     monkeypatch.setenv("INVOCATION_ID", "test")
     mod._require_exclusive_systemd_owner()
 

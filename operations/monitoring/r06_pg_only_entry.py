@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import pwd
 import signal
 import time
 from datetime import UTC, datetime, timedelta
@@ -264,6 +263,14 @@ def _observe_one(
         raise R06PublishedEntryBlocked("R06_ENTRY_ATOMIC_CAUSAL_STATE_CAS_FAILED")
     return new_count
 
+def _runtime_actor_verified() -> bool:
+    """Compare actual service UID with the deployed runtime owner on Linux."""
+    try:
+        return os.geteuid() == os.stat("/srv/cripta/runtime/current").st_uid
+    except (OSError, AttributeError):
+        return False
+
+
 def _require_exclusive_systemd_owner() -> None:
     """Only the SAME unit that owned old WS can replace its Entry reader.
 
@@ -272,11 +279,10 @@ def _require_exclusive_systemd_owner() -> None:
     """
     try:
         scope = Path("/proc/self/cgroup").read_text(encoding="utf-8")
-        owner = pwd.getpwnam("cripta").pw_uid
-    except (OSError, KeyError) as exc:
+    except OSError as exc:
         raise R06PublishedEntryBlocked("R06_SINGLE_UNIT_IDENTITY_UNAVAILABLE") from exc
     if (
-        os.geteuid() != owner
+        not _runtime_actor_verified()
         or not os.environ.get("INVOCATION_ID")
         or "/system.slice/cripta-universal-entry-observer.service" not in scope
     ):
