@@ -66,6 +66,7 @@ class Collector:
         self.liquidation_lock = threading.Lock()
         self.state_write_lock = threading.Lock()
         self.subscription_acks: dict[str, dict[str, Any]] = {}
+        self._scope_commit_logged = False
         self.previous_state: str | None = None
         self.continuity = MinuteContinuityTracker()
         self.transport_gap_started_at: dict[str, float | None] = {
@@ -437,6 +438,8 @@ class Collector:
                 threading.Thread(target=self._refresh_ratios, daemon=True).start()
                 next_ratios = time.monotonic() + 300
             snapshot = self.engine.snapshot(now)
+            if set(snapshot.get("coins", {})) != set(self.symbols):
+                raise RuntimeError("MAYAK_SEVEN_SNAPSHOT_SCOPE_DRIFT")
             minute = now.replace(second=0, microsecond=0)
             if self.last_persisted_minute is None or minute > self.last_persisted_minute:
                 snapshot["collector_continuity"] = self._advance_continuity(minute)
@@ -446,6 +449,18 @@ class Collector:
                 self._persist_coin_market_contexts(snapshot_id, snapshot)
                 self._persist_observation_journal(snapshot_id, snapshot)
                 self._persist_shared_market_context(snapshot_id, snapshot)
+                if not self._scope_commit_logged:
+                    # Durable input writes succeeded; operator can verify the
+                    # actual loaded seven-symbol scope without reading files
+                    # owned by another Unix principal or restarting services.
+                    print(
+                        "MAYAK_SEVEN_SCOPE_COMMITTED "
+                        f"snapshot_id={snapshot_id} "
+                        f"symbols={','.join(self.symbols)} "
+                        f"config_fingerprint={snapshot['config_fingerprint']}",
+                        flush=True,
+                    )
+                    self._scope_commit_logged = True
                 self.last_persisted_handoff = snapshot["dispatcher_handoff"]
                 state = str(snapshot["state"])
                 if state != self.previous_state:
