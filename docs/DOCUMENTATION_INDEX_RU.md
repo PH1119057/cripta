@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.52
-**Дата:** 2026-11-10
+**Версия:** 3.53
+**Дата:** 2026-11-11
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1801,3 +1801,9 @@ GitHub source artifact от установленного operator readback.
 physical filesystem и release/rollback приёмки. Current docs
 set, active source bundle (11), mandatory pre-read, root README/AGENTS
 routes и Project Instructions не меняются.
+
+## 75. R04 scoped optional public-feed failure isolation — OWNER DECISION 2026-11-11 (Issue #470)
+
+Владелец разрешил продолжение roadmap после R03: один native MarketSource producer/writer сохраняется, но optional SPOT/topic/REST failures изолируются с durable scoped GAP/NO_DATA/STALE/NOT_LISTED и epoch/recovery evidence; исправная обязательная LINEAR original trade и R03 candle/Observer continuity не останавливаются глобальным отказом необязательного источника. **Source/quality owner:** OBS §7.10.5.2. ARCH §60.5 остаётся owner единой producer/consumer границы, OBS §7.10.5.1 задаёт per-consumer required/TTL, DEV §50.5.1/§59 — negative tests, PG/WAL/backup, release and rollback. GLOSSARY §45 определяет общую MarketSource identity; dated facts — MAP и Issue #470.
+
+Нельзя включать R04 source union, R05 publication, новые монеты, второй writer, automatic LIVE/Exchange mutation или отключать существующий MAYAK 20 symbols по одной редакционной правке. До физической активации обязательны негативные SPOT/topic/REST cases, disposable PG16 scoped quality evidence, measured disk/WAL/backup pressure и runtime parity LINEAR/Observer. Документный состав 11 файлов, пути, pre-read, README/AGENTS и Project Instructions не меняются. OWNER_DECISION=YES; CANON_AFTER_MERGE=YES; R04_IMPLEMENTED=NOT_VERIFIED; R04_DEPLOYED=NO; LIVE_CHANGE=NO.

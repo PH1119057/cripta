@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 2.4
-**Дата:** 2026-11-10
+**Версия:** 2.5
+**Дата:** 2026-11-11
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -1190,3 +1190,17 @@ It must remain inert (`CRIPTA_SOURCE_UNION_CAPTURE=0`) until the
 approved one-producer native cutover and independent signed
 Exit/protection preflight. Do not claim R01 DEPLOYED or RUNTIME VERIFIED
 from GitHub merge or a test fixture.
+
+#### 7.10.5.2 R04 — независимость отказов optional public feeds — OWNER DECISION 2026-11-11 (#470)
+
+**Физический owner остаётся один:** Native/MarketSource producer с одним PG advisory lock и единственным writer-path. SPOT и LINEAR, а также необходимые WS topics и REST polls — отдельные внутренние transport/fact scopes. Изоляция transport failures не создаёт второго producer, writer или authority.
+
+**Владелец качества и граница отказа:** MarketSource producer обязан фиксировать durable quality/continuity evidence на доказуемом scope venue + market/source + product (SPOT/LINEAR) + topic/dataset + instrument + transport/source epoch. Невозможность подтвердить более узкий scope должна оставаться явно UNKNOWN, а не скрываться под READY. GAP требует доказанного continuity break, NO_DATA обозначает отсутствие доказанного факта, STALE — consumer-specific freshness expiry, NOT_LISTED — подтверждённое отсутствие конкретного SPOT/LINEAR instrument. Event-driven отсутствие торговли/ликвидаций не означает GAP или нулевой рыночный факт. У ошибок и восстановления сохраняются причина, timestamps, scoped epoch, provenance и audit; успешный reconnect сам по себе не закрывает старый GAP.
+
+**Изоляция обязательных LINEAR источников:** отказ необязательного по R01 manifest SPOT connection/subscription, runtime disconnect/heartbeat, malformed optional topic/book delta или REST poll/queue не должен разрывать исправную LINEAR original publicTrade native session, R03 confirmed 1m/5m/15m candle writer, журнал/cursors и Observer ACK. Аналогично optional LINEAR topic fault не делает глобальный GAP. Обязательность и TTL определяются для каждого consumer, не для общего process. Неизвестная required data блокирует только affected consumer/decision. Если граница общей ошибки не доказана, affected source fail-closed, без false READY; global PG/advisory lock corruption остаётся критичной ошибкой всего producer.
+
+**Recovery:** ограниченный retry/backoff по product/topic и доказанная новая epoch; missing events, closed bars и old source continuity не синтезируются. Decoder, network worker, REST и backpressure faults получают отдельный typed quality outcome и bounded queues, не unconditional common stop для unrelated LINEAR. Для любой реконструкции required history нужен authentic source, exact lineage и независимый QC.
+
+**Физический R04 gate:** до enable R04 source union RED→GREEN tests: optional SPOT subscribe rejection, runtime disconnect/heartbeat, malformed optional book, optional REST absence/timeout, queue overflow and reconnect; доказать сохранность five native LINEAR cursors, journal, 15 closed windows, same-session Observer ACK, scoped durable quality/epochs. Требуется disposable PostgreSQL16 integration, restart/rollback proof, measured per-day PG+WAL+system-backup amplification and headroom, actor/path and bounded retention for NEW compact/REST/forming datasets. Native original journal, R03 closed candles и OPEN Exit evidence не подвергать TTL purge без отдельного approved решения. До выполнения gate CRIPTA_SOURCE_UNION_CAPTURE выключен; R05 publication остаётся выключена.
+
+**Preservation:** только пять symbols APTUSDT/ARBUSDT/DOTUSDT/INJUSDT/LTCUSDT в новом capture. Existing MAYAK 20-symbol capability, Strategy/Entry/Exit/Execution, signed Private safety и financial LIVE-arm не меняются. CANON UPDATE не означает IMPLEMENTED, DEPLOYED или RUNTIME BEHAVIOR VERIFIED.
