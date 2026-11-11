@@ -195,7 +195,7 @@ def test_frozen_h9_atr_and_entry_candidate_parity_both_sides(
             event_at=pg_fact.event_at,
         )
         assert old_crossings == pg_crossings
-        for old_cross, pg_cross in zip(old_crossings, pg_crossings):
+        for old_cross, pg_cross in zip(old_crossings, pg_crossings, strict=True):
             old_candidate = p90l90_crossing_fact(
                 entry_plan_fingerprint=plan.entry_plan_fingerprint,
                 source_fact=old_fact, crossing=old_cross, geometry=state,
@@ -217,7 +217,7 @@ def test_frozen_h9_atr_and_entry_candidate_parity_both_sides(
                 allow_new_signals=True, account_ref="BYBIT:UNIFIED",
             )
             assert len(old_result) == len(pg_result)
-            for o, p in zip(old_result, pg_result):
+            for o, p in zip(old_result, pg_result, strict=True):
                 assert o.signal.fact_id == p.signal.fact_id
                 assert o.signal.direction == p.signal.direction
                 assert o.decision is p.decision is None
