@@ -453,6 +453,13 @@ def run_source_union(
         for item in union.requirements
         if item.dataset in ("ACCOUNT_RATIO", "INSTRUMENT_INFO")
     }))
+    rest_freshness = {
+        feed: min(
+            item.freshness_seconds for item in union.requirements
+            if (item.product, item.symbol, item.dataset) == feed
+        )
+        for feed in rest_needs
+    }
     forming_needs = frozenset({
         (item.product, item.symbol, item.timeframe)
         for item in union.requirements
@@ -562,6 +569,7 @@ def run_source_union(
         # explicit physical REST feed. A failure leaves missing/stale evidence
         # in the shared publication. The original WS reader is uninterrupted.
         due = {feed: 0.0 for feed in rest_needs}
+        last_received_rest: dict[tuple[str, str, str], float] = {}
         while not done.is_set() and not source_stopping():
             for product, symbol, dataset in rest_needs:
                 if done.is_set() or source_stopping():
@@ -579,6 +587,7 @@ def run_source_union(
                         product=product, symbol=symbol,
                     )
                     rest_pipe.put(fact, timeout=0.25)
+                    last_received_rest[key] = time.monotonic()
                 except PublicMarketRestInvalid:
                     # No false healthy response, no silence on optional REST.
                     note_quality(
@@ -586,7 +595,15 @@ def run_source_union(
                         topic=("REST:market/account-ratio:" + symbol
                                if dataset == "ACCOUNT_RATIO"
                                else "REST:market/instruments-info:" + symbol),
-                        quality="NO_DATA", reason="PUBLIC_REST_UNVERIFIED",
+                        quality=(
+                            "STALE"
+                            if key in last_received_rest and (
+                                now - last_received_rest[key]
+                                > rest_freshness[key]
+                            )
+                            else "NO_DATA"
+                        ),
+                        reason="PUBLIC_REST_UNVERIFIED",
                     )
                     continue
                 except (OSError, TimeoutError):
@@ -595,7 +612,15 @@ def run_source_union(
                         topic=("REST:market/account-ratio:" + symbol
                                if dataset == "ACCOUNT_RATIO"
                                else "REST:market/instruments-info:" + symbol),
-                        quality="NO_DATA", reason="PUBLIC_REST_UNAVAILABLE",
+                        quality=(
+                            "STALE"
+                            if key in last_received_rest and (
+                                now - last_received_rest[key]
+                                > rest_freshness[key]
+                            )
+                            else "NO_DATA"
+                        ),
+                        reason="PUBLIC_REST_UNAVAILABLE",
                     )
                     continue
                 except queue.Full:
