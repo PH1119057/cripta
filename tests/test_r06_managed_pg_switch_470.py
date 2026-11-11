@@ -311,12 +311,11 @@ def test_protected_probe_uses_explicit_cripta_uid_gid_and_no_pam_runuser(
     monkeypatch,
 ):
     from types import SimpleNamespace
-    import os
 
+    pwd = pytest.importorskip("pwd")
     account = SimpleNamespace(
         pw_uid=107, pw_gid=109, pw_dir="/var/lib/cripta",
     )
-    import pwd
     monkeypatch.setattr(pwd, "getpwnam", lambda _name: account)
     monkeypatch.setattr(switch.os, "geteuid", lambda: 0)
     monkeypatch.setattr(switch.os, "getgrouplist", lambda *_args: [109, 250])
@@ -345,7 +344,8 @@ def test_protected_probe_uses_explicit_cripta_uid_gid_and_no_pam_runuser(
 
 def test_missing_uid_drop_never_falls_back_to_root(monkeypatch):
     from types import SimpleNamespace
-    import pwd
+
+    pwd = pytest.importorskip("pwd")
     monkeypatch.setattr(
         pwd, "getpwnam", lambda _name:
         SimpleNamespace(pw_uid=107,pw_gid=109,pw_dir="/var/lib/cripta"),
@@ -368,7 +368,8 @@ def test_missing_uid_drop_never_falls_back_to_root(monkeypatch):
 
 def test_missing_child_output_returns_sanitized_actor_diagnostics(monkeypatch):
     from types import SimpleNamespace
-    import pwd
+
+    pwd = pytest.importorskip("pwd")
     monkeypatch.setattr(
         pwd, "getpwnam", lambda _name:
         SimpleNamespace(pw_uid=107,pw_gid=109,pw_dir="/var/lib/cripta"),
@@ -393,8 +394,10 @@ def test_probe_rejects_wrong_unix_actor_before_db_or_signed_exchange(
     monkeypatch,
 ):
     from types import SimpleNamespace
-    import pwd
+
     from operations.management import r06_pg_switch_probe as probe
+
+    pwd = pytest.importorskip("pwd")
     monkeypatch.setattr(
         pwd, "getpwnam", lambda _name:
         SimpleNamespace(pw_uid=107,pw_gid=109),
