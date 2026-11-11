@@ -188,3 +188,90 @@ def test_rollback_never_accepts_altered_config_or_backup(monkeypatch):
     )
     with pytest.raises(switch.R06ModeSwitchBlocked, match="CONCURRENT_CHANGE"):
         switch._rollback_inner(automatic=False)
+
+
+def test_automatic_rollback_uses_local_off_gate_not_missing_signed_proof(
+    monkeypatch,
+):
+    original = b"R06_UNRELATED_SETTING=unchanged\n"
+    modified = switch._new_config(original)
+    marker = {
+        "state": "FLAG_WRITTEN", "original_sha": switch._sha(original),
+        "edited_sha": switch._sha(modified),
+    }
+    backup = SimpleNamespace(
+        exists=lambda: True, is_symlink=lambda: False,
+        stat=lambda **_kw: SimpleNamespace(st_uid=0, st_mode=0o100600),
+        read_bytes=lambda: original,
+    )
+    actions = []
+    running = {"observer": False, "pid": 0}
+    monkeypatch.setattr(switch, "_load_marker", lambda: marker)
+    monkeypatch.setattr(switch, "_verify_release", lambda: "a" * 40)
+    monkeypatch.setattr(switch, "BACKUP", backup)
+    monkeypatch.setattr(
+        switch, "_mode_source",
+        lambda: (modified, SimpleNamespace(st_uid=0, st_gid=109)),
+    )
+    monkeypatch.setattr(
+        switch, "_is_active",
+        lambda unit: running["observer"] if unit == switch.OBSERVER else True,
+    )
+    monkeypatch.setattr(
+        switch, "_pid", lambda _unit: running["pid"],
+    )
+    def restart(action):
+        actions.append(("service", action))
+        if action == "start":
+            running.update(observer=True, pid=102)
+        if action == "stop":
+            running.update(observer=False, pid=0)
+    monkeypatch.setattr(switch, "_service", restart)
+    monkeypatch.setattr(
+        switch, "_probe", lambda mode: actions.append(("probe", mode)),
+    )
+    monkeypatch.setattr(
+        switch, "_atomic",
+        lambda content, *_args, **_kwargs: actions.append(("restore", content)),
+    )
+    monkeypatch.setattr(
+        switch, "_write_marker",
+        lambda state: actions.append(("state", state["state"])),
+    )
+    switch._rollback_inner(automatic=True)
+    assert ("probe", "rollback_local") in actions
+    assert ("restore", original) in actions
+    assert ("service", "start") in actions
+    assert ("state", "ROLLED_BACK") in actions
+    assert not any("signed" in str(event).lower() for event in actions)
+
+
+def test_existing_old_observer_does_not_get_restart_on_early_failure(
+    monkeypatch,
+):
+    original = b"R06_EXISTING=old\n"
+    marker = {
+        "state": "PREPARED",
+        "original_sha": switch._sha(original),
+        "edited_sha": switch._sha(switch._new_config(original)),
+    }
+    backup = SimpleNamespace(
+        exists=lambda: True, is_symlink=lambda: False,
+        stat=lambda **_kw: SimpleNamespace(st_uid=0, st_mode=0o100600),
+        read_bytes=lambda: original,
+    )
+    monkeypatch.setattr(switch, "_load_marker", lambda: marker)
+    monkeypatch.setattr(switch, "_verify_release", lambda: "a" * 40)
+    monkeypatch.setattr(switch, "BACKUP", backup)
+    monkeypatch.setattr(
+        switch, "_mode_source",
+        lambda: (original, SimpleNamespace(st_uid=0, st_gid=109)),
+    )
+    monkeypatch.setattr(switch, "_is_active", lambda _unit: True)
+    monkeypatch.setattr(switch, "_probe", lambda _phase: None)
+    monkeypatch.setattr(
+        switch, "_service", lambda _action: pytest.fail("do not restart old"),
+    )
+    monkeypatch.setattr(switch, "_write_marker", lambda _state: None)
+    switch._rollback_inner(automatic=True)
+    assert marker["state"] == "ROLLED_BACK"

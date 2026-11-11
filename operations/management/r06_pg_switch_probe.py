@@ -95,7 +95,7 @@ def _require_after(conn: psycopg.Connection, sha: str, source: str) -> dict[str,
 
 
 def verify(mode: str) -> dict[str, object]:
-    if mode not in ("before", "detached", "after"):
+    if mode not in ("before", "detached", "after", "rollback_local"):
         raise R06SwitchPreflightBlocked("R06_UNKNOWN_PROBE_MODE")
     sha = current_release()
     with psycopg.connect(
@@ -107,6 +107,12 @@ def verify(mode: str) -> dict[str, object]:
             raise R06SwitchPreflightBlocked("R06_DB_READ_ONLY_NOT_ENFORCED")
         bundles = _bundles(conn)
         _require_no_exposure_or_requests(conn)
+        if mode == "rollback_local":
+            return {
+                "result": "R06_ROLLBACK_LOCAL_OFF_PASS",
+                "release": sha,
+                "trading_effect": "NONE",
+            }
         if mode != "after":
             # Credential-local signed MAIN/SUB proof, with its own bounded
             # generation barrier. Never accept stale 0/0 or mocked proof.

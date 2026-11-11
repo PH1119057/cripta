@@ -200,7 +200,7 @@ def _require_units() -> int:
 
 
 def _probe(phase: str) -> dict[str, object]:
-    if phase not in ("before", "detached", "after"):
+    if phase not in ("before", "detached", "after", "rollback_local"):
         raise R06ModeSwitchBlocked("R06_UNKNOWN_PROBE_PHASE")
     command = (
         "/usr/sbin/runuser", "-u", "cripta", "--",
@@ -219,6 +219,7 @@ def _probe(phase: str) -> dict[str, object]:
         or report.get("result") not in (
             "R06_PG_SWITCH_PREFLIGHT_PASS",
             "R06_PHYSICAL_PG_ONLY_NO_ORDER_PASS",
+            "R06_ROLLBACK_LOCAL_OFF_PASS",
         )
     ):
         raise R06ModeSwitchBlocked(
@@ -274,8 +275,18 @@ def _rollback_inner(*, automatic: bool) -> None:
     current, meta = _mode_source()
     if _sha(current) not in (original, edited):
         raise R06ModeSwitchBlocked("R06_ROLLBACK_CONFIG_CONCURRENT_CHANGE")
-    # A rollback is only source-only while independently no orders/gate.
-    _probe("detached" if not _is_active(OBSERVER) else "before")
+    # A blocked signed MAIN/SUB forward preflight must not itself prevent
+    # restoring the already-existing no-order legacy Observer. Verify local
+    # OFF/exposure under cripta, plus both independent source/Exit services.
+    # The old Observer still has its own fail-closed private safety gates.
+    if not _is_active(SOURCE) or not _is_active(EXIT):
+        raise R06ModeSwitchBlocked("R06_ROLLBACK_EXIT_OR_SOURCE_UNAVAILABLE")
+    _probe("rollback_local")
+    if _sha(current) == original and _is_active(OBSERVER):
+        data["state"] = "ROLLED_BACK"
+        data["ended_at"] = datetime.now(UTC).isoformat()
+        _write_marker(data)
+        return
     if _is_active(OBSERVER):
         _service("stop")
     if _is_active(OBSERVER):
