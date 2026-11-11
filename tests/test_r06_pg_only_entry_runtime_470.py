@@ -1,4 +1,5 @@
 """R06 physical PG-only no-order Entry automaton durability and fail-closed tests."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -9,7 +10,10 @@ import pytest
 
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.universal_entry.p90_r06_no_order_state import (
-    R06NoOrderStateBlocked, advance_symbol, dump_symbol, restore_symbol,
+    R06NoOrderStateBlocked,
+    advance_symbol,
+    dump_symbol,
+    restore_symbol,
 )
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS

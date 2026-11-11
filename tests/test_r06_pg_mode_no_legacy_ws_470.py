@@ -1,4 +1,5 @@
 """R06 guard against still-connected legacy WebSocket in the PG-only route."""
+
 import inspect
 
 from operations.monitoring import universal_entry_shadow

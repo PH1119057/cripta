@@ -3,6 +3,7 @@
 The native cursor AND this state are committed inside one PostgreSQL transaction.
 Do not infer a previous price or a previous crossing from a technical ACK.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -11,7 +12,10 @@ from typing import Any
 
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.universal_entry.p90l90_causal import (
-    P90L90CausalEntry, P90L90EntryState, P90L90Crossing, causal_entry_state,
+    P90L90CausalEntry,
+    P90L90Crossing,
+    P90L90EntryState,
+    causal_entry_state,
 )
 
 class R06NoOrderStateBlocked(RuntimeError):
