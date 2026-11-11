@@ -141,7 +141,7 @@ class PublicSecondAccumulator:
                 raise PublicSourceFrameInvalid("PUBLIC_TRADE_NATIVE_ID_REQUIRED")
             duplicate = (event.instrument_id, event.exchange_sequence, event.exec_id)
             if duplicate in self._processed_trade_ids[second]:
-                return
+                return None
             self._processed_trade_ids[second].add(duplicate)
             price = Decimal(str(event.payload["price"]))
             qty = Decimal(str(event.payload["qty"]))
@@ -170,6 +170,7 @@ class PublicSecondAccumulator:
             row["ticker_field_times"] = dict(seen)
         else:
             row["book"] = book_data
+        return None
 
     def ready_seconds(self, *, before: datetime) -> tuple[dict[str, Any], ...]:
         """Peek frozen second rows, do not drop on failed DB transaction."""
