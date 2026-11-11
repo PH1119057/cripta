@@ -74,7 +74,8 @@ def test_strict_cohorts_nested_for_every_depthzero_event():
 
 def test_only_two_new_bands_replayed_and_baseline_reused():
     assert sweep.NEW == ("025", "075")
-    assert sweep.WIDTHS == {"025": D("0.25"), "050": D("0.50"), "075": D("0.75")}
+    width_bands = sweep.WIDTHS
+    assert width_bands == {"025": D("0.25"), "050": D("0.50"), "075": D("0.75")}
     assert sweep.EXPECTED_050 == {"LONG_ONLY": 2583, "SHORT_ONLY": 2863}
     assert sweep.CASES == ("NO_PAUSE", "SECOND48")
     assert sweep.SIDES == ("LONG_ONLY", "SHORT_ONLY")
