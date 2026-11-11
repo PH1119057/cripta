@@ -1,4 +1,4 @@
-"""R01/R04 source union: 20 MAYAK coins + five P90; no redundant sockets.
+"""R01/R04 planner: legacy seven-symbol MAYAK plus five P90, no duplicate topics.
 
 This is the approved-feed *planner*, NOT proof of active producer capture.
 It intentionally starts no public WS, no private connection and no DB writer.
@@ -72,8 +72,9 @@ def test_physically_one_feed_serves_multiple_entry_exit_and_mayak_consumers() ->
     assert union.websocket_batches("SPOT") == (("publicTrade.LTCUSDT",),)
 
 
-def test_all_twenty_existing_mayak_symbols_and_p90_are_covered_without_dup() -> None:
-    assert len(DEFAULT_SYMBOLS) == 20
+def test_owner_approved_seven_mayak_symbols_and_five_p90_dedup() -> None:
+    assert len(DEFAULT_SYMBOLS) == 7
+    assert {"BTCUSDT", "ETHUSDT"} <= set(DEFAULT_SYMBOLS)
     assert set(P90).issubset(set(DEFAULT_SYMBOLS))
     needs: list[RequiredPublicFeed] = []
     for sym in DEFAULT_SYMBOLS:
@@ -97,11 +98,11 @@ def test_all_twenty_existing_mayak_symbols_and_p90_are_covered_without_dup() -> 
     union = union_public_feed_requirements(tuple(needs))
     spot = [x for x in union.websocket_topics if x.product == "SPOT"]
     linear = [x for x in union.websocket_topics if x.product == "LINEAR"]
-    assert len(spot) == 40
-    assert len(linear) == 90
+    assert len(spot) == 14
+    assert len(linear) == 38
     assert len(union.rest_inputs) == 0
-    assert sum(len(batch) for batch in union.websocket_batches("SPOT")) == 40
-    assert sum(len(batch) for batch in union.websocket_batches("LINEAR")) == 90
+    assert sum(len(batch) for batch in union.websocket_batches("SPOT")) == 14
+    assert sum(len(batch) for batch in union.websocket_batches("LINEAR")) == 38
     assert all(len(batch) <= 10 for batch in union.websocket_batches("SPOT"))
     assert all(len(batch) <= 30 for batch in union.websocket_batches("LINEAR"))
     ltc = next(
