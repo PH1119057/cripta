@@ -231,7 +231,8 @@ def _probe(phase: str) -> dict[str, object]:
 def _check_unit_invocation(mode: str) -> None:
     wanted = (
         "cripta-r06-entry-cutover.service" if mode == "cutover"
-        else "cripta-r06-entry-rollback.service"
+        else ("cripta-r06-entry-recovery.service" if mode == "auto-rollback"
+              else "cripta-r06-entry-rollback.service")
     )
     try:
         cgroup = Path("/proc/self/cgroup").read_text(encoding="utf-8")
@@ -360,7 +361,14 @@ def main() -> int:
         mode = sys.argv[1]
         _check_unit_invocation(mode)
         import fcntl
-        with LOCK.open("a+b") as lock:
+        lock_fd = os.open(
+            LOCK, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC |
+            getattr(os, "O_NOFOLLOW", 0), 0o600,
+        )
+        with os.fdopen(lock_fd, "r+b") as lock:
+            lock_info = os.fstat(lock.fileno())
+            if lock_info.st_uid != 0 or not stat.S_ISREG(lock_info.st_mode):
+                raise R06ModeSwitchBlocked("R06_LOCK_OWNER_OR_TYPE_DRIFT")
             os.fchmod(lock.fileno(), 0o600)
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             if mode == "cutover":

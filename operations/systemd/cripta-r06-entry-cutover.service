@@ -1,0 +1,24 @@
+[Unit]
+Description=CRIPTA R06 authorized one-shot no-order PG-only Entry switch
+After=postgresql.service
+Requires=postgresql.service
+OnFailure=cripta-r06-entry-recovery.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /usr/local/libexec/cripta-r06-switch/r06_pg_mode_switch.py cutover
+TimeoutStartSec=790
+Restart=no
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+ReadOnlyPaths=/srv/cripta/runtime/current /usr/local/libexec/cripta-r06-switch
+ReadWritePaths=/etc/cripta /var/lib/cripta/release-controller/r06-pg-switch /run/lock
+UMask=0077

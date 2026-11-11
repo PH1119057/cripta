@@ -349,6 +349,10 @@ unit_specs=(
   "operations/systemd/cripta-universal-entry-consumer.service|cripta-universal-entry-consumer.service|runtime"
   # Credential-free native MarketSource must own the journal before consumers.
   "operations/systemd/cripta-native-public-trade-source.service|cripta-native-public-trade-source.service|runtime"
+  # Inert exact root-managed R06 switch/recovery units; never auto-enable.
+  "operations/systemd/cripta-r06-entry-cutover.service|cripta-r06-entry-cutover.service|runtime"
+  "operations/systemd/cripta-r06-entry-rollback.service|cripta-r06-entry-rollback.service|runtime"
+  "operations/systemd/cripta-r06-entry-recovery.service|cripta-r06-entry-recovery.service|runtime"
   "operations/systemd/cripta-universal-entry-observer.service|cripta-universal-entry-observer.service|runtime"
   "operations/systemd/cripta-universal-entry-shadow.service|cripta-universal-entry-shadow.service|runtime"
   "operations/systemd/cripta-universal-exit-shadow.service|cripta-universal-exit-shadow.service|runtime"
@@ -386,6 +390,19 @@ for relative in "${release_controller_files[@]}"; do
   cmp -s "$staged" "$candidate" || die "release controller candidate differs from exact Git: $relative"
 done
 echo "RELEASE_CONTROLLER_SOURCE_PREFLIGHT=PASS"
+
+# Exact root-owned R06 management bytes must be compared to the reviewed
+# Git object BEFORE stopping any managed service or writing the filesystem.
+r06_switch_rel="operations/management/r06_pg_mode_switch.py"
+r06_switch_stage="$controller_stage/r06_pg_mode_switch.py"
+as_repo_owner git -C "$SOURCE" show "$RELEASE_COMMIT:$r06_switch_rel" > "$r06_switch_stage"
+chmod 0600 "$r06_switch_stage"
+cmp -s "$r06_switch_stage" "$runtime_release/$r06_switch_rel" ||
+  die "R06 management root helper differs from exact protected Git bytes"
+[[ -f "$runtime_release/operations/management/r06_pg_switch_probe.py" ]] ||
+  die "R06 signed preflight source absent from release"
+echo "R06_MANAGEMENT_ROOT_BINARY_GIT_BYTES=PASS"
+
 
 broker_relative="operations/management/real_service_broker.py"
 broker_candidate="$runtime_release/$broker_relative"
@@ -440,7 +457,7 @@ if [[ -d /etc/systemd/system/cripta-private-runtime.service.d ]]; then
   install -d -m 0700 "$backup/files/etc/systemd/system"
   cp -a /etc/systemd/system/cripta-private-runtime.service.d "$backup/files/etc/systemd/system/"
 fi
-for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /usr/local/libexec/cripta-market-hot-retention.py /etc/cripta/release.env; do
+for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /usr/local/libexec/cripta-r06-switch /usr/local/libexec/cripta-market-hot-retention.py /etc/cripta/release.env; do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
     install -d -m 0700 "$backup/files/$(dirname "$safe")"
@@ -825,6 +842,19 @@ install -d -o root -g root -m 0755 /usr/local/libexec/cripta-real-service-broker
 install -o root -g root -m 0755 \
   "$broker_staged" \
   /usr/local/libexec/cripta-real-service-broker/real_service_broker.py
+
+
+# One exact root-owned unit entrypoint; never run the privileged helper from
+# cripta-writable runtime code. Root state retains secret preimage 0600 only.
+install -d -o root -g root -m 0755 /usr/local/libexec/cripta-r06-switch
+install -o root -g root -m 0755 "$r06_switch_stage" \
+  /usr/local/libexec/cripta-r06-switch/r06_pg_mode_switch.py
+cmp -s "$r06_switch_stage" \
+  /usr/local/libexec/cripta-r06-switch/r06_pg_mode_switch.py ||
+  die "R06 root management helper install-byte mismatch"
+install -d -o root -g root -m 0700 \
+  /var/lib/cripta/release-controller/r06-pg-switch
+echo "R06_ROOT_ONLY_SWITCH_RAIL=INSTALLED_INERT"
 
 install -d -o root -g cripta -m 0750 /etc/cripta
 cat > /etc/cripta/release.env <<EOF

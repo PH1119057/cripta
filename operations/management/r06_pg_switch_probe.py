@@ -99,7 +99,7 @@ def verify(mode: str) -> dict[str, object]:
         raise R06SwitchPreflightBlocked("R06_UNKNOWN_PROBE_MODE")
     sha = current_release()
     with psycopg.connect(
-        DSN + " options='-c default_transaction_read_only=on'",
+        DSN + " options=-cdefault_transaction_read_only=on",
         autocommit=True,
         connect_timeout=5,
     ) as conn:
