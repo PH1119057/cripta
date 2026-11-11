@@ -398,6 +398,7 @@ def run_source_union(
     done = threading.Event()
     failures: list[str] = []  # Required LINEAR transport only.
     optional_faults: queue.Queue[str] = queue.Queue(maxsize=128)
+    optional_audit_overflow = threading.Event()
 
     def note_optional_fault(reason: str) -> None:
         # This is operator-visible staging evidence, not the R04 durable
@@ -406,8 +407,10 @@ def run_source_union(
         try:
             optional_faults.put_nowait(reason[:160])
         except queue.Full:
-            failures.append("OPTIONAL_FAULT_AUDIT_OVERFLOW")
-            done.set()
+            # A saturated optional fault diagnostic must never tear down
+            # healthy native LINEAR. Mark this scope unverified and keep the
+            # rollout inert until an append-only durable quality ledger exists.
+            optional_audit_overflow.set()
     pipe: queue.Queue[tuple[str, dict[str, object], datetime]] = queue.Queue(
         maxsize=_MAX_QUEUE,
     )
@@ -482,7 +485,10 @@ def run_source_union(
                 note_optional_fault(f"SPOT:{type(exc).__name__}")
                 previous = sock.pop(product, None)
                 if previous is not None:
-                    previous.close()
+                    try:
+                        previous.close()
+                    except Exception:
+                        note_optional_fault("SPOT:SOCKET_CLOSE_UNVERIFIED")
                 pending.clear()
                 if done.wait(5.0):
                     return
@@ -610,9 +616,11 @@ def run_source_union(
                         ),
                         product=product,
                     )
-                optional_topic = any(
+                # Physical required=True belongs to one specific consumer.
+                # A compact/ticker/book decoder fault blocks that dataset,
+                # not the already committed original LINEAR trade journal.
+                scoped_topic = any(
                     feed.product == product and feed.dataset_topic == topic
-                    and not feed.required
                     for feed in union.websocket_topics
                 )
                 try:
@@ -622,8 +630,11 @@ def run_source_union(
                         received_at=received,
                     ))
                 except PublicSourceFrameInvalid as exc:
-                    if not optional_topic:
+                    if not scoped_topic:
                         raise
+                    aggregate.invalidate_market(
+                        bybit_instrument_id(product.lower(), topic.rsplit(".", 1)[-1])
+                    )
                     note_optional_fault(
                         f"{product}:{topic}:{type(exc).__name__}"
                     )
@@ -644,7 +655,7 @@ def run_source_union(
                             aggregate.accept(event, received_at=received)
                         except (PublicSourceFrameInvalid,
                                 PublicSourceSecondUnavailable) as exc:
-                            if not optional_topic:
+                            if not scoped_topic:
                                 raise
                             aggregate.invalidate_market(event.instrument_id)
                             note_optional_fault(
@@ -658,9 +669,20 @@ def run_source_union(
                     fault = optional_faults.get_nowait()
                 except queue.Empty:
                     break
+                if fault.startswith("SPOT:"):
+                    for symbol in symbols.get("SPOT", ()):
+                        aggregate.invalidate_market(
+                            bybit_instrument_id("spot", symbol)
+                        )
                 native._status(
                     "ACTIVE", session=session, reason="R04_OPTIONAL:" + fault,
                 )
+            if optional_audit_overflow.is_set():
+                native._status(
+                    "ACTIVE", session=session,
+                    reason="R04_OPTIONAL_QUALITY_UNKNOWN_OVERFLOW",
+                )
+                optional_audit_overflow.clear()
             # Handle bounded REST receipts only on the one PG source writer.
             # Never insert the REST fact directly from its network worker.
             for _ in range(8):
