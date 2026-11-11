@@ -210,3 +210,18 @@ def test_only_exact_typed_reasons_can_enter_quality_ledger() -> None:
     assert _scoped_quality_reason(
         RuntimeError(""), "PUBLIC_TOPIC_FRAME_UNVERIFIED",
     ) == "PUBLIC_TOPIC_FRAME_UNVERIFIED"
+
+
+def test_bad_book_delta_cannot_fabricate_an_empty_second() -> None:
+    agg = PublicSecondAccumulator(session=SESSION)
+    with pytest.raises(PublicSourceFrameInvalid, match="WITHOUT_SNAPSHOT"):
+        agg.accept(
+            _book(seq=101, update=11, kind="delta"),
+            received_at=AT,
+        )
+    assert agg.ready_seconds(before=AT + timedelta(seconds=1)) == ()
+    # A genuine provider snapshot, not a synthetic empty book, resumes.
+    agg.accept(_book(seq=200, update=1), received_at=AT)
+    assert agg.ready_seconds(before=AT + timedelta(seconds=1))[0][
+        "book"
+    ]["source_sequence"] == 200
