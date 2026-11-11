@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import inspect
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal as D
 from types import SimpleNamespace
 
@@ -30,7 +30,7 @@ def medians():
 def test_utc_day_is_exact_and_uses_closed_bucket():
     value = sweep.day_of(event("1.00"))
     assert value == "2025-04-01"
-    assert datetime.fromtimestamp(1743465600, timezone.utc).date().isoformat() == value
+    assert value == datetime.fromtimestamp(1743465600, UTC).date().isoformat()
 
 
 @pytest.mark.parametrize(
