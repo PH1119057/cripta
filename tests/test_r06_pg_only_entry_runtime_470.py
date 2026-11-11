@@ -170,6 +170,34 @@ def scoped_history(history):
             for sym in ALLOWED_SYMBOLS[MAIN_ID]}
 
 
+def test_pg_only_cutover_cannot_be_launched_from_ordinary_shell(monkeypatch):
+    monkeypatch.setattr(
+        mod.Path, "read_text",
+        lambda _self, **_kw: "0::/user.slice/user-1000.slice",
+    )
+    monkeypatch.setattr(
+        mod.pwd, "getpwnam",
+        lambda _name: SimpleNamespace(pw_uid=__import__("os").geteuid()),
+    )
+    monkeypatch.setenv("INVOCATION_ID", "test")
+    with pytest.raises(mod.R06PublishedEntryBlocked,match="EXCLUSIVITY"):
+        mod._require_exclusive_systemd_owner()
+
+
+def test_same_unit_cgroup_is_required_before_source_only_start(monkeypatch):
+    monkeypatch.setattr(
+        mod.Path, "read_text",
+        lambda _self, **_kw:
+            "0::/system.slice/cripta-universal-entry-observer.service",
+    )
+    monkeypatch.setattr(
+        mod.pwd, "getpwnam",
+        lambda _name: SimpleNamespace(pw_uid=__import__("os").geteuid()),
+    )
+    monkeypatch.setenv("INVOCATION_ID", "test")
+    mod._require_exclusive_systemd_owner()
+
+
 def test_source_only_native_callback_and_cursor_share_publication_atomic_state(
     monkeypatch,history,controlled,
 ):

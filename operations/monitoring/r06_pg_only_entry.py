@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import pwd
 import signal
 import time
 from datetime import UTC, datetime, timedelta
@@ -263,6 +264,25 @@ def _observe_one(
         raise R06PublishedEntryBlocked("R06_ENTRY_ATOMIC_CAUSAL_STATE_CAS_FAILED")
     return new_count
 
+def _require_exclusive_systemd_owner() -> None:
+    """Only the SAME unit that owned old WS can replace its Entry reader.
+
+    The service manager waits for old unit cgroup teardown before launching
+    the new ExecStart. Running this script from a shell is not a cutover.
+    """
+    try:
+        scope = Path("/proc/self/cgroup").read_text(encoding="utf-8")
+        owner = pwd.getpwnam("cripta").pw_uid
+    except (OSError, KeyError) as exc:
+        raise R06PublishedEntryBlocked("R06_SINGLE_UNIT_IDENTITY_UNAVAILABLE") from exc
+    if (
+        os.geteuid() != owner
+        or not os.environ.get("INVOCATION_ID")
+        or "/system.slice/cripta-universal-entry-observer.service" not in scope
+    ):
+        raise R06PublishedEntryBlocked("R06_OLD_ENTRY_SERVICE_EXCLUSIVITY_NOT_PROVEN")
+
+
 def run_pg_only(
     *, loaded_commit: str, dsn: str,
     write_status: Callable[..., None],
@@ -274,6 +294,7 @@ def run_pg_only(
         or any(c not in "0123456789abcdef" for c in loaded_commit)
     ):
         raise R06PublishedEntryBlocked("R06_PG_ONLY_OPERATOR_GATE_OR_RELEASE_INVALID")
+    _require_exclusive_systemd_owner()
     detached_at = datetime.now(UTC)
     stopping = False
     def stop(_sig: int, _frame: Any) -> None:
