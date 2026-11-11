@@ -13,8 +13,8 @@ import pytest
 
 from operations.monitoring import (
     native_public_trade_observer_delivery as delivery,
+    universal_entry_shadow as observer,
 )
-from operations.monitoring import universal_entry_shadow as observer
 
 
 _BLOCKED = {
