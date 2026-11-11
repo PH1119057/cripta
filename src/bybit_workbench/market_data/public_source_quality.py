@@ -57,7 +57,7 @@ class PublicSourceQualityEvent:
         quality: Quality,
         reason: str,
         observed_at: datetime,
-    ) -> "PublicSourceQualityEvent":
+    ) -> PublicSourceQualityEvent:
         event = cls(
             event_id=uuid4().hex,
             source_session_id=source_session_id,
