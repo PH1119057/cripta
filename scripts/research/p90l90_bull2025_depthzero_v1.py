@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from decimal import Decimal as D
-import fcntl
 import hashlib
 import json
 import os
@@ -313,6 +312,8 @@ def independent_qc(side: str, source_head: str) -> dict:
 
 
 def worker(engine, source_head: str) -> None:
+    import fcntl  # Linux-only real-worker import; Windows test discovery is safe
+
     launch = json.loads((OUT / "launch.json").read_text())
     if launch["source_head"] != source_head or not (OUT / "study.json").is_file():
         raise RuntimeError("unrecognized research launch identity")
