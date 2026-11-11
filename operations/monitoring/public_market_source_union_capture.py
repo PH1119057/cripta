@@ -679,6 +679,43 @@ def run_source_union(
             "CLOSED_KLINE",
         )
     )
+    def flush_quality() -> None:
+        # Durable scoped quality audit, written only by the one native
+        # PostgreSQL owner, never by network workers or REST threads.
+        quality_batch: list[PublicSourceQualityEvent] = []
+        for _ in range(32):
+            try:
+                quality_batch.append(optional_faults.get_nowait())
+            except queue.Empty:
+                break
+        if optional_audit_overflow.is_set():
+            quality_batch.append(PublicSourceQualityEvent.create(
+                source_session_id=session,
+                transport_epoch_id=transport_epochs.get("SPOT", session),
+                product="SPOT", topic="*", quality="UNKNOWN",
+                reason="PUBLIC_OPTIONAL_QUALITY_QUEUE_OVERFLOW",
+                observed_at=datetime.now(UTC),
+            ))
+            optional_audit_overflow.clear()
+        if quality_batch:
+            persist_public_source_quality_events(
+                connection, events=tuple(quality_batch),
+                producer_release_commit=producer_release_commit,
+            )
+            for fault in quality_batch:
+                if fault.product == "SPOT" and fault.topic == "*":
+                    for symbol in symbols.get("SPOT", ()):
+                        aggregate.invalidate_market(
+                            bybit_instrument_id("spot", symbol)
+                        )
+                native._status(
+                    "ACTIVE", session=session,
+                    reason=(
+                        "R04_OPTIONAL:" + fault.product + ":"
+                        + fault.quality + ":" + fault.reason
+                    )[:160],
+                )
+
     frame_index = 0
     last_published_second: datetime | None = None
     repair_index = 0
@@ -792,41 +829,7 @@ def run_source_union(
                                 reason="PUBLIC_TOPIC_ACCUMULATOR_UNVERIFIED",
                                 epoch=frame_epoch,
                             )
-            # Durable scoped quality audit, written only by the one native
-            # PostgreSQL owner, never by network workers or REST threads.
-            quality_batch: list[PublicSourceQualityEvent] = []
-            for _ in range(32):
-                try:
-                    quality_batch.append(optional_faults.get_nowait())
-                except queue.Empty:
-                    break
-            if optional_audit_overflow.is_set():
-                quality_batch.append(PublicSourceQualityEvent.create(
-                    source_session_id=session,
-                    transport_epoch_id=transport_epochs.get("SPOT", session),
-                    product="SPOT", topic="*", quality="UNKNOWN",
-                    reason="PUBLIC_OPTIONAL_QUALITY_QUEUE_OVERFLOW",
-                    observed_at=datetime.now(UTC),
-                ))
-                optional_audit_overflow.clear()
-            if quality_batch:
-                persist_public_source_quality_events(
-                    connection, events=tuple(quality_batch),
-                    producer_release_commit=producer_release_commit,
-                )
-                for fault in quality_batch:
-                    if fault.product == "SPOT" and fault.topic == "*":
-                        for symbol in symbols.get("SPOT", ()):
-                            aggregate.invalidate_market(
-                                bybit_instrument_id("spot", symbol)
-                            )
-                    native._status(
-                        "ACTIVE", session=session,
-                        reason=(
-                            "R04_OPTIONAL:" + fault.product + ":"
-                            + fault.quality + ":" + fault.reason
-                        )[:160],
-                    )
+            flush_quality()
             # Handle bounded REST receipts only on the one PG source writer.
             # Never insert the REST fact directly from its network worker.
             for _ in range(8):
@@ -956,6 +959,9 @@ def run_source_union(
                         observed_at=current_second,
                     )
                     last_published_second = current_second
+        # Drain source-quality events before the native epoch turns GAP.
+        # A clean owner stop cannot erase the final optional failure.
+        flush_quality()
         if failures:
             raise PublicSourceSecondUnavailable(
                 "PUBLIC_FEED_TRANSPORT_FAILED"
