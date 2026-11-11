@@ -38,7 +38,7 @@ def test_default_mayak_seven_keeps_btc_eth_anchors(
     assert snapshot["config_fingerprint"] == (
         source.engine.configuration_fingerprint()
     )
-    assert snapshot["derivatives_coverage"]["total"] == len(SEVEN)
+    assert snapshot["money_breadth"]["derivatives_coverage"]["total"] == len(SEVEN)
 
 
 def test_subscriptions_are_exact_scope_and_bounded(
@@ -115,7 +115,7 @@ def test_mayak_universe_change_cannot_replay_old_dispatcher_handoff(
     assert previous != current
     latest_minute = datetime(2026, 11, 11, 10, 0, tzinfo=UTC)
     old_handoff = {"panel": "historical-20", "config_fingerprint": previous}
-    state = {"fingerprint": previous}
+    state = {"fingerprint": previous, "handoff": old_handoff}
     observed_params: list[object] = []
 
     class Result:
@@ -139,7 +139,7 @@ def test_mayak_universe_change_cannot_replay_old_dispatcher_handoff(
             if "j.config_fingerprint" in query:
                 return Result((
                     latest_minute, "OLD_GLOBAL_STATE",
-                    old_handoff, state["fingerprint"],
+                    state["handoff"], state["fingerprint"],
                 ))
             if "min(regular_minute)" in query:
                 return Result((latest_minute, latest_minute, 1))
@@ -160,7 +160,9 @@ def test_mayak_universe_change_cannot_replay_old_dispatcher_handoff(
 
     # Existing same-panel records still have valid causal restart lineage.
     state["fingerprint"] = current
+    current_handoff = {"panel": "approved-7", "config_fingerprint": current}
+    state["handoff"] = current_handoff
     compatible = mayak_v2.Collector()
     compatible._load_persistence_checkpoint()
-    assert compatible.last_persisted_handoff == old_handoff
+    assert compatible.last_persisted_handoff == current_handoff
     assert compatible.previous_state == "OLD_GLOBAL_STATE"
