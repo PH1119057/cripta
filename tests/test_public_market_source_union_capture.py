@@ -14,6 +14,9 @@ from unittest.mock import Mock
 import pytest
 import websocket
 
+from bybit_workbench.market_data.public_market_rest_source import (
+    PublicMarketRestInvalid,
+)
 from bybit_workbench.market_data.public_source_second_store import (
     PublicSourceSecondUnavailable,
 )
@@ -456,7 +459,8 @@ def test_invalid_r03_horizon_never_starts_socket_or_pg_epoch(
 
 @pytest.mark.parametrize(
     "failure_mode",
-    ("subscribe_reject", "disconnect", "bad_book", "bad_linear_book"),
+    ("subscribe_reject", "disconnect", "bad_book", "bad_linear_book",
+     "bad_spot_kline", "rest_absent"),
 )
 def test_r04_optional_spot_failure_does_not_gap_required_linear(
     failure_mode: str, monkeypatch: pytest.MonkeyPatch,
@@ -471,6 +475,14 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
         # and R03 closed source must still remain independently live.
         manifest.append(_required(
             "POSITION", "LINEAR", "APTUSDT", "ORDERBOOK_50",
+        ))
+    if failure_mode == "bad_spot_kline":
+        manifest.append(_required(
+            "MAYAK", "SPOT", "APTUSDT", "CLOSED_KLINE", interval="1",
+        ))
+    if failure_mode == "rest_absent":
+        manifest.append(_required(
+            "MAYAK", "SPOT", "APTUSDT", "INSTRUMENT_INFO",
         ))
     union = parse_explicit_source_manifest(
         json.dumps(manifest), native_symbols=P90,
@@ -515,6 +527,13 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
                         "type": "delta",
                         "data": "not a provider orderbook",
                     })
+                if failure_mode == "bad_spot_kline":
+                    return json.dumps({
+                        "topic": "kline.1.APTUSDT",
+                        "type": "snapshot",
+                        "ts": int(datetime.now(UTC).timestamp() * 1000),
+                        "data": "invalid close",
+                    })
             time.sleep(0.01)
             raise websocket.WebSocketTimeoutException("test timeout")
 
@@ -531,6 +550,11 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
         return Socket(product), []
 
     monkeypatch.setattr(source, "_connect_subscribe", connect)
+    if failure_mode == "rest_absent":
+        def unavailable_rest(**_kw: object) -> None:
+            raise PublicMarketRestInvalid("PUBLIC_REST_UNAVAILABLE")
+        monkeypatch.setattr(source, "fetch_public_market_rest",
+                            unavailable_rest)
     monkeypatch.setattr(native, "uuid4", lambda: SimpleNamespace(hex="a" * 32))
     monkeypatch.setattr(
         native, "_session_start",
