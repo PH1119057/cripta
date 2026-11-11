@@ -20,6 +20,7 @@ from bybit_workbench.market_data.public_source_second_store import (
 from operations.monitoring.public_market_source_union_capture import (
     _BookResubscribe,
     _invalidate_scoped_market,
+    _scoped_quality_reason,
 )
 
 AT = datetime(2026, 11, 11, 10, 15, tzinfo=UTC)
@@ -195,3 +196,17 @@ def test_delayed_forming_source_frame_is_explicitly_not_relabelled_ready() -> No
             product="LINEAR", allowed_symbols=frozenset({SYMBOL}),
             received_at=AT,
         )
+
+
+def test_only_exact_typed_reasons_can_enter_quality_ledger() -> None:
+    assert _scoped_quality_reason(
+        PublicSourceFrameInvalid("PUBLIC_BOOK_DELTA_WITHOUT_SNAPSHOT"),
+        "PUBLIC_TOPIC_FRAME_UNVERIFIED",
+    ) == "PUBLIC_BOOK_DELTA_WITHOUT_SNAPSHOT"
+    assert _scoped_quality_reason(
+        RuntimeError("PUBLIC_BAD with untrusted content"),
+        "PUBLIC_TOPIC_FRAME_UNVERIFIED",
+    ) == "PUBLIC_TOPIC_FRAME_UNVERIFIED"
+    assert _scoped_quality_reason(
+        RuntimeError(""), "PUBLIC_TOPIC_FRAME_UNVERIFIED",
+    ) == "PUBLIC_TOPIC_FRAME_UNVERIFIED"
