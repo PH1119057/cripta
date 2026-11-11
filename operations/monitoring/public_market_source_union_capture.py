@@ -948,9 +948,10 @@ def run_source_union(
                     received < book_waiting_snapshot[key]
                     or item.get("type") != "snapshot"
                 ):
-                    # Already queued pre-fault book deltas are not evidence
-                    # of post-repair continuity. Wait for genuine snapshot.
-                    continue
+                    # Ignore only the stale book frame. Do not skip the
+                    # source loop's REST/quality/compact/repair maintenance.
+                    item = {}
+                    topic = ""
                 if topic.startswith("kline.") and product in (
                     "LINEAR", "SPOT",
                 ):
