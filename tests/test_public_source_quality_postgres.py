@@ -71,7 +71,29 @@ def test_pg16_scoped_optional_spot_gap_does_not_gap_linear_native_session(
                VALUES ('inst-bybit-spot-ltcusdt','venue-bybit','SPOT','LTCUSDT')
                ON CONFLICT (instrument_id) DO NOTHING"""
         )
+        db.execute(
+            """INSERT INTO identity.instruments
+               (instrument_id,venue_id,product_category,external_symbol)
+               VALUES ('inst-bybit-linear-ltcusdt','venue-bybit',
+                       'LINEAR','LTCUSDT')
+               ON CONFLICT (instrument_id) DO NOTHING"""
+        )
         native._session_start(db, session)
+        native_trade = native.decode_native_trades(
+            {
+                "topic": "publicTrade.LTCUSDT",
+                "data": [{
+                    "s": "LTCUSDT", "seq": 89901,
+                    "i": "quality-isolation-" + uuid4().hex,
+                    "T": int(AT.timestamp() * 1000),
+                    "p": "52.0", "v": "0.2", "S": "Buy",
+                }],
+            },
+            symbols=frozenset({"LTCUSDT"}), release=RELEASE,
+        )
+        native._persist_frame(
+            db, session=session, frame_number=1, facts=native_trade,
+        )
         events = (first, reconnect, book)
         assert persist_public_source_quality_events(
             db, events=events, producer_release_commit=RELEASE,
@@ -96,6 +118,17 @@ def test_pg16_scoped_optional_spot_gap_does_not_gap_linear_native_session(
                 WHERE source_session_id=%s""",
             (session,),
         ).fetchone() == ("ACTIVE", RELEASE)
+        assert db.execute(
+            """SELECT frame_number,exchange_sequence
+                 FROM analytics.native_public_trade_source_cursors
+                WHERE source_session_id=%s AND external_symbol='LTCUSDT'""",
+            (session,),
+        ).fetchone() == (1, 89901)
+        assert db.execute(
+            """SELECT count(*) FROM analytics.native_public_trade_source_events
+                WHERE source_session_id=%s""",
+            (session,),
+        ).fetchone() == (1,)
         with pytest.raises(
             PublicSourceQualityInvalid, match="QUALITY_EPOCH_NOT_ACTIVE",
         ):
