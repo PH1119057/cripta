@@ -477,13 +477,17 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
             "POSITION", "LINEAR", "APTUSDT", "ORDERBOOK_50",
         ))
     if failure_mode == "bad_spot_kline":
-        manifest.append(_required(
+        spot_bar = _required(
             "MAYAK", "SPOT", "APTUSDT", "CLOSED_KLINE", interval="1",
-        ))
+        )
+        spot_bar["required"] = False
+        manifest.append(spot_bar)
     if failure_mode == "rest_absent":
-        manifest.append(_required(
+        spot_info = _required(
             "MAYAK", "SPOT", "APTUSDT", "INSTRUMENT_INFO",
-        ))
+        )
+        spot_info["required"] = False
+        manifest.append(spot_info)
     union = parse_explicit_source_manifest(
         json.dumps(manifest), native_symbols=P90,
     )
