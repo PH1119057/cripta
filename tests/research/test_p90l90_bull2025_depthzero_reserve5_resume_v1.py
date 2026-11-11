@@ -127,3 +127,72 @@ def test_worker_uses_exact_original_exit_and_replay():
 def test_script_located_inside_versioned_research_scope():
     assert resume.SELF_REL.startswith("scripts/research/")
     assert Path(resume.SELF_REL).suffix == ".py"
+
+
+def test_preflight_accepts_absent_full_directory(tmp_path, monkeypatch):
+    """The failed worker did not reach final publication; full/ legitimately absent."""
+    out = tmp_path / "output"
+    (out / "checkpoint" / "long_only").mkdir(parents=True)
+    (out / "checkpoint" / "short_only").mkdir()
+    (out / "status.json").write_text(json.dumps({
+        "stage": "FAILED",
+        "error": resume.ORIGINAL_FAILURE,
+        "source_head": resume.ORIGINAL_HEAD,
+    }))
+    (out / "launch.json").write_text(json.dumps({
+        "source_head": resume.ORIGINAL_HEAD,
+        "pid": 99999999,
+    }))
+    (out / "study.json").write_text(json.dumps({
+        "source_head": resume.ORIGINAL_HEAD,
+        "source_sha256": "old-sha",
+        "exact_depth_percent": "0",
+    }))
+    monkeypatch.setattr(resume, "OUT", out)
+    monkeypatch.setattr(resume, "free_bytes", lambda: 7 * 2**30)
+    monkeypatch.setattr(resume.original, "sha", lambda _p: "old-sha")
+    def load(folder):
+        if folder.name == "short_only":
+            return None, None, None
+        return (
+            {"next_day": 103},
+            {"source_head_first": resume.ORIGINAL_HEAD, "index": 102},
+            "source-checkpoint-sha",
+        )
+    report = resume.check_resume(SimpleNamespace(load_parts=load), "a" * 40)
+    assert report["status"] == "RESUME5_PREFLIGHT_PASS_NO_MUTATION"
+    assert report["existing_long_days"] == 103
+    assert not (out / "full").exists()
+
+
+def test_preflight_rejects_nonempty_finished_output(tmp_path, monkeypatch):
+    out = tmp_path / "output"
+    (out / "full").mkdir(parents=True)
+    (out / "full" / "incompatible_result.json").write_text("{}")
+    (out / "checkpoint" / "long_only").mkdir(parents=True)
+    (out / "checkpoint" / "short_only").mkdir()
+    (out / "status.json").write_text(json.dumps({
+        "stage": "FAILED", "error": resume.ORIGINAL_FAILURE,
+        "source_head": resume.ORIGINAL_HEAD,
+    }))
+    (out / "launch.json").write_text(json.dumps({
+        "source_head": resume.ORIGINAL_HEAD, "pid": 99999999,
+    }))
+    (out / "study.json").write_text(json.dumps({
+        "source_head": resume.ORIGINAL_HEAD,
+        "source_sha256": "old-sha",
+        "exact_depth_percent": "0",
+    }))
+    monkeypatch.setattr(resume, "OUT", out)
+    monkeypatch.setattr(resume, "free_bytes", lambda: 7 * 2**30)
+    monkeypatch.setattr(resume.original, "sha", lambda _p: "old-sha")
+    def load(folder):
+        if folder.name == "short_only":
+            return None, None, None
+        return (
+            {"next_day": 103},
+            {"source_head_first": resume.ORIGINAL_HEAD, "index": 102},
+            "source-checkpoint-sha",
+        )
+    with pytest.raises(RuntimeError, match="original final result"):
+        resume.check_resume(SimpleNamespace(load_parts=load), "a" * 40)
