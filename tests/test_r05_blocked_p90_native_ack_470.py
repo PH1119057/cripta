@@ -12,10 +12,12 @@ from types import SimpleNamespace
 import pytest
 
 from operations.monitoring import (
-    native_public_trade_observer_delivery as delivery,
-    universal_entry_shadow as observer,
+    native_public_trade_observer_delivery,
+    universal_entry_shadow,
 )
 
+delivery = native_public_trade_observer_delivery
+observer = universal_entry_shadow
 
 _BLOCKED = {
     "state": "BLOCKED",
