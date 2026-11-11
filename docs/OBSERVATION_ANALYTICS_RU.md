@@ -1,6 +1,6 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 2.6
+**Версия:** 2.7
 **Дата:** 2026-11-11
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
@@ -1214,3 +1214,11 @@ from GitHub merge or a test fixture.
 **Неэквивалентность и проверка:** сокращение глобальной ширины/market breadth с 20 до 7 объективно меняет контекст MAYAK/Dispatcher, базовые доли и покрытие рынка; это сознательное изменение панели, **не** сохранение численной эквивалентности прежнему 20-symbol режиму. Запрет на торговую интерпретацию MAYAK сохраняется; никакие Strategy thresholds, Entry/Exit, live positions или финансовые ARM не пересматриваются без отдельного исследования/owner decision. Каждый live consumer, которому действительно требовались 13 исключённых инструментов, должен получить явный degraded/not-covered scope или отдельно доказанный BEFORE→AFTER; выдавать старые 20 как fresh/ready нельзя. На cutover требуется новый `config_fingerprint`/source-epoch quality, корректный WARMUP, проверка BTC/ETH anchors, причинных минут и integrity snapshots/Dispatcher; старые immutable records не переписывать.
 
 **Storage/release:** уменьшение подписок и новых per-coin writes **не освобождает историческое место автоматически** и не даёт разрешения на delete/TTL purge raw original trades, shared closed candles, OPEN Exit, fault/audit или pinned contexts. Storage class/retention/actor/backup/rollback и headroom сохраняются по ARCH §48 и DEV §5.1/§19/§50.5.1/§59. При owner-approved сокращении не требуется эквивалентная замена 13 добровольно исключённых MAYAK-only inputs, но активные торговые и safety consumers обязаны сохранить доказуемо необходимые данные. Само решение не запускает service restart/release или R04/R05 флаги. `OWNER_DECISION=YES`; `CANON=AFTER_PROTECTED_MERGE`; `MAYAK_SEVEN_RUNTIME=NOT_VERIFIED`; `LIVE_CHANGE=NO`.
+
+#### 7.10.5.4 R04 bounded storage acceptance amendment — OWNER DECISION 2026-11-11 (#470)
+
+Владелец подтвердил намерение **закрыть R04 физическим cutover** и принять конечный риск роста PostgreSQL/WAL, одновременно сократив самостоятельный MAYAK с 20 до 7 инструментов (OBS §7.10.5.3). Это не разрешение безусловно исчерпать data-disk, удалить историю или ослабить защиту открытых сделок.
+
+Для **одного контролируемого R04 native cutover** допускается bounded operational measurement: при доказанных clean exact main, approved CI, signed MAIN/SUB flat/protected, single-writer source GAP/rollback, проверенном существующем PG/backup и свободном data-disk не менее **10 GiB после резервирования дополнительного предрелизного backup** можно включить пять R04 источников и **измерить фактический** PG/WAL/backup growth по новому source epoch в первые 20 минут работы. Число 10 GiB — нижний операционный safety reserve для первоначального наблюдения, не разрешение продолжать unlimited writes на таком остатке. Следующий 24-часовой прогноз должен явно учитывать baseline legacy/native writes, новые compact seconds+REST+forming+quality, WAL, backups и доступный headroom. Пока этого измерения нет, статус R04 = DEPLOYED/PARTIAL при выполнении install gate, но **не RUNTIME BEHAVIOR VERIFIED / CLOSED**.
+
+Если первые показатели показывают depletion до следующего подтверждённого контрольного окна или запас падает ниже 10 GiB, R04 нельзя закрывать: нужны утверждённые safe rollback/retention/volume expansion, с сохранением independent R03/OPEN Exit safety. Старые оригинальные сделки, неизменяемые свечи, pinned MAYAK/Dispatcher и OPEN Exit records не удалять «для очистки» без точной dependency+backup проверки. R05 publication и financial LIVE-arm остаются выключенными. Это owner-approved уточнение порядка capacity proof именно для R04; остальные producer/consumer и DEV release gates не ослабляются.
