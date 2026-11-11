@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from decimal import Decimal as D
 from operator import eq
+import os
 
 import pytest
 
@@ -55,6 +56,7 @@ def test_capfree_notional_fee_is_scaled_at_original_12_decimal_quantum():
     assert eq(cap.old.money(cap.POSITION_NOTIONAL * cap.old.MAKER), D("0.020000000000"))
 
 
+@pytest.mark.skipif(not hasattr(os, "geteuid"), reason="Unix actor-gate test")
 def test_wrong_actor_fails_before_any_write(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(cap.os, "geteuid", lambda: 1000)
     monkeypatch.setattr(cap.os, "getegid", lambda: 1000)
