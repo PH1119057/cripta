@@ -362,6 +362,7 @@ class Collector:
             if (
                 isinstance(latest[2], dict)
                 and latest[3] == self.engine.configuration_fingerprint()
+                and latest[2].get("config_fingerprint") == latest[3]
             ):
                 self.previous_state = str(latest[1])
                 self.last_persisted_handoff = latest[2]
