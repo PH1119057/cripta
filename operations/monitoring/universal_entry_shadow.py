@@ -5521,6 +5521,14 @@ def _run_parity_main() -> None:
 
 def main() -> None:
     if RUNTIME_MODE == "MULTI_STRATEGY_OBSERVER":
+        if os.environ.get("CRIPTA_R06_PG_ONLY", "DISABLED") == "ENABLED":
+            # Exact same-unit replacement: never launch legacy public WS/REST.
+            from operations.monitoring.r06_pg_only_entry import run_pg_only
+            run_pg_only(
+                loaded_commit=LOADED_COMMIT, dsn=DATABASE_DSN,
+                write_status=_observer_status,
+            )
+            return
         _run_multi_strategy_observer()
         return
     if RUNTIME_MODE != "PARITY_V1":
