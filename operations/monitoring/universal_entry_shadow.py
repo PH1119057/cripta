@@ -174,6 +174,11 @@ LOADED_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
 EXTERNAL_NATIVE_SOURCE = (
     os.environ.get("CRIPTA_NATIVE_SOURCE_EXTERNAL", "DISABLED") == "ENABLED"
 )
+# R03 is a write-ownership handoff only, not the later R06 replacement
+# of independent consumer-side public WS/REST decision input paths.
+R03_NATIVE_CANDLE_READER = (
+    os.environ.get("CRIPTA_R03_NATIVE_CANDLE_READER", "DISABLED") == "ENABLED"
+)
 BASELINE_COMMIT = os.environ.get(
     "CRIPTA_U5_BASELINE_COMMIT", "49670cb0631a8742b2bf8dace9ab33d6b29a107d"
 ).strip()
@@ -2374,6 +2379,8 @@ def _run_observer_epoch(
     isolated_p90_block: bool = False,
 ) -> str:
     epoch_started = datetime.now(UTC)
+    if R03_NATIVE_CANDLE_READER and not EXTERNAL_NATIVE_SOURCE:
+        raise RuntimeError("R03_OBSERVER_CANDLE_READER_REQUIRES_NATIVE_SOURCE")
     signature = _observer_light_signature(connection)
     if not signature:
         return "RELOAD"
@@ -2711,6 +2718,8 @@ def _run_observer_epoch(
         history = cache_approved_bybit_history(
             connection, symbol=symbol, history=history,
             observed_at=observed, producer_release_commit=LOADED_COMMIT,
+            verify_only=R03_NATIVE_CANDLE_READER,
+            source_wait_seconds=(45.0 if R03_NATIVE_CANDLE_READER else 0.0),
         )
         oi_history = _fetch_oi_history(symbol) if required_oi_symbols else ()
         if p90_consumer is not None and symbol in p90l90_symbols:
@@ -3078,6 +3087,10 @@ def _run_observer_epoch(
                     observed_at=datetime.now(UTC),
                     producer_release_commit=LOADED_COMMIT,
                     source_transport="BYBIT_WS_KLINE",
+                    verify_only=R03_NATIVE_CANDLE_READER,
+                    source_wait_seconds=(
+                        5.0 if R03_NATIVE_CANDLE_READER else 0.0
+                    ),
                 )
             prior = closed_boundaries.get((fact.symbol, timeframe))
             if prior is not None and boundary < prior:
@@ -3364,12 +3377,14 @@ def _run_observer_epoch(
                 connection, symbols=tuple(sorted(p90l90_symbols)),
                 source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
                 progress=preparation_progress,
+                verify_native_source_only=R03_NATIVE_CANDLE_READER,
             )
         elif p90_real_live and preflight_restart_epoch_id is None:
             prepare_p90_closed_tails(
                 connection, symbols=tuple(sorted(p90l90_symbols)),
                 source_fetch=_fetch_history, source_commit=LOADED_COMMIT,
                 progress=preparation_progress,
+                verify_native_source_only=R03_NATIVE_CANDLE_READER,
             )
         sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
         # Source proof is issued ONLY in this epoch, after real Bybit

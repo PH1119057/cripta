@@ -179,7 +179,11 @@ def _status(state: str, *, session: str = "", reason: str = "") -> None:
         "closed_gap_repair_mode": (
             "ASYNC_SOURCE_NETWORK_ONLY_ONE_PG_WRITER"
             if _source_feature_enabled(_UNION_CAPTURE_FLAG)
-            else "INERT"
+            else (
+                "ASYNC_LINEAR_CLOSED_ONLY_ONE_PG_WRITER"
+                if _source_feature_enabled(_KLINE_CAPTURE_FLAG)
+                else "INERT"
+            )
         ),
         "publication_enabled": _source_feature_enabled(_PUBLICATION_FLAG),
         "trading_effect": "NONE",
@@ -488,10 +492,17 @@ def main() -> int:
     if not _SHA.fullmatch(RELEASE):
         raise NativeSourceInputUnverified("NATIVE_SOURCE_RELEASE_INVALID")
     symbols = _checked_symbols(_ALLOWED_SYMBOLS)
+    capture_closed = _source_feature_enabled(_KLINE_CAPTURE_FLAG)
+    capture_union = _source_feature_enabled(_UNION_CAPTURE_FLAG)
+    if capture_closed and capture_union:
+        raise NativeSourceInputUnverified(
+            "NATIVE_R03_CLOSED_ONLY_CANNOT_ENABLE_R04_UNION"
+        )
     union = None
-    if _source_feature_enabled(_UNION_CAPTURE_FLAG):
-        # The native producer itself remains the only process/lock owner.
-        # No guessed topics and no silently ignored required REST facts.
+    if capture_closed or capture_union:
+        # The existing native producer remains the ONE physical writer.
+        # R03 derives only LINEAR original trade + 1/5/15 CLOSED topics
+        # from the reviewed R01 operator contract. R04/R05 remain inert.
         if _UNION_MANIFEST_FILE != (
             "/etc/cripta/market-source/required_public_feeds.json"
         ):
@@ -500,16 +511,27 @@ def main() -> int:
             )
         from operations.monitoring.public_market_source_union_capture import (
             parse_explicit_source_manifest,
+            r03_closed_only_feed_union,
         )
         manifest_path = Path(_UNION_MANIFEST_FILE)
         if not manifest_path.is_file() or manifest_path.is_symlink():
             raise NativeSourceInputUnverified(
                 "NATIVE_SOURCE_UNION_MANIFEST_NOT_REGULAR"
             )
-        union = parse_explicit_source_manifest(
+        full_union = parse_explicit_source_manifest(
             manifest_path.read_text(encoding="utf-8"),
             native_symbols=symbols,
         )
+        union = (
+            r03_closed_only_feed_union(full_union, native_symbols=symbols)
+            if capture_closed else full_union
+        )
+        if capture_closed and set(_checked_kline_intervals(_KLINE_INTERVALS)) != {
+            "1", "5", "15",
+        }:
+            raise NativeSourceInputUnverified(
+                "R03_CLOSED_ONLY_INTERVALS_NOT_EXACT"
+            )
     os.umask(0o027)
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
@@ -528,6 +550,8 @@ def main() -> int:
                         connection, p90_symbols=symbols, union=union,
                         producer_release_commit=RELEASE,
                         publish_seconds=_source_feature_enabled(_PUBLICATION_FLAG),
+                        closed_only=capture_closed,
+                        should_stop=lambda: stopping,
                     )
             except (websocket.WebSocketException, OSError, TimeoutError,
                     NativeSourceInputUnverified):

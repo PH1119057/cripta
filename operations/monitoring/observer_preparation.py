@@ -143,6 +143,7 @@ def prepare_p90_closed_tails(
     connection: Any, *, symbols: tuple[str, ...], source_fetch: Callable[..., Any],
     source_commit: str, progress: Callable[[dict[str, object]], None],
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    verify_native_source_only: bool = False,
 ) -> None:
     """Use the existing approved provider/store; append missing tails only."""
     def key(symbol: str, tf: str) -> MarketCandleKey:
@@ -183,6 +184,8 @@ def prepare_p90_closed_tails(
         cache_approved_bybit_history(
             connection, symbol=symbol, history=history, observed_at=clock(),
             producer_release_commit=source_commit,
+            verify_only=verify_native_source_only,
+            source_wait_seconds=(5.0 if verify_native_source_only else 0.0),
         )
 
     incomplete: dict[tuple[str, str], bool] = {}

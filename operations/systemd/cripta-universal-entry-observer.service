@@ -14,6 +14,10 @@ WorkingDirectory=/srv/cripta/runtime/current
 Environment=CRIPTA_U5_RUNTIME_MODE=MULTI_STRATEGY_OBSERVER
 # Cutover: journal is owned by independent native MarketSource. Observer is reader.
 Environment=CRIPTA_NATIVE_SOURCE_EXTERNAL=ENABLED
+# R03 exclusive candle writer moves to credential-free native MarketSource.
+# Observer retains existing Strategy read/evaluation path until R06; it may
+# verify but never INSERT a closed candle when this explicit gate is enabled.
+Environment=CRIPTA_R03_NATIVE_CANDLE_READER=ENABLED
 Environment=CRIPTA_TRADING_ACCOUNT_ID=ta-2122c81ecff14f3b85b102db605212f7
 Environment=CRIPTA_U5_FACT_SOURCE_ID=BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1
 Environment=CRIPTA_U5_OI_SAMPLE_SECONDS=30

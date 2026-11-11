@@ -7,6 +7,8 @@ or native-trade cursor, no per-Strategy storage or Exchange access.
 """
 from __future__ import annotations
 
+import os
+import time
 from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Any
@@ -14,6 +16,7 @@ from typing import Any
 from bybit_workbench.domain.models import Candle
 
 from .shared_closed_candles import (
+    CandleSourceConflict,
     MarketCandleKey,
     SharedClosedCandleStore,
     verify_closed_window,
@@ -59,6 +62,8 @@ def cache_approved_bybit_history(
     connection: Any, *, symbol: str, history: dict[str, tuple[Candle, ...]],
     observed_at: datetime, producer_release_commit: str,
     source_transport: str = "BYBIT_REST_KLINE",
+    verify_only: bool = False,
+    source_wait_seconds: float = 0.0,
 ) -> dict[str, tuple[Candle, ...]]:
     """One PostgreSQL source across consumers; only the Bybit REST adapter.
 
@@ -67,6 +72,13 @@ def cache_approved_bybit_history(
     from Strategy ID, account balance, a coin name or a fabricated market source.
     It resolves the one active registered Bybit MarketSource/Instrument pair.
     """
+    # R03 protected OPEN Exit source-replay keeps its immutable, hash-pinned
+    # source implementation. All Observer calls, including that protected
+    # replay, become read-only when the explicitly reviewed native candle
+    # ownership unit flag is active; a missing native bar must fail closed.
+    if os.environ.get("CRIPTA_R03_NATIVE_CANDLE_READER") == "ENABLED":
+        verify_only = True
+        source_wait_seconds = max(source_wait_seconds, 5.0)
     matches = connection.execute(
         """SELECT s.market_source_id,s.venue_id,i.instrument_id,
                   i.external_symbol,i.product_category
@@ -92,10 +104,41 @@ def cache_approved_bybit_history(
         # strategy already has a cached subset of this source.
         full = verify_closed_window(key, rows)
         store = SharedClosedCandleStore(connection, key)
-        store.ingest(
-            full, producer_release_commit=producer_release_commit,
-            transport=source_transport, observed_at=observed_at,
-        )
-        result[tf] = store.history(through=full[-1].closed_at,
-                                   required=len(full))
+        if verify_only:
+            # R03 handoff: the Observer can still receive public REST/WS
+            # candles for its existing Strategy transport, but must NEVER
+            # be a second writer in the canonical MarketSource table.
+            # Wait a small bounded interval for the separately committing
+            # native source. Never synthesize, overwrite or accept a conflict.
+            if not 0.0 <= source_wait_seconds <= 120.0:
+                raise ValueError("CANDLE_SOURCE_READER_WAIT_INVALID")
+            deadline = time.monotonic() + source_wait_seconds
+            while True:
+                try:
+                    canonical = store.history(
+                        through=full[-1].closed_at, required=len(full),
+                    )
+                    break
+                except RuntimeError as exc:
+                    if (
+                        str(exc) not in (
+                            "CANDLE_WARMUP_INCOMPLETE",
+                            "CANDLE_HISTORY_GAP_OR_DUPLICATE",
+                            "CANDLE_WARMUP_END_NOT_PROVEN",
+                        )
+                        or time.monotonic() >= deadline
+                    ):
+                        raise
+                    time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+            if canonical != full:
+                raise CandleSourceConflict(key, full[-1].closed_at)
+            result[tf] = canonical
+        else:
+            store.ingest(
+                full, producer_release_commit=producer_release_commit,
+                transport=source_transport, observed_at=observed_at,
+            )
+            result[tf] = store.history(
+                through=full[-1].closed_at, required=len(full),
+            )
     return result
