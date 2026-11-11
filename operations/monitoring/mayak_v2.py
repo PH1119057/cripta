@@ -32,28 +32,11 @@ from bybit_workbench.mayak.context_records import (
 from bybit_workbench.mayak.continuity import MinuteContinuityTracker
 from bybit_workbench.mayak.core.live import LiveMayakEngine
 
-EXCLUDED = {"1000PEPEUSDT", "DOGEUSDT", "NEARUSDT", "XLMUSDT"}
+# Owner decision #470: five traded symbols plus BTC/ETH market anchors.
+# The new native MarketSource R01-R05 remains exact five-symbol scope.
 DEFAULT_SYMBOLS = (
-    "AAVEUSDT",
-    "ADAUSDT",
-    "APTUSDT",
-    "ARBUSDT",
-    "AVAXUSDT",
-    "BCHUSDT",
-    "BNBUSDT",
-    "DOTUSDT",
-    "HBARUSDT",
-    "INJUSDT",
-    "LINKUSDT",
-    "LTCUSDT",
-    "OPUSDT",
-    "SOLUSDT",
-    "SUIUSDT",
-    "TRXUSDT",
-    "UNIUSDT",
-    "XRPUSDT",
-    "BTCUSDT",
-    "ETHUSDT",
+    "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+    "BTCUSDT", "ETHUSDT",
 )
 STATE_PATH = Path(os.environ.get("MAYAK_V2_STATE", "/var/lib/cripta/mayak_v2/status.json"))
 DSN = os.environ.get("CRIPTA_DSN", "dbname=cripta user=cripta host=/var/run/postgresql")
@@ -67,11 +50,12 @@ SUBSCRIBE_BATCH_LIMIT = {"spot": 10, "linear": 30}
 class Collector:
     def __init__(self) -> None:
         configured = os.environ.get("MAYAK_V2_SYMBOLS", ",".join(DEFAULT_SYMBOLS))
-        self.symbols = tuple(
-            x.strip().upper()
-            for x in configured.split(",")
-            if x.strip() and x.strip().upper() not in EXCLUDED
-        )
+        requested = tuple(value.strip().upper() for value in configured.split(","))
+        # A stale service config must not restore historical twenty feeds.
+        # Reject before opening a public socket or writing any new PG fact.
+        if requested != DEFAULT_SYMBOLS:
+            raise ValueError("MAYAK_OWNER_APPROVED_SEVEN_SCOPE_INVALID")
+        self.symbols = requested
         self.engine = LiveMayakEngine(self.symbols)
         self.stop = threading.Event()
         self.books: dict[tuple[str, str], dict[str, dict[float, float]]] = {}
@@ -330,7 +314,8 @@ class Collector:
     def _load_persistence_checkpoint(self) -> None:
         with psycopg.connect(DSN) as db:
             latest = db.execute(
-                """SELECT s.regular_minute,s.state,j.dispatcher_handoff
+                """SELECT s.regular_minute,s.state,j.dispatcher_handoff,
+                       j.config_fingerprint
                 FROM mayak_v2.snapshots s
                 LEFT JOIN mayak_v2.observation_journal j ON j.snapshot_id=s.id
                 WHERE s.snapshot_kind='REGULAR' AND s.regular_minute IS NOT NULL
@@ -362,17 +347,27 @@ class Collector:
                     AND instrument_identity.external_symbol=l.symbol
                     AND instrument_identity.status='ACTIVE'
                    WHERE l.market_source_id=%s
+                     AND l.symbol = ANY(%s)
                      AND l.occurred_at >= clock_timestamp() - interval '24 hours'
                      AND l.occurred_at <= clock_timestamp()
                    ORDER BY occurred_at""",
-                (BYBIT_VENUE_ID, BYBIT_PUBLIC_MARKET_SOURCE_ID),
+                (BYBIT_VENUE_ID, BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                 list(self.symbols)),
             ).fetchall()
         self._restore_liquidation_checkpoint(liquidation_rows)
         if latest is not None:
             self.last_persisted_minute = latest[0]
-            self.previous_state = str(latest[1])
-            if isinstance(latest[2], dict):
+            # Never replay a 20-coin handoff into a new seven-coin
+            # Dispatcher consumer while the new panel is warming up.
+            if (
+                isinstance(latest[2], dict)
+                and latest[3] == self.engine.configuration_fingerprint()
+            ):
+                self.previous_state = str(latest[1])
                 self.last_persisted_handoff = latest[2]
+            else:
+                self.previous_state = None
+                self.last_persisted_handoff = None
             startup_gap_origin = latest[0].timestamp()
             with self.transport_gap_lock:
                 for market in self.transport_gap_started_at:
@@ -537,6 +532,19 @@ class Collector:
             )
         self.engine.on_transport(market, connected=True, timestamp=connected_at)
 
+    def _subscription_topics(self, market: str) -> tuple[str, ...]:
+        """Exact seven-symbol public feed list, no second native producer."""
+        if market not in WS:
+            raise ValueError("MAYAK_SOURCE_MARKET_INVALID")
+        topics = tuple(
+            topic for symbol in self.symbols
+            for topic in (f"publicTrade.{symbol}", f"orderbook.50.{symbol}")
+        )
+        if market == "linear":
+            topics += tuple(f"tickers.{symbol}" for symbol in self.symbols)
+            topics += tuple(f"allLiquidation.{symbol}" for symbol in self.symbols)
+        return topics
+
     def _socket_loop(self, market: str) -> None:
         while not self.stop.is_set():
             sock = None
@@ -545,14 +553,7 @@ class Collector:
                 sock.settimeout(1)
                 connected_at = time.time()
                 self._mark_transport_connected(market, connected_at)
-                topics = [
-                    topic
-                    for symbol in self.symbols
-                    for topic in (f"publicTrade.{symbol}", f"orderbook.50.{symbol}")
-                ]
-                if market == "linear":
-                    topics.extend(f"tickers.{symbol}" for symbol in self.symbols)
-                    topics.extend(f"allLiquidation.{symbol}" for symbol in self.symbols)
+                topics = self._subscription_topics(market)
                 batch_limit = SUBSCRIBE_BATCH_LIMIT[market]
                 for start in range(0, len(topics), batch_limit):
                     batch = topics[start : start + batch_limit]
