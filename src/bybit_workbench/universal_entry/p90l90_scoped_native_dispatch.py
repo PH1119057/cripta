@@ -251,6 +251,10 @@ def consume_scoped_native_batch(
                 bounded.append(event)
             batch = tuple(bounded)
         if publication_bounds is not None:
+            if publication_pin is None or max_publication_age is None:
+                raise P90ScopedConsumerBlocked(
+                    "P90_SCOPED_PUBLICATION_CONTRACT_INCOMPLETE"
+                )
             # A caller could have waited for the shared source row/checkpoint
             # lock after sampling observed_at. Recheck the REAL database
             # clock before any Entry effects; no stale publication may turn
