@@ -204,7 +204,10 @@ def test_r03_all_active_observer_recovery_writers_become_read_only() -> None:
     recovery = (
         _ROOT / "src/bybit_workbench/universal_entry/p90l90_real_restart_recovery.py"
     ).read_text(encoding="utf-8")
-    assert "verify_only=R03_NATIVE_CANDLE_READER" in observer
+    assert "CRIPTA_R03_NATIVE_CANDLE_READER" in (
+        _ROOT / "src/bybit_workbench/market_data/candle_warmup.py"
+    ).read_text(encoding="utf-8")
+    assert "verify_only=R03_NATIVE_CANDLE_READER" not in observer
     assert observer.count(
         "verify_native_source_only=R03_NATIVE_CANDLE_READER"
     ) == 2
@@ -217,3 +220,66 @@ def test_r03_all_active_observer_recovery_writers_become_read_only() -> None:
     assert "CANDLE_IMMUTABLE_SOURCE_CONFLICT" in (
         _ROOT / "src/bybit_workbench/market_data/shared_closed_candles.py"
     ).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "symbol,timeframe",
+    (("BTCUSDT", "5"), ("LTCUSDT", "60")),
+)
+def test_r03_does_not_revoke_other_closed_candle_source_owners(
+    monkeypatch: pytest.MonkeyPatch, symbol: str, timeframe: str,
+) -> None:
+    # R03 reader-only source ownership must not absorb old Observer assets or
+    # unrelated intervals (e.g. the ordinary R1 60m context). No REAL DB.
+    step = timedelta(minutes=int(timeframe))
+    close_at = datetime(2026, 11, 10, 23, 0, tzinfo=UTC)
+    candle = Candle(
+        symbol=symbol, timeframe=timeframe,
+        opened_at=close_at - step, closed_at=close_at,
+        open=Decimal("101"), high=Decimal("103"),
+        low=Decimal("100"), close=Decimal("102"),
+        volume=Decimal("42"),
+    )
+    writes: list[str] = []
+
+    class Query:
+        def fetchall(self) -> list[tuple[str, str, str, str, str]]:
+            return [(
+                "ms-bybit-mainnet-public-v1", "venue-bybit",
+                f"inst-bybit-linear-{symbol.lower()}", symbol, "LINEAR",
+            )]
+
+    class DB:
+        def execute(self, _query: str, _args: object) -> Query:
+            return Query()
+
+    class Store:
+        def __init__(self, _db: object, _key: object) -> None:
+            pass
+
+        def ingest(self, _rows: object, **_kwargs: object) -> int:
+            writes.append("ingest")
+            return 1
+
+        def history(self, *, through: datetime, required: int) -> tuple[Candle, ...]:
+            assert (through, required) == (close_at, 1)
+            return (candle,)
+
+    monkeypatch.setattr(candle_warmup, "SharedClosedCandleStore", Store)
+    monkeypatch.setenv("CRIPTA_R03_NATIVE_CANDLE_READER", "ENABLED")
+    assert candle_warmup.cache_approved_bybit_history(
+        DB(), symbol=symbol, history={timeframe: (candle,)},
+        observed_at=close_at + timedelta(seconds=1),
+        producer_release_commit="a" * 40,
+    ) == {timeframe: (candle,)}
+    assert writes == ["ingest"]
+
+
+def test_r03_canonical_source_scope_is_explicit_for_five_by_three() -> None:
+    src = (
+        _ROOT / "src/bybit_workbench/market_data/candle_warmup.py"
+    ).read_text(encoding="utf-8")
+    assert "and symbol in r03_symbols" in src
+    assert 'and tf in ("1", "5", "15")' in src
+    assert "read_only = verify_only or r03_native_owned" in src
+    assert "if read_only:" in src
