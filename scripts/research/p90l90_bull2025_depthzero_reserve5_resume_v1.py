@@ -30,10 +30,11 @@ import sys
 import time
 import traceback
 
-from scripts.research import p90l90_bull2025_depthzero_v1 as original
+SOURCE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(SOURCE))
+original = importlib.import_module("scripts.research.p90l90_bull2025_depthzero_v1")
 
 SELF_REL = "scripts/research/p90l90_bull2025_depthzero_reserve5_resume_v1.py"
-SOURCE = Path(__file__).resolve().parents[2]
 OUT = original.OUT
 ORIGINAL_HEAD = "87d44fb5ab6ae8e82ab63e6d765c6742d5289cf2"
 ORIGINAL_FAILURE = "research data disk fell below 16GiB reserve"
