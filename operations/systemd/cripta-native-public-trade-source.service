@@ -16,10 +16,13 @@ Environment=CRIPTA_NATIVE_PUBLIC_TRADE_SYMBOLS=APTUSDT,ARBUSDT,DOTUSDT,INJUSDT,L
 # confirmed closed LINEAR candles plus optional SPOT/topics/REST.
 # This CHANGES the producer ABI: release ONLY through the native source
 # cutover rail, with old-session GAP, new PID/session and independent QC.
-# R03 closed-only and R04 union are mutually exclusive. R05 publication OFF.
+# R03 closed-only and R04 union are mutually exclusive.
+# R05 publishes immutable committed PG references in the SAME native process.
+# Producer code/unit changes require a controlled native GAP/cutover; no new
+# source owner, consumer cutover, Strategy activation, Exchange or LIVE action.
 Environment=CRIPTA_SOURCE_CLOSED_KLINES=0
 Environment=CRIPTA_SOURCE_UNION_CAPTURE=1
-Environment=CRIPTA_SOURCE_PUBLICATION=0
+Environment=CRIPTA_SOURCE_PUBLICATION=1
 Environment=CRIPTA_SOURCE_KLINE_INTERVALS=1,5,15
 Environment=CRIPTA_SOURCE_UNION_MANIFEST_FILE=/etc/cripta/market-source/required_public_feeds.json
 WorkingDirectory=/srv/cripta/runtime/current
