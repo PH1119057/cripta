@@ -282,7 +282,8 @@ def check_resume(engine, expected: str) -> dict:
         raise RuntimeError("103-day original SHA checkpoint chain mismatch")
     if engine.load_parts(OUT / "checkpoint" / "short_only")[0] is not None:
         raise RuntimeError("short checkpoint already started")
-    if any((OUT / "full").iterdir()) or any(OUT.glob("qc_*.json")):
+    final_dir = OUT / "full"
+    if (final_dir.exists() and any(final_dir.iterdir())) or any(OUT.glob("qc_*.json")):
         raise RuntimeError("original final result/QC already exists")
     return {
         "status": "RESUME5_PREFLIGHT_PASS_NO_MUTATION",
