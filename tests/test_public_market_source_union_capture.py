@@ -5,12 +5,18 @@ No real connections are made in the test; no consumer is rewired or LIVE arm.
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import websocket
 
+from bybit_workbench.market_data.public_source_second_store import (
+    PublicSourceSecondUnavailable,
+)
 from bybit_workbench.market_data.source_required_feed_manifest import (
     SourceManifestInvalid,
 )
@@ -19,6 +25,7 @@ from bybit_workbench.market_identity import (
     bybit_instrument_id,
 )
 from operations.monitoring import native_public_trade_source as native
+from operations.monitoring import public_market_source_union_capture as source
 from operations.monitoring.public_market_source_union_capture import (
     _closed_repair_windows,
     _ClosedRepairTask,
@@ -452,15 +459,6 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
     failure_mode: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """R04 negative: the optional SPOT source cannot end LINEAR original epoch."""
-    import time
-    from types import SimpleNamespace
-
-    import websocket
-    from bybit_workbench.market_data.public_source_second_store import (
-        PublicSourceSecondUnavailable,
-    )
-    from operations.monitoring import public_market_source_union_capture as source
-
     manifest = json.loads(_manifest())
     for row in manifest:
         if row["product"] == "SPOT":
@@ -542,8 +540,6 @@ def test_r04_cannot_isolate_a_required_spot_as_optional(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A future required SPOT declaration needs new owner-approved recovery."""
-    from operations.monitoring import public_market_source_union_capture as source
-
     union = parse_explicit_source_manifest(_manifest(), native_symbols=P90)
     monkeypatch.setattr(
         source, "_closed_repair_windows",
