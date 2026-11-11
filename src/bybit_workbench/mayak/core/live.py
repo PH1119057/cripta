@@ -598,6 +598,25 @@ class LiveMayakEngine:
         self.history: deque[tuple[float, dict[str, float]]] = deque(maxlen=60)
         self.liquidations = LiquidationWindow()
 
+    def configuration_fingerprint(self) -> str:
+        """Stable identity of this exact causal observation universe.
+
+        Historic MAYAK 20-symbol snapshots must never be re-used as a fresh
+        dispatcher handoff after owner-approved 7-symbol scope cutover.
+        """
+        return hashlib.sha256(
+            json.dumps(
+                {
+                    "symbols": self.symbols,
+                    "architecture": self.ARCHITECTURE_VERSION,
+                    "engine": self.VERSION,
+                    "features": self.FEATURE_VERSION,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+
     def set_instrument_support(self, market: str, symbols: set[str] | None) -> None:
         if market in self.instrument_support:
             self.instrument_support[market] = set(symbols) if symbols is not None else None
@@ -875,18 +894,7 @@ class LiveMayakEngine:
         state, reasons = self._classify(median, agreement, synchronization, money_breadth)
         fresh = sum(row["quality"] == SourceQuality.FRESH for row in source_rows)
         confidence = fresh / max(1, len(source_rows))
-        config_fingerprint = hashlib.sha256(
-            json.dumps(
-                {
-                    "symbols": self.symbols,
-                    "architecture": self.ARCHITECTURE_VERSION,
-                    "engine": self.VERSION,
-                    "features": self.FEATURE_VERSION,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            ).encode("utf-8")
-        ).hexdigest()
+        config_fingerprint = self.configuration_fingerprint()
         coin_market_contexts = self._coin_market_contexts(
             now_ts=now_ts,
             observed_at=now.isoformat(),
