@@ -70,7 +70,7 @@ def test_r03_missing_one_minute_required_source_blocks_before_socket() -> None:
         r03_closed_only_feed_union(full, native_symbols=_SYMBOLS)
 
 
-def test_r04_native_union_preserves_r03_observer_and_never_enables_r05() -> None:
+def test_r05_native_union_preserves_r03_observer_candle_owner() -> None:
     native = (_ROOT / "operations/systemd/cripta-native-public-trade-source.service"
               ).read_text(encoding="utf-8")
     observer = (_ROOT / "operations/systemd/cripta-universal-entry-observer.service"
@@ -86,7 +86,7 @@ def test_r04_native_union_preserves_r03_observer_and_never_enables_r05() -> None
         "/etc/cripta/market-source/required_public_feeds.json"
     ) in native
     assert "Environment=CRIPTA_SOURCE_UNION_CAPTURE=1" in native
-    assert "Environment=CRIPTA_SOURCE_PUBLICATION=0" in native
+    assert "Environment=CRIPTA_SOURCE_PUBLICATION=1" in native
     assert "Environment=CRIPTA_R03_NATIVE_CANDLE_READER=ENABLED" in observer
     assert "r03_closed_only_feed_union(" in main
     assert "closed_only=capture_closed" in main
