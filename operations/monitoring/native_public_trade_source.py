@@ -206,6 +206,29 @@ def _acquire_exclusive_producer(connection: psycopg.Connection[Any]) -> None:
         raise NativeSourceInputUnverified("NATIVE_SOURCE_WRITER_ALREADY_OWNED")
 
 
+def _enable_source_union_autocommit(
+    connection: psycopg.Connection[Any],
+) -> None:
+    """Guarantee each original journal/frame transaction commits independently.
+
+    R03/R04 bounded source-gap SELECTs execute on the same advisory-lock
+    owning PostgreSQL session. Without autocommit, one such read begins an
+    implicit outer transaction; native _persist_frame() then commits only a
+    nested SAVEPOINT and zero journal/cursor rows become visible to readers.
+    Session-level pg_advisory_lock survives autocommit; every explicit
+    with connection.transaction() remains atomic and durable.
+    """
+    if connection.info.transaction_status != psycopg.pq.TransactionStatus.IDLE:
+        raise NativeSourceInputUnverified(
+            "NATIVE_SOURCE_UNION_TRANSACTION_NOT_IDLE"
+        )
+    connection.autocommit = True
+    if not connection.autocommit:
+        raise NativeSourceInputUnverified(
+            "NATIVE_SOURCE_UNION_AUTOCOMMIT_UNVERIFIED"
+        )
+
+
 def _session_start(connection: psycopg.Connection[Any], session: str) -> None:
     # The caller holds the one-producer PostgreSQL session advisory lock.
     # A power loss/SIGKILL leaves an ACTIVE row without a clean shutdown.
@@ -538,6 +561,11 @@ def main() -> int:
     _status("STARTING")
     with psycopg.connect(DATABASE_DSN, connect_timeout=5) as connection:
         _acquire_exclusive_producer(connection)
+        if union is not None:
+            # Commit every original provider frame/cursor and closed-bar repair
+            # as its own explicit source transaction, even after PG reads.
+            # Existing five-symbol publicTrade-only mode remains unchanged.
+            _enable_source_union_autocommit(connection)
         while not stopping:
             try:
                 if union is None:
