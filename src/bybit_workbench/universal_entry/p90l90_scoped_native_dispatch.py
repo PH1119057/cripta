@@ -11,6 +11,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from bybit_workbench.market_data.entry_publication_reader import EntryPublicationPin
+
 from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 from .p90l90_scoped_native_source import (
@@ -33,6 +35,79 @@ def _sha(value: object, size: int) -> bool:
     )
 
 
+def _verify_pinned_publication_bounds(
+    connection: Any, *,
+    publication_pin: EntryPublicationPin,
+    source: NativeSourceEvidence,
+    observed_at: datetime,
+    max_publication_age: timedelta,
+) -> dict[str, tuple[int, int]]:
+    """Recheck immutable market publication INSIDE the decision transaction.
+
+    The earlier R06 pin was acquired in a separate read-only REPEATABLE READ
+    snapshot. An Entry callback may write only after this transaction proves
+    that exactly the same immutable publication belongs to its still-locked
+    source epoch. WATERMARKS_ONLY is never treated as geometry/ATR READY.
+    """
+    if (
+        not isinstance(publication_pin, EntryPublicationPin)
+        or type(publication_pin.publication_id) is not int
+        or publication_pin.publication_id < 1
+        or publication_pin.source_session_id != source.session_id
+        or publication_pin.producer_release_commit != source.producer_release_commit
+        or not isinstance(publication_pin.as_of_second, datetime)
+        or publication_pin.as_of_second.utcoffset() != timedelta(0)
+        or type(max_publication_age) is not timedelta
+        or not timedelta(0) < max_publication_age <= timedelta(seconds=30)
+        or not timedelta(0)
+            <= observed_at - publication_pin.as_of_second
+            <= max_publication_age
+    ):
+        raise P90ScopedConsumerBlocked("P90_SCOPED_PUBLICATION_IDENTITY_OR_AGE_INVALID")
+
+    row = connection.execute(
+        """SELECT source_session_id,producer_release_commit,as_of_second,
+                  publication_status,native_watermarks,closed_candle_watermarks
+             FROM analytics.market_publications
+            WHERE publication_id=%s AND market_source_id=%s""",
+        (publication_pin.publication_id, source.market_source_id),
+    ).fetchone()
+    if (
+        row is None
+        or row[:4] != (
+            source.session_id, source.producer_release_commit,
+            publication_pin.as_of_second, "WATERMARKS_ONLY",
+        )
+        or not isinstance(row[4], dict)
+        or not isinstance(row[5], dict)
+    ):
+        raise P90ScopedConsumerBlocked("P90_SCOPED_PUBLICATION_EPOCH_CHANGED")
+
+    native, candles = row[4], row[5]
+    limits: dict[str, tuple[int, int]] = {}
+    for symbol in source.by_symbol:
+        ref = publication_pin.native_watermarks.get(symbol)
+        tf = publication_pin.closed_refs.get(symbol)
+        if (
+            not isinstance(ref, dict)
+            or not isinstance(tf, dict)
+            or native.get(symbol) != ref
+            or candles.get(symbol) != tf
+            or not all(k in tf for k in ("5", "15"))
+        ):
+            raise P90ScopedConsumerBlocked("P90_SCOPED_PUBLICATION_REF_DRIFT")
+        frame, index = ref.get("frame_number"), ref.get("frame_index")
+        if (
+            type(frame) is not int or frame < 0
+            or type(index) is not int or index < 0
+        ):
+            raise P90ScopedConsumerBlocked("P90_SCOPED_PUBLICATION_WATERMARK_INVALID")
+        limits[symbol] = frame, index
+    if not limits:
+        raise P90ScopedConsumerBlocked("P90_SCOPED_PUBLICATION_SCOPE_EMPTY")
+    return limits
+
+
 def consume_scoped_native_batch(
     connection: Any,
     *,
@@ -46,6 +121,8 @@ def consume_scoped_native_batch(
     max_evidence_age: timedelta,
     on_native_trade: Callable[[OrderedNativeTrade], None],
     limit: int = 256,
+    publication_pin: EntryPublicationPin | None = None,
+    max_publication_age: timedelta | None = None,
 ) -> tuple[OrderedNativeTrade, ...]:
     """Dispatch only events after an existing proven checkpoint, atomically.
 
@@ -73,6 +150,8 @@ def consume_scoped_native_batch(
         or type(limit) is not int or not 1 <= limit <= 1000
     ):
         raise P90ScopedConsumerBlocked("P90_SCOPED_EXACT_CONSUMER_INPUT_INVALID")
+    if (publication_pin is None) != (max_publication_age is None):
+        raise P90ScopedConsumerBlocked("P90_SCOPED_PUBLICATION_CONTRACT_INCOMPLETE")
     now = observed_at.astimezone(UTC)
     evidence_age = now - source.checked_at
     if (
@@ -102,6 +181,16 @@ def consume_scoped_native_batch(
         ):
             raise P90ScopedConsumerBlocked("P90_SCOPED_SOURCE_SESSION_CHANGED")
 
+        publication_bounds = (
+            _verify_pinned_publication_bounds(
+                connection, publication_pin=publication_pin,
+                source=source, observed_at=now,
+                max_publication_age=max_publication_age,
+            )
+            if publication_pin is not None and max_publication_age is not None
+            else None
+        )
+
         cursor = connection.execute(
             """SELECT frame_number,frame_index,entry_plan_fingerprint,
                       exit_plan_fingerprint,producer_release_commit,
@@ -129,6 +218,14 @@ def consume_scoped_native_batch(
                 "P90_SCOPED_SOURCE_CHECKPOINT_CONTRACT_DRIFT"
             )
 
+        if (
+            publication_bounds is not None
+            and (frame, index) > max(publication_bounds.values())
+        ):
+            raise P90ScopedConsumerBlocked(
+                "P90_SCOPED_PUBLICATION_BEHIND_DECISION_CHECKPOINT"
+            )
+
         try:
             batch = read_ordered_native_events(
                 connection, source=source,
@@ -138,6 +235,21 @@ def consume_scoped_native_batch(
             raise P90ScopedConsumerBlocked(
                 "P90_SCOPED_NATIVE_EVENT_PROOF_FAILED"
             ) from exc
+        if publication_bounds is not None:
+            # One original provider order across all symbols; never dispatch
+            # events past any published per-symbol boundary. A later batch
+            # can resume only after another immutable publication is pinned.
+            bounded: list[OrderedNativeTrade] = []
+            for event in batch:
+                upper = publication_bounds.get(event.symbol)
+                if upper is None:
+                    raise P90ScopedConsumerBlocked(
+                        "P90_SCOPED_PUBLICATION_SYMBOL_UNLISTED"
+                    )
+                if (event.frame_number, event.frame_index) > upper:
+                    break
+                bounded.append(event)
+            batch = tuple(bounded)
         for event in batch:
             if event.symbol not in ALLOWED_SYMBOLS[strategy_id]:
                 raise P90ScopedConsumerBlocked(
@@ -168,3 +280,48 @@ def consume_scoped_native_batch(
                     "P90_SCOPED_CHECKPOINT_CONCURRENT_CHANGE"
                 )
         return batch
+
+
+def consume_pinned_entry_native_batch(
+    connection: Any,
+    *,
+    publication_pin: EntryPublicationPin,
+    max_publication_age: timedelta,
+    source: NativeSourceEvidence,
+    strategy_id: str,
+    strategy_version: str,
+    entry_plan_fingerprint: str,
+    exit_plan_fingerprint: str,
+    consumer_release_commit: str,
+    observed_at: datetime,
+    max_evidence_age: timedelta,
+    on_publication_trade: Callable[[OrderedNativeTrade, int], None],
+    limit: int = 256,
+) -> tuple[OrderedNativeTrade, ...]:
+    """Stage R06 only: same canonical P90 decision cursor and atomic writer.
+
+    The Engine callback receives the exact immutable publication_id with each
+    original event in the SAME PG transaction as checkpoint progress. This
+    function is NOT wired to runtime Observer or an Exchange endpoint. The
+    supplied callback must independently prove full geometry/ATR/admission;
+    pinning WATERMARKS_ONLY is insufficient and grants no financial authority.
+    """
+    if not isinstance(publication_pin, EntryPublicationPin) or not callable(
+        on_publication_trade
+    ):
+        raise P90ScopedConsumerBlocked("P90_SCOPED_ENTRY_PUBLICATION_INPUT_INVALID")
+
+    def deliver(event: OrderedNativeTrade) -> None:
+        on_publication_trade(event, publication_pin.publication_id)
+
+    return consume_scoped_native_batch(
+        connection, source=source, strategy_id=strategy_id,
+        strategy_version=strategy_version,
+        entry_plan_fingerprint=entry_plan_fingerprint,
+        exit_plan_fingerprint=exit_plan_fingerprint,
+        consumer_release_commit=consumer_release_commit,
+        observed_at=observed_at, max_evidence_age=max_evidence_age,
+        on_native_trade=deliver, limit=limit,
+        publication_pin=publication_pin,
+        max_publication_age=max_publication_age,
+    )
