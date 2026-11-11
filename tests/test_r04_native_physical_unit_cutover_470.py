@@ -8,9 +8,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bybit_workbench.market_data.source_required_feed_manifest import (
-    SourceManifestInvalid,
-)
 from operations.monitoring.public_market_source_union_capture import (
     parse_explicit_source_manifest,
     r03_closed_only_feed_union,
@@ -98,7 +95,6 @@ def test_r04_unit_must_use_native_source_cutover_release_not_full() -> None:
 
 def test_r03_closed_only_and_r04_union_are_separate_feed_plans() -> None:
     from operations.monitoring.native_public_trade_source import (
-        NativeSourceInputUnverified,
         _source_feature_enabled,
     )
 
