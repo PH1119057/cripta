@@ -115,7 +115,8 @@ def test_status_remains_financially_blocked_while_technical_ack_is_reported() ->
     module = runtime.split("def wait_blocked(", 1)[1].split(
         "with psycopg.connect(", 1
     )[0]
-    assert "_blocked_p90_native_transport_ack(connection, detail)" in module
+    assert "_blocked_p90_native_transport_ack(" in module
+    assert "connection, detail," in module
     assert 'state="BLOCKED"' in module
     assert '"native_pg_delivery"' in module
     assert '"native_pg_session_id"' in module
