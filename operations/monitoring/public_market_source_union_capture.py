@@ -344,15 +344,6 @@ def run_source_union(
         or union.websocket_batches("SPOT")
     ):
         raise SourceManifestInvalid("R03_CLOSED_ONLY_SOURCE_SCOPE_DRIFT")
-    # R04: a required SPOT/REST feed cannot silently use optional isolation.
-    if not closed_only and any(
-        item.required and (
-            item.product == "SPOT"
-            or item.dataset in ("ACCOUNT_RATIO", "INSTRUMENT_INFO")
-        )
-        for item in union.requirements
-    ):
-        raise SourceManifestInvalid("R04_REQUIRED_OPTIONAL_TRANSPORT_UNSUPPORTED")
     products = ("LINEAR",) if closed_only else ("SPOT", "LINEAR")
     # Avoid a second producer: the native module already owns the PostgreSQL
     # exclusive session lock. The only caller is its main() branch.
@@ -385,6 +376,15 @@ def run_source_union(
     # Fail closed on an incomplete source/consumer horizon BEFORE opening
     # either public socket or creating an ACTIVE producer source epoch.
     repair_windows = _closed_repair_windows(union, native_symbols=p90_symbols)
+    # R04: a required SPOT/REST feed cannot silently use optional isolation.
+    if not closed_only and any(
+        item.required and (
+            item.product == "SPOT"
+            or item.dataset in ("ACCOUNT_RATIO", "INSTRUMENT_INFO")
+        )
+        for item in union.requirements
+    ):
+        raise SourceManifestInvalid("R04_REQUIRED_OPTIONAL_TRANSPORT_UNSUPPORTED")
     sock: dict[str, Any] = {}
     buffer: dict[str, list[dict[str, object]]] = {}
     # The required LINEAR socket must be ready before the native session.
