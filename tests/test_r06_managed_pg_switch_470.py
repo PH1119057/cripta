@@ -275,3 +275,17 @@ def test_existing_old_observer_does_not_get_restart_on_early_failure(
     monkeypatch.setattr(switch, "_write_marker", lambda _state: None)
     switch._rollback_inner(automatic=True)
     assert marker["state"] == "ROLLED_BACK"
+
+
+def test_no_switch_if_source_mirror_has_a_different_commit(monkeypatch):
+    from operations.management import r06_pg_switch_probe as probe
+
+    class WrongHead:
+        returncode = 0
+        stdout = "b" * 40 + "\n"
+
+    monkeypatch.setattr(probe.subprocess, "run", lambda *_a, **_kw: WrongHead())
+    with pytest.raises(
+        probe.R06SwitchPreflightBlocked, match="SOURCE_INSTALLED_HEAD",
+    ):
+        probe.assert_source_mirror_matches_loaded("a" * 40)

@@ -6,7 +6,9 @@ or substitutes local account-state status for signed MAIN/SUB FLAT proof.
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -44,6 +46,18 @@ def current_release() -> str:
         raise R06SwitchPreflightBlocked("R06_RELEASE_IDENTITY_INVALID")
     return sha
 
+
+
+
+def assert_source_mirror_matches_loaded(sha: str) -> None:
+    """Normal clean source sync does not imply deploy: refuse mixed identity."""
+    result = subprocess.run(
+        ["git", "-C", str(SOURCE_CHECKOUT), "rev-parse", "HEAD"],
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+        capture_output=True, text=True, timeout=5, check=False,
+    )
+    if result.returncode != 0 or result.stdout.strip() != sha:
+        raise R06SwitchPreflightBlocked("R06_SOURCE_INSTALLED_HEAD_NOT_EQUAL")
 
 def _require_after(conn: psycopg.Connection, sha: str, source: str) -> dict[str, object]:
     rows = conn.execute(
@@ -98,6 +112,7 @@ def verify(mode: str) -> dict[str, object]:
     if mode not in ("before", "detached", "after", "rollback_local"):
         raise R06SwitchPreflightBlocked("R06_UNKNOWN_PROBE_MODE")
     sha = current_release()
+    assert_source_mirror_matches_loaded(sha)
     with psycopg.connect(
         DSN + " options=-cdefault_transaction_read_only=on",
         autocommit=True,
