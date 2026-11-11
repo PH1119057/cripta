@@ -11,7 +11,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from operations.monitoring import native_public_trade_observer_delivery as delivery
+from operations.monitoring import (
+    native_public_trade_observer_delivery as delivery,
+)
 from operations.monitoring import universal_entry_shadow as observer
 
 
