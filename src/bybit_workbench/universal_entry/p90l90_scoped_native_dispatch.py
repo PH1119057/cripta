@@ -250,6 +250,23 @@ def consume_scoped_native_batch(
                     break
                 bounded.append(event)
             batch = tuple(bounded)
+        if publication_bounds is not None:
+            # A caller could have waited for the shared source row/checkpoint
+            # lock after sampling observed_at. Recheck the REAL database
+            # clock before any Entry effects; no stale publication may turn
+            # into a late decision merely because its earlier pin was valid.
+            current = connection.execute("SELECT clock_timestamp()").fetchone()
+            if (
+                current is None
+                or not isinstance(current[0], datetime)
+                or current[0].utcoffset() != timedelta(0)
+                or not timedelta(0)
+                    <= current[0].astimezone(UTC) - publication_pin.as_of_second
+                    <= max_publication_age
+            ):
+                raise P90ScopedConsumerBlocked(
+                    "P90_SCOPED_PUBLICATION_STALE_BEFORE_DECISION"
+                )
         for event in batch:
             if event.symbol not in ALLOWED_SYMBOLS[strategy_id]:
                 raise P90ScopedConsumerBlocked(
