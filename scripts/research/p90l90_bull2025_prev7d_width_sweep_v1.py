@@ -27,7 +27,6 @@ import shutil
 import subprocess
 import sys
 import traceback
-from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal as D
 from pathlib import Path
