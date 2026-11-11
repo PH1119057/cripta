@@ -19,9 +19,7 @@ Filesystem contract DEV 5.1:
 from __future__ import annotations
 
 import argparse
-from collections import defaultdict
 from decimal import Decimal as D
-import hashlib
 import importlib
 import json
 import os
