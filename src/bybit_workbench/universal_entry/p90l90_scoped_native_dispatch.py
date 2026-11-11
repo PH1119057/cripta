@@ -218,6 +218,39 @@ def consume_scoped_native_batch(
                 "P90_SCOPED_SOURCE_CHECKPOINT_CONTRACT_DRIFT"
             )
 
+        checkpoint_lineage: tuple[int, int] | None = None
+        if publication_bounds is not None:
+            if publication_pin is None:
+                raise P90ScopedConsumerBlocked(
+                    "P90_SCOPED_PUBLICATION_CONTRACT_INCOMPLETE"
+                )
+            lineage = connection.execute(
+                """SELECT bootstrap_publication_id,last_publication_id,
+                          bootstrap_source_at
+                     FROM strategy_entry.p90_scoped_native_consumer_checkpoints
+                    WHERE strategy_id=%s AND strategy_version=%s
+                      AND source_session_id=%s
+                    FOR UPDATE""",
+                (strategy_id, strategy_version, source.session_id),
+            ).fetchone()
+            if lineage is None:
+                raise P90ScopedConsumerBlocked(
+                    "P90_SCOPED_PUBLICATION_CHECKPOINT_LINEAGE_MISSING"
+                )
+            bootstrap_id, previous_id, source_at = lineage
+            if (
+                type(bootstrap_id) is not int or bootstrap_id < 1
+                or type(previous_id) is not int or previous_id < bootstrap_id
+                or publication_pin.publication_id < previous_id
+                or not isinstance(source_at, datetime)
+                or source_at.utcoffset() != timedelta(0)
+                or publication_pin.as_of_second < source_at
+            ):
+                raise P90ScopedConsumerBlocked(
+                    "P90_SCOPED_PUBLICATION_CHECKPOINT_LINEAGE_DRIFT"
+                )
+            checkpoint_lineage = bootstrap_id, previous_id
+
         if (
             publication_bounds is not None
             and (frame, index) > max(publication_bounds.values())
@@ -281,21 +314,48 @@ def consume_scoped_native_batch(
             on_native_trade(event)
         if batch:
             last = batch[-1]
-            result = connection.execute(
-                """UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints
-                      SET frame_number=%s,frame_index=%s,last_exec_id=%s,
-                          checked_at=clock_timestamp()
-                    WHERE strategy_id=%s AND strategy_version=%s
-                      AND source_session_id=%s
-                      AND frame_number=%s AND frame_index=%s
-                      AND consumer_release_commit=%s
-                      AND producer_release_commit=%s""",
-                (
-                    last.frame_number, last.frame_index, last.exec_id,
-                    strategy_id, strategy_version, source.session_id,
-                    frame, index, loaded, producer,
-                ),
-            )
+            if publication_pin is not None:
+                if checkpoint_lineage is None:
+                    raise P90ScopedConsumerBlocked(
+                        "P90_SCOPED_PUBLICATION_CHECKPOINT_LINEAGE_MISSING"
+                    )
+                bootstrap_id, previous_id = checkpoint_lineage
+                result = connection.execute(
+                    """UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints
+                          SET frame_number=%s,frame_index=%s,last_exec_id=%s,
+                              last_publication_id=%s,checked_at=clock_timestamp()
+                        WHERE strategy_id=%s AND strategy_version=%s
+                          AND source_session_id=%s
+                          AND frame_number=%s AND frame_index=%s
+                          AND consumer_release_commit=%s
+                          AND producer_release_commit=%s
+                          AND bootstrap_publication_id=%s
+                          AND last_publication_id=%s""",
+                    (
+                        last.frame_number, last.frame_index, last.exec_id,
+                        publication_pin.publication_id,
+                        strategy_id, strategy_version, source.session_id,
+                        frame, index, loaded, producer,
+                        bootstrap_id, previous_id,
+                    ),
+                )
+            else:
+                # Pre-R06 legacy replay keeps its exact previous SQL/behavior.
+                result = connection.execute(
+                    """UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints
+                          SET frame_number=%s,frame_index=%s,last_exec_id=%s,
+                              checked_at=clock_timestamp()
+                        WHERE strategy_id=%s AND strategy_version=%s
+                          AND source_session_id=%s
+                          AND frame_number=%s AND frame_index=%s
+                          AND consumer_release_commit=%s
+                          AND producer_release_commit=%s""",
+                    (
+                        last.frame_number, last.frame_index, last.exec_id,
+                        strategy_id, strategy_version, source.session_id,
+                        frame, index, loaded, producer,
+                    ),
+                )
             if result.rowcount != 1:
                 raise P90ScopedConsumerBlocked(
                     "P90_SCOPED_CHECKPOINT_CONCURRENT_CHANGE"
