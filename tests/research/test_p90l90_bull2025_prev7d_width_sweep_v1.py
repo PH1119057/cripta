@@ -133,3 +133,37 @@ def test_study_outputs_are_not_source_modified(tmp_path, monkeypatch):
     with pytest.raises(FileExistsError):
         sweep.write_once(dummy, {"test": "DUPLICATE"})
     assert json.loads(dummy.read_text()) == {"test": "PASS"}
+
+
+def test_frozen_depthzero_prepare_tuple_contract(monkeypatch):
+    """Original prepare returns (engine, proof), not (driver, engine)."""
+    class DummyBook:
+        def handle(self, *_args):
+            return True
+
+    fake_engine = SimpleNamespace(
+        old=SimpleNamespace(
+            START_WALLET=D("1000000000000"),
+            FIXED_MARGIN=D("20"),
+            LEVERAGE=D("5"),
+            Book=DummyBook,
+        ),
+        PINNED=("original_sha_pins",),
+    )
+    monkeypatch.setattr(
+        sweep.original,
+        "prepare",
+        lambda _expected: (fake_engine, {"status": "FROZEN_PASS"}),
+    )
+    monkeypatch.setattr(sweep, "verify_base", lambda: {})
+    monkeypatch.setattr(
+        sweep,
+        "verify_source_catalog",
+        lambda: {"median": medians(), "selected": {}, "counts": {}},
+    )
+    monkeypatch.setattr(sweep, "sha", lambda _p: "sample_sha")
+    actual_engine, catalog, current = sweep.prepare("a" * 40)
+    assert actual_engine is fake_engine
+    assert sweep.SELF_REL in fake_engine.PINNED
+    assert "median" in catalog
+    assert current == {"width": None}

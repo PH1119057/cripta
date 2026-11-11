@@ -152,7 +152,7 @@ def verify_base() -> dict:
 
 def prepare(expected: str) -> tuple:
     original.MIN_FREE = RESERVE
-    driver, engine = original.prepare(expected)
+    engine, _proof = original.prepare(expected)
     if engine.old.START_WALLET != D("1000000000000"):
         raise ValueError("virtual capfree wallet changed")
     if engine.old.FIXED_MARGIN != D(20) or engine.old.LEVERAGE != D(5):
