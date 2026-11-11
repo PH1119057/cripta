@@ -269,3 +269,66 @@ def read_entry_publication_seed(
         ):
             raise EntryPublicationUnavailable("R06_ENTRY_SEED_PUBLICATION_MISMATCH")
     return history
+
+
+def read_entry_publication_original_suffix(
+    connection: Any,
+    *,
+    pin: EntryPublicationPin,
+    source: Any,
+    after_frame: int,
+    after_index: int,
+    limit: int = 256,
+) -> tuple[Any, ...]:
+    """Read exact original provider rows, never a per-second trade sample.
+
+    The caller proves SOURCE ABI and supplies its OWN durable causal decision
+    checkpoint (not the technical transport ACK). No decision or checkpoint
+    write occurs here. The returned suffix is bounded by each symbol's
+    immutable watermark in this ONE publication.
+    """
+    from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
+        NativeSourceEvidence,
+        NativeSourceProofUnavailable,
+        read_ordered_native_events,
+    )
+
+    if (
+        not isinstance(pin, EntryPublicationPin)
+        or not isinstance(source, NativeSourceEvidence)
+        or not source.ready
+        or source.market_source_id != BYBIT_PUBLIC_MARKET_SOURCE_ID
+        or source.session_id != pin.source_session_id
+        or source.producer_release_commit != pin.producer_release_commit
+        or not set(pin.native_watermarks) <= set(source.by_symbol)
+        or type(after_frame) is not int or after_frame < 0
+        or type(after_index) is not int or after_index < 0
+        or type(limit) is not int or not 1 <= limit <= 1000
+    ):
+        raise EntryPublicationUnavailable("R06_ENTRY_ORIGINAL_SOURCE_MISMATCH")
+
+    try:
+        events = read_ordered_native_events(
+            connection,
+            source=source,
+            after_frame=after_frame,
+            after_index=after_index,
+            limit=limit,
+        )
+    except NativeSourceProofUnavailable as exc:
+        raise EntryPublicationUnavailable("R06_ENTRY_ORIGINAL_GAP") from exc
+
+    accepted = []
+    prior = (after_frame, after_index)
+    for event in events:
+        pos = (event.frame_number, event.frame_index)
+        bound = pin.native_watermarks.get(event.symbol)
+        if pos <= prior or not isinstance(bound, dict):
+            raise EntryPublicationUnavailable("R06_ENTRY_ORIGINAL_ORDER_INVALID")
+        if pos > (bound["frame_number"], bound["frame_index"]):
+            # Source advances after the pinned publication. Preserve original
+            # frame order, never leap past a not-yet-published event.
+            break
+        accepted.append(event)
+        prior = pos
+    return tuple(accepted)
