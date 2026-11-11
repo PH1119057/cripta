@@ -93,6 +93,37 @@ def test_r04_unit_must_use_native_source_cutover_release_not_full() -> None:
     assert "NATIVE_SOURCE_EXACT_CODE_CUTOVER=PASS" in installer
 
 
+def test_derived_public_feed_modules_are_native_producer_abi() -> None:
+    """A derived book fix MUST select native GAP/cutover, not ordinary FULL.
+
+    Runtime controller is still loaded from baseline at first release
+    invocation, so the changed native entrypoint is also an explicit
+    ABI marker recognized by the baseline Controller.
+    """
+    controller = (
+        ROOT / "operations/infrastructure/cripta-release-controller"
+    ).read_text(encoding="utf-8")
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    native = (
+        ROOT / "operations/monitoring/native_public_trade_source.py"
+    ).read_text(encoding="utf-8")
+    required = (
+        "operations/monitoring/native_public_trade_source.py",
+        "operations/monitoring/public_market_source_union_capture.py",
+        "src/bybit_workbench/market_data/public_source_event_codec.py",
+        "src/bybit_workbench/market_data/public_source_second_store.py",
+        "src/bybit_workbench/market_data/public_source_quality.py",
+    )
+    for path in required:
+        assert controller.count(f'"{path}"') >= 1
+        assert installer.count(path) >= 2
+    assert "R04 native producer ABI includes shared book/ticker" in native
+    assert "NATIVE_CUTOVER_PURPOSE, True" in controller
+    assert "NATIVE_SOURCE_PRODUCER_CODE_CHANGED_SEPARATE_CUTOVER_REQUIRED" in installer
+
+
 def test_r03_closed_only_and_r04_union_are_separate_feed_plans() -> None:
     from operations.monitoring.native_public_trade_source import (
         _source_feature_enabled,
