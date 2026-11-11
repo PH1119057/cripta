@@ -1,6 +1,6 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 2.5
+**Версия:** 2.6
 **Дата:** 2026-11-11
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
@@ -1204,3 +1204,13 @@ from GitHub merge or a test fixture.
 **Физический R04 gate:** до enable R04 source union RED→GREEN tests: optional SPOT subscribe rejection, runtime disconnect/heartbeat, malformed optional book, optional REST absence/timeout, queue overflow and reconnect; доказать сохранность five native LINEAR cursors, journal, 15 closed windows, same-session Observer ACK, scoped durable quality/epochs. Требуется disposable PostgreSQL16 integration, restart/rollback proof, measured per-day PG+WAL+system-backup amplification and headroom, actor/path and bounded retention for NEW compact/REST/forming datasets. Native original journal, R03 closed candles и OPEN Exit evidence не подвергать TTL purge без отдельного approved решения. До выполнения gate CRIPTA_SOURCE_UNION_CAPTURE выключен; R05 publication остаётся выключена.
 
 **Preservation:** только пять symbols APTUSDT/ARBUSDT/DOTUSDT/INJUSDT/LTCUSDT в новом capture. Existing MAYAK 20-symbol capability, Strategy/Entry/Exit/Execution, signed Private safety и financial LIVE-arm не меняются. CANON UPDATE не означает IMPLEMENTED, DEPLOYED или RUNTIME BEHAVIOR VERIFIED.
+
+### 7.10.5.3 MAYAK seven-symbol observation scope — OWNER DECISION 2026-11-11 (#470)
+
+**Новое прямое решение владельца, уточняющее ранее сохранённый 20-symbol MAYAK:** отдельный существующий MAYAK v2 observation collector должен в будущей установленной версии охватывать **ровно семь** инструментов: `APTUSDT`, `ARBUSDT`, `DOTUSDT`, `INJUSDT`, `LTCUSDT`, `BTCUSDT`, `ETHUSDT`. Первые пять — действующая торгуемая панель P90, BTC/ETH — market-regime/relative reference anchors, не новый Strategy Entry/Execution scope. Ранее наблюдавшиеся 20 символов остаются **историческим BEFORE**, а не текущим обязательным 20-symbol AFTER. Сокращение 13 остальных символов непосредственно разрешено владельцем; старые их данные и audit/lineage **не удаляются**.
+
+**Точная граница:** одобренный R01–R05 **новый** public/native capture, его per-consumer `required_public_feeds.json`, original native trade journal, 15 свечных окон, Observer, Exit и Strategy остаются строго **пятисимвольными**. BTC/ETH не добавляются в native producer, MarketPublication, новый REST/compact store или торговые Strategy. MAYAK аналитически продолжает использовать семь собственных входов до отдельного R11 consumer cutover; новый второй collector не создаётся. Dispatcher и downstream consumer могут получать объективный MAYAK context лишь по этим семи, без синтеза контекста исключённым 13 и без неявного fallback на старые 20.
+
+**Неэквивалентность и проверка:** сокращение глобальной ширины/market breadth с 20 до 7 объективно меняет контекст MAYAK/Dispatcher, базовые доли и покрытие рынка; это сознательное изменение панели, **не** сохранение численной эквивалентности прежнему 20-symbol режиму. Запрет на торговую интерпретацию MAYAK сохраняется; никакие Strategy thresholds, Entry/Exit, live positions или финансовые ARM не пересматриваются без отдельного исследования/owner decision. Каждый live consumer, которому действительно требовались 13 исключённых инструментов, должен получить явный degraded/not-covered scope или отдельно доказанный BEFORE→AFTER; выдавать старые 20 как fresh/ready нельзя. На cutover требуется новый `config_fingerprint`/source-epoch quality, корректный WARMUP, проверка BTC/ETH anchors, причинных минут и integrity snapshots/Dispatcher; старые immutable records не переписывать.
+
+**Storage/release:** уменьшение подписок и новых per-coin writes **не освобождает историческое место автоматически** и не даёт разрешения на delete/TTL purge raw original trades, shared closed candles, OPEN Exit, fault/audit или pinned contexts. Storage class/retention/actor/backup/rollback и headroom сохраняются по ARCH §48 и DEV §5.1/§19/§50.5.1/§59. При owner-approved сокращении не требуется эквивалентная замена 13 добровольно исключённых MAYAK-only inputs, но активные торговые и safety consumers обязаны сохранить доказуемо необходимые данные. Само решение не запускает service restart/release или R04/R05 флаги. `OWNER_DECISION=YES`; `CANON=AFTER_PROTECTED_MERGE`; `MAYAK_SEVEN_RUNTIME=NOT_VERIFIED`; `LIVE_CHANGE=NO`.

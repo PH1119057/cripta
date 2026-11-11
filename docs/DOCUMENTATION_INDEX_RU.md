@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.53
+**Версия:** 3.54
 **Дата:** 2026-11-11
 **Статус:** канонический индекс документации
 
@@ -1807,3 +1807,11 @@ routes и Project Instructions не меняются.
 Владелец разрешил продолжение roadmap после R03: один native MarketSource producer/writer сохраняется, но optional SPOT/topic/REST failures изолируются с durable scoped GAP/NO_DATA/STALE/NOT_LISTED и epoch/recovery evidence; исправная обязательная LINEAR original trade и R03 candle/Observer continuity не останавливаются глобальным отказом необязательного источника. **Source/quality owner:** OBS §7.10.5.2. ARCH §60.5 остаётся owner единой producer/consumer границы, OBS §7.10.5.1 задаёт per-consumer required/TTL, DEV §50.5.1/§59 — negative tests, PG/WAL/backup, release and rollback. GLOSSARY §45 определяет общую MarketSource identity; dated facts — MAP и Issue #470.
 
 Нельзя включать R04 source union, R05 publication, новые монеты, второй writer, automatic LIVE/Exchange mutation или отключать существующий MAYAK 20 symbols по одной редакционной правке. До физической активации обязательны негативные SPOT/topic/REST cases, disposable PG16 scoped quality evidence, measured disk/WAL/backup pressure и runtime parity LINEAR/Observer. Документный состав 11 файлов, пути, pre-read, README/AGENTS и Project Instructions не меняются. OWNER_DECISION=YES; CANON_AFTER_MERGE=YES; R04_IMPLEMENTED=NOT_VERIFIED; R04_DEPLOYED=NO; LIVE_CHANGE=NO.
+
+## 76. MAYAK 20→7 observation-panel reduction — OWNER DECISION 2026-11-11 (Issue #470)
+
+Новое прямое решение владельца **заменяет прежний запрет урезать существующий 20-symbol MAYAK без отдельного owner decision**. Future installed MAYAK observation panel: `APTUSDT,ARBUSDT,DOTUSDT,INJUSDT,LTCUSDT,BTCUSDT,ETHUSDT` (7). Исторический BEFORE=20 сохраняется как lineage; 13 неприоритетных inputs не требуются для нового MAYAK AFTER. Exact owner/consumer, quality, breadth/anchors и исключения — OBS §7.10.5.3, архитектурная граница — ARCH §60.5.1, release/storage/actor — DEV §59.3, факты/статусы — MAP и Issue #470.
+
+Это не добавляет BTC/ETH в **пятисимвольный native MarketSource R01–R05**, не отменяет обязательства независимых trading/Exit/Position/Safety consumers, не даёт права удалять исторические записи, архивы, WAL или audit по одному owner scope решению. Разрешение терпеть свободные 19 ГБ не заменяет проверку PostgreSQL+WAL+backup+rollback перед физической активацией R04. R05 и LIVE без изменений; source code/CI не равны DEPLOY/RUNTIME VERIFIED.
+
+No new current docs, changes to Project Source set (11), paths, pre-read, root README/AGENTS or Project Instructions bootstrap. `CANON=AFTER_PROTECTED_MERGE`; `MAYAK7_SOURCE_IMPLEMENTED=NO`; `MAYAK7_RUNTIME=NO`.
