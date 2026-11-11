@@ -186,7 +186,7 @@ def independent_qc(side: str) -> dict:
             per_coin[t["symbol"]]["hard"] += (t["exit_reason"]=="HARD_STOP")
             per_coin[t["symbol"]]["net"] += D(t["net_usdt"])
             money += D(t["net_usdt"])
-        open_positions = report["results"][key].get("open_positions", [])
+        open_positions = report["results"][key].get("open_censored", [])
         if not isinstance(open_positions,list):
             raise ValueError("censored open positions type mismatch")
         for pos in open_positions:
