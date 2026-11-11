@@ -46,6 +46,7 @@ from bybit_workbench.market_data.public_rest_observations import (
     persist_public_rest_fact,
 )
 from bybit_workbench.market_data.public_source_event_codec import (
+    PublicSourceFrameInvalid,
     decode_bybit_public_frame,
 )
 from bybit_workbench.market_data.public_source_second_store import (
@@ -343,6 +344,15 @@ def run_source_union(
         or union.websocket_batches("SPOT")
     ):
         raise SourceManifestInvalid("R03_CLOSED_ONLY_SOURCE_SCOPE_DRIFT")
+    # R04: a required SPOT/REST feed cannot silently use optional isolation.
+    if not closed_only and any(
+        item.required and (
+            item.product == "SPOT"
+            or item.dataset in ("ACCOUNT_RATIO", "INSTRUMENT_INFO")
+        )
+        for item in union.requirements
+    ):
+        raise SourceManifestInvalid("R04_REQUIRED_OPTIONAL_TRANSPORT_UNSUPPORTED")
     products = ("LINEAR",) if closed_only else ("SPOT", "LINEAR")
     # Avoid a second producer: the native module already owns the PostgreSQL
     # exclusive session lock. The only caller is its main() branch.
@@ -377,15 +387,27 @@ def run_source_union(
     repair_windows = _closed_repair_windows(union, native_symbols=p90_symbols)
     sock: dict[str, Any] = {}
     buffer: dict[str, list[dict[str, object]]] = {}
-    for product in products:
-        sock[product], buffer[product] = _connect_subscribe(
-            product=product, union=union,
-        )
+    # The required LINEAR socket must be ready before the native session.
+    # Optional SPOT connect/retry happens on its own worker after LINEAR start.
+    sock["LINEAR"], buffer["LINEAR"] = _connect_subscribe(
+        product="LINEAR", union=union,
+    )
     session = native.uuid4().hex
     native._session_start(connection, session)
     native._status("ACTIVE", session=session)
     done = threading.Event()
-    failures: list[str] = []
+    failures: list[str] = []  # Required LINEAR transport only.
+    optional_faults: queue.Queue[str] = queue.Queue(maxsize=128)
+
+    def note_optional_fault(reason: str) -> None:
+        # This is operator-visible staging evidence, not the R04 durable
+        # source-quality ledger. Physical R04 activation stays disarmed until
+        # the separate scoped PG event/epoch writer and QC are released.
+        try:
+            optional_faults.put_nowait(reason[:160])
+        except queue.Full:
+            failures.append("OPTIONAL_FAULT_AUDIT_OVERFLOW")
+            done.set()
     pipe: queue.Queue[tuple[str, dict[str, object], datetime]] = queue.Queue(
         maxsize=_MAX_QUEUE,
     )
@@ -412,10 +434,18 @@ def run_source_union(
     ] = queue.Queue(maxsize=1)
 
     def read(product: str) -> None:
-        try:
-            pending = list(buffer[product])
-            last_ping = time.monotonic()
-            while not done.is_set() and not source_stopping():
+        pending = list(buffer.get(product, []))
+        last_ping = time.monotonic()
+        while not done.is_set() and not source_stopping():
+            try:
+                if product not in sock:
+                    current_sock, early = _connect_subscribe(
+                        product=product, union=union,
+                    )
+                    sock[product] = current_sock
+                    pending.extend(early)
+                    last_ping = time.monotonic()
+                    last_received[product] = last_ping
                 if pending:
                     item = pending.pop(0)
                 else:
@@ -442,9 +472,20 @@ def run_source_union(
                     raise PublicSourceSecondUnavailable(
                         "PUBLIC_FEED_TRANSPORT_HEARTBEAT_LOST"
                     )
-        except Exception as exc:
-            failures.append(f"{product}:{type(exc).__name__}")
-            done.set()
+            except Exception as exc:
+                if product == "LINEAR":
+                    failures.append(f"{product}:{type(exc).__name__}")
+                    done.set()
+                    return
+                # Only SPOT is optional in the exact approved R01 manifest.
+                # Never GAP the original LINEAR journal for its outage.
+                note_optional_fault(f"SPOT:{type(exc).__name__}")
+                previous = sock.pop(product, None)
+                if previous is not None:
+                    previous.close()
+                pending.clear()
+                if done.wait(5.0):
+                    return
 
     workers = [
         threading.Thread(target=read, args=(product,), daemon=True)
@@ -480,9 +521,8 @@ def run_source_union(
                 except (OSError, TimeoutError):
                     continue
                 except queue.Full:
-                    failures.append("REST:PUBLIC_REST_PIPE_OVERFLOW")
-                    done.set()
-                    return
+                    note_optional_fault("REST:PUBLIC_REST_PIPE_OVERFLOW")
+                    continue
             done.wait(0.20)
 
     if rest_needs:
@@ -570,11 +610,25 @@ def run_source_union(
                         ),
                         product=product,
                     )
-                for event in (() if closed_only else decode_bybit_public_frame(
-                    item, product=product,
-                    allowed_symbols=symbols[product],
-                    received_at=received,
-                )):
+                optional_topic = any(
+                    feed.product == product and feed.dataset_topic == topic
+                    and not feed.required
+                    for feed in union.websocket_topics
+                )
+                try:
+                    events = (() if closed_only else decode_bybit_public_frame(
+                        item, product=product,
+                        allowed_symbols=symbols[product],
+                        received_at=received,
+                    ))
+                except PublicSourceFrameInvalid as exc:
+                    if not optional_topic:
+                        raise
+                    note_optional_fault(
+                        f"{product}:{topic}:{type(exc).__name__}"
+                    )
+                    events = ()
+                for event in events:
                     if event.kind == "FORMING_KLINE":
                         if (
                             event.product, event.symbol,
@@ -586,7 +640,27 @@ def run_source_union(
                                 fact=event, received_at=received,
                             )
                     else:
-                        aggregate.accept(event, received_at=received)
+                        try:
+                            aggregate.accept(event, received_at=received)
+                        except (PublicSourceFrameInvalid,
+                                PublicSourceSecondUnavailable) as exc:
+                            if not optional_topic:
+                                raise
+                            aggregate.invalidate_market(event.instrument_id)
+                            note_optional_fault(
+                                f"{product}:{topic}:{type(exc).__name__}"
+                            )
+            # Initial partial source-only isolation: these faults do NOT
+            # imply recovered quality or R04 runtime acceptance. A durable
+            # per-topic ledger is required before enabling the feature flag.
+            for _ in range(8):
+                try:
+                    fault = optional_faults.get_nowait()
+                except queue.Empty:
+                    break
+                native._status(
+                    "ACTIVE", session=session, reason="R04_OPTIONAL:" + fault,
+                )
             # Handle bounded REST receipts only on the one PG source writer.
             # Never insert the REST fact directly from its network worker.
             for _ in range(8):
