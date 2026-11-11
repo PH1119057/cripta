@@ -65,6 +65,7 @@ class DB:
         self.initialized = initialized
         self.checkpoint = (0, 0)
         self.clock_override = None
+        self.checkpoint_lineage = (14, 14, self.now-timedelta(minutes=5))
         self.events = []
         self.effects = []
         self.queries = []
@@ -111,6 +112,8 @@ class DB:
             assert params == (14, BYBIT_PUBLIC_MARKET_SOURCE_ID)
             return Rows(self.publication)
         if "FROM strategy_entry.p90_scoped_native_consumer_checkpoints" in sql:
+            if "SELECT bootstrap_publication_id" in sql:
+                return Rows(self.checkpoint_lineage if self.initialized else None)
             return Rows(
                 (*self.checkpoint, ENTRY_FP, EXIT_FP, SOURCE_RELEASE, CONSUMER_RELEASE)
                 if self.initialized else None
@@ -127,7 +130,12 @@ class DB:
                  Decimal("52.2"), Decimal("0.2"), "Sell"),
             ])
         if "UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints" in sql:
-            self.events.append("CHECKPOINT")
+            if "last_publication_id=%s" in sql:
+                assert params[3] == 14
+                assert params[-2:] == self.checkpoint_lineage[:2]
+                self.events.append("CHECKPOINT_PUBLICATION_14")
+            else:
+                self.events.append("CHECKPOINT")
             return Rows(rowcount=1)
         raise AssertionError(sql)
 
@@ -226,9 +234,10 @@ def test_pinned_entry_callback_and_existing_checkpoint_commit_atomically():
     assert [e.exec_id for e in rows] == ["provider-first", "provider-second"]
     assert db.events == [
         "BEGIN", "ENGINE:provider-first:14", "ENGINE:provider-second:14",
-        "CHECKPOINT", "COMMIT",
+        "CHECKPOINT_PUBLICATION_14", "COMMIT",
     ]
     assert any("FROM analytics.market_publications" in q for q, _ in db.queries)
+    assert any("last_publication_id=%s" in q for q, _ in db.queries)
     assert not any("observer_delivery" in q for q, _ in db.queries)
 
 
@@ -240,7 +249,7 @@ def test_publication_bounding_discards_only_not_yet_published_suffix():
     rows = pinned_call(db, lambda event, pid: delivered.append((event.exec_id, pid)))
     assert delivered == [("provider-first", 14)]
     assert [e.exec_id for e in rows] == ["provider-first"]
-    assert db.events == ["BEGIN", "CHECKPOINT", "COMMIT"]
+    assert db.events == ["BEGIN", "CHECKPOINT_PUBLICATION_14", "COMMIT"]
 
 
 def test_publication_mismatch_blocks_all_callbacks_and_rolls_back():
@@ -334,5 +343,30 @@ def test_publication_expired_while_waiting_for_checkpoint_lock_blocks_entry():
     with pytest.raises(
         P90ScopedConsumerBlocked, match="STALE_BEFORE_DECISION",
     ):
+        pinned_call(db, lambda *_: db.events.append("ENGINE"))
+    assert db.events == ["BEGIN", "ROLLBACK"]
+
+
+@pytest.mark.parametrize(
+    "lineage",
+    [
+        (None, None, None),
+        (15, 15, datetime(2026, 11, 11, 18, 20, tzinfo=UTC)),
+        (14, 15, datetime(2026, 11, 11, 18, 20, tzinfo=UTC)),
+        (14, 14, datetime(2099, 1, 1, tzinfo=UTC)),
+    ],
+)
+def test_pinned_entry_rejects_unproven_or_future_checkpoint_lineage(lineage):
+    db = DB(datetime.now(UTC))
+    db.checkpoint_lineage = lineage
+    with pytest.raises(P90ScopedConsumerBlocked, match="LINEAGE_DRIFT"):
+        pinned_call(db, lambda *_: db.events.append("ENGINE"))
+    assert db.events == ["BEGIN", "ROLLBACK"]
+
+
+def test_pinned_entry_no_checkpoint_provenance_fails_closed():
+    db = DB(datetime.now(UTC))
+    db.checkpoint_lineage = None
+    with pytest.raises(P90ScopedConsumerBlocked, match="LINEAGE_MISSING"):
         pinned_call(db, lambda *_: db.events.append("ENGINE"))
     assert db.events == ["BEGIN", "ROLLBACK"]
