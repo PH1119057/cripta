@@ -5,12 +5,21 @@ No real connections are made in the test; no consumer is rewired or LIVE arm.
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import websocket
 
+from bybit_workbench.market_data.public_market_rest_source import (
+    PublicMarketRestInvalid,
+)
+from bybit_workbench.market_data.public_source_second_store import (
+    PublicSourceSecondUnavailable,
+)
 from bybit_workbench.market_data.source_required_feed_manifest import (
     SourceManifestInvalid,
 )
@@ -19,6 +28,7 @@ from bybit_workbench.market_identity import (
     bybit_instrument_id,
 )
 from operations.monitoring import native_public_trade_source as native
+from operations.monitoring import public_market_source_union_capture as source
 from operations.monitoring.public_market_source_union_capture import (
     _closed_repair_windows,
     _ClosedRepairTask,
@@ -446,3 +456,171 @@ def test_invalid_r03_horizon_never_starts_socket_or_pg_epoch(
             producer_release_commit="a" * 40, publish_seconds=False,
         )
     assert not opened
+
+@pytest.mark.parametrize(
+    "failure_mode",
+    ("subscribe_reject", "disconnect", "bad_book", "bad_linear_book",
+     "bad_spot_kline", "rest_absent"),
+)
+def test_r04_optional_spot_failure_does_not_gap_required_linear(
+    failure_mode: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R04 negative: the optional SPOT source cannot end LINEAR original epoch."""
+    manifest = json.loads(_manifest())
+    for row in manifest:
+        if row["product"] == "SPOT":
+            row["required"] = False
+    if failure_mode == "bad_linear_book":
+        # Position requires this LINEAR topic; Entry original publicTrade
+        # and R03 closed source must still remain independently live.
+        manifest.append(_required(
+            "POSITION", "LINEAR", "APTUSDT", "ORDERBOOK_50",
+        ))
+    if failure_mode == "bad_spot_kline":
+        spot_bar = _required(
+            "MAYAK", "SPOT", "APTUSDT", "CLOSED_KLINE", interval="1",
+        )
+        spot_bar["required"] = False
+        manifest.append(spot_bar)
+    if failure_mode == "rest_absent":
+        spot_info = _required(
+            "MAYAK", "SPOT", "APTUSDT", "INSTRUMENT_INFO",
+        )
+        spot_info["required"] = False
+        manifest.append(spot_info)
+    union = parse_explicit_source_manifest(
+        json.dumps(manifest), native_symbols=P90,
+    )
+    monkeypatch.setattr(
+        source, "_closed_repair_windows",
+        lambda _union, *, native_symbols: (),
+    )
+    connect_order: list[str] = []
+    progress: list[tuple[str, str]] = []
+    gaps: list[str] = []
+    quality_rows: list[object] = []
+    writer_threads: list[int] = []
+
+    def persist_quality(_conn: object, *, events: tuple, **_kw: object) -> int:
+        import threading
+
+        writer_threads.append(threading.get_ident())
+        quality_rows.extend(events)
+        return len(events)
+
+    monkeypatch.setattr(source, "persist_public_source_quality_events",
+                        persist_quality)
+
+    class Socket:
+        def __init__(self, product: str) -> None:
+            self.product = product
+            self.once = False
+
+        def recv(self) -> str:
+            if not self.once and (
+                self.product == "SPOT"
+                or (self.product == "LINEAR" and failure_mode == "bad_linear_book")
+            ):
+                self.once = True
+                if self.product == "SPOT" and failure_mode == "disconnect":
+                    return ""
+                if failure_mode in ("bad_book", "bad_linear_book"):
+                    return json.dumps({
+                        "topic": "orderbook.50.APTUSDT",
+                        "ts": int(datetime.now(UTC).timestamp() * 1000),
+                        "type": "delta",
+                        "data": "not a provider orderbook",
+                    })
+                if failure_mode == "bad_spot_kline":
+                    return json.dumps({
+                        "topic": "kline.1.APTUSDT",
+                        "type": "snapshot",
+                        "ts": int(datetime.now(UTC).timestamp() * 1000),
+                        "data": "invalid close",
+                    })
+            time.sleep(0.01)
+            raise websocket.WebSocketTimeoutException("test timeout")
+
+        def send(self, _raw: str) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    def connect(*, product: str, union: object) -> tuple[Socket, list[dict]]:
+        connect_order.append(product)
+        if product == "SPOT" and failure_mode == "subscribe_reject":
+            raise PublicSourceSecondUnavailable("PUBLIC_FEED_SUBSCRIBE_REJECTED")
+        return Socket(product), []
+
+    monkeypatch.setattr(source, "_connect_subscribe", connect)
+    if failure_mode == "rest_absent":
+        def unavailable_rest(**_kw: object) -> None:
+            raise PublicMarketRestInvalid("PUBLIC_REST_UNAVAILABLE")
+        monkeypatch.setattr(source, "fetch_public_market_rest",
+                            unavailable_rest)
+    monkeypatch.setattr(native, "uuid4", lambda: SimpleNamespace(hex="a" * 32))
+    monkeypatch.setattr(
+        native, "_session_start",
+        lambda _conn, session: progress.append(("START", session)),
+    )
+    monkeypatch.setattr(
+        native, "_session_gap",
+        lambda _conn, _session, reason: gaps.append(reason),
+    )
+    monkeypatch.setattr(
+        native, "_status",
+        lambda state, **kw: progress.append((state, str(kw.get("reason", "")))),
+    )
+    start = time.monotonic()
+    source.run_source_union(
+        Mock(), p90_symbols=P90, union=union,
+        producer_release_commit="a" * 40, publish_seconds=False,
+        should_stop=lambda: time.monotonic() - start >= 0.40,
+    )
+    assert connect_order[0] == "LINEAR"
+    assert "SPOT" in connect_order
+    assert any(item[0] == "START" for item in progress)
+    assert gaps == ["OWNER_CONTROLLED_STOP"]
+    assert any(
+        state == "ACTIVE" and reason.startswith("R04_OPTIONAL:")
+        for state, reason in progress
+    )
+    assert quality_rows
+    assert all(event.product == "SPOT"
+               or failure_mode == "bad_linear_book"
+               for event in quality_rows)
+    assert any(
+        event.quality in ("GAP", "NO_DATA", "UNKNOWN")
+        for event in quality_rows
+    )
+    # No network worker is a PostgreSQL writer.
+    import threading
+
+    assert writer_threads and set(writer_threads) == {threading.get_ident()}
+
+
+def test_r04_cannot_isolate_a_required_spot_as_optional(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A future required SPOT declaration needs new owner-approved recovery."""
+    union = parse_explicit_source_manifest(_manifest(), native_symbols=P90)
+    monkeypatch.setattr(
+        source, "_closed_repair_windows",
+        lambda _union, *, native_symbols: (),
+    )
+    touched: list[str] = []
+
+    def cannot_connect(**kw: object) -> None:
+        touched.append(str(kw.get("product")))
+        raise AssertionError("required SPOT must be refused before any network")
+
+    monkeypatch.setattr(source, "_connect_subscribe", cannot_connect)
+    with pytest.raises(
+        SourceManifestInvalid, match="R04_REQUIRED_OPTIONAL_TRANSPORT_UNSUPPORTED",
+    ):
+        source.run_source_union(
+            Mock(), p90_symbols=P90, union=union,
+            producer_release_commit="a" * 40, publish_seconds=False,
+        )
+    assert touched == []

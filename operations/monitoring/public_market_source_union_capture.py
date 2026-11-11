@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+from uuid import uuid4
 
 import psycopg
 import websocket
@@ -33,6 +34,9 @@ from bybit_workbench.market_data.public_closed_kline_gap_repair import (
     fetch_verified_bybit_closed_page,
     plan_missing_closed_pages,
 )
+from bybit_workbench.market_data.market_source_public_candles import (
+    ClosedKlineSourceInvalid,
+)
 from bybit_workbench.market_data.public_forming_minute_source import (
     persist_forming_minute_fact,
 )
@@ -46,7 +50,13 @@ from bybit_workbench.market_data.public_rest_observations import (
     persist_public_rest_fact,
 )
 from bybit_workbench.market_data.public_source_event_codec import (
+    PublicSourceFrameInvalid,
     decode_bybit_public_frame,
+)
+from bybit_workbench.market_data.public_source_quality import (
+    PublicSourceQualityEvent,
+    Quality,
+    persist_public_source_quality_events,
 )
 from bybit_workbench.market_data.public_source_second_store import (
     PublicSecondAccumulator,
@@ -375,20 +385,66 @@ def run_source_union(
     # Fail closed on an incomplete source/consumer horizon BEFORE opening
     # either public socket or creating an ACTIVE producer source epoch.
     repair_windows = _closed_repair_windows(union, native_symbols=p90_symbols)
+    # R04: a required SPOT/REST feed cannot silently use optional isolation.
+    if not closed_only and any(
+        item.required and (
+            item.product == "SPOT"
+            or item.dataset in ("ACCOUNT_RATIO", "INSTRUMENT_INFO")
+        )
+        for item in union.requirements
+    ):
+        raise SourceManifestInvalid("R04_REQUIRED_OPTIONAL_TRANSPORT_UNSUPPORTED")
     sock: dict[str, Any] = {}
     buffer: dict[str, list[dict[str, object]]] = {}
-    for product in products:
-        sock[product], buffer[product] = _connect_subscribe(
-            product=product, union=union,
-        )
+    # The required LINEAR socket must be ready before the native session.
+    # Optional SPOT connect/retry happens on its own worker after LINEAR start.
+    sock["LINEAR"], buffer["LINEAR"] = _connect_subscribe(
+        product="LINEAR", union=union,
+    )
     session = native.uuid4().hex
     native._session_start(connection, session)
     native._status("ACTIVE", session=session)
     done = threading.Event()
-    failures: list[str] = []
-    pipe: queue.Queue[tuple[str, dict[str, object], datetime]] = queue.Queue(
-        maxsize=_MAX_QUEUE,
+    failures: list[str] = []  # Required LINEAR transport only.
+    optional_faults: queue.Queue[PublicSourceQualityEvent] = queue.Queue(
+        maxsize=128,
     )
+    optional_audit_overflow = threading.Event()
+    transport_epochs: dict[str, str] = {"LINEAR": session}
+    fault_seen: dict[tuple[str, str, str, str, str, str], float] = {}
+    fault_lock = threading.Lock()
+
+    def note_quality(
+        *, product: str, topic: str, symbol: str = "",
+        quality: str, reason: str, epoch: str | None = None,
+    ) -> None:
+        # Network/REST workers enqueue immutable evidence; ONLY the native
+        # advisory-lock owner is authorized to persist it in PostgreSQL.
+        transport_epoch = epoch or transport_epochs.get(product, session)
+        key = (product, topic, symbol, quality, reason, transport_epoch)
+        now = time.monotonic()
+        with fault_lock:
+            if now - fault_seen.get(key, -100000.0) < 60.0:
+                return
+            if len(fault_seen) >= 512:
+                fault_seen.clear()
+            fault_seen[key] = now
+        event = PublicSourceQualityEvent.create(
+            source_session_id=session, transport_epoch_id=transport_epoch,
+            product=product, topic=topic, symbol=symbol,
+            quality=cast(Quality, quality), reason=reason,
+            observed_at=datetime.now(UTC),
+        )
+        try:
+            optional_faults.put_nowait(event)
+        except queue.Full:
+            # Explicitly signal missing quality audit, not a false healthy
+            # status or unrelated LINEAR transport GAP.
+            optional_audit_overflow.set()
+
+    pipe: queue.Queue[
+        tuple[str, str, dict[str, object], datetime]
+    ] = queue.Queue(maxsize=_MAX_QUEUE)
     # Network workers cannot write PG, so the source session/PG advisory lock
     # remains the single writer across public WS and REST.
     rest_pipe: queue.Queue[PublicMarketRestFact] = queue.Queue(maxsize=256)
@@ -397,6 +453,13 @@ def run_source_union(
         for item in union.requirements
         if item.dataset in ("ACCOUNT_RATIO", "INSTRUMENT_INFO")
     }))
+    rest_freshness = {
+        feed: min(
+            item.freshness_seconds for item in union.requirements
+            if (item.product, item.symbol, item.dataset) == feed
+        )
+        for feed in rest_needs
+    }
     forming_needs = frozenset({
         (item.product, item.symbol, item.timeframe)
         for item in union.requirements
@@ -412,10 +475,27 @@ def run_source_union(
     ] = queue.Queue(maxsize=1)
 
     def read(product: str) -> None:
-        try:
-            pending = list(buffer[product])
-            last_ping = time.monotonic()
-            while not done.is_set() and not source_stopping():
+        pending = list(buffer.get(product, []))
+        last_ping = time.monotonic()
+        while not done.is_set() and not source_stopping():
+            try:
+                if product not in sock:
+                    # Every reconnect is a NEW, independent transport epoch;
+                    # it never repairs source gaps from a previous epoch.
+                    next_epoch = uuid4().hex
+                    transport_epochs[product] = next_epoch
+                    current_sock, early = _connect_subscribe(
+                        product=product, union=union,
+                    )
+                    sock[product] = current_sock
+                    pending.extend(early)
+                    last_ping = time.monotonic()
+                    last_received[product] = last_ping
+                    if product == "SPOT":
+                        note_quality(
+                            product=product, topic="*", quality="RECOVERING",
+                            reason="PUBLIC_SPOT_CONNECTED_NOT_CONTINUOUS",
+                        )
                 if pending:
                     item = pending.pop(0)
                 else:
@@ -434,7 +514,11 @@ def run_source_union(
                         last_received[product] = now
                     elif item.get("topic"):
                         last_received[product] = now
-                        pipe.put((product, item, datetime.now(UTC)), timeout=0.25)
+                        pipe.put(
+                            (product, transport_epochs[product],
+                             item, datetime.now(UTC)),
+                            timeout=0.25,
+                        )
                 if now - last_ping > 20:
                     sock[product].send('{"op":"ping"}')
                     last_ping = now
@@ -442,9 +526,38 @@ def run_source_union(
                     raise PublicSourceSecondUnavailable(
                         "PUBLIC_FEED_TRANSPORT_HEARTBEAT_LOST"
                     )
-        except Exception as exc:
-            failures.append(f"{product}:{type(exc).__name__}")
-            done.set()
+            except Exception as exc:
+                if product == "LINEAR":
+                    failures.append(f"{product}:{type(exc).__name__}")
+                    done.set()
+                    return
+                # Only SPOT is optional in the exact approved R01 manifest.
+                # Never GAP the original LINEAR journal for its outage.
+                prior_epoch = transport_epochs.get(product, session)
+                was_connected = product in sock
+                # Invalidate queued frames IMMEDIATELY on disconnect.
+                # Even while retry is waiting, the previous epoch must not
+                # be accepted into the current compact market source.
+                transport_epochs[product] = uuid4().hex
+                note_quality(
+                    product="SPOT", topic="*",
+                    quality=("GAP" if was_connected else "NO_DATA"),
+                    reason="PUBLIC_SPOT_TRANSPORT_UNAVAILABLE",
+                    epoch=prior_epoch,
+                )
+                previous = sock.pop(product, None)
+                if previous is not None:
+                    try:
+                        previous.close()
+                    except Exception:
+                        note_quality(
+                            product="SPOT", topic="*", quality="UNKNOWN",
+                            reason="PUBLIC_SPOT_SOCKET_CLOSE_UNVERIFIED",
+                            epoch=prior_epoch,
+                        )
+                pending.clear()
+                if done.wait(5.0):
+                    return
 
     workers = [
         threading.Thread(target=read, args=(product,), daemon=True)
@@ -456,6 +569,7 @@ def run_source_union(
         # explicit physical REST feed. A failure leaves missing/stale evidence
         # in the shared publication. The original WS reader is uninterrupted.
         due = {feed: 0.0 for feed in rest_needs}
+        last_received_rest: dict[tuple[str, str, str], float] = {}
         while not done.is_set() and not source_stopping():
             for product, symbol, dataset in rest_needs:
                 if done.is_set() or source_stopping():
@@ -473,16 +587,51 @@ def run_source_union(
                         product=product, symbol=symbol,
                     )
                     rest_pipe.put(fact, timeout=0.25)
+                    last_received_rest[key] = time.monotonic()
                 except PublicMarketRestInvalid:
-                    # An unverified public REST response is never persisted
-                    # and never becomes an implicit success/zero observation.
+                    # No false healthy response, no silence on optional REST.
+                    note_quality(
+                        product=product, symbol=symbol,
+                        topic=("REST:market/account-ratio:" + symbol
+                               if dataset == "ACCOUNT_RATIO"
+                               else "REST:market/instruments-info:" + symbol),
+                        quality=(
+                            "STALE"
+                            if key in last_received_rest and (
+                                now - last_received_rest[key]
+                                > rest_freshness[key]
+                            )
+                            else "NO_DATA"
+                        ),
+                        reason="PUBLIC_REST_UNVERIFIED",
+                    )
                     continue
                 except (OSError, TimeoutError):
+                    note_quality(
+                        product=product, symbol=symbol,
+                        topic=("REST:market/account-ratio:" + symbol
+                               if dataset == "ACCOUNT_RATIO"
+                               else "REST:market/instruments-info:" + symbol),
+                        quality=(
+                            "STALE"
+                            if key in last_received_rest and (
+                                now - last_received_rest[key]
+                                > rest_freshness[key]
+                            )
+                            else "NO_DATA"
+                        ),
+                        reason="PUBLIC_REST_UNAVAILABLE",
+                    )
                     continue
                 except queue.Full:
-                    failures.append("REST:PUBLIC_REST_PIPE_OVERFLOW")
-                    done.set()
-                    return
+                    note_quality(
+                        product=product, symbol=symbol,
+                        topic=("REST:market/account-ratio:" + symbol
+                               if dataset == "ACCOUNT_RATIO"
+                               else "REST:market/instruments-info:" + symbol),
+                        quality="UNKNOWN", reason="PUBLIC_REST_PIPE_OVERFLOW",
+                    )
+                    continue
             done.wait(0.20)
 
     if rest_needs:
@@ -530,6 +679,43 @@ def run_source_union(
             "CLOSED_KLINE",
         )
     )
+    def flush_quality() -> None:
+        # Durable scoped quality audit, written only by the one native
+        # PostgreSQL owner, never by network workers or REST threads.
+        quality_batch: list[PublicSourceQualityEvent] = []
+        for _ in range(32):
+            try:
+                quality_batch.append(optional_faults.get_nowait())
+            except queue.Empty:
+                break
+        if optional_audit_overflow.is_set():
+            quality_batch.append(PublicSourceQualityEvent.create(
+                source_session_id=session,
+                transport_epoch_id=transport_epochs.get("SPOT", session),
+                product="SPOT", topic="*", quality="UNKNOWN",
+                reason="PUBLIC_OPTIONAL_QUALITY_QUEUE_OVERFLOW",
+                observed_at=datetime.now(UTC),
+            ))
+            optional_audit_overflow.clear()
+        if quality_batch:
+            persist_public_source_quality_events(
+                connection, events=tuple(quality_batch),
+                producer_release_commit=producer_release_commit,
+            )
+            for fault in quality_batch:
+                if fault.product == "SPOT" and fault.topic == "*":
+                    for symbol in symbols.get("SPOT", ()):
+                        aggregate.invalidate_market(
+                            bybit_instrument_id("spot", symbol)
+                        )
+                native._status(
+                    "ACTIVE", session=session,
+                    reason=(
+                        "R04_OPTIONAL:" + fault.product + ":"
+                        + fault.quality + ":" + fault.reason
+                    )[:160],
+                )
+
     frame_index = 0
     last_published_second: datetime | None = None
     repair_index = 0
@@ -541,10 +727,19 @@ def run_source_union(
     try:
         while not done.is_set() and not source_stopping():
             try:
-                product, item, received = pipe.get(timeout=0.10)
+                product, frame_epoch, item, received = pipe.get(timeout=0.10)
             except queue.Empty:
-                product, item, received = "", {}, datetime.now(UTC)
+                product, frame_epoch, item, received = (
+                    "", "", {}, datetime.now(UTC),
+                )
             if product:
+                # Buffered frames from an already disconnected SPOT epoch
+                # cannot populate the new transport's current read-model.
+                if (
+                    product == "SPOT"
+                    and frame_epoch != transport_epochs.get("SPOT")
+                ):
+                    continue
                 topic = str(item.get("topic") or "")
                 if product == "LINEAR" and topic.startswith("publicTrade."):
                     symbol = topic.split(".", 1)[1]
@@ -561,20 +756,55 @@ def run_source_union(
                 if topic.startswith("kline.") and product in (
                     "LINEAR", "SPOT",
                 ):
-                    native._persist_closed_kline_frame(
-                        connection, message=item,
-                        symbols=tuple(sorted(symbols[product])),
-                        intervals=(
-                            intervals if product == "LINEAR"
-                            else spot_intervals
-                        ),
-                        product=product,
+                    try:
+                        native._persist_closed_kline_frame(
+                            connection, message=item,
+                            symbols=tuple(sorted(symbols[product])),
+                            intervals=(
+                                intervals if product == "LINEAR"
+                                else spot_intervals
+                            ),
+                            product=product,
+                        )
+                    except ClosedKlineSourceInvalid:
+                        if product != "SPOT":
+                            raise
+                        note_quality(
+                            product="SPOT", topic=topic,
+                            symbol=topic.rsplit(".", 1)[-1],
+                            quality="UNKNOWN",
+                            reason="PUBLIC_SPOT_CLOSED_KLINE_UNVERIFIED",
+                            epoch=frame_epoch,
+                        )
+                        continue
+                # Physical required=True belongs to one specific consumer.
+                # A compact/ticker/book decoder fault blocks that dataset,
+                # not the already committed original LINEAR trade journal.
+                scoped_topic = any(
+                    feed.product == product and feed.dataset_topic == topic
+                    for feed in union.websocket_topics
+                )
+                try:
+                    events = (() if closed_only else decode_bybit_public_frame(
+                        item, product=product,
+                        allowed_symbols=symbols[product],
+                        received_at=received,
+                    ))
+                except PublicSourceFrameInvalid as exc:
+                    if not scoped_topic:
+                        raise
+                    aggregate.invalidate_market(
+                        bybit_instrument_id(product.lower(), topic.rsplit(".", 1)[-1])
                     )
-                for event in (() if closed_only else decode_bybit_public_frame(
-                    item, product=product,
-                    allowed_symbols=symbols[product],
-                    received_at=received,
-                )):
+                    note_quality(
+                        product=product, topic=topic,
+                        symbol=topic.rsplit(".", 1)[-1],
+                        quality="UNKNOWN",
+                        reason="PUBLIC_TOPIC_FRAME_UNVERIFIED",
+                        epoch=frame_epoch,
+                    )
+                    events = ()
+                for event in events:
                     if event.kind == "FORMING_KLINE":
                         if (
                             event.product, event.symbol,
@@ -586,7 +816,20 @@ def run_source_union(
                                 fact=event, received_at=received,
                             )
                     else:
-                        aggregate.accept(event, received_at=received)
+                        try:
+                            aggregate.accept(event, received_at=received)
+                        except (PublicSourceFrameInvalid,
+                                PublicSourceSecondUnavailable) as exc:
+                            if not scoped_topic:
+                                raise
+                            aggregate.invalidate_market(event.instrument_id)
+                            note_quality(
+                                product=product, topic=topic,
+                                symbol=event.symbol, quality="UNKNOWN",
+                                reason="PUBLIC_TOPIC_ACCUMULATOR_UNVERIFIED",
+                                epoch=frame_epoch,
+                            )
+            flush_quality()
             # Handle bounded REST receipts only on the one PG source writer.
             # Never insert the REST fact directly from its network worker.
             for _ in range(8):
@@ -598,6 +841,31 @@ def run_source_union(
                     connection, source_session_id=session,
                     producer_release_commit=producer_release_commit,
                     fact=rest_fact,
+                )
+                dataset_topic = (
+                    "REST:market/account-ratio:" + rest_fact.symbol
+                    if rest_fact.dataset == "ACCOUNT_RATIO"
+                    else "REST:market/instruments-info:" + rest_fact.symbol
+                )
+                is_not_listed = rest_fact.values.get("status") == "NOT_LISTED"
+                # A committed REST fact permits *scoped* causal recovery
+                # evidence. RECOVERING is intentionally not global READY;
+                # publication must still verify each consumer freshness TTL.
+                persist_public_source_quality_events(
+                    connection,
+                    events=(PublicSourceQualityEvent.create(
+                        source_session_id=session,
+                        transport_epoch_id=session,
+                        product=rest_fact.product, topic=dataset_topic,
+                        symbol=rest_fact.symbol,
+                        quality=("NOT_LISTED" if is_not_listed
+                                 else "RECOVERING"),
+                        reason=("PUBLIC_INSTRUMENT_NOT_LISTED"
+                                if is_not_listed
+                                else "PUBLIC_REST_FACT_COMMITTED"),
+                        observed_at=rest_fact.received_at,
+                    ),),
+                    producer_release_commit=producer_release_commit,
                 )
             # Preserve original native WS priority: only after processing
             # its frame and REST receipts can one complete gap result commit.
@@ -699,6 +967,9 @@ def run_source_union(
                         observed_at=current_second,
                     )
                     last_published_second = current_second
+        # Drain source-quality events before the native epoch turns GAP.
+        # A clean owner stop cannot erase the final optional failure.
+        flush_quality()
         if failures:
             raise PublicSourceSecondUnavailable(
                 "PUBLIC_FEED_TRANSPORT_FAILED"

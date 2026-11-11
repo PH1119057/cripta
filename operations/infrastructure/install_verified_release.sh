@@ -701,6 +701,7 @@ migration_files=(
   operations/sql/20261110_market_publication_rest_links.sql
   # Source-only unconfirmed one-minute evidence. Not canonical closed OHLCV.
   operations/sql/20261110_public_forming_minute_observations.sql
+  operations/sql/20261111_public_market_source_quality_events.sql
   operations/sql/20261110_market_publication_forming_links.sql
   # Shared source closed candle IDs for SPOT/LINEAR; legacy symbol projection
   # remains LINEAR-only until all consumers migrate.
