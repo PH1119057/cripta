@@ -256,6 +256,87 @@ def _connect_subscribe(
 
 
 
+def _scoped_quality_reason(exc: Exception, fallback: str) -> str:
+    """Only validated typed codes may enter append-only quality evidence."""
+    reason = str(exc)
+    if (
+        reason.startswith("PUBLIC_")
+        and 3 <= len(reason) <= 128
+        and all(ch == "_" or ch.isdigit() or "A" <= ch <= "Z"
+                for ch in reason)
+    ):
+        return reason
+    return fallback
+
+
+def _invalidate_scoped_market(
+    aggregate: PublicSecondAccumulator, *, topic: str, instrument_id: str,
+) -> None:
+    """No unrelated data-family reset from a scoped decoder/accumulator fault."""
+    if topic.startswith("orderbook.50."):
+        aggregate.invalidate_book(instrument_id)
+    elif topic.startswith("tickers."):
+        aggregate.invalidate_ticker(instrument_id)
+    # publicTrade, kline, and liquidation have no derived book/ticker rights.
+
+
+@dataclass(slots=True)
+class _BookResubscribe:
+    """One topic-only provider unsubscribe/subscribe with exact ACK fencing.
+
+    No LINEAR transport reconnect and no second MarketSource writer. A
+    successful subscribe ACK is NOT a snapshot/READY proof.
+    """
+    topic: str
+    req_id: str
+    phase: str
+    deadline: float
+
+    @classmethod
+    def start(cls, topic: str, now: float) -> _BookResubscribe:
+        if not topic.startswith("orderbook.50."):
+            raise SourceManifestInvalid("PUBLIC_BOOK_RESUBSCRIBE_SCOPE_INVALID")
+        return cls(
+            topic=topic, req_id="cripta-book-off-" + uuid4().hex,
+            phase="UNSUBSCRIBE", deadline=now + 12.0,
+        )
+
+    def command(self) -> str:
+        return json.dumps({
+            "op": ("unsubscribe" if self.phase == "UNSUBSCRIBE"
+                   else "subscribe"),
+            "args": [self.topic], "req_id": self.req_id,
+        }, separators=(",", ":"))
+
+    def on_ack(self, message: dict[str, object], now: float) -> str | None:
+        if message.get("req_id") != self.req_id:
+            return None
+        if message.get("op") != (
+            "unsubscribe" if self.phase == "UNSUBSCRIBE" else "subscribe"
+        ) or message.get("success") is not True or message.get("retCode") not in (
+            None, 0,
+        ):
+            raise PublicSourceSecondUnavailable(
+                "PUBLIC_BOOK_RESUBSCRIBE_ACK_REJECTED"
+            )
+        if self.phase == "UNSUBSCRIBE":
+            self.phase = "SUBSCRIBE"
+            self.req_id = "cripta-book-on-" + uuid4().hex
+            self.deadline = now + 12.0
+            return self.command()
+        if self.phase == "SUBSCRIBE":
+            self.phase = "SNAPSHOT"
+            self.deadline = now + 12.0
+        return None
+
+    def allows(self, message: dict[str, object]) -> bool:
+        return (
+            self.phase == "SNAPSHOT"
+            and message.get("topic") == self.topic
+            and message.get("type") == "snapshot"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class _ClosedRepairWindow:
     key: MarketCandleKey
@@ -410,6 +491,35 @@ def run_source_union(
         maxsize=128,
     )
     optional_audit_overflow = threading.Event()
+    # A scoped book fault must never tear down LINEAR native publicTrade.
+    # Only the existing owning network reader sends topic control messages.
+    book_requests: dict[str, queue.Queue[str]] = {
+        product: queue.Queue(maxsize=max(5, len(symbols[product])))
+        for product in products
+    }
+    book_request_after: dict[tuple[str, str], float] = {}
+    book_waiting_snapshot: dict[tuple[str, str], datetime] = {}
+
+    def request_book_snapshot(
+        product: str, topic: str, *, received_at: datetime,
+    ) -> None:
+        key = (product, topic)
+        if key not in book_waiting_snapshot:
+            book_waiting_snapshot[key] = received_at
+        now = time.monotonic()
+        if now < book_request_after.get(key, -1.0):
+            return
+        # Coalesce up to 50 book deltas/sec into ONE bounded repair attempt.
+        book_request_after[key] = now + 45.0
+        try:
+            book_requests[product].put_nowait(topic)
+        except queue.Full:
+            note_quality(
+                product=product, topic=topic,
+                symbol=topic.rsplit(".", 1)[-1], quality="UNKNOWN",
+                reason="PUBLIC_BOOK_RESUBSCRIBE_QUEUE_FULL",
+            )
+
     transport_epochs: dict[str, str] = {"LINEAR": session}
     fault_seen: dict[tuple[str, str, str, str, str, str], float] = {}
     fault_lock = threading.Lock()
@@ -477,6 +587,12 @@ def run_source_union(
     def read(product: str) -> None:
         pending = list(buffer.get(product, []))
         last_ping = time.monotonic()
+        book_states: dict[str, _BookResubscribe] = {}
+        known_books = frozenset(
+            item.dataset_topic for item in union.websocket_topics
+            if item.product == product
+            and item.dataset_topic.startswith("orderbook.50.")
+        )
         while not done.is_set() and not source_stopping():
             try:
                 if product not in sock:
@@ -496,6 +612,36 @@ def run_source_union(
                             product=product, topic="*", quality="RECOVERING",
                             reason="PUBLIC_SPOT_CONNECTED_NOT_CONTINUOUS",
                         )
+                # Do not stop/reconnect the native LINEAR reader when a
+                # derived book loses a snapshot: resubscribe ONLY its topic.
+                try:
+                    requested_topic = book_requests[product].get_nowait()
+                except queue.Empty:
+                    requested_topic = ""
+                if requested_topic and requested_topic in known_books:
+                    if requested_topic not in book_states:
+                        state = _BookResubscribe.start(
+                            requested_topic, time.monotonic(),
+                        )
+                        try:
+                            sock[product].send(state.command())
+                            book_states[requested_topic] = state
+                        except (OSError, websocket.WebSocketException):
+                            note_quality(
+                                product=product, topic=requested_topic,
+                                symbol=requested_topic.rsplit(".", 1)[-1],
+                                quality="UNKNOWN",
+                                reason="PUBLIC_BOOK_RESUBSCRIBE_SEND_FAILED",
+                            )
+                for stale_topic, state in tuple(book_states.items()):
+                    if time.monotonic() > state.deadline:
+                        note_quality(
+                            product=product, topic=stale_topic,
+                            symbol=stale_topic.rsplit(".", 1)[-1],
+                            quality="UNKNOWN",
+                            reason="PUBLIC_BOOK_RESUBSCRIBE_TIMEOUT",
+                        )
+                        del book_states[stale_topic]
                 if pending:
                     item = pending.pop(0)
                 else:
@@ -512,13 +658,44 @@ def run_source_union(
                 if isinstance(item, dict):
                     if item.get("op") == "pong" or item.get("ret_msg") == "pong":
                         last_received[product] = now
+                    elif item.get("op") in ("unsubscribe", "subscribe"):
+                        last_received[product] = now
+                        for topic, state in tuple(book_states.items()):
+                            if item.get("req_id") != state.req_id:
+                                continue
+                            try:
+                                next_command = state.on_ack(item, now)
+                                if next_command:
+                                    sock[product].send(next_command)
+                            except (
+                                PublicSourceSecondUnavailable, OSError,
+                                websocket.WebSocketException,
+                            ):
+                                note_quality(
+                                    product=product, topic=topic,
+                                    symbol=topic.rsplit(".", 1)[-1],
+                                    quality="UNKNOWN",
+                                    reason="PUBLIC_BOOK_RESUBSCRIBE_ACK_INVALID",
+                                )
+                                del book_states[topic]
+                            break
                     elif item.get("topic"):
                         last_received[product] = now
+                        topic = str(item["topic"])
+                        recovery = book_states.get(topic)
+                        if recovery is not None and not recovery.allows(item):
+                            # No stale book delta/old socket frame may satisfy
+                            # a new snapshot requirement.
+                            continue
                         pipe.put(
                             (product, transport_epochs[product],
                              item, datetime.now(UTC)),
                             timeout=0.25,
                         )
+                        if recovery is not None:
+                            # Only the source writer may assert verified
+                            # snapshot after decoding + applying this frame.
+                            del book_states[topic]
                 if now - last_ping > 20:
                     sock[product].send('{"op":"ping"}')
                     last_ping = now
@@ -556,6 +733,7 @@ def run_source_union(
                             epoch=prior_epoch,
                         )
                 pending.clear()
+                book_states.clear()
                 if done.wait(5.0):
                     return
 
@@ -726,6 +904,18 @@ def run_source_union(
     repair_inflight = False
     try:
         while not done.is_set() and not source_stopping():
+            # Retry a bounded topic-only snapshot request even when the
+            # provider sends only deltas (which are intentionally ignored
+            # until a fresh snapshot). Never wait for another decoder fault.
+            for (book_product, book_topic), since in tuple(
+                book_waiting_snapshot.items()
+            ):
+                if time.monotonic() >= book_request_after.get(
+                    (book_product, book_topic), -1.0,
+                ):
+                    request_book_snapshot(
+                        book_product, book_topic, received_at=since,
+                    )
             try:
                 product, frame_epoch, item, received = pipe.get(timeout=0.10)
             except queue.Empty:
@@ -753,6 +943,15 @@ def run_source_union(
                             connection, session=session,
                             frame_number=frame_index, facts=facts,
                         )
+                key = (product, topic)
+                if key in book_waiting_snapshot and (
+                    received < book_waiting_snapshot[key]
+                    or item.get("type") != "snapshot"
+                ):
+                    # Ignore only the stale book frame. Do not skip the
+                    # source loop's REST/quality/compact/repair maintenance.
+                    item = {}
+                    topic = ""
                 if topic.startswith("kline.") and product in (
                     "LINEAR", "SPOT",
                 ):
@@ -793,14 +992,26 @@ def run_source_union(
                 except PublicSourceFrameInvalid as exc:
                     if not scoped_topic:
                         raise
-                    aggregate.invalidate_market(
-                        bybit_instrument_id(product.lower(), topic.rsplit(".", 1)[-1])
+                    instrument = bybit_instrument_id(
+                        product.lower(), topic.rsplit(".", 1)[-1],
+                    )
+                    _invalidate_scoped_market(
+                        aggregate, topic=topic, instrument_id=instrument,
+                    )
+                    if topic.startswith("orderbook.50."):
+                        request_book_snapshot(
+                            product, topic, received_at=received,
+                        )
+                    # A stale/malformed FORMING_KLINE can NEVER destroy an
+                    # unrelated valid book, ticker or original native trade.
+                    reason = _scoped_quality_reason(
+                        exc, "PUBLIC_TOPIC_FRAME_UNVERIFIED",
                     )
                     note_quality(
                         product=product, topic=topic,
                         symbol=topic.rsplit(".", 1)[-1],
                         quality="UNKNOWN",
-                        reason="PUBLIC_TOPIC_FRAME_UNVERIFIED",
+                        reason=reason,
                         epoch=frame_epoch,
                     )
                     events = ()
@@ -822,13 +1033,38 @@ def run_source_union(
                                 PublicSourceSecondUnavailable) as exc:
                             if not scoped_topic:
                                 raise
-                            aggregate.invalidate_market(event.instrument_id)
+                            _invalidate_scoped_market(
+                                aggregate, topic=topic,
+                                instrument_id=event.instrument_id,
+                            )
+                            if event.kind == "BOOK":
+                                request_book_snapshot(
+                                    product, topic, received_at=received,
+                                )
+                            # Trade/liquidation faults cannot erase a good
+                            # ticker/book for the same InstrumentIdentity.
+                            reason = _scoped_quality_reason(
+                                exc, "PUBLIC_TOPIC_ACCUMULATOR_UNVERIFIED",
+                            )
                             note_quality(
                                 product=product, topic=topic,
                                 symbol=event.symbol, quality="UNKNOWN",
-                                reason="PUBLIC_TOPIC_ACCUMULATOR_UNVERIFIED",
+                                reason=reason,
                                 epoch=frame_epoch,
                             )
+                        else:
+                            if (
+                                event.kind == "BOOK"
+                                and event.frame_type == "snapshot"
+                                and key in book_waiting_snapshot
+                            ):
+                                del book_waiting_snapshot[key]
+                                note_quality(
+                                    product=product, topic=topic,
+                                    symbol=event.symbol, quality="RECOVERING",
+                                    reason="PUBLIC_BOOK_SNAPSHOT_RESTORED",
+                                    epoch=frame_epoch,
+                                )
             flush_quality()
             # Handle bounded REST receipts only on the one PG source writer.
             # Never insert the REST fact directly from its network worker.

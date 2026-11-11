@@ -54,11 +54,19 @@ class PublicSecondAccumulator:
             raise PublicSourceSecondUnavailable("PUBLIC_FEED_RECEIVER_NOT_UTC")
         return at.replace(microsecond=0)
 
-    def invalidate_market(self, instrument_id: str) -> None:
-        """Transport reconnect invalidates book and ticker; never stale READY."""
+    def invalidate_book(self, instrument_id: str) -> None:
+        """A book delta/sequence fault must not erase independent ticker facts."""
         self._books.pop(instrument_id, None)
+
+    def invalidate_ticker(self, instrument_id: str) -> None:
+        """Only an invalid ticker or a full transport reset clears ticker state."""
         self._ticker.pop(instrument_id, None)
         self._ticker_seen.pop(instrument_id, None)
+
+    def invalidate_market(self, instrument_id: str) -> None:
+        """Full transport reconnect invalidates all in-memory market fields."""
+        self.invalidate_book(instrument_id)
+        self.invalidate_ticker(instrument_id)
 
     def accept(self, event: PublicSourceFact, *, received_at: datetime) -> None:
         second = self._second(received_at)
@@ -74,6 +82,16 @@ class PublicSecondAccumulator:
             raise PublicSourceSecondUnavailable("PUBLIC_FEED_RECEIVE_REGRESSION")
         if len({t for _, t in self._pending} | {second}) > self._max_pending:
             raise PublicSourceSecondUnavailable("PUBLIC_FEED_BACKPRESSURE_UNVERIFIED")
+
+        # Verify orderbook sequence/ladder BEFORE constructing any compact
+        # second or advancing its source-time range. A rejected delta is
+        # never a zero-trade/no-book market observation.
+        book_data: dict[str, object] | None = None
+        if event.kind == "BOOK":
+            book = self._books.setdefault(
+                event.instrument_id, OrderbookContinuity(),
+            )
+            book_data = dict(book.apply(event))
 
         key = (event.instrument_id, second)
         if key not in self._pending:
@@ -136,8 +154,7 @@ class PublicSecondAccumulator:
             row["ticker"] = dict(ticker)
             row["ticker_field_times"] = dict(seen)
         else:
-            book = self._books.setdefault(event.instrument_id, OrderbookContinuity())
-            row["book"] = dict(book.apply(event))
+            row["book"] = book_data
 
     def ready_seconds(self, *, before: datetime) -> tuple[dict[str, Any], ...]:
         """Peek frozen second rows, do not drop on failed DB transaction."""

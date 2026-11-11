@@ -155,6 +155,10 @@ except Exception:
   if ! as_repo_owner git -C "$SOURCE" diff --quiet \
     "$producer_loaded_commit" "$RELEASE_COMMIT" -- \
     operations/monitoring/native_public_trade_source.py \
+    operations/monitoring/public_market_source_union_capture.py \
+    src/bybit_workbench/market_data/public_source_event_codec.py \
+    src/bybit_workbench/market_data/public_source_second_store.py \
+    src/bybit_workbench/market_data/public_source_quality.py \
     src/bybit_workbench/market_data/native_public_trade_journal.py \
     src/bybit_workbench/market_identity.py \
     operations/systemd/cripta-native-public-trade-source.service; then
@@ -166,6 +170,10 @@ except Exception:
     as_repo_owner git -C "$SOURCE" diff --quiet \
       "$producer_loaded_commit" "$EXPECTED_BASELINE" -- \
       operations/monitoring/native_public_trade_source.py \
+      operations/monitoring/public_market_source_union_capture.py \
+      src/bybit_workbench/market_data/public_source_event_codec.py \
+      src/bybit_workbench/market_data/public_source_second_store.py \
+      src/bybit_workbench/market_data/public_source_quality.py \
       src/bybit_workbench/market_data/native_public_trade_journal.py \
       src/bybit_workbench/market_identity.py \
       operations/systemd/cripta-native-public-trade-source.service ||
