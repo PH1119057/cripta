@@ -104,6 +104,7 @@ from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
     SUB_ID as P90_SUB_ID,
 )
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+    ALLOWED_SYMBOLS as P90_REAL_ALLOWED_SYMBOLS,
     OWNER_ARM_OPEN_GATE_REASON,
     OWNER_ARM_STAGE_GATE_REASON,
     OWNER_ARM_STAGE_RELOAD_REASON,
@@ -4222,6 +4223,53 @@ def _run_observer_epoch(
                 sock.close()
 
 
+def _blocked_p90_native_transport_ack(
+    connection: Any, detail: Mapping[str, object],
+) -> tuple[str, str | None]:
+    """Keep receipt-only original PG transport alive after private P90 blocks.
+
+    Only the exact terminal private-preflight failure is eligible. Financial
+    Observer preparation stays BLOCKED, while the same native technical
+    consumer ID can ACK authentic committed original trades in its own
+    transaction. No signed private proof is inferred, no Entry/Exit callback,
+    and no retry budget or execution gate is modified.
+    """
+    if (
+        not EXTERNAL_NATIVE_SOURCE
+        or detail.get("state") != "BLOCKED"
+        or detail.get("reason")
+        != "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_RETRY_BUDGET_EXPIRED"
+    ):
+        return "NOT_ENABLED", None
+
+    from operations.monitoring.native_public_trade_observer_delivery import (
+        NativeObserverDeliveryBlocked,
+        acknowledge_native_technical_batch,
+    )
+
+    symbols = tuple(sorted(
+        P90_REAL_ALLOWED_SYMBOLS[P90_MAIN_ID]
+        | P90_REAL_ALLOWED_SYMBOLS[P90_SUB_ID]
+    ))
+    try:
+        result = acknowledge_native_technical_batch(
+            connection,
+            symbols=symbols,
+            source_checkout=NATIVE_SOURCE_GIT_CHECKOUT,
+            loaded_consumer_commit=LOADED_COMMIT,
+            observed_at=datetime.now(UTC),
+            limit=256,
+        )
+    except NativeObserverDeliveryBlocked as blocked:
+        # Source/ABI/cursor UNKNOWN does NOT become an Observer/financial PASS.
+        return "BLOCKED:" + str(blocked), None
+    return (
+        "TECHNICAL_CATCHING_UP" if len(result.events) == 256
+        else "TECHNICAL_CAUGHT_UP",
+        result.source_session_id,
+    )
+
+
 def _run_multi_strategy_observer() -> None:
     if not LOADED_COMMIT:
         raise RuntimeError("CRIPTA_RELEASE_COMMIT is required")
@@ -4252,10 +4300,26 @@ def _run_multi_strategy_observer() -> None:
     def wait_blocked(connection: Any, detail: dict[str, object]) -> None:
         blocked_at = datetime.now(UTC)
         while not stopping_flag:
+            # Financial P90 preparation stays terminally BLOCKED. Only the
+            # already-owned, proven native technical transport receipt is
+            # independent; it never runs a Strategy/Exit or signed bypass.
+            native_state, native_session = _blocked_p90_native_transport_ack(
+                connection, detail,
+            )
             _observer_status(
                 state="BLOCKED", epoch_id=None, active_bundles=(), symbols=(),
                 preparation=detail,
                 reason="Подготовка приостановлена · " + str(detail["reason"]),
+                sensor_status=(
+                    {
+                        "native_pg_delivery": native_state,
+                        "native_pg_session_id": native_session,
+                        "native_pg_delivery_scope": (
+                            "BLOCKED_P90_TECHNICAL_TRANSPORT_ONLY"
+                        ),
+                    }
+                    if native_state != "NOT_ENABLED" else None
+                ),
             )
             time.sleep(1.0)
             if not stopping_flag and preparation_retry_request(
