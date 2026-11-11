@@ -891,6 +891,18 @@ def run_source_union(
     repair_inflight = False
     try:
         while not done.is_set() and not source_stopping():
+            # Retry a bounded topic-only snapshot request even when the
+            # provider sends only deltas (which are intentionally ignored
+            # until a fresh snapshot). Never wait for another decoder fault.
+            for (book_product, book_topic), since in tuple(
+                book_waiting_snapshot.items()
+            ):
+                if time.monotonic() >= book_request_after.get(
+                    (book_product, book_topic), -1.0,
+                ):
+                    request_book_snapshot(
+                        book_product, book_topic, received_at=since,
+                    )
             try:
                 product, frame_epoch, item, received = pipe.get(timeout=0.10)
             except queue.Empty:
