@@ -86,6 +86,28 @@ class PublicSourceQualityEvent:
             or self.observed_at.utcoffset() != timedelta(0)
         ):
             raise PublicSourceQualityInvalid("PUBLIC_SOURCE_QUALITY_EVENT_INVALID")
+        if self.topic != "*":
+            # Exact product/topic/instrument identity; a scoped quality fault
+            # cannot be falsely attributed to an unrelated symbol or dataset.
+            ws = (
+                f"publicTrade.{self.symbol}",
+                f"orderbook.50.{self.symbol}",
+                *(f"kline.{interval}.{self.symbol}"
+                  for interval in ("1", "5", "15", "60")),
+            )
+            if self.product == "LINEAR":
+                ws += (
+                    f"tickers.{self.symbol}",
+                    f"allLiquidation.{self.symbol}",
+                    f"REST:market/account-ratio:{self.symbol}",
+                )
+            allowed = ws + (
+                f"REST:market/instruments-info:{self.symbol}",
+            )
+            if self.topic not in allowed:
+                raise PublicSourceQualityInvalid(
+                    "PUBLIC_SOURCE_QUALITY_TOPIC_SCOPE_INVALID"
+                )
         if self.quality == "NOT_LISTED" and self.topic != (
             f"REST:market/instruments-info:{self.symbol}"
         ):
