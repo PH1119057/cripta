@@ -70,7 +70,7 @@ def test_r03_missing_one_minute_required_source_blocks_before_socket() -> None:
         r03_closed_only_feed_union(full, native_symbols=_SYMBOLS)
 
 
-def test_r03_explicit_native_and_observer_units_never_enable_r04_or_r05() -> None:
+def test_r04_native_union_preserves_r03_observer_and_never_enables_r05() -> None:
     native = (_ROOT / "operations/systemd/cripta-native-public-trade-source.service"
               ).read_text(encoding="utf-8")
     observer = (_ROOT / "operations/systemd/cripta-universal-entry-observer.service"
@@ -79,14 +79,14 @@ def test_r03_explicit_native_and_observer_units_never_enable_r04_or_r05() -> Non
             ).read_text(encoding="utf-8")
     union = (_ROOT / "operations/monitoring/public_market_source_union_capture.py"
              ).read_text(encoding="utf-8")
-    assert "Environment=CRIPTA_SOURCE_CLOSED_KLINES=1" in native
+    assert "Environment=CRIPTA_SOURCE_CLOSED_KLINES=0" in native
     assert "Environment=CRIPTA_SOURCE_KLINE_INTERVALS=1,5,15" in native
     assert (
         "Environment=CRIPTA_SOURCE_UNION_MANIFEST_FILE="
         "/etc/cripta/market-source/required_public_feeds.json"
     ) in native
-    assert "Environment=CRIPTA_SOURCE_UNION_CAPTURE=1" not in native
-    assert "Environment=CRIPTA_SOURCE_PUBLICATION=1" not in native
+    assert "Environment=CRIPTA_SOURCE_UNION_CAPTURE=1" in native
+    assert "Environment=CRIPTA_SOURCE_PUBLICATION=0" in native
     assert "Environment=CRIPTA_R03_NATIVE_CANDLE_READER=ENABLED" in observer
     assert "r03_closed_only_feed_union(" in main
     assert "closed_only=capture_closed" in main
