@@ -27,7 +27,7 @@ import shutil
 import subprocess
 import sys
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal as D
 from pathlib import Path
 
@@ -58,7 +58,7 @@ def sha(p: Path) -> str:
 
 def day_of(event: dict) -> str:
     return datetime.fromtimestamp(
-        int(event["state_effective_ts"]), timezone.utc
+        int(event["state_effective_ts"]), UTC
     ).date().isoformat()
 
 
