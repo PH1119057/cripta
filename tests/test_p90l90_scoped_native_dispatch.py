@@ -64,6 +64,7 @@ class DB:
         self.now = now
         self.initialized = initialized
         self.checkpoint = (0, 0)
+        self.clock_override = None
         self.events = []
         self.effects = []
         self.queries = []
@@ -104,6 +105,8 @@ class DB:
         self.queries.append((sql, params))
         if "FROM analytics.native_public_trade_source_sessions" in sql:
             return Rows(("ACTIVE", SOURCE_RELEASE, None, self.now))
+        if sql == "SELECT clock_timestamp()":
+            return Rows((self.clock_override or self.now,))
         if "FROM analytics.market_publications" in sql:
             assert params == (14, BYBIT_PUBLIC_MARKET_SOURCE_ID)
             return Rows(self.publication)
@@ -320,6 +323,16 @@ def test_pinned_checkpoint_cannot_run_ahead_of_publication():
     db.checkpoint = (2, 0)
     with pytest.raises(
         P90ScopedConsumerBlocked, match="BEHIND_DECISION_CHECKPOINT",
+    ):
+        pinned_call(db, lambda *_: db.events.append("ENGINE"))
+    assert db.events == ["BEGIN", "ROLLBACK"]
+
+
+def test_publication_expired_while_waiting_for_checkpoint_lock_blocks_entry():
+    db = DB(datetime.now(UTC))
+    db.clock_override = db.now + timedelta(seconds=12)
+    with pytest.raises(
+        P90ScopedConsumerBlocked, match="STALE_BEFORE_DECISION",
     ):
         pinned_call(db, lambda *_: db.events.append("ENGINE"))
     assert db.events == ["BEGIN", "ROLLBACK"]
