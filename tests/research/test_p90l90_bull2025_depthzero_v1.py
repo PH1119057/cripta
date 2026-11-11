@@ -101,7 +101,7 @@ def test_launch_requires_verified_pilot_and_never_duplicates(tmp_path, monkeypat
 
 
 def test_baseline_actor_required_before_any_read(monkeypatch):
-    monkeypatch.setattr(study.os, "geteuid", lambda: 9999)
+    monkeypatch.setattr(study.os, "geteuid", lambda: 9999, raising=False)
     with pytest.raises(PermissionError, match="UID107"):
         study.baseline_proof()
 
