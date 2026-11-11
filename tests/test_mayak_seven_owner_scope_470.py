@@ -75,7 +75,7 @@ def test_subscriptions_are_exact_scope_and_bounded(
         ",".join(SEVEN[:5]),
         ",".join((*SEVEN, "TRXUSDT")),
         ",".join((*SEVEN, "ETHUSDT")),
-        ",".join((*SEVEN[:4], SEVEN[5:])),
+        ",".join((*SEVEN[:4], *SEVEN[5:])),
         ",".join(sorted(SEVEN)),
         ",".join((
             "AAVEUSDT", "ADAUSDT", "APTUSDT", "ARBUSDT", "AVAXUSDT",
