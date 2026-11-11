@@ -55,6 +55,7 @@ from bybit_workbench.market_data.public_source_event_codec import (
 )
 from bybit_workbench.market_data.public_source_quality import (
     PublicSourceQualityEvent,
+    Quality,
     persist_public_source_quality_events,
 )
 from bybit_workbench.market_data.public_source_second_store import (
@@ -431,7 +432,7 @@ def run_source_union(
         event = PublicSourceQualityEvent.create(
             source_session_id=session, transport_epoch_id=transport_epoch,
             product=product, topic=topic, symbol=symbol,
-            quality=cast(Any, quality), reason=reason,
+            quality=cast(Quality, quality), reason=reason,
             observed_at=datetime.now(UTC),
         )
         try:
@@ -525,10 +526,17 @@ def run_source_union(
                     return
                 # Only SPOT is optional in the exact approved R01 manifest.
                 # Never GAP the original LINEAR journal for its outage.
+                prior_epoch = transport_epochs.get(product, session)
+                was_connected = product in sock
+                # Invalidate queued frames IMMEDIATELY on disconnect.
+                # Even while retry is waiting, the previous epoch must not
+                # be accepted into the current compact market source.
+                transport_epochs[product] = uuid4().hex
                 note_quality(
                     product="SPOT", topic="*",
-                    quality=("GAP" if product in sock else "NO_DATA"),
+                    quality=("GAP" if was_connected else "NO_DATA"),
                     reason="PUBLIC_SPOT_TRANSPORT_UNAVAILABLE",
+                    epoch=prior_epoch,
                 )
                 previous = sock.pop(product, None)
                 if previous is not None:
@@ -538,6 +546,7 @@ def run_source_union(
                         note_quality(
                             product="SPOT", topic="*", quality="UNKNOWN",
                             reason="PUBLIC_SPOT_SOCKET_CLOSE_UNVERIFIED",
+                            epoch=prior_epoch,
                         )
                 pending.clear()
                 if done.wait(5.0):
