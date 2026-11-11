@@ -574,6 +574,9 @@ def main() -> int:
                     from operations.monitoring.public_market_source_union_capture import (
                         run_source_union,
                     )
+                    # R04 native producer ABI includes shared book/ticker
+                    # codecs and scoped snapshot recovery. Derived source
+                    # changes require a producer GAP/cutover, not hot import.
                     run_source_union(
                         connection, p90_symbols=symbols, union=union,
                         producer_release_commit=RELEASE,
