@@ -256,6 +256,19 @@ def _connect_subscribe(
 
 
 
+def _scoped_quality_reason(exc: Exception, fallback: str) -> str:
+    """Only validated typed codes may enter append-only quality evidence."""
+    reason = str(exc)
+    if (
+        reason.startswith("PUBLIC_")
+        and 3 <= len(reason) <= 128
+        and all(ch == "_" or ch.isdigit() or "A" <= ch <= "Z"
+                for ch in reason)
+    ):
+        return reason
+    return fallback
+
+
 def _invalidate_scoped_market(
     aggregate: PublicSecondAccumulator, *, topic: str, instrument_id: str,
 ) -> None:
@@ -990,18 +1003,13 @@ def run_source_union(
                         )
                     # A stale/malformed FORMING_KLINE can NEVER destroy an
                     # unrelated valid book, ticker or original native trade.
-                    reason = str(exc)
-                    if not reason.startswith("PUBLIC_"):
-                        reason = "PUBLIC_TOPIC_FRAME_UNVERIFIED"
+                    reason = _scoped_quality_reason(
+                        exc, "PUBLIC_TOPIC_FRAME_UNVERIFIED",
+                    )
                     note_quality(
                         product=product, topic=topic,
                         symbol=topic.rsplit(".", 1)[-1],
-                        quality=(
-                            "STALE" if reason in (
-                                "PUBLIC_FORMING_EXPIRED_OR_FUTURE_SOURCE",
-                                "PUBLIC_FORMING_LAST_MATCH_TIMESTAMP_INVALID",
-                            ) else "UNKNOWN"
-                        ),
+                        quality="UNKNOWN",
                         reason=reason,
                         epoch=frame_epoch,
                     )
@@ -1034,9 +1042,9 @@ def run_source_union(
                                 )
                             # Trade/liquidation faults cannot erase a good
                             # ticker/book for the same InstrumentIdentity.
-                            reason = str(exc)
-                            if not reason.startswith("PUBLIC_"):
-                                reason = "PUBLIC_TOPIC_ACCUMULATOR_UNVERIFIED"
+                            reason = _scoped_quality_reason(
+                                exc, "PUBLIC_TOPIC_ACCUMULATOR_UNVERIFIED",
+                            )
                             note_quality(
                                 product=product, topic=topic,
                                 symbol=event.symbol, quality="UNKNOWN",
