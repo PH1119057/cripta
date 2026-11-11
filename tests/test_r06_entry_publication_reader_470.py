@@ -11,6 +11,7 @@ from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
 )
+from bybit_workbench.universal_entry import p90l90_scoped_native_source as native
 
 SYMS = ("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT")
 RELEASE = "a" * 40
@@ -257,3 +258,94 @@ def test_no_atr_or_decision_permission_is_granted_by_pin() -> None:
     assert x.history_verified is False
     assert not hasattr(x, "entry_ready")
     assert not hasattr(x, "can_execute")
+
+
+def _native_source() -> native.NativeSourceEvidence:
+    return native.NativeSourceEvidence(
+        BYBIT_PUBLIC_MARKET_SOURCE_ID,
+        EPOCH,
+        RELEASE,
+        AT,
+        {
+            symbol: native.NativeSourceSymbolEvidence(
+                symbol, True, "NATIVE_SOURCE_COMMITTED_CURRENT",
+            )
+            for symbol in SYMS
+        },
+    )
+
+
+def test_original_suffix_stops_at_pinned_causal_watermark(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    x = pin(FakePG())
+    fake_conn = object()
+    rows = (
+        SimpleNamespace(frame_number=122, frame_index=0, symbol="LTCUSDT"),
+        SimpleNamespace(frame_number=123, frame_index=1, symbol="LTCUSDT"),
+        SimpleNamespace(frame_number=124, frame_index=0, symbol="LTCUSDT"),
+    )
+    calls: list[object] = []
+
+    def ordered(connection: object, **kwargs: object) -> tuple[object, ...]:
+        assert connection is fake_conn
+        assert kwargs["source"].session_id == EPOCH
+        assert kwargs["after_frame"] == 121
+        assert kwargs["after_index"] == 0
+        calls.append(kwargs)
+        return rows
+
+    monkeypatch.setattr(native, "read_ordered_native_events", ordered)
+    received = reader.read_entry_publication_original_suffix(
+        fake_conn, pin=x, source=_native_source(),
+        after_frame=121, after_index=0,
+    )
+    assert received == rows[:2]
+    assert len(calls) == 1
+
+
+def test_original_suffix_cannot_mix_old_source_epoch() -> None:
+    x = pin(FakePG())
+    src = native.NativeSourceEvidence(
+        BYBIT_PUBLIC_MARKET_SOURCE_ID, "c" * 32, RELEASE, AT,
+        _native_source().by_symbol,
+    )
+    with pytest.raises(
+        reader.EntryPublicationUnavailable, match="ORIGINAL_SOURCE_MISMATCH",
+    ):
+        reader.read_entry_publication_original_suffix(
+            object(), pin=x, source=src, after_frame=0, after_index=0,
+        )
+
+
+def test_original_suffix_gap_and_reordering_never_claimed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    x = pin(FakePG())
+    monkeypatch.setattr(
+        native, "read_ordered_native_events",
+        lambda *_a, **_kw: (_ for _ in ()).throw(
+            native.NativeSourceProofUnavailable("SOURCE_GAP")
+        ),
+    )
+    with pytest.raises(
+        reader.EntryPublicationUnavailable, match="ORIGINAL_GAP",
+    ):
+        reader.read_entry_publication_original_suffix(
+            object(), pin=x, source=_native_source(),
+            after_frame=0, after_index=0,
+        )
+    monkeypatch.setattr(
+        native, "read_ordered_native_events",
+        lambda *_a, **_kw: (
+            SimpleNamespace(frame_number=1, frame_index=0, symbol="LTCUSDT"),
+            SimpleNamespace(frame_number=1, frame_index=0, symbol="LTCUSDT"),
+        ),
+    )
+    with pytest.raises(
+        reader.EntryPublicationUnavailable, match="ORIGINAL_ORDER_INVALID",
+    ):
+        reader.read_entry_publication_original_suffix(
+            object(), pin=x, source=_native_source(),
+            after_frame=0, after_index=0,
+        )
