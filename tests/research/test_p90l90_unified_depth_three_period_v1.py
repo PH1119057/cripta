@@ -1,4 +1,9 @@
-"""#638 tests: one shared LONG/SHORT book and executable 2025 accounting parity."""
+"""Isolated research unit suite; the repo-wide test collector stubs scripts.research."""
+import subprocess
+import sys
+from pathlib import Path
+
+SCRIPT = r'''"""#638 tests: one shared LONG/SHORT book and executable 2025 accounting parity."""
 from __future__ import annotations
 
 import importlib
@@ -9,7 +14,7 @@ from pathlib import Path
 import pytest
 
 # Source-tree research namespace is not part of the installed wheel.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path.cwd()))
 original = importlib.import_module("scripts.research.p90l90_bull2025_portfolio_v1")
 run = importlib.import_module("scripts.research.p90l90_unified_depth_three_period_v1")
 
@@ -143,3 +148,17 @@ def test_results_are_scoped_new_data_disk_children_only():
         for period in run.WINDOW
     )
     assert all(run.output(period).name == run.LEAF for period in run.WINDOW)
+
+
+for _name in sorted(name for name in globals() if name.startswith('test_')):
+    globals()[_name]()
+'''
+
+
+def test_source_tree_research_in_clean_python_interpreter():
+    root = Path(__file__).resolve().parents[2]
+    proc = subprocess.run(
+        [sys.executable, "-c", SCRIPT], cwd=root, capture_output=True,
+        text=True, timeout=120, check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
