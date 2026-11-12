@@ -1,0 +1,50 @@
+{
+  "manifest_id": "R07_UNIVERSAL_ENTRY_PUBLICATION_PROOF_20261112",
+  "roadmap_id": "UNIFIED_MARKET_PUBLICATION_20261110",
+  "component": "Universal Entry Consumer",
+  "implementation": "one reusable account-scoped code path, no account-count constant",
+  "registered_account_discovery": "identity.trading_accounts JOIN identity.account_connectors by trading_account_id; never infer connector from MAIN/SUB role",
+  "source_boundary": {
+    "phase": "R06 SOURCE_ONLY: no financial EntryDecision/EntryExecutionRequest",
+    "strategy_scope": "owner-approved current P90 REAL strategy versions only; unrelated strategies retain independent existing source policy",
+    "original_signal": "strategy_entry.p90_r06_publication_observations(signal_id,strategy_id,strategy_version,symbol,direction,source_session_id,frame_number,frame_index,native_exec_id)",
+    "publication": "analytics.market_publications(publication_id,market_source_id,producer_release_commit,published_at,source_session_id)",
+    "original_event": "analytics.native_public_trade_source_events(source_session_id,frame_number,frame_index,exec_id,instrument_id,external_symbol,event_at)",
+    "checkpoint": "strategy_entry.p90_scoped_native_consumer_checkpoints(strategy_id,strategy_version,source_session_id,last_publication_id,bootstrap_publication_id,frame_number,frame_index)",
+    "freshness_seconds": 5,
+    "freshness_source": "existing P90 REAL v3 immutable EntryPlan maximum request age; not a new Strategy threshold",
+    "missing_or_mixed_proof": "fail closed before financial permission check or command creation"
+  },
+  "account_boundary": {
+    "execution_route": "exact TradingAccount + exact AccountConnector, no credentials in publication",
+    "existing_gates": [
+      "StrategyActivation and ExecutionPermission",
+      "AccountConnector",
+      "CapitalReservation",
+      "ExchangePositionSlotClaim",
+      "AccountStateGeneration and position mode",
+      "Lifecycle/Safety",
+      "release-bound OWNER LIVE ARM",
+      "control.execution_gates",
+      "independent Exit"
+    ],
+    "scaling": "1 MAIN, any finite number of registered SUB accounts; per-account worker instance optional; no separate algorithm for SUB"
+  },
+  "tests": [
+    "one original published signal supports 1+10 synthetic isolated account identities",
+    "missing/duplicated/unpublished/stale/changed original native refs deny Entry",
+    "source epoch/checkpoint/release fingerprint mismatches deny Entry",
+    "failed P90 proof stops before LIVE ARM/command and records cancelled request",
+    "non-P90 strategy dispatch contract is left untouched",
+    "independent Exit remains runnable when Entry disabled",
+    "PG16 disposable integration, existing consumer/Exit regressions and CI"
+  ],
+  "release": {
+    "source_branch": "core/r07-universal-entry-provenance-20261112",
+    "financial_entry_enabled": false,
+    "source_only_R06_no_order_preserved": true,
+    "owner_arm": "never implicit",
+    "exit": "never stopped or gated by R07",
+    "operational_readiness": "requires live account/portal control and independent signed OPEN Exit evidence before financial Entry; no PASS from process liveness"
+  }
+}
