@@ -591,7 +591,10 @@ def _publish_command(
             str(existing["command_type"]) != "entry"
             or str(existing["symbol"]) != prepared.symbol
             or json.loads(str(existing["payload_json"])) != prepared.payload
-            or (\n                str(existing["strategy_execution_binding_id"])\n                != prepared.strategy_execution_binding_id\n            )
+            or (
+                str(existing["strategy_execution_binding_id"])
+                != prepared.strategy_execution_binding_id
+            )
             or str(existing["execution_leg"]) != prepared.execution_leg
             or str(existing["trading_account_id"]) != prepared.trading_account_id
             or str(existing["identity_status"]) != "PROVEN"
