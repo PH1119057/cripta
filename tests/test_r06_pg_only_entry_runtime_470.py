@@ -295,6 +295,7 @@ def test_any_financial_effect_blocks_before_no_order_state_commit(
     ("error", "expected"),
     [
         (mod.EntryPublicationUnavailable("PUBLICATION_STALE"), True),
+        (mod.psycopg.errors.SerializationFailure("PG_CONFLICT"), True),
         (mod.R06FreshCutoverBlocked("R06_NEW_PUBLICATION_UNVERIFIED"), True),
         (mod.R06FreshCutoverBlocked("R06_START_PUBLICATION_STALE_OR_CHANGED"), True),
         (mod.R06FreshCutoverBlocked("R06_FUTURE_CLOSED_BOUNDARY_NOT_REACHED"), True),
@@ -308,8 +309,11 @@ def test_pre_cursor_transient_retries_only_preapproved_source_wait(error, expect
     ) is expected
 
 
-def test_pre_cursor_transient_must_expire_at_existing_10_minute_budget():
-    err = mod.EntryPublicationUnavailable("PUBLICATION_STALE")
+@pytest.mark.parametrize("err", [
+    mod.EntryPublicationUnavailable("PUBLICATION_STALE"),
+    mod.psycopg.errors.SerializationFailure("PG_CONFLICT"),
+])
+def test_pre_cursor_transient_must_expire_at_existing_10_minute_budget(err):
     assert mod._bootstrap_transient_retryable(
         err, detached_at=BASE, observed_at=BASE + timedelta(minutes=10),
     )
@@ -331,7 +335,26 @@ def test_worker_failure_classification_never_leaks_private_exception_detail():
         ValueError("API_SECRET=DO_NOT_LOG"),
     ) == "R06_UNCLASSIFIED_RUNTIME_EXCEPTION"
     assert mod._worker_block_code(
+        mod.psycopg.errors.SerializationFailure("sensitive DB params"),
+    ) == "R06_PG_SERIALIZATION_CONFLICT"
+    assert mod._worker_block_code(
         mod.R06PublishedEntryBlocked(
             "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT:private-name"
         ),
     ) == "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT"
+
+
+
+def test_serialization_retry_only_before_dual_cursor_commit():
+    from pathlib import Path
+
+    source = Path(mod.__file__).read_text(encoding="utf-8")
+    # All 3 pre-bootstrap transaction phases are guarded with rollback and a
+    # bounded retry, never a write/replay or false checkpoint claim.
+    assert source.count(
+        "psycopg.errors.SerializationFailure,\n"
+    ) >= 3
+    assert "first_cursor_accepted = True\n                    prior_pub=0" in source
+    assert "if (\n                        first_cursor_accepted" in source
+    assert "R06_PG_SERIALIZATION_CONFLICT" in source
+    assert "R06_NEW_5M_BOOTSTRAP_TIMEOUT" in source
