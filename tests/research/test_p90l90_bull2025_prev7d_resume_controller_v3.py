@@ -97,8 +97,8 @@ def test_no_unsafe_qc_overwrite_or_broad_reuse():
 
 
 def test_absolute_contained_results_and_not_production():
-    assert str(resume.OUT).startswith("/")  # POSIX server path, also on Windows CI
-    assert "/data/cripta/research/runs/" in str(resume.OUT)
-    assert "/srv/cripta/runtime" not in str(resume.OUT)
-    assert str(resume.FROZEN_ROOT).startswith("/")
+    # WindowsPath rendering uses backslashes; as_posix retains Linux path intent.
+    assert resume.OUT.as_posix().startswith("/data/cripta/research/runs/")
+    assert "/srv/cripta/runtime" not in resume.OUT.as_posix()
+    assert resume.FROZEN_ROOT.as_posix().startswith("/data/cripta/research/worktrees/")
     assert resume.FROZEN_REL.startswith("scripts/research/")
