@@ -377,13 +377,78 @@ def _rollback_inner(*, automatic: bool) -> None:
     _write_marker(data)
 
 
+def _verified_rolled_back_history(
+    previous: dict[str, object] | None, original: bytes,
+) -> list[dict[str, object]]:
+    """Bounded same-mode reattempt ONLY after exact verified prior rollback.
+
+    Preserve an append-only attempt audit in the private root marker and the
+    previous original 0600 backup. Never clear a partial/ACTIVE/unknown switch,
+    reset a cursor, or recover from a mismatched config/release by guessing.
+    """
+    if previous is None:
+        return []
+    if previous.get("state") != "ROLLED_BACK":
+        raise R06ModeSwitchBlocked("R06_PREVIOUS_SWITCH_RECORD_EXISTS")
+    release = previous.get("release")
+    original_hash = previous.get("original_sha")
+    edited_hash = previous.get("edited_sha")
+    if (
+        not isinstance(release, str)
+        or re.fullmatch(r"[0-9a-f]{40}", release) is None
+        or not isinstance(original_hash, str)
+        or re.fullmatch(r"[0-9a-f]{64}", original_hash) is None
+        or not isinstance(edited_hash, str)
+        or re.fullmatch(r"[0-9a-f]{64}", edited_hash) is None
+        or original_hash == edited_hash
+        or _sha(original) != original_hash
+        or not isinstance(previous.get("ended_at"), str)
+        or type(previous.get("old_pid")) is not int
+        or previous["old_pid"] <= 1
+    ):
+        raise R06ModeSwitchBlocked("R06_ROLLED_BACK_HISTORY_INVALID")
+    if not BACKUP.exists() or BACKUP.is_symlink():
+        raise R06ModeSwitchBlocked("R06_RETRY_ORIGINAL_BACKUP_MISSING")
+    meta = BACKUP.stat(follow_symlinks=False)
+    if (
+        not stat.S_ISREG(meta.st_mode)
+        or meta.st_uid != 0 or stat.S_IMODE(meta.st_mode) != 0o600
+        or _sha(BACKUP.read_bytes()) != original_hash
+    ):
+        raise R06ModeSwitchBlocked("R06_RETRY_ORIGINAL_BACKUP_DRIFT")
+    history = previous.get("rolled_back_attempts", [])
+    if (
+        not isinstance(history, list) or len(history) >= 8
+        or any(
+            not isinstance(item, dict)
+            or item.get("original_sha") != original_hash
+            or not isinstance(item.get("release"), str)
+            for item in history
+        )
+    ):
+        raise R06ModeSwitchBlocked("R06_PRIOR_ATTEMPT_AUDIT_UNVERIFIED")
+    return [
+        *history,
+        {
+            "state": "ROLLED_BACK",
+            "release": release,
+            "ended_at": previous["ended_at"],
+            "old_pid": previous["old_pid"],
+            "original_sha": original_hash,
+            "edited_sha": edited_hash,
+        },
+    ]
+
+
 def _cutover() -> None:
     sha = _verify_release()
-    if _load_marker() is not None:
+    previous = _load_marker()
+    if previous is not None and previous.get("state") != "ROLLED_BACK":
         raise R06ModeSwitchBlocked("R06_PREVIOUS_SWITCH_RECORD_EXISTS")
     initial = _require_units()
     _probe("before")
     contents, meta = _mode_source()
+    history = _verified_rolled_back_history(previous, contents)
     modified = _new_config(contents)
     if _sha(modified) == _sha(contents):
         raise R06ModeSwitchBlocked("R06_FLAG_IDEMPOTENCY_INVALID")
@@ -391,8 +456,10 @@ def _cutover() -> None:
         "state": "PREPARED", "release": sha,
         "original_sha": _sha(contents), "edited_sha": _sha(modified),
         "old_pid": initial, "started_at": datetime.now(UTC).isoformat(),
+        "rolled_back_attempts": history,
     }
-    _atomic(contents, BACKUP, uid=0, gid=0, mode=0o600)
+    if previous is None:
+        _atomic(contents, BACKUP, uid=0, gid=0, mode=0o600)
     _write_marker(record)
     try:
         _service("stop")
