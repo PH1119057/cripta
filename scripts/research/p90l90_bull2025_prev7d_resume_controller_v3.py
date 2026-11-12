@@ -20,7 +20,7 @@ Operational contract:
 from __future__ import annotations
 
 import argparse
-import fcntl
+import importlib
 import hashlib
 import json
 import os
@@ -104,13 +104,13 @@ def guard(sweep, controller_digest: str):
     lock_file = OUT / ".worker.lock"
     if not lock_file.is_file() or lock_file.is_symlink():
         raise RuntimeError("original worker lock missing/unsafe")
+    fcntl = importlib.import_module("fcntl")
     with lock_file.open("r+") as lock:
         try:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise RuntimeError("another worker already owns research lock") from exc
-        finally:
-            pass  # closing the file releases only our preflight probe lock
+        # closing the file releases only our preflight probe lock
     engine, catalog, current = sweep.prepare(FROZEN_HEAD)
     verified = {}
     for code in BANDS:
