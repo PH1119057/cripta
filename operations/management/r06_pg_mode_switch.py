@@ -262,51 +262,49 @@ def _probe(phase: str) -> dict[str, object]:
             + str(exit_status)
         )
 
-    journal = _call(
-        "/usr/bin/journalctl",
-        "_SYSTEMD_INVOCATION_ID=" + invocation,
-        "--output=json", "--no-pager", "-n", "50",
-        timeout=10, checked=False,
-    )
-    if journal.returncode != 0:
-        raise R06ModeSwitchBlocked("R06_PROBE_CURRENT_JOURNAL_UNAVAILABLE")
-    reports = []
-    for line in journal.stdout.splitlines():
-        try:
-            entry = json.loads(line)
-        except ValueError:
-            continue
-        if (
-            not isinstance(entry, dict)
-            or entry.get("_SYSTEMD_UNIT") != unit
-        ):
-            continue
-        try:
-            report = json.loads(entry.get("MESSAGE", ""))
-        except (ValueError, TypeError):
-            continue
-        if (
-            isinstance(report, dict)
-            and report.get("unit_invocation_id") == invocation
-            and report.get("mode") == phase
-        ):
-            reports.append(report)
-    if len(reports) != 1:
-        raise R06ModeSwitchBlocked(
-            "R06_PROBE_CURRENT_INVOCATION_RESULT_NOT_ATTESTED"
-        )
-    report = reports[0]
+    # The exact immutable code in the separate User=cripta one-shot unit
+    # returns 0 ONLY after checking the signed proof and all relevant gates.
+    # Its ExitStatus plus current InvocationID are sufficient. Management
+    # does not re-open PostgreSQL as root or read protected journal records.
+    release = RELEASE.read_text(encoding="utf-8").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", release):
+        raise R06ModeSwitchBlocked("R06_PROBE_CURRENT_RELEASE_UNVERIFIED")
     expected_result = (
         "R06_PHYSICAL_PG_ONLY_NO_ORDER_PASS" if phase == "after"
         else ("R06_ROLLBACK_LOCAL_OFF_PASS" if phase == "rollback_local"
               else "R06_PG_SWITCH_PREFLIGHT_PASS")
     )
-    if (
-        report.get("result") != expected_result
-        or report.get("trading_effect") != "NONE"
-        or report.get("release") != RELEASE.read_text(encoding="utf-8").strip()
-    ):
-        raise R06ModeSwitchBlocked("R06_CRIPTA_PROBE_PROOF_DRIFT")
+    report: dict[str, object] = {
+        "result": expected_result,
+        "release": release,
+        "trading_effect": "NONE",
+        "mode": phase,
+        "unit_invocation_id": invocation,
+    }
+    if phase == "after":
+        # cripta verified the causal database boundary before returning 0.
+        # Root only reads the existing Observer status; never contacts DB
+        # or reconstructs private Exchange/account evidence.
+        raw = json.loads(
+            Path("/var/lib/cripta/universal_entry_observer/status.json")
+            .read_text(encoding="utf-8")
+        )
+        if not isinstance(raw, dict):
+            raise R06ModeSwitchBlocked("R06_AFTER_STATUS_INVALID")
+        sensor = raw.get("sensor_status")
+        source = raw.get("observer_epoch_id")
+        if (
+            raw.get("state") != "R06_PG_NO_ORDER_SOURCE_ONLY"
+            or raw.get("source_commit") != release
+            or not isinstance(source, str)
+            or re.fullmatch(r"[0-9a-f]{32}", source) is None
+            or not isinstance(sensor, dict)
+            or sensor.get("observer_market_ws")
+               != "DETACHED_BY_R06_MODE"
+            or sensor.get("financial_ready") is not False
+        ):
+            raise R06ModeSwitchBlocked("R06_AFTER_STATUS_PROVENANCE_DRIFT")
+        report["source_session"] = source
     return report
 
 

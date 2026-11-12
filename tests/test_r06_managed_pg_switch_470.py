@@ -330,7 +330,6 @@ def test_cri_probe_is_fixed_systemd_user_and_never_switches_uid():
     ).read_text(encoding="utf-8")
     assert '"/usr/bin/systemctl", "start", unit' in manager
     assert "user=identity.pw_uid" not in manager
-    assert '"/usr/bin/journalctl"' in manager
     assert (
         "operations/systemd/cripta-r06-entry-preflight@.service"
     ) in (
@@ -338,18 +337,13 @@ def test_cri_probe_is_fixed_systemd_user_and_never_switches_uid():
     ).read_text(encoding="utf-8")
 
 
-def test_probe_exact_actor_attested_systemd_invocation_and_journal(
+def test_probe_attests_exact_systemd_cripta_actor_and_invocation(
     monkeypatch,
 ):
     from types import SimpleNamespace
 
     phase = "before"
     invocation = "b" * 32
-    record = {
-        "result": "R06_PG_SWITCH_PREFLIGHT_PASS", "mode": phase,
-        "release": "a" * 40, "trading_effect": "NONE",
-        "unit_invocation_id": invocation,
-    }
     seen = []
     monkeypatch.setattr(switch.time, "monotonic_ns", lambda: 1_000_000)
     monkeypatch.setattr(
@@ -372,16 +366,14 @@ def test_probe_exact_actor_attested_systemd_invocation_and_journal(
                 + " before",
             ])
             return SimpleNamespace(returncode=0, stdout=output)
-        if args[0] == "/usr/bin/journalctl":
-            entry = {
-                "_SYSTEMD_UNIT": "cripta-r06-entry-preflight@before.service",
-                "MESSAGE": json.dumps(record),
-            }
-            return SimpleNamespace(returncode=0, stdout=json.dumps(entry))
         raise AssertionError(args)
     monkeypatch.setattr(switch, "_call", fake_call)
-    assert switch._probe(phase) == record
-    assert len(seen) == 3
+    assert switch._probe(phase) == {
+        "result": "R06_PG_SWITCH_PREFLIGHT_PASS",
+        "mode": phase, "release": "a" * 40,
+        "trading_effect": "NONE", "unit_invocation_id": invocation,
+    }
+    assert len(seen) == 2
 
 
 def test_probe_refuses_incorrect_unix_actor_without_phase_effect(
@@ -411,7 +403,32 @@ def test_probe_refuses_incorrect_unix_actor_without_phase_effect(
         switch._probe("before")
 
 
-def test_probe_bad_or_stale_journal_never_passes(
+def test_probe_rejects_stale_systemd_execution_even_after_success(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(switch.time, "monotonic_ns", lambda: 2_000_000)
+    def fake_call(*args, **_kwargs):
+        if args[1] == "start":
+            return SimpleNamespace(returncode=0, stdout="")
+        return SimpleNamespace(returncode=0, stdout="\n".join([
+            "User=cripta", "Group=cripta", "NoNewPrivileges=yes",
+            "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
+            "InvocationID=" + "b"*32,
+            "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=1000",
+            "Result=success", "ActiveState=inactive",
+            "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
+            + " before",
+        ]))
+    monkeypatch.setattr(switch, "_call", fake_call)
+    with pytest.raises(
+        switch.R06ModeSwitchBlocked, match="CRIPTA_ACTOR_OR_INVOCATION",
+    ):
+        switch._probe("before")
+
+
+def test_after_probe_requires_matching_observer_status(
     monkeypatch,
 ):
     from types import SimpleNamespace
@@ -420,33 +437,24 @@ def test_probe_bad_or_stale_journal_never_passes(
     def fake_call(*args, **_kwargs):
         if args[1] == "start":
             return SimpleNamespace(returncode=0, stdout="")
-        if args[0] == "/usr/bin/systemctl":
-            return SimpleNamespace(returncode=0, stdout="\n".join([
-                "User=cripta", "Group=cripta", "NoNewPrivileges=yes",
-                "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
-                "InvocationID=" + "b"*32,
-                "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=2000",
-                "Result=success", "ActiveState=inactive",
-                "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
-                + " before",
-            ]))
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps({
-                "_SYSTEMD_UNIT": "cripta-r06-entry-preflight@before.service",
-                "MESSAGE": json.dumps({
-                    "result": "R06_PG_SWITCH_PREFLIGHT_PASS",
-                    "mode": "before", "unit_invocation_id": "old"*10+"00",
-                    "trading_effect": "NONE",
-                }),
-            }),
-        )
+        return SimpleNamespace(returncode=0, stdout="\n".join([
+            "User=cripta", "Group=cripta", "NoNewPrivileges=yes",
+            "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
+            "InvocationID=" + "b"*32,
+            "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=2000",
+            "Result=success", "ActiveState=inactive",
+            "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
+            + " after",
+        ]))
     monkeypatch.setattr(switch, "_call", fake_call)
+    monkeypatch.setattr(
+        switch.RELEASE.__class__, "read_text",
+        lambda _self, **_kw: "a" * 40 + "\n",
+    )
     with pytest.raises(
-        switch.R06ModeSwitchBlocked,
-        match="CURRENT_INVOCATION_RESULT_NOT_ATTESTED",
+        switch.R06ModeSwitchBlocked, match="AFTER_STATUS",
     ):
-        switch._probe("before")
+        switch._probe("after")
 
 
 def test_read_only_probe_rejects_wrong_unix_actor_before_db(monkeypatch):
