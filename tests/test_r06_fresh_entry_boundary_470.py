@@ -233,6 +233,8 @@ class WriterDB:
             return One(self.pub)
         if clean == "SELECT clock_timestamp()":
             return One((self.now,))
+        if clean == "SELECT count(*) FROM strategy_entry.p90_scoped_native_consumer_checkpoints":
+            return One((0,))
         if "FROM control.execution_gates" in sql:
             return One(self.gate)
         if "FROM strategy_entry.execution_permissions" in sql:

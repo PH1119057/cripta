@@ -186,7 +186,9 @@ def _one_pin(readonly: Any, *, at: datetime, loaded: str) -> tuple[
         }
     return pin, history, accepted
 
-def _checkpoints(writer: Any, *, pin: EntryPublicationPin) -> tuple[Any, ...]:
+def _checkpoints(
+    writer: Any, *, pin: EntryPublicationPin, allow_new_epoch: bool = False,
+) -> tuple[Any, ...]:
     rows = writer.execute(
         "SELECT strategy_id,strategy_version,source_session_id,"
         "consumer_release_commit,bootstrap_publication_id,causal_state "
@@ -199,7 +201,11 @@ def _checkpoints(writer: Any, *, pin: EntryPublicationPin) -> tuple[Any, ...]:
             "SELECT count(*) FROM strategy_entry.p90_scoped_native_consumer_checkpoints"
         ).fetchone()
         if historical != (0,):
-            raise R06PublishedEntryBlocked("R06_OLD_ENTRY_EPOCH_REQUIRES_EXPLICIT_BRIDGE")
+            if not allow_new_epoch:
+                raise R06PublishedEntryBlocked("R06_OLD_ENTRY_EPOCH_REQUIRES_EXPLICIT_BRIDGE")
+            from operations.monitoring.r06_entry_epoch import prior_epoch
+
+            prior_epoch(writer, pin.source_session_id)
         return ()
     if (
         len(rows) != 2 or {r[0] for r in rows} != set(_STRATEGIES)
@@ -464,7 +470,9 @@ def run_pg_only(
                         raise
                     time.sleep(1.0)
                     continue
-                checkpoints = _checkpoints(writer,pin=pin)
+                checkpoints = _checkpoints(
+                    writer,pin=pin,allow_new_epoch=not first_cursor_accepted,
+                )
                 if not checkpoints:
                     # A single owner process replaces old WS/REST after the
                     # service manager stopped its preceding ExecStart; the

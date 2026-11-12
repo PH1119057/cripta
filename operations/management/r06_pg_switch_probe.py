@@ -65,7 +65,7 @@ def _require_after(conn: psycopg.Connection, sha: str, source: str) -> dict[str,
                   consumer_release_commit,bootstrap_publication_id,
                   last_publication_id,causal_state
              FROM strategy_entry.p90_scoped_native_consumer_checkpoints
-            ORDER BY strategy_id"""
+            WHERE source_session_id=%s ORDER BY strategy_id""", (source,),
     ).fetchall()
     if (
         len(rows) != 2
