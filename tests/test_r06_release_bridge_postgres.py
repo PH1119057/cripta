@@ -251,3 +251,31 @@ def test_new_epoch_rejects_invalid_lineage_without_mutation(db, defect):
         fresh_epoch(runtime, proof)
     assert snapshot(runtime) == before
     assert epoch_audits(runtime) == (0,)
+
+
+def test_real_pg_quiet_scope_waits_at_exact_global_bootstrap_fence(db):
+    admin, runtime, _ = db
+    admin.execute('ALTER TABLE analytics.market_publications ADD native_watermarks jsonb')
+    watermarks = {'LTCUSDT': {'frame_number': 99, 'frame_index': 0},
+                  'INJUSDT': {'frame_number': 98, 'frame_index': 0},
+                  'APTUSDT': {'frame_number': 100, 'frame_index': 2}}
+    admin.execute('UPDATE analytics.market_publications SET native_watermarks=%s::jsonb',
+                  (json.dumps(watermarks),))
+    admin.execute('UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints '
+                  'SET causal_state=%s::jsonb', (json.dumps({'version': 1, 'by_symbol': {}}),))
+    pin = SimpleNamespace(source_session_id=SESSION, producer_release_commit=PRODUCER,
+                          publication_id=20, native_watermarks=watermarks)
+    before = snapshot(runtime)
+    kwargs = dict(pin=pin, strategy=IDS[0], version='v3', symbols=('LTCUSDT', 'INJUSDT'))
+    assert mod.scope_waits_at_bootstrap(runtime, **kwargs)
+    assert snapshot(runtime) == before
+    # A next real scope trade releases only this wait; no cursor transplant.
+    watermarks['LTCUSDT'] = {'frame_number': 101, 'frame_index': 0}
+    assert not mod.scope_waits_at_bootstrap(runtime, **kwargs)
+    assert snapshot(runtime) == before
+    watermarks['LTCUSDT'] = {'frame_number': 99, 'frame_index': 0}
+    # An unexplained cursor above the authenticated original fence is blocked.
+    admin.execute('UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints '
+                  'SET frame_number=101 WHERE strategy_id=%s', (IDS[0],))
+    with pytest.raises(mod.R06ResumeBlocked, match='FENCE_UNVERIFIED'):
+        mod.scope_waits_at_bootstrap(runtime, **kwargs)

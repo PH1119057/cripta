@@ -375,6 +375,13 @@ def _process_publication(
                     blocked[name] = "NATIVE_SOURCE_CURSOR_NOT_FRESH"
                     continue
                 raise R06PublishedEntryBlocked("R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT:"+name)
+            from operations.monitoring.r06_entry_resume import scope_waits_at_bootstrap
+
+            if scope_waits_at_bootstrap(
+                writer, pin=pin, strategy=name, version=VERSION, symbols=symbols,
+            ):
+                blocked[name] = "R06_SCOPE_AWAITING_POST_BOOTSTRAP_NATIVE_EVENT"
+                continue
             signals += _observe_one(
                 writer, pin=pin, history=history, source=source, bundle=bundle,
                 engine=engines[name], loaded=loaded, at=at,
