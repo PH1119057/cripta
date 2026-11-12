@@ -454,7 +454,12 @@ def _pg_only_worker_block_reason() -> str:
             Path("/var/lib/cripta/universal_entry_observer/status.json")
             .read_text(encoding="utf-8")
         )
-        if not isinstance(raw, dict) or raw.get("state") != "BLOCKED":
+        if (
+            not isinstance(raw, dict)
+            or raw.get("state") != "BLOCKED"
+            or raw.get("source_commit")
+            != RELEASE.read_text(encoding="utf-8").strip()
+        ):
             return "R06_WORKER_FAILURE_NOT_ATTESTED"
         reason = str(raw.get("reason", ""))
         match = re.fullmatch(

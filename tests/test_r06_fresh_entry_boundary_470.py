@@ -164,6 +164,30 @@ def _proof() -> mod.R06FreshEntryProof:
     )
 
 
+class FreshReadOnlyDB:
+    """Distinct pinned read-only connection, NEVER the checkpoint writer."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    @contextmanager
+    def transaction(self):
+        self.calls.append("BEGIN")
+        try:
+            yield self
+        except Exception:
+            self.calls.append("ROLLBACK")
+            raise
+        else:
+            self.calls.append("COMMIT")
+
+    def execute(self, sql: str, params: object = ()) -> One:
+        assert params == ()
+        assert sql == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        self.calls.append("SET_READ_ONLY")
+        return One(None)
+
+
 class WriterDB:
     def __init__(self) -> None:
         self.calls: list[str] = []
@@ -237,19 +261,24 @@ def _bootstrap(
     refreshed: mod.R06FreshEntryProof | None = None,
     on_refresh: object = None,
 ) -> tuple[str, ...]:
-    # The production implementation ALWAYS rechecks the pinned source AFTER
-    # credential-local signing. Test snapshots must pin the same provenance.
+    # Production re-pins through separate read-only PG connection AFTER
+    # private signing; the writer only locks and atomically inserts cursors.
+    readonly = FreshReadOnlyDB()
     with pytest.MonkeyPatch.context() as patch:
         def read_fresh(_db: object, **_kw: object) -> mod.R06FreshEntryProof:
+            assert _db is readonly and _db is not db
+            assert readonly.calls == ["BEGIN", "SET_READ_ONLY"]
             if callable(on_refresh):
                 on_refresh()
             return refreshed if refreshed is not None else _proof()
         patch.setattr(mod, "verify_r06_fresh_publication", read_fresh)
-        return mod.bootstrap_future_entry_checkpoints(
-            db, proof=_proof(), strategies=PLANS,
-            consumer_release_commit=CONSUMER_SHA,
+        result = mod.bootstrap_future_entry_checkpoints(
+            db, readonly_connection=readonly, proof=_proof(),
+            strategies=PLANS, consumer_release_commit=CONSUMER_SHA,
             active_p90_bundles=_bundles(),
         )
+        assert readonly.calls == ["BEGIN", "SET_READ_ONLY", "COMMIT"]
+        return result
 
 
 def test_one_signed_preflight_then_one_atomic_dual_strategy_bootstrap(
@@ -389,3 +418,42 @@ def test_refresh_still_requires_five_second_freshness_without_exception():
     ):
         _bootstrap(db)
     assert "INSERT" not in db.calls
+
+
+
+def test_bootstrap_never_uses_write_capable_connection_as_read_only_proof():
+    db = WriterDB()
+    with pytest.raises(mod.R06FreshCutoverBlocked, match="BOOTSTRAP_CONTRACT"):
+        mod.bootstrap_future_entry_checkpoints(
+            db, readonly_connection=db, proof=_proof(), strategies=PLANS,
+            consumer_release_commit=CONSUMER_SHA,
+            active_p90_bundles=_bundles(),
+        )
+    assert db.calls == []
+    assert not db.inserted
+
+
+def test_reader_rejection_stops_before_writer_transaction(monkeypatch):
+    from operations.monitoring import p90l90_real_source_bootstrap as private
+
+    monkeypatch.setattr(
+        private, "preflight_p90_real_private_flat_source",
+        lambda *_a, **_k: None,
+    )
+    db = WriterDB()
+    readonly = FreshReadOnlyDB()
+    def reject(_db: object, **_kw: object):
+        assert _db is readonly
+        raise mod.R06FreshCutoverBlocked("R06_NEW_PUBLICATION_UNVERIFIED")
+    monkeypatch.setattr(mod, "verify_r06_fresh_publication", reject)
+    with pytest.raises(
+        mod.R06FreshCutoverBlocked, match="NEW_PUBLICATION_UNVERIFIED",
+    ):
+        mod.bootstrap_future_entry_checkpoints(
+            db, readonly_connection=readonly, proof=_proof(),
+            strategies=PLANS, consumer_release_commit=CONSUMER_SHA,
+            active_p90_bundles=_bundles(),
+        )
+    assert readonly.calls == ["BEGIN", "SET_READ_ONLY", "ROLLBACK"]
+    assert db.calls == []
+    assert not db.inserted

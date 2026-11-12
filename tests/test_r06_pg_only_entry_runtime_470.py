@@ -320,3 +320,18 @@ def test_pre_cursor_transient_must_expire_at_existing_10_minute_budget():
     assert not mod._bootstrap_transient_retryable(
         err, detached_at=BASE, observed_at=BASE - timedelta(seconds=1),
     )
+
+
+
+def test_worker_failure_classification_never_leaks_private_exception_detail():
+    assert mod._worker_block_code(
+        mod.R06FreshCutoverBlocked("R06_NEW_PUBLICATION_UNVERIFIED"),
+    ) == "R06_NEW_PUBLICATION_UNVERIFIED"
+    assert mod._worker_block_code(
+        ValueError("API_SECRET=DO_NOT_LOG"),
+    ) == "R06_UNCLASSIFIED_RUNTIME_EXCEPTION"
+    assert mod._worker_block_code(
+        mod.R06PublishedEntryBlocked(
+            "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT:private-name"
+        ),
+    ) == "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT"

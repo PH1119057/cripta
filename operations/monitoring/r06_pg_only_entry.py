@@ -56,6 +56,14 @@ class R06PublishedEntryBlocked(RuntimeError):
     """A no-order PG-only Entry consumer has no verified current contract."""
 
 
+def _worker_block_code(exc: BaseException) -> str:
+    """Return only an approved non-secret R06/P90 classification code."""
+    code = str(exc).split(":", 1)[0]
+    if re.fullmatch(r"(?:R06|P90)_[A-Z0-9_]{1,100}", code) is None:
+        return "R06_UNCLASSIFIED_RUNTIME_EXCEPTION"
+    return code
+
+
 def _bootstrap_transient_retryable(
     exc: BaseException, *, detached_at: datetime, observed_at: datetime,
 ) -> bool:
@@ -471,9 +479,7 @@ def run_pg_only(
         # This status is a service/runtime log sink, not a secret store.
         # Preserve only a fixed R06/P90 failure CODE, never raw provider,
         # database or signed account exception text.
-        code = str(exc).split(":", 1)[0]
-        if re.fullmatch(r"(?:R06|P90)_[A-Z0-9_]{1,100}", code) is None:
-            code = "R06_UNCLASSIFIED_RUNTIME_EXCEPTION"
+        code = _worker_block_code(exc)
         write_status(
             state="BLOCKED",epoch_id=None,active_bundles=(),symbols=FIVE,
             reason="R06_PG_ONLY_BLOCKED:"+type(exc).__name__+":"+code,
