@@ -15,10 +15,11 @@ from typing import Any
 
 from bybit_workbench.market_data.source_required_feed_manifest import RequiredPublicFeed
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS
 from operations.monitoring.r06_entry_publication_shadow_probe import EXISTING_P90_COLD_COUNTS
 from operations.monitoring.r06_fresh_entry_boundary import _require_no_exposure_or_requests
 
-APPROVED_BASELINE = "5f04e1653ecfc349c6389f6a0756bee4260fed45"
+APPROVED_BASELINE = "776cf2d9c92894a13249ced0b7b34983e1788f30"
 _SEMANTIC_PATHS = (
     "src/bybit_workbench/universal_entry",
     "src/bybit_workbench/domain",
@@ -109,17 +110,18 @@ def recovery_counts(
     rows = connection.execute(
         "SELECT bootstrap_source_at,causal_state FROM "
         "strategy_entry.p90_scoped_native_consumer_checkpoints "
-        "WHERE source_session_id=%s ORDER BY strategy_id", (session,),
+        "WHERE source_session_id=%s AND strategy_id=%s ORDER BY strategy_id",
+        (session, next(name for name, symbols in ALLOWED_SYMBOLS.items() if symbol in symbols)),
     ).fetchall()
     required = dict(counts)
     for bootstrap, state in rows:
         if not isinstance(state, dict) or not isinstance(state.get("by_symbol"), dict):
             raise R06ResumeBlocked("R06_RESUME_CAUSAL_STATE_INVALID")
         saved = state["by_symbol"].get(symbol)
-        if saved is None:
-            continue
         try:
-            at = datetime.fromisoformat(saved["geometry_at"])
+            # An audited bootstrap may have committed before the first batch.
+            # Its unread originals still need geometry at the bootstrap bar.
+            at = bootstrap if saved is None else datetime.fromisoformat(saved["geometry_at"])
         except (KeyError, TypeError, ValueError) as exc:
             raise R06ResumeBlocked("R06_RESUME_GEOMETRY_TIME_INVALID") from exc
         if at.utcoffset() != timedelta(0) or at > closed_at:
@@ -236,3 +238,41 @@ def bridge_checkpoint_release(
             )
             if changed.rowcount != 1:
                 raise R06ResumeBlocked("R06_RESUME_CURSOR_COMPARE_AND_SWAP_FAILED")
+
+
+def scope_waits_at_bootstrap(connection: Any, *, pin: Any, strategy: str,
+                             version: str, symbols: tuple[str, ...]) -> bool:
+    """A global bootstrap fence can precede the next trade of a quiet scope.
+
+    Never move the cursor or waive the dispatcher's ahead-of-publication guard.
+    Only an untouched, exactly attested global bootstrap fence may wait.
+    """
+    saved = connection.execute(
+        "SELECT frame_number,frame_index,bootstrap_publication_id,causal_state "
+        "FROM strategy_entry.p90_scoped_native_consumer_checkpoints "
+        "WHERE strategy_id=%s AND strategy_version=%s AND source_session_id=%s",
+        (strategy, version, pin.source_session_id),
+    ).fetchone()
+    if saved is None:
+        raise R06ResumeBlocked("R06_SCOPE_CHECKPOINT_MISSING")
+    frame, index, bootstrap_id, state = saved
+    cursor = (frame, index)
+    def maximum(watermarks: dict, scope: tuple[str, ...]) -> tuple[int, int]:
+        return max((watermarks[s]["frame_number"], watermarks[s]["frame_index"])
+                   for s in scope)
+    if cursor <= maximum(pin.native_watermarks, symbols):
+        return False
+    if state != {"version": 1, "by_symbol": {}}:
+        # A real accepted decision cursor ahead of publication still fails.
+        return False
+    bootstrap = connection.execute(
+        "SELECT source_session_id,producer_release_commit,native_watermarks "
+        "FROM analytics.market_publications WHERE publication_id=%s", (bootstrap_id,),
+    ).fetchone()
+    if (bootstrap is None or bootstrap[:2] != (pin.source_session_id,
+                                              pin.producer_release_commit)
+            or pin.publication_id < bootstrap_id
+            or cursor != maximum(bootstrap[2], tuple(bootstrap[2]))
+            or cursor > maximum(pin.native_watermarks, tuple(pin.native_watermarks))):
+        raise R06ResumeBlocked("R06_BOOTSTRAP_SCOPE_FENCE_UNVERIFIED")
+    return True

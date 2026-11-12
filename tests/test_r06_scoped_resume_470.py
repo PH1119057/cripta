@@ -107,6 +107,7 @@ def test_quiet_scope_waits_without_advancing_or_blocking_another(monkeypatch, st
     monkeypatch.setattr(worker, "read_scoped_native_source", source)
     monkeypatch.setattr(worker, "_require_no_exposure_or_requests", lambda _db: None)
     monkeypatch.setattr(worker, "_observe_one", observe)
+    monkeypatch.setattr(resume, "scope_waits_at_bootstrap", lambda *_a, **_kw: False)
     _, blocked = worker._process_publication(
         Transaction(), pin=object(), history={}, bundles=bundles,
         engines={MAIN_ID: None, SUB_ID: None}, commits=frozenset(), loaded="d"*40,
@@ -150,3 +151,42 @@ def test_semantic_bridge_refuses_unapproved_release_or_changed_engine(monkeypatc
                         (b"a"*40 if resume.APPROVED_BASELINE in argv[-1] else b"b"*40))
     with pytest.raises(resume.R06ResumeBlocked, match="SEMANTICS_CHANGED"):
         resume.verify_semantic_compatibility(Path("."), resume.APPROVED_BASELINE, "b"*40)
+
+
+@pytest.mark.parametrize('defect', [None, 'cursor', 'epoch', 'producer', 'older_pub', 'nonempty'])
+def test_quiet_bootstrap_wait_requires_exact_untouched_original_fence(defect):
+    watermarks = {'LTCUSDT': {'frame_number': 98, 'frame_index': 0},
+                  'APTUSDT': {'frame_number': 100, 'frame_index': 2}}
+    saved = [100, 2, 10, {'version': 1, 'by_symbol': {}}]
+    original = ['session', 'producer', watermarks]
+    pin = SimpleNamespace(source_session_id='session', producer_release_commit='producer',
+                          publication_id=20, native_watermarks=watermarks)
+    if defect == 'cursor':
+        saved[0] = 101
+    elif defect == 'epoch':
+        original[0] = 'other'
+    elif defect == 'producer':
+        original[1] = 'other'
+    elif defect == 'older_pub':
+        pin.publication_id = 9
+    elif defect == 'nonempty':
+        saved[3]['by_symbol']['LTCUSDT'] = {'previous_price': '1'}
+    class Reader:
+        def execute(self, sql, params):
+            assert sql.startswith('SELECT')
+            row = tuple(original if 'FROM analytics.market_publications' in sql else saved)
+            return SimpleNamespace(fetchone=lambda: row)
+    kwargs = dict(pin=pin, strategy=MAIN_ID, version='v3', symbols=('LTCUSDT',))
+    if defect in ('cursor', 'epoch', 'producer', 'older_pub'):
+        with pytest.raises(resume.R06ResumeBlocked, match='FENCE_UNVERIFIED'):
+            resume.scope_waits_at_bootstrap(Reader(), **kwargs)
+    else:
+        assert resume.scope_waits_at_bootstrap(Reader(), **kwargs) is (defect is None)
+
+
+def test_empty_committed_bootstrap_recovers_original_seed_before_first_batch():
+    db = StateReader({"version": 1, "by_symbol": {}})
+    assert resume.recovery_counts(
+        db, session="s", symbol="LTCUSDT", closed_at=NOW,
+        counts={"5": 2600, "15": 1000},
+    ) == {"5": 2609, "15": 1003}
