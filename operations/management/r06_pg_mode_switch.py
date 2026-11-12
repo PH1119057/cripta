@@ -441,6 +441,35 @@ def _verified_rolled_back_history(
     ]
 
 
+def _pg_only_worker_block_reason() -> str:
+    """Expose one safe no-order R06 failure code before legacy auto-recovery.
+
+    The old Observer restarts and overwrites its shared status.json. Recording
+    only a sanitized pre-rollback code in the protected unit failure lets the
+    operator repair the EXACT failed stage without journal privileges or a
+    generic root command. Never output signed account/DB/Exchange payloads.
+    """
+    try:
+        raw = json.loads(
+            Path("/var/lib/cripta/universal_entry_observer/status.json")
+            .read_text(encoding="utf-8")
+        )
+        if not isinstance(raw, dict) or raw.get("state") != "BLOCKED":
+            return "R06_WORKER_FAILURE_NOT_ATTESTED"
+        reason = str(raw.get("reason", ""))
+        match = re.fullmatch(
+            r"R06_PG_ONLY_BLOCKED:[A-Za-z][A-Za-z0-9_]{0,70}:"
+            r"((?:R06|P90)_[A-Z0-9_]{1,100})",
+            reason,
+        )
+        return (
+            match.group(1) if match is not None
+            else "R06_WORKER_FAILURE_NOT_ATTESTED"
+        )
+    except (OSError, ValueError, TypeError):
+        return "R06_WORKER_FAILURE_NOT_ATTESTED"
+
+
 def _cutover() -> None:
     sha = _verify_release()
     previous = _load_marker()
@@ -476,7 +505,10 @@ def _cutover() -> None:
         deadline = time.monotonic() + TIMEOUT
         while time.monotonic() < deadline:
             if not _is_active(OBSERVER) or _pid(OBSERVER) in (0, initial):
-                raise R06ModeSwitchBlocked("R06_NEW_PG_ENTRY_UNIT_FAILED_OR_NOT_NEW")
+                raise R06ModeSwitchBlocked(
+                    "R06_NEW_PG_ENTRY_UNIT_FAILED_OR_NOT_NEW:"
+                    + _pg_only_worker_block_reason()
+                )
             if not _is_active(EXIT) or not _is_active(SOURCE):
                 raise R06ModeSwitchBlocked("R06_SHARED_EXIT_OR_MARKET_SOURCE_LOST")
             try:
