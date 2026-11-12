@@ -507,3 +507,99 @@ def test_read_only_probe_journal_errors_redact_provider_details(monkeypatch):
     monkeypatch.setattr(probe.sys, "argv", ["prog", "before"])
     assert probe.main() == 2
 
+
+
+
+def test_exact_prior_rollback_can_rearm_same_mode_without_losing_audit(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+
+    original = b"X=Y\n"
+    class SafeBackup:
+        def exists(self):
+            return True
+        def is_symlink(self):
+            return False
+        def stat(self, **_kwargs):
+            return SimpleNamespace(st_uid=0, st_mode=0o100600)
+        def read_bytes(self):
+            return original
+    monkeypatch.setattr(switch, "BACKUP", SafeBackup())
+    old = {
+        "state": "ROLLED_BACK",
+        "release": "a" * 40,
+        "original_sha": switch._sha(original),
+        "edited_sha": switch._sha(switch._new_config(original)),
+        "old_pid": 4110,
+        "ended_at": "2026-11-12T02:30:04+00:00",
+    }
+    history = switch._verified_rolled_back_history(old, original)
+    assert len(history) == 1
+    assert history[0]["state"] == "ROLLED_BACK"
+    assert history[0]["original_sha"] == switch._sha(original)
+    assert old["state"] == "ROLLED_BACK"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("state", "ACTIVE"),
+    ("old_pid", 0),
+    ("original_sha", "a"*64),
+    ("edited_sha", "a"*64),
+    ("ended_at", None),
+])
+def test_rollback_rearm_rejects_state_or_original_provenance_drift(
+    monkeypatch, field, value,
+):
+    from types import SimpleNamespace
+
+    original = b"X=Y\n"
+    class SafeBackup:
+        def exists(self):
+            return True
+        def is_symlink(self):
+            return False
+        def stat(self, **_kwargs):
+            return SimpleNamespace(st_uid=0, st_mode=0o100600)
+        def read_bytes(self):
+            return original
+    monkeypatch.setattr(switch, "BACKUP", SafeBackup())
+    previous = {
+        "state": "ROLLED_BACK", "release": "a"*40,
+        "original_sha": switch._sha(original),
+        "edited_sha": switch._sha(switch._new_config(original)),
+        "old_pid": 4110,
+        "ended_at": "2026-11-12T02:30:04+00:00",
+    }
+    previous[field] = value
+    with pytest.raises(switch.R06ModeSwitchBlocked):
+        switch._verified_rolled_back_history(previous, original)
+
+
+def test_rollback_rearm_refuses_wrong_private_backup_actor_mode_or_bytes(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+
+    original = b"X=Y\n"
+    class DriftedBackup:
+        def exists(self):
+            return True
+        def is_symlink(self):
+            return False
+        def stat(self, **_kwargs):
+            return SimpleNamespace(st_uid=999, st_mode=0o100644)
+        def read_bytes(self):
+            return original
+    monkeypatch.setattr(switch, "BACKUP", DriftedBackup())
+    previous = {
+        "state": "ROLLED_BACK", "release": "a"*40,
+        "original_sha": switch._sha(original),
+        "edited_sha": switch._sha(switch._new_config(original)),
+        "old_pid": 4110,
+        "ended_at": "2026-11-12T02:30:04+00:00",
+    }
+    with pytest.raises(
+        switch.R06ModeSwitchBlocked, match="RETRY_ORIGINAL_BACKUP_DRIFT",
+    ):
+        switch._verified_rolled_back_history(previous, original)

@@ -288,3 +288,35 @@ def test_any_financial_effect_blocks_before_no_order_state_commit(
             loaded="d"*40,at=BOUNDARY+timedelta(seconds=3),
         )
     assert not any("UPDATE strategy_entry" in sql for sql,_ in writer.queries)
+
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (mod.EntryPublicationUnavailable("PUBLICATION_STALE"), True),
+        (mod.R06FreshCutoverBlocked("R06_NEW_PUBLICATION_UNVERIFIED"), True),
+        (mod.R06FreshCutoverBlocked("R06_START_PUBLICATION_STALE_OR_CHANGED"), True),
+        (mod.R06FreshCutoverBlocked("R06_FUTURE_CLOSED_BOUNDARY_NOT_REACHED"), True),
+        (mod.R06FreshCutoverBlocked("R06_BOOTSTRAP_CONTRACT_INVALID"), False),
+        (ValueError("program defect"), False),
+    ],
+)
+def test_pre_cursor_transient_retries_only_preapproved_source_wait(error, expected):
+    assert mod._bootstrap_transient_retryable(
+        error, detached_at=BASE, observed_at=BASE + timedelta(minutes=2),
+    ) is expected
+
+
+def test_pre_cursor_transient_must_expire_at_existing_10_minute_budget():
+    err = mod.EntryPublicationUnavailable("PUBLICATION_STALE")
+    assert mod._bootstrap_transient_retryable(
+        err, detached_at=BASE, observed_at=BASE + timedelta(minutes=10),
+    )
+    assert not mod._bootstrap_transient_retryable(
+        err, detached_at=BASE,
+        observed_at=BASE + timedelta(minutes=10, microseconds=1),
+    )
+    assert not mod._bootstrap_transient_retryable(
+        err, detached_at=BASE, observed_at=BASE - timedelta(seconds=1),
+    )

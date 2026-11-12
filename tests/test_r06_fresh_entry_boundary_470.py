@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -182,6 +183,8 @@ class WriterDB:
         )
         self.inserted: list[str] = []
         self.fail_second = False
+        self.expected_pub = 15200
+        self.expected_cursor = (104, 1)
 
     @contextmanager
     def transaction(self):
@@ -198,6 +201,8 @@ class WriterDB:
     def execute(self, sql: str, params: object = ()) -> One:
         clean = sql.lstrip()
         self.calls.append(clean.split()[0].upper())
+        if clean.startswith("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"):
+            return One(None)
         if "FROM analytics.native_public_trade_source_sessions" in sql:
             return One(self.source)
         if "FROM analytics.market_publications" in sql:
@@ -219,17 +224,32 @@ class WriterDB:
             if self.fail_second and len(self.inserted) == 1:
                 return One(None)
             self.inserted.append(name)
-            assert params[-3:] == (15200, 15200, BOUNDARY)
+            assert params[-3:] == (
+                self.expected_pub, self.expected_pub, BOUNDARY,
+            )
+            assert params[7:9] == self.expected_cursor
             return One((name,))
         pytest.fail("unexpected SQL")
 
 
-def _bootstrap(db: WriterDB) -> tuple[str, ...]:
-    return mod.bootstrap_future_entry_checkpoints(
-        db, proof=_proof(), strategies=PLANS,
-        consumer_release_commit=CONSUMER_SHA,
-        active_p90_bundles=_bundles(),
-    )
+def _bootstrap(
+    db: WriterDB, *,
+    refreshed: mod.R06FreshEntryProof | None = None,
+    on_refresh: object = None,
+) -> tuple[str, ...]:
+    # The production implementation ALWAYS rechecks the pinned source AFTER
+    # credential-local signing. Test snapshots must pin the same provenance.
+    with pytest.MonkeyPatch.context() as patch:
+        def read_fresh(_db: object, **_kw: object) -> mod.R06FreshEntryProof:
+            if callable(on_refresh):
+                on_refresh()
+            return refreshed if refreshed is not None else _proof()
+        patch.setattr(mod, "verify_r06_fresh_publication", read_fresh)
+        return mod.bootstrap_future_entry_checkpoints(
+            db, proof=_proof(), strategies=PLANS,
+            consumer_release_commit=CONSUMER_SHA,
+            active_p90_bundles=_bundles(),
+        )
 
 
 def test_one_signed_preflight_then_one_atomic_dual_strategy_bootstrap(
@@ -243,9 +263,9 @@ def test_one_signed_preflight_then_one_atomic_dual_strategy_bootstrap(
         private, "preflight_p90_real_private_flat_source",
         lambda *_a, **_k: auth.append("SIGNED_MAIN_SUB"),
     )
-    result = _bootstrap(db)
+    result = _bootstrap(db, on_refresh=lambda: auth.append("FRESH_PIN"))
     assert result == (mod.MAIN_ID, mod.SUB_ID)
-    assert auth == ["SIGNED_MAIN_SUB"]
+    assert auth == ["SIGNED_MAIN_SUB", "FRESH_PIN"]
     assert db.inserted == [mod.MAIN_ID, mod.SUB_ID]
     assert db.calls[0] == "BEGIN"
     assert db.calls[-1] == "COMMIT"
@@ -314,3 +334,58 @@ def test_legacy_technical_ack_not_used_as_start_cursor() -> None:
     assert "ON CONFLICT DO NOTHING" in Path(mod.__file__).read_text(
         encoding="utf-8"
     )
+
+
+
+def test_signed_slow_then_new_publication_fresh_snapshot_commits_atomically():
+    db = WriterDB()
+    # Original proof is stale AFTER a >5s signed MAIN/SUB call.
+    db.now = AT + timedelta(seconds=12)
+    latest = _pin()
+    latest.publication_id = 15201
+    latest.as_of_second = AT + timedelta(seconds=11)
+    db.expected_pub = 15201
+    db.expected_cursor = (222, 3)
+    db.pub = (
+        EPOCH, SOURCE_SHA, latest.as_of_second, latest.native_watermarks,
+        {s: dict(latest.closed_refs[s]) for s in SYMBOLS},
+    )
+    refreshed = replace(
+        _proof(), pin=latest, first_cursor=(222, 3),
+    )
+    result = _bootstrap(db, refreshed=refreshed)
+    assert result == (mod.MAIN_ID, mod.SUB_ID)
+    assert db.inserted == [mod.MAIN_ID, mod.SUB_ID]
+    assert db.calls[0] == "BEGIN"
+    assert db.calls[-1] == "COMMIT"
+
+
+def test_signed_refresh_cannot_cross_source_epoch_or_rewind_closed_boundary():
+    db = WriterDB()
+    foreign = _pin()
+    foreign.source_session_id = "f" * 32
+    with pytest.raises(
+        mod.R06FreshCutoverBlocked, match="SIGNED_REFRESH_EPOCH",
+    ):
+        _bootstrap(db, refreshed=replace(_proof(), pin=foreign))
+    assert "INSERT" not in db.calls
+
+    db = WriterDB()
+    older = replace(
+        _proof(), closed_5m_at=DETACHED,
+    )
+    with pytest.raises(
+        mod.R06FreshCutoverBlocked, match="SIGNED_REFRESH_EPOCH",
+    ):
+        _bootstrap(db, refreshed=older)
+    assert "INSERT" not in db.calls
+
+
+def test_refresh_still_requires_five_second_freshness_without_exception():
+    db = WriterDB()
+    db.now = AT + timedelta(seconds=8)
+    with pytest.raises(
+        mod.R06FreshCutoverBlocked, match="START_PUBLICATION_STALE_OR_CHANGED",
+    ):
+        _bootstrap(db)
+    assert "INSERT" not in db.calls
