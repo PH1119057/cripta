@@ -66,6 +66,7 @@ RESERVE = 5 * 2**30
 SELF_REL = "scripts/research/p90l90_depthzero_prev7d_width_confirm_v1.py"
 PINNED = (
     SELF_REL,
+    "scripts/research/p90l90_depthzero_prev7d_width_confirm_qc_v1.py",
     "scripts/research/p90l90_entry_only_hardstop_embargo_v1.py",
     "scripts/research/p90l90_portfolio_pause_v1.py",
     "scripts/research/p90l90_29d_exit_replay_v1.py",
@@ -670,6 +671,12 @@ def main() -> None:
     for period in periods:
         print(json.dumps(run_period(period, a.source_head, a.mode,
                                     a.smoke_hours), sort_keys=True), flush=True)
+        if a.mode == "run":
+            verifier = importlib.import_module(
+                "scripts.research.p90l90_depthzero_prev7d_width_confirm_qc_v1"
+            )
+            print(json.dumps(verifier.audit(period, a.source_head),
+                             sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":
