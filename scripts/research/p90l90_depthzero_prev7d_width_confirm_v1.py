@@ -208,6 +208,16 @@ def preflight(period: str, expected_head: str) -> tuple[dict, dict, dict, dict, 
     pins = source_identity(expected_head)
     data, references = load_original(period)
     filters, counts = validate_and_filter(data, period)
+    # Full input-day list was authenticated by the prior frozen Entry manifests;
+    # also verify the 10 warmup daily archives in this execution context.
+    for symbol in SYMBOLS:
+        manifest = data[symbol]["manifest"]
+        raw_root = (data[symbol]["raw_root"] if period == "90d"
+                    else PERIODS[period]["root"] / "inputs")
+        for item in manifest["inputs"][:10]:
+            f = raw_root / symbol / "public_trades" / item["file"]
+            if sha(f) != item["sha256"]:
+                raise ValueError("source warmup immutable SHA drift " + symbol)
     return pins, data, references, filters, counts
 
 
@@ -448,9 +458,7 @@ def report_and_qc(period: str, root: Path, books: dict, data: dict,
     for name, book in books.items():
         details = book.finish()
         if name != "REFERENCE":
-            _, band, side, mode = name.split("_", 3)
-            # side is either LONG_ONLY / SHORT_ONLY, cannot naively split on "_".
-            # Parse fixed names instead below.
+            # Side contains an underscore; use the frozen scenario naming contract.
             band = name[1:4]
             side = "LONG_ONLY" if "_LONG_ONLY_" in name else "SHORT_ONLY"
             if details["counts"].get("qualified_candidate", 0) != counts[band][side]:
