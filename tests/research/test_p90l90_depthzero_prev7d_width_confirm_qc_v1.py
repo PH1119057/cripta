@@ -49,9 +49,9 @@ def test_side_and_price_fail_closed():
 
 def test_exact_frozen_names_periods_and_full_audit_contract():
     assert len(qc.EXPECT) == 37
-    assert "REFERENCE" in qc.EXPECT
-    assert "w080_SHORT_ONLY_SECOND48" in qc.EXPECT
-    assert "w090_SHORT_ONLY_SECOND48" in qc.EXPECT
+    assert qc.EXPECT.issuperset({
+        "REFERENCE", "w080_SHORT_ONLY_SECOND48", "w090_SHORT_ONLY_SECOND48"
+    })
     assert qc.TOTAL_DAYS == {"90d": 90, "29d": 29}
     assert qc.LEAF == "p90l90_depthzero_prev7d_width_confirm_20261112_v1"
     assert qc.Q == D("0.000000000001")
@@ -63,8 +63,8 @@ def test_qc_never_claims_real_fills():
     import inspect
 
     src = inspect.getsource(qc.audit)
-    assert "source_cohorts(period, report)" in src
-    assert "net_components(row)" in src
-    assert "expected_reference(period)" in src
-    assert "COMPLETED_INDEPENDENT_QC_PASS" in src
-    assert "status.json.tmp" in src
+    assert src.find("source_cohorts(period, report)") >= 0
+    assert src.find("net_components(row)") >= 0
+    assert src.find("expected_reference(period)") >= 0
+    assert src.find("COMPLETED_INDEPENDENT_QC_PASS") >= 0
+    assert src.find("status.json.tmp") >= 0
