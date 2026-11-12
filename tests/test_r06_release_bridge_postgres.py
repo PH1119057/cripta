@@ -296,3 +296,52 @@ def test_empty_bootstrap_backlog_history_is_scoped_and_preserved(db):
         counts={'5': 2600, '15': 1000},
     ) == {'5': 2603, '15': 1001}
     assert snapshot(runtime) == before
+
+
+def test_real_pg_confirmed_seed_first_second_and_future_rows(db):
+    from bybit_workbench.market_data.candle_warmup import load_verified_r03_native_closed_seed
+    from bybit_workbench.market_data.entry_publication_reader import EntryPublicationPin
+    from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID, bybit_instrument_id
+    from operations.monitoring.r06_pinned_seed import read_pinned_closed_seed
+
+    admin, runtime, _ = db
+    admin.execute('DROP SCHEMA IF EXISTS identity CASCADE')
+    admin.execute('CREATE SCHEMA identity')
+    admin.execute('CREATE TABLE identity.market_sources '
+                  '(market_source_id text,venue_id text,source_kind text,status text)')
+    admin.execute('CREATE TABLE identity.instruments '
+                  '(venue_id text,instrument_id text,external_symbol text,product_category text)')
+    source = BYBIT_PUBLIC_MARKET_SOURCE_ID
+    instrument = bybit_instrument_id('linear', 'LTCUSDT')
+    admin.execute('INSERT INTO identity.market_sources VALUES (%s,%s,%s,%s)',
+                  (source, 'venue-bybit', 'DIRECT_PUBLIC_COMPOSITE', 'ACTIVE'))
+    admin.execute('INSERT INTO identity.instruments VALUES (%s,%s,%s,%s)',
+                  ('venue-bybit', instrument, 'LTCUSDT', 'LINEAR'))
+    admin.execute('CREATE TABLE analytics.closed_candles_effective '
+                  '(market_source_id text,instrument_id text,timeframe text,opened_at timestamptz,'
+                  'closed_at timestamptz,open numeric,high numeric,low numeric,close numeric,'
+                  'volume numeric)')
+    admin.execute('GRANT USAGE ON SCHEMA identity TO cripta')
+    admin.execute('GRANT SELECT ON ALL TABLES IN SCHEMA identity TO cripta')
+    admin.execute('GRANT SELECT ON analytics.closed_candles_effective TO cripta')
+    from datetime import timedelta
+    at = datetime(2026, 11, 12, 16, tzinfo=UTC)
+    for tf in ('5', '15'):
+        for k in (-2, -1, 0, 1):
+            close = at+timedelta(minutes=int(tf)*k)
+            admin.execute('INSERT INTO analytics.closed_candles_effective '
+                          'VALUES (%s,%s,%s,%s,%s,100,101,99,100,1)',
+                          (source, instrument, tf, close-timedelta(minutes=int(tf)), close))
+    pin = EntryPublicationPin(30, SESSION, PRODUCER, at+timedelta(seconds=1), {},
+                               {'LTCUSDT': {tf: at.isoformat() for tf in ('5', '15')}})
+    for counts in ({'5': 2}, {'15': 2}, {'5': 2, '15': 2}):
+        old = load_verified_r03_native_closed_seed(
+            runtime, symbol='LTCUSDT', required_counts=counts, observed_at=pin.as_of_second)
+        assert all(bars[-1].closed_at < at for bars in old.values())
+        actual = read_pinned_closed_seed(runtime, pin=pin, symbol='LTCUSDT',
+                                         required_counts=counts)
+        assert all(len(bars) == 2 and bars[-1].closed_at == at for bars in actual.values())
+    admin.execute('DELETE FROM analytics.closed_candles_effective '
+                  'WHERE timeframe=%s AND closed_at=%s', ('5', at-timedelta(minutes=5)))
+    with pytest.raises(RuntimeError, match='GAP'):
+        read_pinned_closed_seed(runtime, pin=pin, symbol='LTCUSDT', required_counts={'5': 2})

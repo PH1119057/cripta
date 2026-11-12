@@ -23,7 +23,6 @@ from bybit_workbench.market_data.entry_publication_reader import (
     EntryPublicationPin,
     EntryPublicationUnavailable,
     read_entry_publication_pin,
-    read_entry_publication_seed,
 )
 from bybit_workbench.universal_entry.engine import UniversalEntryEngine
 from bybit_workbench.universal_entry.p90_r06_no_order_state import (
@@ -62,6 +61,7 @@ from operations.monitoring.r06_fresh_entry_boundary import (
     bootstrap_future_entry_checkpoints,
     verify_r06_fresh_publication,
 )
+from operations.monitoring.r06_pinned_seed import read_pinned_closed_seed, scope_geometry_ready
 
 _SOURCE_CHECKOUT = Path("/srv/cripta/source_checkout")
 _STRATEGIES = (MAIN_ID, SUB_ID)
@@ -175,7 +175,7 @@ def _one_pin(readonly: Any, *, at: datetime, loaded: str) -> tuple[
         if pin.source_session_id != sessions[0][0]:
             raise R06PublishedEntryBlocked("R06_MIXED_SOURCE_EPOCH")
         history = {
-            sym: read_entry_publication_seed(
+            sym: read_pinned_closed_seed(
                 readonly, pin=pin, symbol=sym,
                 required_counts=recovery_counts(
                     readonly, session=pin.source_session_id, symbol=sym,
@@ -381,6 +381,9 @@ def _process_publication(
                 writer, pin=pin, strategy=name, version=VERSION, symbols=symbols,
             ):
                 blocked[name] = "R06_SCOPE_AWAITING_POST_BOOTSTRAP_NATIVE_EVENT"
+                continue
+            if not scope_geometry_ready(pin, symbols):
+                blocked[name] = "R06_SCOPE_AWAITING_CONFIRMED_CANDLE"
                 continue
             signals += _observe_one(
                 writer, pin=pin, history=history, source=source, bundle=bundle,

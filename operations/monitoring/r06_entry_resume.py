@@ -19,7 +19,7 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMB
 from operations.monitoring.r06_entry_publication_shadow_probe import EXISTING_P90_COLD_COUNTS
 from operations.monitoring.r06_fresh_entry_boundary import _require_no_exposure_or_requests
 
-APPROVED_BASELINE = "776cf2d9c92894a13249ced0b7b34983e1788f30"
+APPROVED_BASELINE = "b47aa43d9333083fb83bb16f191e16e1ff97bd33"
 _SEMANTIC_PATHS = (
     "src/bybit_workbench/universal_entry",
     "src/bybit_workbench/domain",
