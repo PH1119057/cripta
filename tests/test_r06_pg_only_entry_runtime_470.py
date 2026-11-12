@@ -345,16 +345,128 @@ def test_worker_failure_classification_never_leaks_private_exception_detail():
 
 
 
-def test_serialization_retry_only_before_dual_cursor_commit():
-    from pathlib import Path
+@pytest.mark.parametrize("phase", ["pin", "proof", "bootstrap", "after_commit", "expired"])
+def test_worker_retries_conflict_with_fresh_proof_only_before_commit(monkeypatch, phase):
+    """Drive the real worker loop; never depend on its source text."""
+    from contextlib import contextmanager
 
-    source = Path(mod.__file__).read_text(encoding="utf-8")
-    # All 3 pre-bootstrap transaction phases are guarded with rollback and a
-    # bounded retry, never a write/replay or false checkpoint claim.
-    assert source.count(
-        "psycopg.errors.SerializationFailure,\n"
-    ) >= 3
-    assert "first_cursor_accepted = True\n                    prior_pub=0" in source
-    assert "if (\n                        first_cursor_accepted" in source
-    assert "R06_PG_SERIALIZATION_CONFLICT" in source
-    assert "R06_NEW_5M_BOOTSTRAP_TIMEOUT" in source
+    class Finished(BaseException):
+        pass
+
+    calls = []
+    committed = []
+    conflicted = False
+    loaded = "d" * 40
+
+    class Clock:
+        @classmethod
+        def now(cls, _zone):
+            if calls and phase == "expired":
+                return BASE + timedelta(minutes=11)
+            return BASE
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql, _params=()):
+            assert "pg_try_advisory_lock" in sql
+            return Row((True,))
+
+        @contextmanager
+        def transaction(self):
+            calls.append("begin")
+            try:
+                yield self
+            except BaseException:
+                calls.append("rollback")
+                raise
+            else:
+                calls.append("commit")
+
+    writer, reader = Connection(), Connection()
+    connections = iter((writer, reader))
+    pin = SimpleNamespace(
+        publication_id=45, source_session_id="a" * 32,
+        closed_refs={symbol: {"5": (BASE + timedelta(minutes=5)).isoformat()}
+                     for symbol in mod.FIVE},
+    )
+
+    def conflict_once(where):
+        nonlocal conflicted
+        calls.append(where)
+        if not conflicted and (
+            phase == where or phase == "expired" and where == "bootstrap"
+        ):
+            conflicted = True
+            raise mod.psycopg.errors.SerializationFailure("private DB detail")
+
+    def one_pin(*_args, **_kwargs):
+        conflict_once("pin")
+        if phase == "after_commit" and committed:
+            raise mod.psycopg.errors.SerializationFailure("private DB detail")
+        return pin, {}, frozenset()
+
+    def proof(*_args, **_kwargs):
+        conflict_once("proof")
+        return object()
+
+    def bootstrap(db, **kwargs):
+        assert db is writer and kwargs["readonly_connection"] is reader
+        with db.transaction():
+            conflict_once("bootstrap")
+            committed.extend((MAIN_ID, "sub"))
+        return tuple(committed)
+
+    def checkpoints(*_args, **_kwargs):
+        if committed:
+            raise Finished()
+        return ()
+
+    def sleep(delay):
+        assert delay == 1.0
+        calls.append("retry")
+
+    def safety(*_args):
+        calls.append("safety")
+
+    monkeypatch.setenv("CRIPTA_R06_PG_ONLY", "ENABLED")
+    monkeypatch.setattr(mod, "_require_exclusive_systemd_owner", lambda: None)
+    monkeypatch.setattr(mod.signal, "signal", lambda *_args: None)
+    monkeypatch.setattr(mod, "datetime", Clock)
+    monkeypatch.setattr(mod.psycopg, "connect", lambda *_args, **_kw: next(connections))
+    monkeypatch.setattr(mod, "_bundles", lambda *_args: ())
+    monkeypatch.setattr(mod, "_engines", lambda *_args: {})
+    monkeypatch.setattr(mod, "_require_no_exposure_or_requests", safety)
+    monkeypatch.setattr(mod, "_one_pin", one_pin)
+    monkeypatch.setattr(mod, "_checkpoints", checkpoints)
+    monkeypatch.setattr(mod, "verify_r06_fresh_publication", proof)
+    monkeypatch.setattr(mod, "bootstrap_future_entry_checkpoints", bootstrap)
+    monkeypatch.setattr(mod.time, "sleep", sleep)
+    # Reader's SET TRANSACTION is the only statement inside its proof.
+    reader.execute = lambda sql, _params=(): Row()
+    statuses = []
+    terminal = SystemExit if phase in ("after_commit", "expired") else Finished
+    with pytest.raises(terminal) as result:
+        mod.run_pg_only(
+            loaded_commit=loaded, dsn="fake",
+            write_status=lambda **state: statuses.append(state),
+        )
+    if phase in ("after_commit", "expired"):
+        assert result.value.code == 42
+        assert calls.count("retry") == 0
+        assert statuses[-1]["reason"].endswith("R06_PG_SERIALIZATION_CONFLICT")
+        assert "private DB detail" not in statuses[-1]["reason"]
+        assert len(committed) == (2 if phase == "after_commit" else 0)
+    else:
+        assert calls.count("retry") == 1
+        retry = calls.index("retry")
+        # Every retry must revisit safety and select a new immutable pin.
+        assert calls[retry + 1:retry + 3] == ["safety", "pin"]
+        assert len(committed) == 2
+        if phase in ("proof", "bootstrap"):
+            assert "rollback" in calls[:retry]
+        assert not any(state["state"] == "BLOCKED" for state in statuses)
