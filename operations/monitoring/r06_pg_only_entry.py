@@ -58,6 +58,8 @@ class R06PublishedEntryBlocked(RuntimeError):
 
 def _worker_block_code(exc: BaseException) -> str:
     """Return only an approved non-secret R06/P90 classification code."""
+    if isinstance(exc, psycopg.errors.SerializationFailure):
+        return "R06_PG_SERIALIZATION_CONFLICT"
     code = str(exc).split(":", 1)[0]
     if re.fullmatch(r"(?:R06|P90)_[A-Z0-9_]{1,100}", code) is None:
         return "R06_UNCLASSIFIED_RUNTIME_EXCEPTION"
@@ -75,7 +77,7 @@ def _bootstrap_transient_retryable(
     """
     if not timedelta(0) <= observed_at-detached_at <= timedelta(minutes=10):
         return False
-    if isinstance(exc, EntryPublicationUnavailable):
+    if isinstance(exc, (EntryPublicationUnavailable, psycopg.errors.SerializationFailure)):
         return True
     return (
         isinstance(exc, R06FreshCutoverBlocked)
@@ -369,7 +371,9 @@ def run_pg_only(
                     raise R06PublishedEntryBlocked("R06_ACTIVATION_OR_PLAN_IDENTITY_DRIFT")
                 try:
                     pin, history, commits = _one_pin(reader,at=at,loaded=loaded_commit)
-                except EntryPublicationUnavailable as exc:
+                except (
+                    EntryPublicationUnavailable, psycopg.errors.SerializationFailure,
+                ) as exc:
                     if (
                         first_cursor_accepted
                         or not _bootstrap_transient_retryable(
@@ -402,7 +406,9 @@ def run_pg_only(
                                 observed_at=at,source_checkout=_SOURCE_CHECKOUT,
                                 installed_consumer_commit=loaded_commit,
                             )
-                    except R06FreshCutoverBlocked as exc:
+                    except (
+                        R06FreshCutoverBlocked, psycopg.errors.SerializationFailure,
+                    ) as exc:
                         if not _bootstrap_transient_retryable(
                             exc,detached_at=detached_at,observed_at=at,
                         ):
@@ -422,15 +428,22 @@ def run_pg_only(
                             consumer_release_commit=loaded_commit,
                             active_p90_bundles=bundles,
                         )
-                    except R06FreshCutoverBlocked as exc:
+                    except (
+                        R06FreshCutoverBlocked, psycopg.errors.SerializationFailure,
+                    ) as exc:
                         if not _bootstrap_transient_retryable(
                             exc,detached_at=detached_at,observed_at=at,
                         ):
                             raise
                         time.sleep(1.0)
                         continue
+                    # The two new decision checkpoints were committed
+                    # together. From here on ANY serialization/source fault
+                    # fails closed; the pre-cursor retry budget is unavailable.
+                    first_cursor_accepted = True
                     prior_pub=0
                     continue
+                first_cursor_accepted = True
                 if any(r[3] != loaded_commit for r in checkpoints):
                     raise R06PublishedEntryBlocked(
                         "R06_CURRENT_RELEASE_DIFFERS_FROM_DECISION_CURSOR"
