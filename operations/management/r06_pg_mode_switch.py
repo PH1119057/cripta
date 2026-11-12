@@ -402,6 +402,7 @@ def _verified_rolled_back_history(
         or re.fullmatch(r"[0-9a-f]{64}", edited_hash) is None
         or original_hash == edited_hash
         or _sha(original) != original_hash
+        or edited_hash != _sha(_new_config(original))
         or not isinstance(previous.get("ended_at"), str)
         or type(previous.get("old_pid")) is not int
         or previous["old_pid"] <= 1
