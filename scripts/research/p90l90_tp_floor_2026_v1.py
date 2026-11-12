@@ -27,7 +27,19 @@ from scripts.research import p90l90_portfolio_pause_v1 as ninety
 from scripts.research import p90l90_entry_only_hardstop_embargo_v1 as embargo
 from scripts.research import p90l90_29d_exit_replay_v1 as sep
 
-ROOT = pathlib.Path("/data/cripta/research/runs/p90l90_dynamic_tp_floor_sweep_20261112_v1")
+# The installed systemd research job runner owns a sandboxed data-disk job spool.
+# In that mode the worker writes only to its own bundled job directory;
+# the independent runner moves the whole bundle to completed/failed on exit.
+JOB_ID = os.environ.get("CRIPTA_JOB_ID", "")
+if JOB_ID:
+    if not (JOB_ID.startswith("C2-R635-TP29-") or JOB_ID.startswith("C2-R635-TP90-")):
+        raise ValueError("unexpected research job identity")
+    ROOT = pathlib.Path.cwd().resolve()
+    expected = pathlib.Path("/data/cripta/jobs/running") / JOB_ID / "bundle"
+    if ROOT != expected.resolve() or ROOT.is_symlink():
+        raise PermissionError("job output must be its approved writable data-disk spool")
+else:
+    ROOT = pathlib.Path("/data/cripta/research/runs/p90l90_dynamic_tp_floor_sweep_20261112_v1")
 FLOORS = tuple(D(x) for x in ("0.50","0.60","0.70","0.80","0.90","1.00","1.10"))
 SIDES = ("LONG_ONLY", "SHORT_ONLY")
 COINS = ("LTCUSDT","DOTUSDT","ARBUSDT","APTUSDT","INJUSDT")
