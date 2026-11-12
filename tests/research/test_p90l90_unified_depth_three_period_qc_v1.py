@@ -1,4 +1,9 @@
-"""Independent financial unit audit for unified portfolio H9 depth research #638."""
+"""Isolated research unit suite; the repo-wide test collector stubs scripts.research."""
+import subprocess
+import sys
+from pathlib import Path
+
+SCRIPT = r'''"""Independent financial unit audit for unified portfolio H9 depth research #638."""
 from __future__ import annotations
 
 import importlib
@@ -9,7 +14,7 @@ from pathlib import Path
 import pytest
 
 # Source-tree research namespace is not part of the installed wheel.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path.cwd()))
 qc = importlib.import_module("scripts.research.p90l90_unified_depth_three_period_qc_v1")
 
 def row(side="SHORT", entry="100", exit_="98", margin="200",
@@ -55,3 +60,17 @@ def test_unique_result_leaf_and_independent_verification_semantics():
     assert qc.run.RESEARCH.startswith("P90L90_UNIFIED_DEPTH0")
     assert qc.run.WINDOW["183d"]["days"] == 183
     assert len(qc.run.BOOK_NAMES) == 8
+
+
+for _name in sorted(name for name in globals() if name.startswith('test_')):
+    globals()[_name]()
+'''
+
+
+def test_source_tree_research_in_clean_python_interpreter():
+    root = Path(__file__).resolve().parents[2]
+    proc = subprocess.run(
+        [sys.executable, "-c", SCRIPT], cwd=root, capture_output=True,
+        text=True, timeout=120, check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
