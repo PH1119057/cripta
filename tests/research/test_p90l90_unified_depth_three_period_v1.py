@@ -150,6 +150,23 @@ def test_results_are_scoped_new_data_disk_children_only():
     assert all(run.output(period).name == run.LEAF for period in run.WINDOW)
 
 
+def test_compound_subpicodollar_margin_roundoff_only():
+    b = run.UnifiedBook("ZERO", "fixed", "NO_PAUSE")
+    event = candidate("LTCUSDT", "LONG", 7000.0, 1)
+    b.handle_unified("LTCUSDT", 7000.0, 1, D("100"), (event,),
+                     (D("80"), D("120"), D("40")), 0)
+    assert b.reserved == D("200")
+    assert run.RESERVED_MARGIN_EPSILON == D("0.000000000001")
+    assert run.LEAF.endswith("_v2")
+    b.reserved = D("200.00000000000000000000000000000000000000000000002")
+    r = b.finish_unified({"LTCUSDT": D("100")}, 7010.0)
+    assert D(r["wallet_usdt"]) == D("999.450000000000")
+    assert r["counts"]["accepted"] == 1
+    b.reserved = D("200.0000000001")
+    with pytest.raises(ValueError, match="wallet/censored/margin"):
+        b.finish_unified({"LTCUSDT": D("100")}, 7020.0)
+
+
 for _name in sorted(name for name in globals() if name.startswith('test_')):
     globals()[_name]()
 '''
