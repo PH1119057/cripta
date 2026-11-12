@@ -62,6 +62,8 @@ PINNED = (
     "scripts/research/p90l90_unified_depth_three_period_qc_v1.py",
     "scripts/research/p90l90_bull2025_portfolio_v1.py",
     "scripts/research/p90l90_bull2025_entry_v1.py",
+    "scripts/research/p90l90_bull2025_exit_unit_v1.py",
+    "scripts/research/p90l90_l53_clean_v2.py",
     "scripts/research/p90l90_depthzero_prev7d_full_matrix_v2.py",
     "scripts/research/p90l90_entry_only_hardstop_embargo_v1.py",
     "scripts/research/p90l90_portfolio_pause_v1.py",
@@ -97,17 +99,24 @@ def source_pins(commit: str) -> dict:
             or old.LEVERAGE != LEVERAGE or old.TAKER != D("0.00055")
             or old.MAKER != D("0.0002") or tuple(SYMBOLS) != tuple(pause.SYMBOLS)):
         raise ValueError("source/economics identity differs from original 2025 contract")
-    # The original 2025 source uses the operational mirror for module imports;
-    # require same Git identity AND same bytes, instead of silently relying on it.
+    # Original 2025 modules import their historical dependencies from the
+    # operational source mirror, which may lag the source-only research commit.
+    # Source authority is the exact detached GitHub SHA above; pin every byte
+    # of the imported ORIGINAL dependencies independently. In particular,
+    # the newly authored v1 and QC v1 are not expected in the old mirror.
     mirror = Path("/srv/cripta/source_checkout")
-    mirror_sha = subprocess.run(["git", "-C", str(mirror), "rev-parse", "HEAD"],
-                                capture_output=True, text=True, check=True, timeout=15).stdout.strip()
-    if mirror_sha != commit:
-        raise ValueError("source mirror differs from GitHub exact research source")
     pins = {rel: sha(SOURCE / rel) for rel in PINNED}
     for rel in PINNED:
+        if rel.startswith("scripts/research/p90l90_unified_depth_three_period_"):
+            continue
         if sha(mirror / rel) != pins[rel]:
-            raise ValueError("read-only original module SHA diverges from pinned source: " + rel)
+            raise ValueError("read-only original imported module SHA differs from pinned GitHub bytes: " + rel)
+    for imported in (old, old.entry, old.unit, base, prev, pause):
+        active_path = Path(imported.__file__).resolve()
+        name = active_path.name
+        matches = [rel for rel in PINNED if Path(rel).name == name]
+        if len(matches) != 1 or sha(active_path) != pins[matches[0]]:
+            raise ValueError("effective imported original research code does not match pinned bytes: " + name)
     return pins
 
 

@@ -217,7 +217,7 @@ def audit(period: str, root: Path, commit: str) -> dict:
             raise ValueError("qualified candidates different from immutable Entry catalog")
         if summary["counts"]["capital_blocked_candidate"] != summary["capital_blocked_candidate_count"]:
             raise ValueError("capital denials not reconciled")
-        if summary["counts"]["exit_HARD_STOP"] != summary["hardstop_count"]:
+        if summary["counts"].get("exit_HARD_STOP", 0) != summary["hardstop_count"]:
             raise ValueError("actual completed Hard Stops not reconciled")
         if int(summary["pause_trigger_count"]) != int(summary["counts"].get("second48_pause_triggers", 0)):
             raise ValueError("actual global pause trigger count drift")
