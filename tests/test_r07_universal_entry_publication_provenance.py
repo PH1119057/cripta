@@ -165,7 +165,10 @@ def test_runtime_does_not_reach_live_arm_or_publish_when_publication_unproven(mo
     monkeypatch.setattr(consumer, "account_entry_safety_ready",
                         lambda *_a, **_kw: (True, ()))
     monkeypatch.setattr(consumer, "_next_request",
-                        lambda *_a, **_kw: {**request(account_id="ta-sub-7"), "capital_reservation_state": "RESERVED"})
+                        lambda *_a, **_kw: {
+                            **request(account_id="ta-sub-7"),
+                            "capital_reservation_state": "RESERVED",
+                        })
     monkeypatch.setattr(consumer, "_request_from_row",
                         lambda _row: SimpleNamespace(
                             signal_id="signal-100",
