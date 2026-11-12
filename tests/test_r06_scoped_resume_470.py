@@ -182,3 +182,11 @@ def test_quiet_bootstrap_wait_requires_exact_untouched_original_fence(defect):
             resume.scope_waits_at_bootstrap(Reader(), **kwargs)
     else:
         assert resume.scope_waits_at_bootstrap(Reader(), **kwargs) is (defect is None)
+
+
+def test_empty_committed_bootstrap_recovers_original_seed_before_first_batch():
+    db = StateReader({"version": 1, "by_symbol": {}})
+    assert resume.recovery_counts(
+        db, session="s", symbol="LTCUSDT", closed_at=NOW,
+        counts={"5": 2600, "15": 1000},
+    ) == {"5": 2609, "15": 1003}

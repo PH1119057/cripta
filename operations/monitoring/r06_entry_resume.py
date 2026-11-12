@@ -15,6 +15,7 @@ from typing import Any
 
 from bybit_workbench.market_data.source_required_feed_manifest import RequiredPublicFeed
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS
 from operations.monitoring.r06_entry_publication_shadow_probe import EXISTING_P90_COLD_COUNTS
 from operations.monitoring.r06_fresh_entry_boundary import _require_no_exposure_or_requests
 
@@ -109,17 +110,18 @@ def recovery_counts(
     rows = connection.execute(
         "SELECT bootstrap_source_at,causal_state FROM "
         "strategy_entry.p90_scoped_native_consumer_checkpoints "
-        "WHERE source_session_id=%s ORDER BY strategy_id", (session,),
+        "WHERE source_session_id=%s AND strategy_id=%s ORDER BY strategy_id",
+        (session, next(name for name, symbols in ALLOWED_SYMBOLS.items() if symbol in symbols)),
     ).fetchall()
     required = dict(counts)
     for bootstrap, state in rows:
         if not isinstance(state, dict) or not isinstance(state.get("by_symbol"), dict):
             raise R06ResumeBlocked("R06_RESUME_CAUSAL_STATE_INVALID")
         saved = state["by_symbol"].get(symbol)
-        if saved is None:
-            continue
         try:
-            at = datetime.fromisoformat(saved["geometry_at"])
+            # An audited bootstrap may have committed before the first batch.
+            # Its unread originals still need geometry at the bootstrap bar.
+            at = bootstrap if saved is None else datetime.fromisoformat(saved["geometry_at"])
         except (KeyError, TypeError, ValueError) as exc:
             raise R06ResumeBlocked("R06_RESUME_GEOMETRY_TIME_INVALID") from exc
         if at.utcoffset() != timedelta(0) or at > closed_at:

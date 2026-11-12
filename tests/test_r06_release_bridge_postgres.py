@@ -279,3 +279,20 @@ def test_real_pg_quiet_scope_waits_at_exact_global_bootstrap_fence(db):
                   'SET frame_number=101 WHERE strategy_id=%s', (IDS[0],))
     with pytest.raises(mod.R06ResumeBlocked, match='FENCE_UNVERIFIED'):
         mod.scope_waits_at_bootstrap(runtime, **kwargs)
+
+
+def test_empty_bootstrap_backlog_history_is_scoped_and_preserved(db):
+    admin, runtime, _ = db
+    admin.execute('UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints '
+                  'SET causal_state=%s::jsonb', (json.dumps({'version': 1, 'by_symbol': {}}),))
+    # An unrelated scope with an ancient bootstrap must not block MAIN.
+    admin.execute('UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints '
+                  'SET bootstrap_source_at=%s WHERE strategy_id=%s',
+                  (datetime(2026, 11, 1, tzinfo=UTC), IDS[1]))
+    before = snapshot(runtime)
+    assert mod.recovery_counts(
+        runtime, session=SESSION, symbol='LTCUSDT',
+        closed_at=datetime(2026, 11, 12, 0, 15, tzinfo=UTC),
+        counts={'5': 2600, '15': 1000},
+    ) == {'5': 2603, '15': 1001}
+    assert snapshot(runtime) == before
