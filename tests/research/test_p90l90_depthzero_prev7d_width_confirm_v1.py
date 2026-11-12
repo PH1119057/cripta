@@ -1,9 +1,9 @@
 """Safety/causal/bookkeeping tests for frozen 2026 replication #633."""
 from __future__ import annotations
 
+import hashlib
 from collections import Counter, defaultdict, deque
 from decimal import Decimal as D
-import hashlib
 
 import pytest
 
