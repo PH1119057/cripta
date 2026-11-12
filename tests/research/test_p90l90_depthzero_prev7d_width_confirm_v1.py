@@ -4,8 +4,6 @@ from __future__ import annotations
 from collections import Counter, defaultdict, deque
 from decimal import Decimal as D
 import hashlib
-import json
-from types import SimpleNamespace
 
 import pytest
 
