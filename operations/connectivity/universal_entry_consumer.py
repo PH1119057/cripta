@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from bybit_workbench.account_entry_readiness import entry_blocking_lifecycle_fault
-
 import json
 import os
 import signal
@@ -14,11 +12,9 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.account_entry_readiness import entry_blocking_lifecycle_fault
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
-from bybit_workbench.strategy_execution_binding_policy import (
-    real_binding_allocation_allowed,
-)
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -31,6 +27,9 @@ from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_
 from bybit_workbench.lifecycle_ack import record_plan_consumption
 from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
+from bybit_workbench.strategy_execution_binding_policy import (
+    real_binding_allocation_allowed,
+)
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 from bybit_workbench.universal_entry.contracts import ExecutionRequest, FrozenPolicy, TradeDirection
@@ -41,10 +40,6 @@ from bybit_workbench.universal_entry.execution_bridge import (
     prepare_runtime_entry_command,
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
-from bybit_workbench.universal_entry.r07_publication_provenance import (
-    R07PublicationProvenanceUnavailable,
-    require_r07_publication_provenance,
-)
 from bybit_workbench.universal_entry.owner_full_contour_control import (
     require_parent_p90_diagnostic_scope,
     retire_entry_rights as retire_owner_diagnostic_entry_rights,
@@ -56,6 +51,10 @@ from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
 from bybit_workbench.universal_entry.owner_full_contour_runtime import (
     materialize_requested_run,
     refresh_run_lifecycle,
+)
+from bybit_workbench.universal_entry.r07_publication_provenance import (
+    R07PublicationProvenanceUnavailable,
+    require_r07_publication_provenance,
 )
 
 CURRENT_ACCOUNT_REF = "BYBIT:UNIFIED"
@@ -592,7 +591,7 @@ def _publish_command(
             str(existing["command_type"]) != "entry"
             or str(existing["symbol"]) != prepared.symbol
             or json.loads(str(existing["payload_json"])) != prepared.payload
-            or str(existing["strategy_execution_binding_id"]) != prepared.strategy_execution_binding_id
+            or (\n                str(existing["strategy_execution_binding_id"])\n                != prepared.strategy_execution_binding_id\n            )
             or str(existing["execution_leg"]) != prepared.execution_leg
             or str(existing["trading_account_id"]) != prepared.trading_account_id
             or str(existing["identity_status"]) != "PROVEN"
