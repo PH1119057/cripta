@@ -107,6 +107,7 @@ def test_quiet_scope_waits_without_advancing_or_blocking_another(monkeypatch, st
     monkeypatch.setattr(worker, "read_scoped_native_source", source)
     monkeypatch.setattr(worker, "_require_no_exposure_or_requests", lambda _db: None)
     monkeypatch.setattr(worker, "_observe_one", observe)
+    monkeypatch.setattr(worker, "scope_geometry_ready", lambda *_a: True)
     monkeypatch.setattr(resume, "scope_waits_at_bootstrap", lambda *_a, **_kw: False)
     _, blocked = worker._process_publication(
         Transaction(), pin=object(), history={}, bundles=bundles,
@@ -190,3 +191,23 @@ def test_empty_committed_bootstrap_recovers_original_seed_before_first_batch():
         db, session="s", symbol="LTCUSDT", closed_at=NOW,
         counts={"5": 2600, "15": 1000},
     ) == {"5": 2609, "15": 1003}
+
+
+def test_pending_confirmed_close_holds_only_affected_strategy(monkeypatch):
+    observed = []
+    monkeypatch.setattr(worker, '_require_no_exposure_or_requests', lambda _db: None)
+    monkeypatch.setattr(worker, 'read_scoped_native_source',
+                        lambda *_a, **_kw: SimpleNamespace(ready=True))
+    monkeypatch.setattr(resume, 'scope_waits_at_bootstrap', lambda *_a, **_kw: False)
+    monkeypatch.setattr(worker, 'scope_geometry_ready',
+                        lambda _pin, symbols: 'LTCUSDT' not in symbols)
+    monkeypatch.setattr(worker, '_observe_one',
+                        lambda _db, **kw: observed.append(kw['bundle'].card.strategy_id) or 0)
+    bundles = tuple(SimpleNamespace(card=SimpleNamespace(strategy_id=n)) for n in (MAIN_ID, SUB_ID))
+    _, blocked = worker._process_publication(
+        Transaction(), pin=object(), history={}, bundles=bundles,
+        engines={MAIN_ID: None, SUB_ID: None}, commits=frozenset(), loaded='d'*40,
+        ttls={s: timedelta(seconds=90) for s in worker.FIVE},
+    )
+    assert blocked == {MAIN_ID: 'R06_SCOPE_AWAITING_CONFIRMED_CANDLE'}
+    assert observed == [SUB_ID]
