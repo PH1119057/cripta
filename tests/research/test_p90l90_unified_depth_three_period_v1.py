@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 from decimal import Decimal as D
+from pathlib import Path
+import sys
+
+# scripts/ is a source-tree namespace (not an installed wheel package).
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pytest
 
