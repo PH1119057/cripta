@@ -42,7 +42,11 @@ from bybit_workbench.universal_entry.execution_bridge import (
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 from bybit_workbench.universal_entry.owner_full_contour_control import (
     require_parent_p90_diagnostic_scope,
+)
+from bybit_workbench.universal_entry.owner_full_contour_control import (
     retire_entry_rights as retire_owner_diagnostic_entry_rights,
+)
+from bybit_workbench.universal_entry.owner_full_contour_control import (
     set_run_state as set_owner_diagnostic_run_state,
 )
 from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
