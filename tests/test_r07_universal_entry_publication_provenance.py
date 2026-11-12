@@ -167,7 +167,13 @@ def test_runtime_does_not_reach_live_arm_or_publish_when_publication_unproven(mo
     monkeypatch.setattr(consumer, "_next_request",
                         lambda *_a, **_kw: {**request(account_id="ta-sub-7"), "capital_reservation_state": "RESERVED"})
     monkeypatch.setattr(consumer, "_request_from_row",
-                        lambda _row: SimpleNamespace(\n                            signal_id="signal-100",\n                            capital_reservation_id="reserve-7",\n                            exchange_position_slot_claim_id="slot-7",\n                            position_mode_state_ref="mode-7",\n                            trading_account_id="ta-sub-7",\n                        ))
+                        lambda _row: SimpleNamespace(
+                            signal_id="signal-100",
+                            capital_reservation_id="reserve-7",
+                            exchange_position_slot_claim_id="slot-7",
+                            position_mode_state_ref="mode-7",
+                            trading_account_id="ta-sub-7",
+                        ))
     monkeypatch.setattr(consumer, "_admission_pre_dispatch_status",
                         lambda *_a, **_kw: ("OK", ""))
     monkeypatch.setattr(consumer, "_critical_lifecycle_fault_code",
