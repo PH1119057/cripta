@@ -12,17 +12,25 @@ import os
 import re
 import signal
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import psycopg
 
 from bybit_workbench.market_data.entry_publication_reader import (
-    EntryPublicationPin, EntryPublicationUnavailable, read_entry_publication_pin,
+    EntryPublicationPin,
+    EntryPublicationUnavailable,
+    read_entry_publication_pin,
     read_entry_publication_seed,
 )
 from bybit_workbench.universal_entry.engine import UniversalEntryEngine
+from bybit_workbench.universal_entry.p90_r06_no_order_state import (
+    advance_symbol,
+    dump_symbol,
+    restore_symbol,
+)
 from bybit_workbench.universal_entry.p90l90_crossing_fact import p90l90_crossing_fact
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
@@ -31,19 +39,26 @@ from bybit_workbench.universal_entry.p90l90_scoped_native_dispatch import (
     consume_pinned_entry_native_batch,
 )
 from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
-    read_scoped_native_source, verify_native_producer_code_compatibility,
-)
-from bybit_workbench.universal_entry.p90_r06_no_order_state import (
-    advance_symbol, dump_symbol, restore_symbol,
+    read_scoped_native_source,
+    verify_native_producer_code_compatibility,
 )
 from bybit_workbench.universal_entry.registry import ActivePlanRegistry
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
 from operations.monitoring.r06_entry_publication_shadow_probe import (
-    EXISTING_P90_COLD_COUNTS, FIVE, verify_current_entry_plan_scope,
+    EXISTING_P90_COLD_COUNTS,
+    FIVE,
+    verify_current_entry_plan_scope,
+)
+from operations.monitoring.r06_entry_resume import (
+    bridge_checkpoint_release,
+    entry_native_ttls,
+    recovery_counts,
 )
 from operations.monitoring.r06_fresh_entry_boundary import (
-    R06FreshCutoverBlocked, _require_no_exposure_or_requests,
-    bootstrap_future_entry_checkpoints, verify_r06_fresh_publication,
+    R06FreshCutoverBlocked,
+    _require_no_exposure_or_requests,
+    bootstrap_future_entry_checkpoints,
+    verify_r06_fresh_publication,
 )
 
 _SOURCE_CHECKOUT = Path("/srv/cripta/source_checkout")
@@ -160,7 +175,11 @@ def _one_pin(readonly: Any, *, at: datetime, loaded: str) -> tuple[
         history = {
             sym: read_entry_publication_seed(
                 readonly, pin=pin, symbol=sym,
-                required_counts=dict(EXISTING_P90_COLD_COUNTS),
+                required_counts=recovery_counts(
+                    readonly, session=pin.source_session_id, symbol=sym,
+                    closed_at=datetime.fromisoformat(pin.closed_refs[sym]["5"]),
+                    counts=dict(EXISTING_P90_COLD_COUNTS),
+                ),
             ) for sym in FIVE
         }
     return pin, history, accepted
@@ -298,6 +317,42 @@ def _observe_one(
         raise R06PublishedEntryBlocked("R06_ENTRY_ATOMIC_CAUSAL_STATE_CAS_FAILED")
     return new_count
 
+def _process_publication(
+    writer: Any, *, pin: EntryPublicationPin,
+    history: dict[str, dict[str, tuple[Any, ...]]], bundles: tuple[Any, ...],
+    engines: dict[str, Any], commits: frozenset[str], loaded: str,
+    ttls: dict[str, timedelta],
+) -> tuple[int, dict[str, str]]:
+    """Keep quiet/stale scopes stationary; never kill an unrelated scope.
+
+    Native freshness is source-readiness, not the independent 5s publication
+    or new-signal gate. Identity/epoch/journal failures remain hard failures.
+    """
+    signals = 0
+    blocked: dict[str, str] = {}
+    with writer.transaction():
+        _require_no_exposure_or_requests(writer)
+        for bundle in bundles:
+            name = bundle.card.strategy_id
+            symbols = tuple(sorted(ALLOWED_SYMBOLS[name]))
+            at = datetime.now(UTC)
+            source = read_scoped_native_source(
+                writer, symbols=symbols, accepted_producer_commits=commits,
+                observed_at=at, max_lag=min(ttls[sym] for sym in symbols),
+            )
+            if not source.ready:
+                failures = {e.reason for e in source.by_symbol.values() if not e.ready}
+                if failures == {"NATIVE_SOURCE_CURSOR_NOT_FRESH"}:
+                    blocked[name] = "NATIVE_SOURCE_CURSOR_NOT_FRESH"
+                    continue
+                raise R06PublishedEntryBlocked("R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT:"+name)
+            signals += _observe_one(
+                writer, pin=pin, history=history, source=source, bundle=bundle,
+                engine=engines[name], loaded=loaded, at=at,
+            )
+    return signals, blocked
+
+
 def _runtime_actor_verified() -> bool:
     """Compare actual service UID with the deployed runtime owner on Linux."""
     try:
@@ -361,6 +416,9 @@ def run_pg_only(
             engines = _engines(bundles)
             original_scope = tuple(_exact_scope_identity(b) for b in bundles)
             _require_no_exposure_or_requests(writer)
+            ttls = entry_native_ttls(
+                Path(__file__).with_name("required_public_feeds.json"), FIVE,
+            )
             prior_pub = 0
             last_status = 0.0
             first_cursor_accepted = False
@@ -445,38 +503,29 @@ def run_pg_only(
                     continue
                 first_cursor_accepted = True
                 if any(r[3] != loaded_commit for r in checkpoints):
-                    raise R06PublishedEntryBlocked(
-                        "R06_CURRENT_RELEASE_DIFFERS_FROM_DECISION_CURSOR"
+                    bridge_checkpoint_release(
+                        writer, bundles=bundles, session=pin.source_session_id,
+                        producer=pin.producer_release_commit, target=loaded_commit,
+                        source_checkout=_SOURCE_CHECKOUT,
                     )
+                    # Re-pin and read back after signed, audited adoption.
+                    continue
                 if pin.publication_id <= prior_pub:
                     time.sleep(0.15)
                     continue
                 # All five originals/closed seeds are tied to ONE verified
                 # publication; the two strategy checkpoints commit together.
-                with writer.transaction():
-                    _require_no_exposure_or_requests(writer)
-                    signals = 0
-                    for bundle in bundles:
-                        name = bundle.card.strategy_id
-                        source = read_scoped_native_source(
-                            writer,symbols=tuple(sorted(ALLOWED_SYMBOLS[name])),
-                            accepted_producer_commits=commits,observed_at=at,
-                            max_lag=timedelta(seconds=30),
-                        )
-                        if not source.ready:
-                            raise R06PublishedEntryBlocked(
-                                "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT:"+name
-                            )
-                        signals += _observe_one(
-                            writer,pin=pin,history=history,source=source,
-                            bundle=bundle,engine=engines[name],
-                            loaded=loaded_commit,at=at,
-                        )
+                signals, blocked = _process_publication(
+                    writer, pin=pin, history=history, bundles=bundles,
+                    engines=engines, commits=commits, loaded=loaded_commit, ttls=ttls,
+                )
                 prior_pub = pin.publication_id
                 first_cursor_accepted = True
                 if time.monotonic()-last_status > 2.0:
                     write_status(
-                        state="R06_PG_NO_ORDER_SOURCE_ONLY",epoch_id=pin.source_session_id,
+                        state=("R06_PG_NO_ORDER_DEGRADED" if blocked
+                               else "R06_PG_NO_ORDER_SOURCE_ONLY"),
+                        epoch_id=pin.source_session_id,
                         active_bundles=bundles,symbols=FIVE,signals=signals,
                         reason="verified PG-only; NO financial Entry/Exit permissions",
                         sensor_status={
@@ -484,6 +533,7 @@ def run_pg_only(
                             "native_pg_delivery_scope":"R06_NO_ORDER_ENTRY_DECISION_ONLY",
                             "financial_ready":False,
                             "observer_market_ws":"DETACHED_BY_R06_MODE",
+                            "blocked_strategy_scopes":blocked,
                         },
                     )
                     last_status=time.monotonic()
