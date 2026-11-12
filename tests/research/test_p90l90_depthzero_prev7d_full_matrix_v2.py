@@ -15,8 +15,8 @@ def test_primary_hypotheses_and_frozen_diagnostic_grid():
     assert check.PERIODS["90d"]["days"] == 90
     assert check.PERIODS["29d"]["days"] == 29
     assert len(check.BANDS) == 9
-    assert check.BANDS["080"] == D("0.80")
-    assert check.BANDS["090"] == D("0.90")
+    assert check.BANDS["080"].compare(D("0.80")) == 0
+    assert check.BANDS["090"].compare(D("0.90")) == 0
     assert "w080_SHORT_ONLY_SECOND48" in check.BOOK_NAMES
     assert "w090_SHORT_ONLY_SECOND48" in check.BOOK_NAMES
     assert set(check.BOOK_NAMES) == {
@@ -25,9 +25,9 @@ def test_primary_hypotheses_and_frozen_diagnostic_grid():
     }
     assert len(check.BOOK_NAMES) == 36
     assert len(check.ALL_NAMES) == 37
-    assert check.COMPARABLE_NOTIONAL == D("100")
-    assert check.FIXED_MARGIN == D("20")
-    assert check.LEVERAGE == D("5")
+    assert check.COMPARABLE_NOTIONAL.compare(D("100")) == 0
+    assert check.FIXED_MARGIN.compare(D("20")) == 0
+    assert check.LEVERAGE.compare(D("5")) == 0
     assert check.SYMBOLS == ("LTCUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT", "INJUSDT")
 
 
@@ -43,7 +43,7 @@ def test_exact_depthzero_and_inclusive_width_boundary():
 
 
 def test_causal_median_current_day_is_not_fallback():
-    assert check.BANDS["050"] == D("0.50")
+    assert check.BANDS["050"].compare(D("0.50")) == 0
     src = check.validate_and_filter.__code__.co_consts
     assert any(isinstance(x, str) and "original causal" in x for x in src)
 
@@ -74,7 +74,7 @@ def test_book_real_instance_roundtrip_without_weakening_stop_contract():
     check.restore_book(out, same)
     assert check.freeze_book(out) == frozen
     assert out.pos["LTCUSDT"].entry == D("1.2")
-    assert out.pos["LTCUSDT"].tp == D("1.1")
+    assert out.pos["LTCUSDT"].tp.compare(D("1.1")) == 0
     assert out.threshold == 2 and out.embargo_hours == 48
 
 
@@ -169,5 +169,5 @@ def test_2025_comparable_100_usdt_trade_fees_include_same_notional():
 
 
 def test_censored_entry_fees_follow_2025_wallet_model():
-    assert check.CENSORED_OPEN_ENTRY_FEE == D("0.055000000000")
-    assert check.COMPARABLE_NOTIONAL * check.base.TAKER == D("0.055")
+    assert check.CENSORED_OPEN_ENTRY_FEE.compare(D("0.055000000000")) == 0
+    assert check.COMPARABLE_NOTIONAL * check.base.TAKER.compare(D("0.055")) == 0
