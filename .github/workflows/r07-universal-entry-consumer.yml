@@ -1,0 +1,67 @@
+name: r07-universal-entry-consumer
+on:
+  pull_request:
+    paths:
+      - "src/bybit_workbench/universal_entry/r07_publication_provenance.py"
+      - "operations/connectivity/universal_entry_consumer.py"
+      - "operations/monitoring/r07_universal_entry_consumer_manifest.json"
+      - "tests/test_r07_*"
+      - ".github/workflows/r07-universal-entry-consumer.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "src/bybit_workbench/universal_entry/r07_publication_provenance.py"
+      - "operations/connectivity/universal_entry_consumer.py"
+      - "tests/test_r07_*"
+      - ".github/workflows/r07-universal-entry-consumer.yml"
+
+jobs:
+  account-scope-and-no-order-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.11.33
+      - run: uv sync --locked --extra dev --python 3.12
+      - run: uv pip install --python .venv/bin/python "psycopg[binary]==3.2.10"
+      - run: .venv/bin/python -m ruff check src/bybit_workbench/universal_entry/r07_publication_provenance.py operations/connectivity/universal_entry_consumer.py tests/test_r07_universal_entry_publication_provenance.py tests/test_r07_universal_entry_publication_postgres.py
+      - run: .venv/bin/python -m pytest -q tests/test_r07_universal_entry_publication_provenance.py tests/test_consumer_multiaccount_arm_scope.py tests/test_consumer_account_connector_gate.py tests/test_consumer_connector_startup_gate.py tests/test_entry_consumer_route.py tests/test_entry_account_fanout.py tests/test_r06_pg_only_entry_runtime_470.py tests/test_p90_disarm_exit_continuity.py
+
+  account-scope-and-no-order-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.11.33
+      - run: uv sync --locked --extra dev --python 3.12
+      - run: uv pip install --python .venv/Scripts/python.exe "psycopg[binary]==3.2.10"
+      - run: .venv/Scripts/python.exe -m pytest -q tests/test_r07_universal_entry_publication_provenance.py tests/test_consumer_multiaccount_arm_scope.py tests/test_entry_account_fanout.py
+
+  disposable-pg16-provenance:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: r07_consumer_ci
+          POSTGRES_PASSWORD: disposable_r07_ci_only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d r07_consumer_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      CRIPTA_R07_TEST_DSN: "postgresql://postgres:disposable_r07_ci_only@127.0.0.1:5432/r07_consumer_ci"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.11.33
+      - run: uv sync --locked --extra dev --python 3.12
+      - run: uv pip install --python .venv/bin/python "psycopg[binary]==3.2.10"
+      - run: .venv/bin/python -m pytest -q tests/test_r07_universal_entry_publication_postgres.py tests/test_r07_universal_entry_publication_provenance.py
