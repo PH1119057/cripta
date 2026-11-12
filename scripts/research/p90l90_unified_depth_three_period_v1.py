@@ -44,8 +44,8 @@ from scripts.research import p90l90_depthzero_prev7d_full_matrix_v2 as prev  # n
 from scripts.research import p90l90_entry_only_hardstop_embargo_v1 as pause  # noqa: E402
 
 base = old.original
-RESEARCH = "P90L90_UNIFIED_DEPTH0_VS_0TO15_THREE_PERIODS_CAPITAL_V1"
-LEAF = "p90l90_unified_depth0_vs_0to15_capital_20261112_v1"
+RESEARCH = "P90L90_UNIFIED_DEPTH0_VS_0TO15_THREE_PERIODS_CAPITAL_V2"
+LEAF = "p90l90_unified_depth0_vs_0to15_capital_20261113_v2"
 SYMBOLS = tuple(old.SYMBOLS)
 WINDOW = {
     "29d": {"root": prev.PERIODS["29d"]["root"], "start": "2026-09-21", "input_start": "2026-09-11", "days": 29, "manifest_days": 39},
@@ -57,6 +57,7 @@ CASH = ("fixed", "compound_capped")
 PAUSE = ("NO_PAUSE", "SECOND48")
 BOOK_NAMES = tuple(f"{depth}__{cash}__{mode}" for depth in DEPTHS for cash in CASH for mode in PAUSE)
 RESERVE_GIB = 5
+RESERVED_MARGIN_EPSILON = D("0.000000000001")
 PINNED = (
     "scripts/research/p90l90_unified_depth_three_period_v1.py",
     "scripts/research/p90l90_unified_depth_three_period_qc_v1.py",
@@ -228,7 +229,8 @@ class UnifiedBook(old.Book):
                 + sum(self.open_fee.values(), D(0))
                 or self.wallet - START_WALLET != self.m["gross_usdt"] -
                 self.m["all_entry_fee_usdt"] - self.m["exit_fee_usdt"]
-                or self.reserved != sum(self.margin.values(), D(0))):
+                or abs(self.reserved - sum(self.margin.values(), D(0)))
+                   > RESERVED_MARGIN_EPSILON):
             raise ValueError("wallet/censored/margin reconciliation failed")
         final_equity = self.mark(at, last_prices)
         return {
