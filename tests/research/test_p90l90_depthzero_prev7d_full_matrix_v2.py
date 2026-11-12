@@ -1,0 +1,173 @@
+"""Safety/causal/bookkeeping tests for frozen 2026 replication #633."""
+from __future__ import annotations
+
+import hashlib
+from collections import Counter, defaultdict, deque
+from decimal import Decimal as D
+
+import pytest
+
+from scripts.research import p90l90_depthzero_prev7d_full_matrix_v2 as check
+
+
+def test_primary_hypotheses_and_frozen_diagnostic_grid():
+    assert set(check.PERIODS) == {"90d", "29d"}
+    assert check.PERIODS["90d"]["days"] == 90
+    assert check.PERIODS["29d"]["days"] == 29
+    assert len(check.BANDS) == 9
+    assert check.BANDS["080"].compare(D("0.80")) == 0
+    assert check.BANDS["090"].compare(D("0.90")) == 0
+    assert "w080_SHORT_ONLY_SECOND48" in check.BOOK_NAMES
+    assert "w090_SHORT_ONLY_SECOND48" in check.BOOK_NAMES
+    assert set(check.BOOK_NAMES) == {
+        f"w{w}_{side}_{mode}" for w in check.BANDS
+        for side in check.SIDES for mode in check.MODES
+    }
+    assert len(check.BOOK_NAMES) == 36
+    assert len(check.ALL_NAMES) == 37
+    assert check.COMPARABLE_NOTIONAL.compare(D("100")) == 0
+    assert check.FIXED_MARGIN.compare(D("20")) == 0
+    assert check.LEVERAGE.compare(D("5")) == 0
+    assert check.SYMBOLS == ("LTCUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT", "INJUSDT")
+
+
+def test_exact_depthzero_and_inclusive_width_boundary():
+    event = {"depth_pct": "0", "width_pct": "0.90"}
+    assert check.cohort(event, D("0.10"), D("0.80"))
+    assert not check.cohort(event, D("0.10"), D("0.79"))
+    assert check.cohort(event, D("0.10"), D("0.90"))
+    assert not check.cohort({**event, "depth_pct": "0.000000000001"},
+                            D("0.10"), D("1.50"))
+    assert not check.cohort({**event, "width_pct": "2.5"},
+                            D("0.10"), D("1.50"))
+
+
+def test_causal_median_current_day_is_not_fallback():
+    assert check.BANDS["050"].compare(D("0.50")) == 0
+    src = check.validate_and_filter.__code__.co_consts
+    assert any(isinstance(x, str) and "original causal" in x for x in src)
+
+
+def test_book_real_instance_roundtrip_without_weakening_stop_contract():
+    b = check.pause.EntryEmbargo(2, 48)
+    p = check.base.Position(
+        side="SHORT", entry=D("1.2"), entry_seq=20,
+        entry_ts=12345.5, state_bucket=12300, stop=D("1.32"),
+        best_favorable=D("0.9"), protected=True,
+        protection_seq=21, tp=D("1.1"), tp_live_after_seq=22,
+        entry_event_id="event-1", entry_trade_id="trade-1",
+    )
+    b.pos["LTCUSDT"] = p
+    b.pause_until = 18900.5
+    b.last_stops = deque([12000.0, 15000.0])
+    b.all_stops = [{"ts": "12000", "symbol": "LTCUSDT"}]
+    b.count = Counter({"accepted": 2, "close_HARD_STOP": 1})
+    b.money = defaultdict(lambda: D(0), {"net_usdt": D("-1.25")})
+    b.stops = [{"ts": "12000", "target_positions": 0}]
+    b.trades = [{"side": "SHORT", "net_usdt": "-1.25"}]
+
+    frozen = check.freeze_book(b)
+    packed = check.pack_snapshot({"book": frozen})
+    assert packed == check.pack_snapshot({"book": frozen})
+    same = check.unpack_snapshot(packed)["book"]
+    out = check.pause.EntryEmbargo(2, 48)
+    check.restore_book(out, same)
+    assert check.freeze_book(out) == frozen
+    assert out.pos["LTCUSDT"].entry == D("1.2")
+    assert out.pos["LTCUSDT"].tp.compare(D("1.1")) == 0
+    assert out.threshold == 2 and out.embargo_hours == 48
+
+
+def test_book_frozen_production_exit_not_modified():
+    books = check.make_books()
+    assert set(books) == set(check.ALL_NAMES)
+    assert books["REFERENCE"].threshold == 0
+    assert books["w080_SHORT_ONLY_NO_PAUSE"].threshold == 0
+    assert books["w080_SHORT_ONLY_SECOND48"].threshold == 2
+    assert books["w080_SHORT_ONLY_SECOND48"].embargo_hours == 48
+    assert not books["w080_SHORT_ONLY_SECOND48"].pending
+    assert not books["w080_SHORT_ONLY_SECOND48"].pos["LTCUSDT"]
+
+
+def test_checkpoint_immutability_and_sha_chain(tmp_path):
+    location = tmp_path / "day_001.json.gz"
+    payload = check.pack_snapshot({
+        "research": check.RESEARCH, "period": "29d",
+        "days_done": 1, "previous_checkpoint_sha256": "",
+        "books": {"example": {}}, "pins": {}, "source_events_seen": {},
+    })
+    check.write_immutable(location, payload)
+    assert location.exists()
+    assert hashlib.sha256(location.read_bytes()).hexdigest() == hashlib.sha256(payload).hexdigest()
+    with pytest.raises(FileExistsError, match="collision"):
+        check.write_immutable(location, payload)
+    assert check.unpack_snapshot(location.read_bytes())["days_done"] == 1
+
+
+def test_checkpoint_load_rejects_foreign_source(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "ALL_NAMES", ("example",))
+    monkeypatch.setattr(check, "PERIODS",
+                        {"29d": {**check.PERIODS["29d"], "days": 1}})
+    folder = tmp_path / "checkpoints"
+    folder.mkdir()
+    payload = check.pack_snapshot({
+        "research": check.RESEARCH, "period": "29d", "pins": {"a": "b"},
+        "days_done": 1, "previous_checkpoint_sha256": "",
+        "books": {"example": {}}, "source_events_seen": {},
+    })
+    check.write_immutable(folder / "day_001.json.gz", payload)
+    with pytest.raises(ValueError, match="checkpoint source"):
+        check.scan_checkpoints(tmp_path, {"a": "WRONG"}, "29d")
+    result, digest = check.scan_checkpoints(tmp_path, {"a": "b"}, "29d")
+    assert result["days_done"] == 1
+    assert digest == hashlib.sha256(payload).hexdigest()
+
+
+def test_wrong_actor_fail_closed(monkeypatch):
+    monkeypatch.setattr(check.os, "geteuid", lambda: 999, raising=False)
+    monkeypatch.setattr(check.os, "getegid", lambda: 999, raising=False)
+    with pytest.raises(PermissionError, match="actual cripta"):
+        check.preflight("29d", "0" * 40)
+
+
+def test_output_is_only_new_research_child():
+    for period in ("90d", "29d"):
+        assert check.out_dir(period).name == check.LEAF
+        assert check.out_dir(period).parent.name == "results"
+        assert "/data/cripta/research/runs/" in check.out_dir(period).as_posix()
+
+
+def test_no_root_runtime_or_external_execution():
+    import inspect
+    code = inspect.getsource(check)
+    assert "sudo " not in code
+    assert "start_new_session=True" not in code
+    assert "subprocess.Popen" not in code
+    assert "systemd-run" not in code
+    assert "Exchange" in code
+    assert "source_head" in code
+    assert "source_events_seen" in code
+
+
+def test_2025_comparable_100_usdt_trade_fees_include_same_notional():
+    record = {
+        "symbol": "LTCUSDT", "side": "SHORT",
+        "entry_price": "100", "exit_price": "98",
+        "entry_ts": "0", "exit_ts": "1",
+        "exit_reason": "HARD_STOP", "maker_exit": False,
+        "gross_usdt": "0.2", "entry_fee_usdt": "0.0055",
+        "exit_fee_usdt": "0.00539", "net_usdt": "0.18911",
+    }
+    changed = check.comparable_100_trade(record)
+    assert changed["notional_usdt"] == "100"
+    assert changed["margin_usdt"] == "20"
+    assert D(changed["gross_usdt"]) == D("2.000000000000")
+    assert D(changed["entry_fee_usdt"]) == D("0.055000000000")
+    assert D(changed["exit_fee_usdt"]) == D("0.053900000000")
+    assert D(changed["net_usdt"]) == D("1.891100000000")
+    assert changed["source_ten_usdt_net"] == record["net_usdt"]
+
+
+def test_censored_entry_fees_follow_2025_wallet_model():
+    assert check.CENSORED_OPEN_ENTRY_FEE.compare(D("0.055000000000")) == 0
+    assert (check.COMPARABLE_NOTIONAL * check.base.TAKER).compare(D("0.055")) == 0
