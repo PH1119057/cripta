@@ -18,7 +18,8 @@ from typing import Any, Callable
 import psycopg
 
 from bybit_workbench.market_data.entry_publication_reader import (
-    EntryPublicationPin, read_entry_publication_pin, read_entry_publication_seed,
+    EntryPublicationPin, EntryPublicationUnavailable, read_entry_publication_pin,
+    read_entry_publication_seed,
 )
 from bybit_workbench.universal_entry.engine import UniversalEntryEngine
 from bybit_workbench.universal_entry.p90l90_crossing_fact import p90l90_crossing_fact
@@ -40,7 +41,7 @@ from operations.monitoring.r06_entry_publication_shadow_probe import (
     EXISTING_P90_COLD_COUNTS, FIVE, verify_current_entry_plan_scope,
 )
 from operations.monitoring.r06_fresh_entry_boundary import (
-    _require_no_exposure_or_requests,
+    R06FreshCutoverBlocked, _require_no_exposure_or_requests,
     bootstrap_future_entry_checkpoints, verify_r06_fresh_publication,
 )
 
@@ -52,6 +53,29 @@ _MAX_LATE_SIGNAL = timedelta(seconds=5)
 
 class R06PublishedEntryBlocked(RuntimeError):
     """A no-order PG-only Entry consumer has no verified current contract."""
+
+
+def _bootstrap_transient_retryable(
+    exc: BaseException, *, detached_at: datetime, observed_at: datetime,
+) -> bool:
+    """Wait only for fresh evidence BEFORE the first no-order decision cursor.
+
+    The existing 10-minute future-5m bootstrap budget is reused. No stale
+    publication is accepted, no H9/ATR defaults change, and no financial
+    action or new source reader is introduced.
+    """
+    if not timedelta(0) <= observed_at-detached_at <= timedelta(minutes=10):
+        return False
+    if isinstance(exc, EntryPublicationUnavailable):
+        return True
+    return (
+        isinstance(exc, R06FreshCutoverBlocked)
+        and str(exc) in {
+            "R06_NEW_PUBLICATION_UNVERIFIED",
+            "R06_START_PUBLICATION_STALE_OR_CHANGED",
+            "R06_FUTURE_CLOSED_BOUNDARY_NOT_REACHED",
+        }
+    )
 
 def _bundles(connection: Any) -> tuple[Any, ...]:
     rows = tuple(
@@ -328,12 +352,24 @@ def run_pg_only(
             _require_no_exposure_or_requests(writer)
             prior_pub = 0
             last_status = 0.0
+            first_cursor_accepted = False
             while not stopping:
                 at = datetime.now(UTC)
                 _require_no_exposure_or_requests(writer)
                 if tuple(_exact_scope_identity(b) for b in _bundles(writer)) != original_scope:
                     raise R06PublishedEntryBlocked("R06_ACTIVATION_OR_PLAN_IDENTITY_DRIFT")
-                pin, history, commits = _one_pin(reader,at=at,loaded=loaded_commit)
+                try:
+                    pin, history, commits = _one_pin(reader,at=at,loaded=loaded_commit)
+                except EntryPublicationUnavailable as exc:
+                    if (
+                        first_cursor_accepted
+                        or not _bootstrap_transient_retryable(
+                            exc,detached_at=detached_at,observed_at=at,
+                        )
+                    ):
+                        raise
+                    time.sleep(1.0)
+                    continue
                 checkpoints = _checkpoints(writer,pin=pin)
                 if not checkpoints:
                     # A single owner process replaces old WS/REST after the
@@ -360,11 +396,19 @@ def run_pg_only(
                          b.exit_plan.exit_plan_fingerprint)
                         for b in bundles
                     )
-                    bootstrap_future_entry_checkpoints(
-                        writer,proof=proof,strategies=identities,
-                        consumer_release_commit=loaded_commit,
-                        active_p90_bundles=bundles,
-                    )
+                    try:
+                        bootstrap_future_entry_checkpoints(
+                            writer,proof=proof,strategies=identities,
+                            consumer_release_commit=loaded_commit,
+                            active_p90_bundles=bundles,
+                        )
+                    except R06FreshCutoverBlocked as exc:
+                        if not _bootstrap_transient_retryable(
+                            exc,detached_at=detached_at,observed_at=at,
+                        ):
+                            raise
+                        time.sleep(1.0)
+                        continue
                     prior_pub=0
                     continue
                 if any(r[3] != loaded_commit for r in checkpoints):
@@ -396,6 +440,7 @@ def run_pg_only(
                             loaded=loaded_commit,at=at,
                         )
                 prior_pub = pin.publication_id
+                first_cursor_accepted = True
                 if time.monotonic()-last_status > 2.0:
                     write_status(
                         state="R06_PG_NO_ORDER_SOURCE_ONLY",epoch_id=pin.source_session_id,
