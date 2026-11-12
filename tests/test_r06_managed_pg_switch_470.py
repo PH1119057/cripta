@@ -603,3 +603,38 @@ def test_rollback_rearm_refuses_wrong_private_backup_actor_mode_or_bytes(
         switch.R06ModeSwitchBlocked, match="RETRY_ORIGINAL_BACKUP_DRIFT",
     ):
         switch._verified_rolled_back_history(previous, original)
+
+
+
+def test_pg_worker_error_status_exposes_only_exact_release_scoped_safe_code(
+    monkeypatch,
+):
+    import json
+
+    valid = {
+        "state": "BLOCKED",
+        "source_commit": "a" * 40,
+        "reason": (
+            "R06_PG_ONLY_BLOCKED:R06FreshCutoverBlocked:"
+            "R06_NEW_PUBLICATION_UNVERIFIED"
+        ),
+    }
+    def fake_read(path, **_kw):
+        if path == switch.RELEASE:
+            return "a" * 40 + "\n"
+        if str(path).endswith("status.json"):
+            return json.dumps(valid)
+        raise AssertionError(str(path))
+    monkeypatch.setattr(switch.Path, "read_text", fake_read)
+    assert switch._pg_only_worker_block_reason() == (
+        "R06_NEW_PUBLICATION_UNVERIFIED"
+    )
+    valid["source_commit"] = "b" * 40
+    assert switch._pg_only_worker_block_reason() == (
+        "R06_WORKER_FAILURE_NOT_ATTESTED"
+    )
+    valid["source_commit"] = "a" * 40
+    valid["reason"] = "R06_PG_ONLY_BLOCKED:Error:API_SECRET=DO_NOT_LOG"
+    assert switch._pg_only_worker_block_reason() == (
+        "R06_WORKER_FAILURE_NOT_ATTESTED"
+    )

@@ -198,6 +198,7 @@ def _require_no_exposure_or_requests(
 def bootstrap_future_entry_checkpoints(
     connection: Any,
     *,
+    readonly_connection: Any,
     proof: R06FreshEntryProof,
     strategies: tuple[tuple[str, str, str, str], ...],
     consumer_release_commit: str,
@@ -211,7 +212,8 @@ def bootstrap_future_entry_checkpoints(
     and cannot be run while the old WS owner is active.
     """
     if (
-        not isinstance(proof, R06FreshEntryProof)
+        readonly_connection is connection
+        or not isinstance(proof, R06FreshEntryProof)
         or not proof.new_epoch_only
         or len(strategies) != 2
         or {part[0] for part in strategies} != set(_IDS)
@@ -257,31 +259,39 @@ def bootstrap_future_entry_checkpoints(
         connection, bundles=active_p90_bundles,
     )
 
-    # Signed MAIN/SUB FLAT may take longer than the immutable 5-second market
-    # publication freshness gate. NEVER insert from a publication selected
-    # before the private proof. Re-pin and rederive the full five-symbol
-    # geometry after signing, in the SAME repeatable-read transaction that
-    # performs the two atomic scoped cursor inserts.
+    # Signed MAIN/SUB FLAT may outlast the fixed five-second publication
+    # freshness gate. Re-pin only AFTER signing, using a distinct physical
+    # REPEATABLE READ READ ONLY reader. The publication reader explicitly
+    # rejects write-capable PG connections. Never silently satisfy that
+    # contract by issuing the proof from the writer.
     previous_pin = proof.pin
     previous_closed = proof.closed_5m_at
     previous_detached = proof.legacy_detached_at
-    with connection.transaction():
-        connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+    with readonly_connection.transaction():
+        readonly_connection.execute(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
         proof = verify_r06_fresh_publication(
-            connection, legacy_detached_at=previous_detached,
+            readonly_connection, legacy_detached_at=previous_detached,
             observed_at=datetime.now(UTC),
             source_checkout=Path("/srv/cripta/source_checkout"),
             installed_consumer_commit=consumer_release_commit,
         )
-        pin = proof.pin
-        if (
-            pin.source_session_id != previous_pin.source_session_id
-            or pin.producer_release_commit != previous_pin.producer_release_commit
-            or proof.closed_5m_at < previous_closed
-        ):
-            raise R06FreshCutoverBlocked(
-                "R06_SIGNED_REFRESH_EPOCH_OR_CLOSED_BOUNDARY_DRIFT"
-            )
+    pin = proof.pin
+    if (
+        pin.source_session_id != previous_pin.source_session_id
+        or pin.producer_release_commit != previous_pin.producer_release_commit
+        or proof.closed_5m_at < previous_closed
+    ):
+        raise R06FreshCutoverBlocked(
+            "R06_SIGNED_REFRESH_EPOCH_OR_CLOSED_BOUNDARY_DRIFT"
+        )
+    # One writer transaction locks and re-verifies exact producer/publication
+    # identity, all candle/native refs, freshness <= five seconds and
+    # financial OFF, then inserts BOTH checkpoint rows atomically. If the
+    # reader proof aged or raced, rollback both; no stale replay or bypass.
+    with connection.transaction():
+        connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
         # Lock before checking actual arm/exposure/pending + one active epoch.
         source = connection.execute(
             """SELECT state,producer_release_commit

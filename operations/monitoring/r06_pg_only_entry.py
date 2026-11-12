@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import time
 from datetime import UTC, datetime, timedelta
@@ -53,6 +54,14 @@ _MAX_LATE_SIGNAL = timedelta(seconds=5)
 
 class R06PublishedEntryBlocked(RuntimeError):
     """A no-order PG-only Entry consumer has no verified current contract."""
+
+
+def _worker_block_code(exc: BaseException) -> str:
+    """Return only an approved non-secret R06/P90 classification code."""
+    code = str(exc).split(":", 1)[0]
+    if re.fullmatch(r"(?:R06|P90)_[A-Z0-9_]{1,100}", code) is None:
+        return "R06_UNCLASSIFIED_RUNTIME_EXCEPTION"
+    return code
 
 
 def _bootstrap_transient_retryable(
@@ -383,13 +392,23 @@ def run_pg_only(
                             raise R06PublishedEntryBlocked("R06_NEW_5M_BOOTSTRAP_TIMEOUT")
                         time.sleep(0.25)
                         continue
-                    with reader.transaction():
-                        reader.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-                        proof = verify_r06_fresh_publication(
-                            reader,legacy_detached_at=detached_at,observed_at=at,
-                            source_checkout=_SOURCE_CHECKOUT,
-                            installed_consumer_commit=loaded_commit,
-                        )
+                    try:
+                        with reader.transaction():
+                            reader.execute(
+                                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                            )
+                            proof = verify_r06_fresh_publication(
+                                reader,legacy_detached_at=detached_at,
+                                observed_at=at,source_checkout=_SOURCE_CHECKOUT,
+                                installed_consumer_commit=loaded_commit,
+                            )
+                    except R06FreshCutoverBlocked as exc:
+                        if not _bootstrap_transient_retryable(
+                            exc,detached_at=detached_at,observed_at=at,
+                        ):
+                            raise
+                        time.sleep(1.0)
+                        continue
                     identities=tuple(
                         (b.card.strategy_id,b.card.strategy_version,
                          b.entry_plan.entry_plan_fingerprint,
@@ -398,7 +417,8 @@ def run_pg_only(
                     )
                     try:
                         bootstrap_future_entry_checkpoints(
-                            writer,proof=proof,strategies=identities,
+                            writer,readonly_connection=reader,
+                            proof=proof,strategies=identities,
                             consumer_release_commit=loaded_commit,
                             active_p90_bundles=bundles,
                         )
@@ -456,12 +476,13 @@ def run_pg_only(
                     last_status=time.monotonic()
                 time.sleep(0.15)
     except Exception as exc:
-        # Fixed exit status 42 is deliberately excluded from Restart=on-failure
-        # by the exact R06 systemd unit. A permanent provenance block must be
-        # visible as failure and may never cause an automatic old-path fallback.
+        # This status is a service/runtime log sink, not a secret store.
+        # Preserve only a fixed R06/P90 failure CODE, never raw provider,
+        # database or signed account exception text.
+        code = _worker_block_code(exc)
         write_status(
             state="BLOCKED",epoch_id=None,active_bundles=(),symbols=FIVE,
-            reason="R06_PG_ONLY_BLOCKED:"+type(exc).__name__+":"+str(exc)[:160],
+            reason="R06_PG_ONLY_BLOCKED:"+type(exc).__name__+":"+code,
             sensor_status={"native_pg_delivery_scope":"R06_BLOCKED_NO_ORDERS"},
         )
         raise SystemExit(42) from exc
