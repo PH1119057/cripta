@@ -179,7 +179,7 @@ def run(period,smoke_hours):
             "ledger_sha256":None
         }
     out=ROOT/period
-    out.mkdir(mode=0o2770)
+    out.mkdir(mode=0o770)
     for (side,floor),book in books.items():
         label=side.lower()+"_floor"+str(floor).replace(".","p")
         leaf=out/(label+".jsonl")
