@@ -54,7 +54,7 @@ def test_exact_frozen_names_periods_and_full_audit_contract():
     })
     assert qc.TOTAL_DAYS == {"90d": 90, "29d": 29}
     assert qc.LEAF == "p90l90_depthzero_prev7d_width_confirm_20261112_v1"
-    assert qc.Q == D("0.000000000001")
+    assert qc.Q.compare(D("0.000000000001")) == 0
     assert str(qc.ROOT["90d"]).replace("\\", "/").startswith("/data/")
     assert str(qc.ROOT["29d"]).replace("\\", "/").startswith("/data/")
 
