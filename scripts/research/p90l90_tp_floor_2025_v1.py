@@ -159,7 +159,7 @@ def run(pilot_days):
  if pilot_days:
   print(json.dumps({"status":"SMOKE_PASS_NO_WRITES","days":pilot_days,
     "native_ticks":state["ticks"],
-    "counts":{k:dict(book.counts) for k,book in books.items()}},flush=True)
+    "counts":{k:dict(book.counts) for k,book in books.items()}}),flush=True)
   return
  assert state["next_day"]==183
  for side in SIDES:
