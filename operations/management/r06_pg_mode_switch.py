@@ -213,53 +213,48 @@ def _probe(phase: str) -> dict[str, object]:
         raise R06ModeSwitchBlocked("R06_UNKNOWN_PROBE_PHASE")
     unit = f"cripta-r06-entry-preflight@{phase}.service"
     template_path = "/etc/systemd/system/cripta-r06-entry-preflight@.service"
-    start_mono_us = time.monotonic_ns() // 1000
+    # Type=oneshot + RemainAfterExit=no synchronously executes the fixed
+    # User=cripta unit on EACH start. systemd discards InvocationID and the
+    # monotonic start timestamp after it becomes inactive, so those cannot
+    # be used as post-exit evidence. The successful blocking start result,
+    # fixed ExecStart and actor metadata are authoritative instead.
     launch = _call(
         "/usr/bin/systemctl", "start", unit, timeout=75, checked=False,
     )
     metadata = _call(
         "/usr/bin/systemctl", "show",
-        "--property=User,Group,NoNewPrivileges,FragmentPath,"
-        "InvocationID,ExecMainStatus,ExecMainStartTimestampMonotonic,"
-        "Result,ActiveState,ExecStart",
+        "--property=Type,RemainAfterExit,User,Group,NoNewPrivileges,"
+        "FragmentPath,ExecMainStatus,Result,ActiveState,ExecStart",
         unit,
     )
     props = dict(
         line.split("=", 1) for line in metadata.stdout.splitlines()
         if "=" in line
     )
-    invocation = props.get("InvocationID", "")
-    try:
-        started = int(props.get("ExecMainStartTimestampMonotonic", "0"))
-        exit_status = int(props.get("ExecMainStatus", "-1"))
-    except ValueError as exc:
-        raise R06ModeSwitchBlocked(
-            "R06_PROBE_SYSTEMD_INVOCATION_METADATA_INVALID"
-        ) from exc
     command = props.get("ExecStart", "")
+    expected_argv = "argv[]=" + VENV + " " + str(PROBE) + " " + phase + " ;"
     if (
-        props.get("User") != "cripta"
+        props.get("Type") != "oneshot"
+        or props.get("RemainAfterExit") != "no"
+        or props.get("User") != "cripta"
         or props.get("Group") != "cripta"
         or props.get("NoNewPrivileges") != "yes"
         or props.get("FragmentPath") != template_path
-        or re.fullmatch(r"[0-9a-f]{32}", invocation) is None
-        or started < start_mono_us
-        or VENV not in command
-        or str(PROBE) not in command
-        or phase not in command
+        or "path=" + VENV + " ;" not in command
+        or expected_argv not in command
     ):
         raise R06ModeSwitchBlocked(
-            "R06_PROBE_SYSTEMD_CRIPTA_ACTOR_OR_INVOCATION_UNVERIFIED"
+            "R06_PROBE_SYSTEMD_CRIPTA_ACTOR_OR_UNIT_UNVERIFIED"
         )
     if (
         launch.returncode != 0
         or props.get("Result") != "success"
         or props.get("ActiveState") != "inactive"
-        or exit_status != 0
+        or props.get("ExecMainStatus") != "0"
     ):
         raise R06ModeSwitchBlocked(
-            "R06_PROBE_SYSTEMD_CRIPTA_UNIT_FAILED:exit="
-            + str(exit_status)
+            "R06_PROBE_SYNCHRONOUS_ONESHOT_NOT_SUCCESS:"
+            + str(launch.returncode)
         )
 
     # The exact immutable code in the separate User=cripta one-shot unit
@@ -279,7 +274,7 @@ def _probe(phase: str) -> dict[str, object]:
         "release": release,
         "trading_effect": "NONE",
         "mode": phase,
-        "unit_invocation_id": invocation,
+        "synchronous_cripta_oneshot": True,
     }
     if phase == "after":
         # cripta verified the causal database boundary before returning 0.

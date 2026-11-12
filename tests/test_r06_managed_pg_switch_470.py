@@ -336,15 +336,10 @@ def test_cri_probe_is_fixed_systemd_user_and_never_switches_uid():
     ).read_text(encoding="utf-8")
 
 
-def test_probe_attests_exact_systemd_cripta_actor_and_invocation(
-    monkeypatch,
-):
+def test_probe_attests_synchronous_fixed_cripta_oneshot(monkeypatch):
     from types import SimpleNamespace
 
-    phase = "before"
-    invocation = "b" * 32
     seen = []
-    monkeypatch.setattr(switch.time, "monotonic_ns", lambda: 1_000_000)
     monkeypatch.setattr(
         switch.RELEASE.__class__, "read_text",
         lambda _self, **_kw: "a" * 40 + "\n",
@@ -353,108 +348,133 @@ def test_probe_attests_exact_systemd_cripta_actor_and_invocation(
         seen.append(args)
         if args[1] == "start":
             assert args[2] == "cripta-r06-entry-preflight@before.service"
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if args[0] == "/usr/bin/systemctl":
-            output = "\n".join([
+            return SimpleNamespace(returncode=0, stdout="")
+        return SimpleNamespace(
+            returncode=0, stdout="\n".join([
+                "Type=oneshot", "RemainAfterExit=no",
                 "User=cripta", "Group=cripta", "NoNewPrivileges=yes",
                 "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
-                f"InvocationID={invocation}", "ExecMainStatus=0",
-                "ExecMainStartTimestampMonotonic=2000",
-                "Result=success", "ActiveState=inactive",
-                "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
-                + " before",
+                "ExecMainStatus=0", "Result=success", "ActiveState=inactive",
+                "InvocationID=",
+                "ExecMainStartTimestampMonotonic=0",
+                "ExecStart={ path=" + switch.VENV + " ; argv[]="
+                + switch.VENV + " " + str(switch.PROBE)
+                + " before ; ignore_errors=no }",
             ])
-            return SimpleNamespace(returncode=0, stdout=output)
-        raise AssertionError(args)
+        )
     monkeypatch.setattr(switch, "_call", fake_call)
-    assert switch._probe(phase) == {
+    assert switch._probe("before") == {
         "result": "R06_PG_SWITCH_PREFLIGHT_PASS",
-        "mode": phase, "release": "a" * 40,
-        "trading_effect": "NONE", "unit_invocation_id": invocation,
+        "mode": "before",
+        "release": "a" * 40,
+        "trading_effect": "NONE",
+        "synchronous_cripta_oneshot": True,
     }
     assert len(seen) == 2
 
 
-def test_probe_refuses_incorrect_unix_actor_without_phase_effect(
-    monkeypatch,
+@pytest.mark.parametrize("drift", [
+    "User=root", "Group=root", "NoNewPrivileges=no",
+    "RemainAfterExit=yes", "Type=simple",
+    "FragmentPath=/tmp/foreign.service",
+    "ExecStart={ path=/tmp/python ; argv[]=/tmp/python foo ; }",
+])
+def test_probe_rejects_wrong_unit_contract(monkeypatch, drift):
+    from types import SimpleNamespace
+
+    fields = {
+        "Type": "oneshot", "RemainAfterExit": "no",
+        "User": "cripta", "Group": "cripta",
+        "NoNewPrivileges": "yes",
+        "FragmentPath":
+            "/etc/systemd/system/cripta-r06-entry-preflight@.service",
+        "ExecMainStatus": "0", "Result": "success",
+        "ActiveState": "inactive",
+        "ExecStart": "{ path=" + switch.VENV
+            + " ; argv[]=" + switch.VENV + " "
+            + str(switch.PROBE) + " before ; ignore_errors=no }",
+    }
+    key, value = drift.split("=", 1)
+    fields[key] = value
+    def fake_call(*args, **_kwargs):
+        if args[1] == "start":
+            return SimpleNamespace(returncode=0, stdout="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout="\n".join(k + "=" + v for k, v in fields.items()),
+        )
+    monkeypatch.setattr(switch, "_call", fake_call)
+    with pytest.raises(
+        switch.R06ModeSwitchBlocked,
+        match="R06_PROBE_SYSTEMD_CRIPTA_ACTOR_OR_UNIT_UNVERIFIED",
+    ):
+        switch._probe("before")
+
+
+@pytest.mark.parametrize("returncode,result,status", [
+    (1, "success", "0"),
+    (0, "exit-code", "42"),
+    (0, "success", "42"),
+])
+def test_probe_rejects_failed_oneshot_even_if_cached_metadata_claims_success(
+    monkeypatch, returncode, result, status,
 ):
     from types import SimpleNamespace
 
-    monkeypatch.setattr(switch.time, "monotonic_ns", lambda: 1_000_000)
+    def fake_call(*args, **_kwargs):
+        if args[1] == "start":
+            return SimpleNamespace(returncode=returncode, stdout="")
+        fields = {
+            "Type": "oneshot", "RemainAfterExit": "no",
+            "User": "cripta", "Group": "cripta",
+            "NoNewPrivileges": "yes",
+            "FragmentPath":
+                "/etc/systemd/system/cripta-r06-entry-preflight@.service",
+            "ExecMainStatus": status, "Result": result,
+            "ActiveState": "inactive",
+            "ExecStart": "{ path=" + switch.VENV
+                + " ; argv[]=" + switch.VENV + " "
+                + str(switch.PROBE) + " before ; ignore_errors=no }",
+        }
+        return SimpleNamespace(
+            returncode=0,
+            stdout="\n".join(k + "=" + v for k, v in fields.items()),
+        )
+    monkeypatch.setattr(switch, "_call", fake_call)
+    with pytest.raises(
+        switch.R06ModeSwitchBlocked, match="R06_PROBE_SYNCHRONOUS_ONESHOT",
+    ):
+        switch._probe("before")
+
+
+def test_after_probe_rejects_forged_observer_status(monkeypatch):
+    from types import SimpleNamespace
+
     def fake_call(*args, **_kwargs):
         if args[1] == "start":
             return SimpleNamespace(returncode=0, stdout="")
         return SimpleNamespace(
             returncode=0, stdout="\n".join([
-                "User=root", "Group=root", "NoNewPrivileges=yes",
+                "Type=oneshot", "RemainAfterExit=no",
+                "User=cripta", "Group=cripta", "NoNewPrivileges=yes",
                 "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
-                "InvocationID=" + "b"*32,
-                "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=2000",
-                "Result=success", "ActiveState=inactive",
-                "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
-                + " before",
+                "ExecMainStatus=0", "Result=success", "ActiveState=inactive",
+                "ExecStart={ path=" + switch.VENV
+                + " ; argv[]=" + switch.VENV + " "
+                + str(switch.PROBE) + " after ; ignore_errors=no }",
             ])
         )
-    monkeypatch.setattr(switch, "_call", fake_call)
-    with pytest.raises(
-        switch.R06ModeSwitchBlocked, match="CRIPTA_ACTOR_OR_INVOCATION",
-    ):
-        switch._probe("before")
-
-
-def test_probe_rejects_stale_systemd_execution_even_after_success(
-    monkeypatch,
-):
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(switch.time, "monotonic_ns", lambda: 2_000_000)
-    def fake_call(*args, **_kwargs):
-        if args[1] == "start":
-            return SimpleNamespace(returncode=0, stdout="")
-        return SimpleNamespace(returncode=0, stdout="\n".join([
-            "User=cripta", "Group=cripta", "NoNewPrivileges=yes",
-            "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
-            "InvocationID=" + "b"*32,
-            "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=1000",
-            "Result=success", "ActiveState=inactive",
-            "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
-            + " before",
-        ]))
-    monkeypatch.setattr(switch, "_call", fake_call)
-    with pytest.raises(
-        switch.R06ModeSwitchBlocked, match="CRIPTA_ACTOR_OR_INVOCATION",
-    ):
-        switch._probe("before")
-
-
-def test_after_probe_requires_matching_observer_status(
-    monkeypatch,
-):
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(switch.time, "monotonic_ns", lambda: 1_000_000)
-    def fake_call(*args, **_kwargs):
-        if args[1] == "start":
-            return SimpleNamespace(returncode=0, stdout="")
-        return SimpleNamespace(returncode=0, stdout="\n".join([
-            "User=cripta", "Group=cripta", "NoNewPrivileges=yes",
-            "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
-            "InvocationID=" + "b"*32,
-            "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=2000",
-            "Result=success", "ActiveState=inactive",
-            "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
-            + " after",
-        ]))
     monkeypatch.setattr(switch, "_call", fake_call)
     def static_read(path, **_kw):
         if path == switch.RELEASE:
             return "a" * 40 + "\n"
         if str(path).endswith("status.json"):
-            return '{"state":"BLOCKED","source_commit":"unexpected"}'
+            return '{"state":"BLOCKED","source_commit":"wrong"}'
         raise AssertionError("unexpected path")
     monkeypatch.setattr(switch.RELEASE.__class__, "read_text", static_read)
     with pytest.raises(
-        switch.R06ModeSwitchBlocked, match="AFTER_STATUS_PROVENANCE_DRIFT",
+        switch.R06ModeSwitchBlocked,
+        match="R06_AFTER_STATUS_PROVENANCE_DRIFT",
     ):
         switch._probe("after")
 
