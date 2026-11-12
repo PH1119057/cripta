@@ -457,3 +457,24 @@ def test_reader_rejection_stops_before_writer_transaction(monkeypatch):
     assert readonly.calls == ["BEGIN", "SET_READ_ONLY", "ROLLBACK"]
     assert db.calls == []
     assert not db.inserted
+
+
+def test_immutable_publication_read_works_without_update_privilege():
+    """Runtime SELECT/INSERT role must not row-lock immutable market facts."""
+    import psycopg
+
+    class RuntimeRoleDB(WriterDB):
+        def execute(self, sql, params=()):
+            if "FROM analytics.market_publications" in sql:
+                if "FOR SHARE" in sql.upper() or "FOR UPDATE" in sql.upper():
+                    raise psycopg.errors.InsufficientPrivilege(
+                        "immutable market publication has no UPDATE grant"
+                    )
+            if "FROM analytics.native_public_trade_source_sessions" in sql:
+                assert "FOR SHARE" in sql
+            return super().execute(sql, params)
+
+    db = RuntimeRoleDB()
+    assert _bootstrap(db) == (mod.MAIN_ID, mod.SUB_ID)
+    assert db.inserted == [mod.MAIN_ID, mod.SUB_ID]
+    assert db.calls[-1] == "COMMIT"
