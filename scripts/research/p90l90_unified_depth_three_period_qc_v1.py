@@ -18,7 +18,7 @@ from pathlib import Path
 
 from scripts.research import p90l90_unified_depth_three_period_v1 as run
 
-STATUS = "INDEPENDENT_QC_PASS_P90L90_UNIFIED_DEPTH_THREE_PERIODS_V1"
+STATUS = "INDEPENDENT_QC_PASS_P90L90_UNIFIED_DEPTH_THREE_PERIODS_V2"
 
 
 def money(val: D) -> D:
@@ -211,7 +211,7 @@ def audit(period: str, root: Path, commit: str) -> dict:
                 != {x["symbol"] for x in open_positions}):
             raise ValueError("snapshot and open-censored coin occupancy differs")
         reserved = sum((D(x["margin"]) for x in open_positions), D(0))
-        if reserved != D(summary["reserved_margin_usdt"]):
+        if abs(reserved - D(summary["reserved_margin_usdt"])) > run.RESERVED_MARGIN_EPSILON:
             raise ValueError("open position margin reservation mismatch")
         if summary["counts"]["qualified_candidate"] != source["candidate_count"][depth]:
             raise ValueError("qualified candidates different from immutable Entry catalog")

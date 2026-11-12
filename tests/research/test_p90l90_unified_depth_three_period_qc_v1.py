@@ -56,10 +56,11 @@ def test_reject_wrong_side_leverage_or_maker_classification():
 
 
 def test_unique_result_leaf_and_independent_verification_semantics():
-    assert qc.STATUS == "INDEPENDENT_QC_PASS_P90L90_UNIFIED_DEPTH_THREE_PERIODS_V1"
+    assert qc.STATUS == "INDEPENDENT_QC_PASS_P90L90_UNIFIED_DEPTH_THREE_PERIODS_V2"
     assert qc.run.RESEARCH.startswith("P90L90_UNIFIED_DEPTH0")
     assert qc.run.WINDOW["183d"]["days"] == 183
     assert len(qc.run.BOOK_NAMES) == 8
+    assert qc.run.RESERVED_MARGIN_EPSILON == D('0.000000000001')
 
 
 for _name in sorted(name for name in globals() if name.startswith('test_')):
