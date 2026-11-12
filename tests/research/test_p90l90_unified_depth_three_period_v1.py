@@ -1,18 +1,17 @@
 """#638 tests: one shared LONG/SHORT book and executable 2025 accounting parity."""
 from __future__ import annotations
 
+import importlib
+import sys
 from decimal import Decimal as D
 from pathlib import Path
-import sys
-
-# scripts/ is a source-tree namespace (not an installed wheel package).
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pytest
 
-from scripts.research import p90l90_bull2025_portfolio_v1 as original
-from scripts.research import p90l90_unified_depth_three_period_v1 as run
-
+# Source-tree research namespace is not part of the installed wheel.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+original = importlib.import_module("scripts.research.p90l90_bull2025_portfolio_v1")
+run = importlib.import_module("scripts.research.p90l90_unified_depth_three_period_v1")
 
 def candidate(symbol: str, side: str, ts: float, seq: int, depth="0") -> dict:
     return {
