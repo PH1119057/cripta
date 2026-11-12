@@ -27,7 +27,7 @@ def test_conservative_taker_exit_and_short_gross():
     gross, fee_in, fee_out, net = qc.net_components(
         row(side="SHORT", entry="100", exit_="98", maker=False, reason="HARD_STOP")
     )
-    assert gross == D("0.200000000000")
+    assert gross == D("2.000000000000")
     assert fee_in == D("0.055000000000")
     assert fee_out == D("0.053900000000")
     assert net == D("1.891100000000")
@@ -54,9 +54,9 @@ def test_exact_frozen_names_periods_and_full_audit_contract():
     })
     assert qc.TOTAL_DAYS == {"90d": 90, "29d": 29}
     assert qc.LEAF == "p90l90_depthzero_prev7d_full_matrix_20261112_v2"
-    assert qc.NOTIONAL == D("100")
-    assert qc.REFERENCE_NOTIONAL == D("10")
-    assert qc.OPEN_ENTRY_FEE == D("0.055")
+    assert qc.NOTIONAL.compare(D("100")) == 0
+    assert qc.REFERENCE_NOTIONAL.compare(D("10")) == 0
+    assert qc.OPEN_ENTRY_FEE.compare(D("0.055")) == 0
     assert qc.Q.compare(D("0.000000000001")) == 0
     assert str(qc.ROOT["90d"]).replace("\\", "/").startswith("/data/")
     assert str(qc.ROOT["29d"]).replace("\\", "/").startswith("/data/")
@@ -67,7 +67,7 @@ def test_qc_never_claims_real_fills():
 
     src = inspect.getsource(qc.audit)
     assert src.find("source_cohorts(period, report)") >= 0
-    assert src.find("net_components(row)") >= 0
+    assert src.find("net_components(row, notional)") >= 0
     assert src.find("expected_reference(period)") >= 0
     assert src.find("COMPLETED_INDEPENDENT_QC_PASS") >= 0
     assert src.find("status.json.tmp") >= 0
