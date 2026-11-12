@@ -191,6 +191,7 @@ def test_healthy_account_reaches_existing_checks():
     env = {
         "_critical_lifecycle_fault_code": lambda *_a, **_k: None,
         "require_r07_publication_provenance": lambda *_a: 45,
+        "row": {},  # Source fragment also consumes the pending request row.
         "R07PublicationProvenanceUnavailable": R07PublicationProvenanceUnavailable,
     }
     exec(
