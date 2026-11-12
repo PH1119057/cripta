@@ -181,7 +181,18 @@ def test_pending_request_cancelled_before_dispatch():
 
 
 def test_healthy_account_reaches_existing_checks():
-    env = {"_critical_lifecycle_fault_code": lambda *_a, **_k: None}
+    # R07 provenance now sits between the critical Exit fault guard and the
+    # existing financial LIVE ARM; this source-fragment test supplies the
+    # independent verified publication port, not a real Entry permission.
+    from bybit_workbench.universal_entry.r07_publication_provenance import (
+        R07PublicationProvenanceUnavailable,
+    )
+
+    env = {
+        "_critical_lifecycle_fault_code": lambda *_a, **_k: None,
+        "require_r07_publication_provenance": lambda *_a: 45,
+        "R07PublicationProvenanceUnavailable": R07PublicationProvenanceUnavailable,
+    }
     exec(
         "def gate(request, connection, current):\n"
         + consumer_fragment()
