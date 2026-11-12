@@ -23,7 +23,16 @@ from scripts.research import p90l90_bull2025_portfolio_chunked_v2 as engine
 from scripts.research import p90l90_exit_90d_v2 as base
 from scripts.research import p90l90_bull2025_entry_v1 as entry
 
-ROOT=pathlib.Path("/data/cripta/research/runs/p90l90_dynamic_tp_floor_sweep_20261112_v1")
+# Existing independent systemd research job-runner has a bounded writable
+# data-disk spool. Only its own job bundle is writable within ProtectSystem=strict.
+JOB_ID=os.environ.get("CRIPTA_JOB_ID","")
+if JOB_ID:
+ if not JOB_ID.startswith("C2-R635-TP25-"):raise ValueError("unexpected job identity")
+ ROOT=pathlib.Path.cwd().resolve()
+ expected=pathlib.Path("/data/cripta/jobs/running")/JOB_ID/"bundle"
+ if ROOT!=expected.resolve() or ROOT.is_symlink():raise PermissionError("job output root mismatch")
+else:
+ ROOT=pathlib.Path("/data/cripta/research/runs/p90l90_dynamic_tp_floor_sweep_20261112_v1")
 OUT=ROOT/"2025"
 CHECKPOINT=OUT/"checkpoint"
 FLOORS=tuple(D(x) for x in ("0.50","0.60","0.70","0.80","0.90","1.00","1.10"))
