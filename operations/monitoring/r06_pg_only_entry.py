@@ -52,7 +52,9 @@ from operations.monitoring.r06_entry_publication_shadow_probe import (
 from operations.monitoring.r06_entry_resume import (
     bridge_checkpoint_release,
     entry_native_ttls,
+    geometry_seed_counts,
     recovery_counts,
+    slice_geometry_seed,
 )
 from operations.monitoring.r06_fresh_entry_boundary import (
     R06FreshCutoverBlocked,
@@ -215,7 +217,7 @@ def _observe_one(
 ) -> int:
     name = bundle.card.strategy_id
     saved = writer.execute(
-        "SELECT causal_state,last_publication_id FROM "
+        "SELECT causal_state,last_publication_id,bootstrap_source_at FROM "
         "strategy_entry.p90_scoped_native_consumer_checkpoints "
         "WHERE strategy_id=%s AND strategy_version=%s AND source_session_id=%s FOR UPDATE",
         (name, VERSION, pin.source_session_id),
@@ -228,15 +230,22 @@ def _observe_one(
     original = stored["by_symbol"]
     if not set(original) <= set(ALLOWED_SYMBOLS[name]):
         raise R06PublishedEntryBlocked("R06_DURABLE_ENTRY_CAUSAL_SYMBOL_DRIFT")
-    automata: dict[str, Any] = {
-        sym: restore_symbol(
-            original.get(sym), five=history[sym]["5"], fifteen=history[sym]["15"],
+    automata: dict[str, Any] = {}
+    seed_counts = {}
+    for sym in ALLOWED_SYMBOLS[name]:
+        raw = original.get(sym)
+        seed_counts[sym] = geometry_seed_counts(stored, sym, saved[2])
+        exact = history[sym] if raw is None else slice_geometry_seed(
+            history[sym], at=datetime.fromisoformat(raw["geometry_at"]),
+            counts=seed_counts[sym],
+        )
+        automata[sym] = restore_symbol(
+            raw, five=exact["5"], fifteen=exact["15"],
             published_closed_at=datetime.fromisoformat(pin.closed_refs[sym]["5"]),
         )
-        for sym in ALLOWED_SYMBOLS[name]
-    }
     new_count = 0
     fresh = at
+    seed_windows: dict[tuple[str, datetime], dict[str, tuple[Any, ...]]] = {}
     def evaluate(event: Any, publication_id: int) -> None:
         nonlocal new_count
         sym = event.symbol
@@ -244,11 +253,23 @@ def _observe_one(
             raise R06PublishedEntryBlocked("R06_PUBLICATION_SYMBOL_OR_ID_MISMATCH")
         closed_at = datetime.fromisoformat(pin.closed_refs[sym]["5"])
         fact, cursor = original_native_fact(event)
+        boundary = event.event_at.replace(
+            minute=event.event_at.minute//5*5, second=0, microsecond=0,
+        )
+        previous_geometry = automata[sym].state
+        window_key = (sym, boundary)
+        if window_key not in seed_windows:
+            seed_windows[window_key] = slice_geometry_seed(
+                history[sym], at=boundary, counts=dict(EXISTING_P90_COLD_COUNTS),
+            )
+        exact = seed_windows[window_key]
         crossing = advance_symbol(
             automata[sym], price=event.price, event_at=event.event_at,
-            five=history[sym]["5"], fifteen=history[sym]["15"],
+            five=exact["5"], fifteen=exact["15"],
             published_closed_at=closed_at,
         )
+        if previous_geometry is not automata[sym].state:
+            seed_counts[sym] = dict(EXISTING_P90_COLD_COUNTS)
         # Late original events are used ONLY to reconstruct the immutable
         # causal automaton. Never backdate any EntrySignal/decision.
         if not timedelta(0) <= fresh-event.event_at <= _MAX_LATE_SIGNAL:
@@ -298,6 +319,8 @@ def _observe_one(
     )
     serialized = {
         "version": 1,
+        "seed_counts_by_symbol": {sym: seed_counts[sym] for sym, state in automata.items()
+                                  if state.previous_price is not None},
         "by_symbol": {sym: dump_symbol(state) for sym, state in automata.items()
                       if state.previous_price is not None},
     }

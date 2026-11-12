@@ -15,9 +15,10 @@ from typing import Any
 
 from bybit_workbench.market_data.source_required_feed_manifest import RequiredPublicFeed
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from operations.monitoring.r06_entry_publication_shadow_probe import EXISTING_P90_COLD_COUNTS
 from operations.monitoring.r06_fresh_entry_boundary import _require_no_exposure_or_requests
 
-APPROVED_BASELINE = "9c27db23ce9f19c199506d225c37841901a7235d"
+APPROVED_BASELINE = "5f04e1653ecfc349c6389f6a0756bee4260fed45"
 _SEMANTIC_PATHS = (
     "src/bybit_workbench/universal_entry",
     "src/bybit_workbench/domain",
@@ -47,6 +48,55 @@ def entry_native_ttls(path: Path, symbols: tuple[str, ...]) -> dict[str, timedel
     return {r.symbol: timedelta(seconds=r.freshness_seconds) for r in wanted}
 
 
+def geometry_seed_counts(state: dict, symbol: str, bootstrap: datetime) -> dict[str, int]:
+    """Recover the exact recorded Wilder seed; legacy seed starts at bootstrap.
+
+    A fingerprint is never waived. Legacy expanded seeds are reconstructed
+    exactly, then future geometry uses the approved fixed cold counts and
+    records those counts alongside the causal state.
+    """
+    base = dict(EXISTING_P90_COLD_COUNTS)
+    recorded = state.get("seed_counts_by_symbol", {})
+    if not isinstance(recorded, dict):
+        raise R06ResumeBlocked("R06_GEOMETRY_SEED_METADATA_INVALID")
+    if symbol in recorded:
+        counts = recorded[symbol]
+        if (not isinstance(counts, dict) or counts.keys() != base.keys()
+                or any(type(counts[tf]) is not int or not base[tf] <= counts[tf] <= 10000
+                       for tf in base)):
+            raise R06ResumeBlocked("R06_GEOMETRY_SEED_METADATA_INVALID")
+        return dict(counts)
+    raw = state.get("by_symbol", {}).get(symbol)
+    if raw is None:
+        return base
+    try:
+        at = datetime.fromisoformat(raw["geometry_at"])
+        if (bootstrap.utcoffset() != timedelta(0) or at.utcoffset() != timedelta(0)
+                or not timedelta(0) <= at-bootstrap <= timedelta(days=1)):
+            raise ValueError("invalid seed anchor")
+    except (AttributeError, TypeError, KeyError, ValueError) as exc:
+        raise R06ResumeBlocked("R06_GEOMETRY_SEED_ANCHOR_INVALID") from exc
+    return {tf: n + int((_tf_boundary(at, tf)-_tf_boundary(bootstrap, tf)).total_seconds())
+            // (int(tf)*60) for tf, n in base.items()}
+
+
+def _tf_boundary(at: datetime, tf: str) -> datetime:
+    minutes = int(tf)
+    return at.replace(minute=at.minute//minutes*minutes, second=0, microsecond=0)
+
+
+def slice_geometry_seed(
+    history: dict[str, tuple[Any, ...]], *, at: datetime, counts: dict[str, int],
+) -> dict[str, tuple[Any, ...]]:
+    out = {}
+    for tf, count in counts.items():
+        bars = tuple(c for c in history[tf] if c.closed_at <= at)
+        if len(bars) < count:
+            raise R06ResumeBlocked("R06_GEOMETRY_EXACT_SEED_MISSING")
+        out[tf] = bars[-count:]
+    return out
+
+
 def recovery_counts(
     connection: Any, *, session: str, symbol: str, closed_at: datetime,
     counts: dict[str, int],
@@ -57,11 +107,12 @@ def recovery_counts(
     the independent five-second no-late-signal gate remains in the worker.
     """
     rows = connection.execute(
-        "SELECT causal_state FROM strategy_entry.p90_scoped_native_consumer_checkpoints "
+        "SELECT bootstrap_source_at,causal_state FROM "
+        "strategy_entry.p90_scoped_native_consumer_checkpoints "
         "WHERE source_session_id=%s ORDER BY strategy_id", (session,),
     ).fetchall()
-    earliest = closed_at
-    for (state,) in rows:
+    required = dict(counts)
+    for bootstrap, state in rows:
         if not isinstance(state, dict) or not isinstance(state.get("by_symbol"), dict):
             raise R06ResumeBlocked("R06_RESUME_CAUSAL_STATE_INVALID")
         saved = state["by_symbol"].get(symbol)
@@ -73,13 +124,13 @@ def recovery_counts(
             raise R06ResumeBlocked("R06_RESUME_GEOMETRY_TIME_INVALID") from exc
         if at.utcoffset() != timedelta(0) or at > closed_at:
             raise R06ResumeBlocked("R06_RESUME_GEOMETRY_TIME_INVALID")
-        earliest = min(earliest, at)
-    lag = closed_at - earliest
-    if lag > timedelta(days=1):
-        raise R06ResumeBlocked("R06_RESUME_HISTORY_BOUND_EXCEEDED")
-    seconds = int(lag.total_seconds())
-    return {tf: n + (seconds + int(tf)*60 - 1)//(int(tf)*60)
-            for tf, n in counts.items()}
+        if closed_at-at > timedelta(days=1):
+            raise R06ResumeBlocked("R06_RESUME_HISTORY_BOUND_EXCEEDED")
+        seed = geometry_seed_counts(state, symbol, bootstrap)
+        for tf in counts:
+            extra = int((_tf_boundary(closed_at, tf)-_tf_boundary(at, tf)).total_seconds())
+            required[tf] = max(required[tf], seed[tf] + extra//(int(tf)*60))
+    return required
 
 
 def verify_semantic_compatibility(source: Path, previous: str, target: str) -> None:
