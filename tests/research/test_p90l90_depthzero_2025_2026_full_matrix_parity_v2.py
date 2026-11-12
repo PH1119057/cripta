@@ -61,7 +61,7 @@ def test_original_2025_entry_exit_stop_pause_and_100usd_fees(
         assert book_2025.counts["accepted"] == 3
     else:
         assert book_2025.counts["accepted"] == 4
-    for row_old, row_native_10 in zip(book_2025.trades, book_2026.trades):
+    for row_old, row_native_10 in zip(book_2025.trades, book_2026.trades, strict=True):
         row_100 = new.comparable_100_trade(row_native_10)
         for field in ("entry_price", "exit_price", "entry_ts", "exit_ts",
                       "exit_reason", "candidate_event_id", "maker_exit",
