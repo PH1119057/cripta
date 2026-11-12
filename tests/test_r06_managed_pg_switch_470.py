@@ -368,9 +368,8 @@ def test_probe_exact_actor_attested_systemd_invocation_and_journal(
                 f"InvocationID={invocation}", "ExecMainStatus=0",
                 "ExecMainStartTimestampMonotonic=2000",
                 "Result=success", "ActiveState=inactive",
-                "ExecStart=/srv/cripta/runtime/current/.venv/bin/python "
-                "/srv/cripta/runtime/current/operations/management/"
-                "r06_pg_switch_probe.py before",
+                "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
+                + " before",
             ])
             return SimpleNamespace(returncode=0, stdout=output)
         if args[0] == "/usr/bin/journalctl":
@@ -401,9 +400,8 @@ def test_probe_refuses_incorrect_unix_actor_without_phase_effect(
                 "InvocationID=" + "b"*32,
                 "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=2000",
                 "Result=success", "ActiveState=inactive",
-                "ExecStart=/srv/cripta/runtime/current/.venv/bin/python "
-                "/srv/cripta/runtime/current/operations/management/"
-                "r06_pg_switch_probe.py before",
+                "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
+                + " before",
             ])
         )
     monkeypatch.setattr(switch, "_call", fake_call)
@@ -429,9 +427,8 @@ def test_probe_bad_or_stale_journal_never_passes(
                 "InvocationID=" + "b"*32,
                 "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=2000",
                 "Result=success", "ActiveState=inactive",
-                "ExecStart=/srv/cripta/runtime/current/.venv/bin/python "
-                "/srv/cripta/runtime/current/operations/management/"
-                "r06_pg_switch_probe.py before",
+                "ExecStart=" + switch.VENV + " " + str(switch.PROBE)
+                + " before",
             ]))
         return SimpleNamespace(
             returncode=0,
