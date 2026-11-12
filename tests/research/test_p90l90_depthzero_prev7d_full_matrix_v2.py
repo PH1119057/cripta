@@ -170,4 +170,4 @@ def test_2025_comparable_100_usdt_trade_fees_include_same_notional():
 
 def test_censored_entry_fees_follow_2025_wallet_model():
     assert check.CENSORED_OPEN_ENTRY_FEE.compare(D("0.055000000000")) == 0
-    assert check.COMPARABLE_NOTIONAL * check.base.TAKER.compare(D("0.055")) == 0
+    assert (check.COMPARABLE_NOTIONAL * check.base.TAKER).compare(D("0.055")) == 0
