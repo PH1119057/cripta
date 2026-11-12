@@ -201,97 +201,112 @@ def _require_units() -> int:
 
 
 def _probe(phase: str) -> dict[str, object]:
-    """Drop to the proven cripta runtime actor without a nested PAM session.
+    """Execute a fixed systemd-owned cripta-actor probe, NEVER switch UID.
 
-    This root-only management unit is under NoNewPrivileges and has a
-    restricted systemd sandbox. A nested runuser/PAM login is neither the
-    documented runtime actor rail nor a successful proof of effective UID.
-    POSIX child credentials are set BEFORE exec, without granting new rights.
+    Manager is root for exactly scoped OS operations. Its systemd sandbox has
+    NoNewPrivileges=yes: neither runuser nor Python preexec setuid is a valid
+    runtime actor handoff. PID 1 creates a separate static User=cripta unit.
+    A successful start alone is not proof: correlate current invocation,
+    systemd's Unix actor/sandbox metadata, and its journal JSON result.
     """
     if phase not in ("before", "detached", "after", "rollback_local"):
         raise R06ModeSwitchBlocked("R06_UNKNOWN_PROBE_PHASE")
-    import pwd
-
-    identity = pwd.getpwnam("cripta")
-    if (
-        os.geteuid() != 0
-        or identity.pw_uid <= 0 or identity.pw_gid <= 0
-        or not Path(VENV).is_file() or not PROBE.is_file()
-    ):
-        raise R06ModeSwitchBlocked("R06_PROBE_ACTOR_OR_RELEASE_UNAVAILABLE")
-    group_ids = tuple(sorted(set(os.getgrouplist("cripta", identity.pw_gid))))
-    if identity.pw_gid not in group_ids or any(gid < 0 for gid in group_ids):
-        raise R06ModeSwitchBlocked("R06_PROBE_CRIPTA_GROUP_SCOPE_INVALID")
-
-    env = {
-        "PATH": "/usr/bin:/bin",
-        "HOME": identity.pw_dir,
-        "PYTHONNOUSERSITE": "1",
-        "PYTHONDONTWRITEBYTECODE": "1",
-        "PYTHONPATH":
-            "/srv/cripta/runtime/current/src:/srv/cripta/runtime/current",
-        "LANG": "C.UTF-8",
-    }
+    unit = f"cripta-r06-entry-preflight@{phase}.service"
+    template_path = "/etc/systemd/system/cripta-r06-entry-preflight@.service"
+    start_mono_us = time.monotonic_ns() // 1000
+    launch = _call(
+        "/usr/bin/systemctl", "start", unit, timeout=75, checked=False,
+    )
+    metadata = _call(
+        "/usr/bin/systemctl", "show",
+        "--property=User,Group,NoNewPrivileges,FragmentPath,"
+        "InvocationID,ExecMainStatus,ExecMainStartTimestampMonotonic,"
+        "Result,ActiveState,ExecStart",
+        unit,
+    )
+    props = dict(
+        line.split("=", 1) for line in metadata.stdout.splitlines()
+        if "=" in line
+    )
+    invocation = props.get("InvocationID", "")
     try:
-        result = subprocess.run(
-            [VENV, str(PROBE), phase],
-            cwd="/srv/cripta/runtime/current",
-            user=identity.pw_uid,
-            group=identity.pw_gid,
-            extra_groups=group_ids,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=65,
-            check=False,
-        )
-    except OSError as exc:
-        # Never fall back to running the read-only Exchange proof as root.
+        started = int(props.get("ExecMainStartTimestampMonotonic", "0"))
+        exit_status = int(props.get("ExecMainStatus", "-1"))
+    except ValueError as exc:
         raise R06ModeSwitchBlocked(
-            "R06_CRIPTA_DROP_OR_EXEC_DENIED:errno=" + str(exc.errno)
+            "R06_PROBE_SYSTEMD_INVOCATION_METADATA_INVALID"
         ) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise R06ModeSwitchBlocked("R06_CRIPTA_PROBE_TIMEOUT") from exc
+    command = props.get("ExecStart", "")
+    if (
+        props.get("User") != "cripta"
+        or props.get("Group") != "cripta"
+        or props.get("NoNewPrivileges") != "yes"
+        or props.get("FragmentPath") != template_path
+        or re.fullmatch(r"[0-9a-f]{32}", invocation) is None
+        or started < start_mono_us
+        or VENV not in command
+        or str(PROBE) not in command
+        or phase not in command
+    ):
+        raise R06ModeSwitchBlocked(
+            "R06_PROBE_SYSTEMD_CRIPTA_ACTOR_OR_INVOCATION_UNVERIFIED"
+        )
+    if (
+        launch.returncode != 0
+        or props.get("Result") != "success"
+        or props.get("ActiveState") != "inactive"
+        or exit_status != 0
+    ):
+        raise R06ModeSwitchBlocked(
+            "R06_PROBE_SYSTEMD_CRIPTA_UNIT_FAILED:exit="
+            + str(exit_status)
+        )
 
-    lines = result.stdout.strip().splitlines()
-    if not lines:
-        # Do not echo stderr: provider/DB exceptions may contain credentials.
-        # The exit code plus a safe diagnostic category is sufficient to
-        # distinguish actor, interpreter, import and private proof failures.
-        stderr = result.stderr
-        cause = "UNKNOWN"
-        for token in (
-            "PermissionError", "ModuleNotFoundError", "ImportError",
-            "OperationalError", "CalledProcessError", "OSError",
-            "Traceback",
+    journal = _call(
+        "/usr/bin/journalctl",
+        "_SYSTEMD_INVOCATION_ID=" + invocation,
+        "--output=json", "--no-pager", "-n", "50",
+        timeout=10, checked=False,
+    )
+    if journal.returncode != 0:
+        raise R06ModeSwitchBlocked("R06_PROBE_CURRENT_JOURNAL_UNAVAILABLE")
+    reports = []
+    for line in journal.stdout.splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if (
+            not isinstance(entry, dict)
+            or entry.get("_SYSTEMD_UNIT") != unit
         ):
-            if token in stderr:
-                cause = token
-                break
+            continue
+        try:
+            report = json.loads(entry.get("MESSAGE", ""))
+        except (ValueError, TypeError):
+            continue
+        if (
+            isinstance(report, dict)
+            and report.get("unit_invocation_id") == invocation
+            and report.get("mode") == phase
+        ):
+            reports.append(report)
+    if len(reports) != 1:
         raise R06ModeSwitchBlocked(
-            f"R06_CRIPTA_PROBE_NO_RESULT:exit={result.returncode}:class={cause}"
+            "R06_PROBE_CURRENT_INVOCATION_RESULT_NOT_ATTESTED"
         )
-    try:
-        report = json.loads(lines[-1])
-    except (TypeError, ValueError) as exc:
-        raise R06ModeSwitchBlocked(
-            f"R06_CRIPTA_PROBE_NON_JSON:exit={result.returncode}"
-        ) from exc
-    if not isinstance(report, dict):
-        raise R06ModeSwitchBlocked("R06_CRIPTA_PROBE_RESULT_NOT_OBJECT")
+    report = reports[0]
+    expected_result = (
+        "R06_PHYSICAL_PG_ONLY_NO_ORDER_PASS" if phase == "after"
+        else ("R06_ROLLBACK_LOCAL_OFF_PASS" if phase == "rollback_local"
+              else "R06_PG_SWITCH_PREFLIGHT_PASS")
+    )
     if (
-        result.returncode != 0
+        report.get("result") != expected_result
         or report.get("trading_effect") != "NONE"
-        or report.get("result") not in (
-            "R06_PG_SWITCH_PREFLIGHT_PASS",
-            "R06_PHYSICAL_PG_ONLY_NO_ORDER_PASS",
-            "R06_ROLLBACK_LOCAL_OFF_PASS",
-        )
+        or report.get("release") != RELEASE.read_text(encoding="utf-8").strip()
     ):
-        raise R06ModeSwitchBlocked(
-            "R06_CRIPTA_PROBE_BLOCKED:exit=" + str(result.returncode) +
-            ":kind=" + str(report.get("reason_type", "PROOF_UNVERIFIED"))[:45]
-        )
+        raise R06ModeSwitchBlocked("R06_CRIPTA_PROBE_PROOF_DRIFT")
     return report
 
 

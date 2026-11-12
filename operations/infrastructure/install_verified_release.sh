@@ -353,6 +353,8 @@ unit_specs=(
   "operations/systemd/cripta-r06-entry-cutover.service|cripta-r06-entry-cutover.service|runtime"
   "operations/systemd/cripta-r06-entry-rollback.service|cripta-r06-entry-rollback.service|runtime"
   "operations/systemd/cripta-r06-entry-recovery.service|cripta-r06-entry-recovery.service|runtime"
+  # Immutable-source cripta-only signed read-only probe under PID 1; no root UID handoff.
+  "operations/systemd/cripta-r06-entry-preflight@.service|cripta-r06-entry-preflight@.service|runtime"
   "operations/systemd/cripta-universal-entry-observer.service|cripta-universal-entry-observer.service|runtime"
   "operations/systemd/cripta-universal-entry-shadow.service|cripta-universal-entry-shadow.service|runtime"
   "operations/systemd/cripta-universal-exit-shadow.service|cripta-universal-exit-shadow.service|runtime"

@@ -307,100 +307,159 @@ def test_rollback_cannot_reuse_foreign_release_state(monkeypatch):
 
 
 
-def test_protected_probe_uses_explicit_cripta_uid_gid_and_no_pam_runuser(
+
+def test_cri_probe_is_fixed_systemd_user_and_never_switches_uid():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    unit = (
+        root / "operations/systemd"
+        / "cripta-r06-entry-preflight@.service"
+    ).read_text(encoding="utf-8")
+    assert "User=cripta" in unit
+    assert "Group=cripta" in unit
+    assert "NoNewPrivileges=true" in unit
+    assert "ProtectSystem=strict" in unit
+    assert "StandardOutput=journal" in unit
+    assert "StandardError=null" in unit
+    assert "[Install]" not in unit
+    assert "runuser" not in unit
+    manager = (
+        root / "operations/management/r06_pg_mode_switch.py"
+    ).read_text(encoding="utf-8")
+    assert '"/usr/bin/systemctl", "start", unit' in manager
+    assert "user=identity.pw_uid" not in manager
+    assert '"/usr/bin/journalctl"' in manager
+    assert (
+        "operations/systemd/cripta-r06-entry-preflight@.service"
+    ) in (
+        root / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+
+
+def test_probe_exact_actor_attested_systemd_invocation_and_journal(
     monkeypatch,
 ):
     from types import SimpleNamespace
 
-    pwd = pytest.importorskip("pwd")
-    account = SimpleNamespace(
-        pw_uid=107, pw_gid=109, pw_dir="/var/lib/cripta",
+    phase = "before"
+    invocation = "b" * 32
+    record = {
+        "result": "R06_PG_SWITCH_PREFLIGHT_PASS", "mode": phase,
+        "release": "a" * 40, "trading_effect": "NONE",
+        "unit_invocation_id": invocation,
+    }
+    seen = []
+    monkeypatch.setattr(switch.time, "monotonic_ns", lambda: 1_000_000)
+    monkeypatch.setattr(
+        switch.RELEASE.__class__, "read_text",
+        lambda _self, **_kw: "a" * 40 + "\n",
     )
-    monkeypatch.setattr(pwd, "getpwnam", lambda _name: account)
-    monkeypatch.setattr(switch.os, "geteuid", lambda: 0)
-    monkeypatch.setattr(switch.os, "getgrouplist", lambda *_args: [109, 250])
-    monkeypatch.setattr(switch.Path, "is_file", lambda _path: True)
-    observed = {}
-    def execute(command, **kwargs):
-        observed.update(kwargs)
-        observed["command"] = command
-        return SimpleNamespace(
-            returncode=0, stderr="",
-            stdout='{"result":"R06_PG_SWITCH_PREFLIGHT_PASS",'
-                   '"trading_effect":"NONE","mode":"before"}\n',
-        )
-    monkeypatch.setattr(switch.subprocess, "run", execute)
-    result = switch._probe("before")
-    assert result["result"] == "R06_PG_SWITCH_PREFLIGHT_PASS"
-    assert observed["user"] == 107
-    assert observed["group"] == 109
-    assert set(observed["extra_groups"]) == {109, 250}
-    assert observed["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
-    assert "runuser" not in str(observed["command"])
-    assert observed["command"] == [
-        switch.VENV, str(switch.PROBE), "before",
-    ]
+    def fake_call(*args, **_kwargs):
+        seen.append(args)
+        if args[1] == "start":
+            assert args[2] == "cripta-r06-entry-preflight@before.service"
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if args[0] == "/usr/bin/systemctl":
+            output = "\n".join([
+                "User=cripta", "Group=cripta", "NoNewPrivileges=yes",
+                "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
+                f"InvocationID={invocation}", "ExecMainStatus=0",
+                "ExecMainStartTimestampMonotonic=2000",
+                "Result=success", "ActiveState=inactive",
+                "ExecStart=/srv/cripta/runtime/current/.venv/bin/python "
+                "/srv/cripta/runtime/current/operations/management/"
+                "r06_pg_switch_probe.py before",
+            ])
+            return SimpleNamespace(returncode=0, stdout=output)
+        if args[0] == "/usr/bin/journalctl":
+            entry = {
+                "_SYSTEMD_UNIT": "cripta-r06-entry-preflight@before.service",
+                "MESSAGE": json.dumps(record),
+            }
+            return SimpleNamespace(returncode=0, stdout=json.dumps(entry))
+        raise AssertionError(args)
+    monkeypatch.setattr(switch, "_call", fake_call)
+    assert switch._probe(phase) == record
+    assert len(seen) == 3
 
 
-def test_missing_uid_drop_never_falls_back_to_root(monkeypatch):
+def test_probe_refuses_incorrect_unix_actor_without_phase_effect(
+    monkeypatch,
+):
     from types import SimpleNamespace
 
-    pwd = pytest.importorskip("pwd")
-    monkeypatch.setattr(
-        pwd, "getpwnam", lambda _name:
-        SimpleNamespace(pw_uid=107,pw_gid=109,pw_dir="/var/lib/cripta"),
-    )
-    monkeypatch.setattr(switch.os, "geteuid", lambda: 0)
-    monkeypatch.setattr(switch.os, "getgrouplist", lambda *_a: [109])
-    monkeypatch.setattr(switch.Path, "is_file", lambda _p: True)
-    calls = []
-    def denied(_command, **kwargs):
-        calls.append(kwargs)
-        raise PermissionError(1, "setgroups denied")
-    monkeypatch.setattr(switch.subprocess, "run", denied)
+    monkeypatch.setattr(switch.time, "monotonic_ns", lambda: 1_000_000)
+    def fake_call(*args, **_kwargs):
+        if args[1] == "start":
+            return SimpleNamespace(returncode=0, stdout="")
+        return SimpleNamespace(
+            returncode=0, stdout="\n".join([
+                "User=root", "Group=root", "NoNewPrivileges=yes",
+                "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
+                "InvocationID=" + "b"*32,
+                "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=2000",
+                "Result=success", "ActiveState=inactive",
+                "ExecStart=/srv/cripta/runtime/current/.venv/bin/python "
+                "/srv/cripta/runtime/current/operations/management/"
+                "r06_pg_switch_probe.py before",
+            ])
+        )
+    monkeypatch.setattr(switch, "_call", fake_call)
     with pytest.raises(
-        switch.R06ModeSwitchBlocked, match="R06_CRIPTA_DROP_OR_EXEC_DENIED",
+        switch.R06ModeSwitchBlocked, match="CRIPTA_ACTOR_OR_INVOCATION",
     ):
         switch._probe("before")
-    assert len(calls) == 1
-    assert calls[0]["user"] == 107
 
 
-def test_missing_child_output_returns_sanitized_actor_diagnostics(monkeypatch):
-    from types import SimpleNamespace
-
-    pwd = pytest.importorskip("pwd")
-    monkeypatch.setattr(
-        pwd, "getpwnam", lambda _name:
-        SimpleNamespace(pw_uid=107,pw_gid=109,pw_dir="/var/lib/cripta"),
-    )
-    monkeypatch.setattr(switch.os, "geteuid", lambda: 0)
-    monkeypatch.setattr(switch.os, "getgrouplist", lambda *_a: [109])
-    monkeypatch.setattr(switch.Path, "is_file", lambda _p: True)
-    monkeypatch.setattr(
-        switch.subprocess, "run",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            stdout="", returncode=2,
-            stderr="PermissionError: secret=DO_NOT_LOG",
-        ),
-    )
-    with pytest.raises(switch.R06ModeSwitchBlocked) as exc:
-        switch._probe("before")
-    assert "exit=2:class=PermissionError" in str(exc.value)
-    assert "DO_NOT_LOG" not in str(exc.value)
-
-
-def test_probe_rejects_wrong_unix_actor_before_db_or_signed_exchange(
+def test_probe_bad_or_stale_journal_never_passes(
     monkeypatch,
 ):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(switch.time, "monotonic_ns", lambda: 1_000_000)
+    def fake_call(*args, **_kwargs):
+        if args[1] == "start":
+            return SimpleNamespace(returncode=0, stdout="")
+        if args[0] == "/usr/bin/systemctl":
+            return SimpleNamespace(returncode=0, stdout="\n".join([
+                "User=cripta", "Group=cripta", "NoNewPrivileges=yes",
+                "FragmentPath=/etc/systemd/system/cripta-r06-entry-preflight@.service",
+                "InvocationID=" + "b"*32,
+                "ExecMainStatus=0", "ExecMainStartTimestampMonotonic=2000",
+                "Result=success", "ActiveState=inactive",
+                "ExecStart=/srv/cripta/runtime/current/.venv/bin/python "
+                "/srv/cripta/runtime/current/operations/management/"
+                "r06_pg_switch_probe.py before",
+            ]))
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({
+                "_SYSTEMD_UNIT": "cripta-r06-entry-preflight@before.service",
+                "MESSAGE": json.dumps({
+                    "result": "R06_PG_SWITCH_PREFLIGHT_PASS",
+                    "mode": "before", "unit_invocation_id": "old"*10+"00",
+                    "trading_effect": "NONE",
+                }),
+            }),
+        )
+    monkeypatch.setattr(switch, "_call", fake_call)
+    with pytest.raises(
+        switch.R06ModeSwitchBlocked,
+        match="CURRENT_INVOCATION_RESULT_NOT_ATTESTED",
+    ):
+        switch._probe("before")
+
+
+def test_read_only_probe_rejects_wrong_unix_actor_before_db(monkeypatch):
     from types import SimpleNamespace
 
     from operations.management import r06_pg_switch_probe as probe
 
     pwd = pytest.importorskip("pwd")
     monkeypatch.setattr(
-        pwd, "getpwnam", lambda _name:
-        SimpleNamespace(pw_uid=107,pw_gid=109),
+        pwd, "getpwnam",
+        lambda _name: SimpleNamespace(pw_uid=107, pw_gid=109),
     )
     monkeypatch.setattr(probe.os, "getuid", lambda: 0)
     with pytest.raises(
@@ -408,3 +467,15 @@ def test_probe_rejects_wrong_unix_actor_before_db_or_signed_exchange(
         match="R06_PROBE_WRONG_UNIX_CRIPTA_ACTOR",
     ):
         probe.verify("before")
+
+
+def test_read_only_probe_journal_errors_redact_provider_details(monkeypatch):
+    from operations.management import r06_pg_switch_probe as probe
+
+    def denied(_phase):
+        raise RuntimeError("API_SECRET=DO_NOT_LOG")
+
+    monkeypatch.setattr(probe, "verify", denied)
+    monkeypatch.setattr(probe.sys, "argv", ["prog", "before"])
+    assert probe.main() == 2
+

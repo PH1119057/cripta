@@ -167,14 +167,25 @@ def main() -> int:
         if len(sys.argv) != 2:
             raise R06SwitchPreflightBlocked("R06_MODE_REQUIRED")
         result = verify(sys.argv[1])
+        result["mode"] = sys.argv[1]
+        result["unit_invocation_id"] = os.environ.get("INVOCATION_ID", "")
         print(json.dumps(result, sort_keys=True))
         return 0
     except Exception as exc:
         # No credentials, signed documents, Exchange payloads or secrets.
+        # Journal is a log sink: never record raw Exchange/DB errors,
+        # credentials, connector IDs or private account evidence there.
+        raw = str(exc)
+        reason = (
+            raw if re.fullmatch(r"(?:R06|P90)_[A-Z0-9_]{1,100}", raw)
+            else "UNCLASSIFIED_READ_ONLY_PROOF_REJECTION"
+        )
         print(json.dumps({
             "result": "R06_SWITCH_PREFLIGHT_BLOCKED",
             "reason_type": type(exc).__name__,
-            "reason": str(exc)[:200],
+            "reason": reason,
+            "mode": sys.argv[1] if len(sys.argv) == 2 else "INVALID",
+            "unit_invocation_id": os.environ.get("INVOCATION_ID", ""),
             "trading_effect": "NONE",
         }, sort_keys=True))
         return 2

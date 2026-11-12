@@ -1,0 +1,32 @@
+[Unit]
+Description=CRIPTA R06 signed read-only cripta actor proof (%i)
+After=postgresql.service
+Requires=postgresql.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONNOUSERSITE=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/management/r06_pg_switch_probe.py %i
+TimeoutStartSec=70
+Restart=no
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+ReadOnlyPaths=/srv/cripta/runtime/current
+StandardOutput=journal
+StandardError=null
+UMask=0077
+
+# Static template. No Install section: only exact protected root manager
+# starts one of before/detached/after/rollback_local; no SentinelX action.
