@@ -1,0 +1,182 @@
+{
+  "algorithm": "historical-trade-minute-mart-v1",
+  "days": 7,
+  "elapsed_seconds": 44.7,
+  "independent_mismatches": 0,
+  "independent_qc_cells": 60480,
+  "mart_bytes": 1433433,
+  "native_exchange_closed_candles": false,
+  "native_trade_sequence_preserved": false,
+  "orderbook_oi_liquidations_covered": false,
+  "per_day": [
+    {
+      "date_utc": "2026-05-18",
+      "independent_qc": {
+        "independent_minute_cells": 8640,
+        "mismatches": 0,
+        "native_rows": 373546
+      },
+      "output_bytes": 203114,
+      "output_filename": "SUIUSDT_2026-05-18_trade_minutes.jsonl.gz",
+      "output_sha256": "d49c135a166beb4d4ec234777133b9db574f410f85f62c1dd0f7e3c4edd8f586",
+      "primary_stats": {
+        "first_last_order_tie_minutes": 1305,
+        "minute_rows": 1440,
+        "recorded_trade_minutes": 1440,
+        "size_price_quote_notional_variances_over_1ppm": 0,
+        "source_trade_rows": 373546
+      },
+      "raw_purge_allowed": false,
+      "readback": "PASS",
+      "source_archive_bytes": 12364326,
+      "source_file": "/data/cripta/datasets/raw/20260518_20260816/SUIUSDT/public_trades/SUIUSDT2026-05-18.csv.gz",
+      "source_sha256": "a4dc845017146388cf3e768aaf3f59a4aeda43592896b90c8baf24953b68748e"
+    },
+    {
+      "date_utc": "2026-05-19",
+      "independent_qc": {
+        "independent_minute_cells": 8640,
+        "mismatches": 0,
+        "native_rows": 358782
+      },
+      "output_bytes": 202566,
+      "output_filename": "SUIUSDT_2026-05-19_trade_minutes.jsonl.gz",
+      "output_sha256": "21f18a9d77d2daacc016af06af456f5c885f2ea0a5fa1a0c6e6305cba6de4ca7",
+      "primary_stats": {
+        "first_last_order_tie_minutes": 1277,
+        "minute_rows": 1440,
+        "recorded_trade_minutes": 1440,
+        "size_price_quote_notional_variances_over_1ppm": 0,
+        "source_trade_rows": 358782
+      },
+      "raw_purge_allowed": false,
+      "readback": "PASS",
+      "source_archive_bytes": 11861058,
+      "source_file": "/data/cripta/datasets/raw/20260518_20260816/SUIUSDT/public_trades/SUIUSDT2026-05-19.csv.gz",
+      "source_sha256": "9da93aa882b58d397748bf2723fe55dffa8670da5b884184f8ef700e182f52fe"
+    },
+    {
+      "date_utc": "2026-05-20",
+      "independent_qc": {
+        "independent_minute_cells": 8640,
+        "mismatches": 0,
+        "native_rows": 338748
+      },
+      "output_bytes": 201580,
+      "output_filename": "SUIUSDT_2026-05-20_trade_minutes.jsonl.gz",
+      "output_sha256": "cb2b91534879bd0d9ee41c262316c3df20cfaf092d25a9c0c127acee9fd13fb9",
+      "primary_stats": {
+        "first_last_order_tie_minutes": 1267,
+        "minute_rows": 1440,
+        "recorded_trade_minutes": 1440,
+        "size_price_quote_notional_variances_over_1ppm": 0,
+        "source_trade_rows": 338748
+      },
+      "raw_purge_allowed": false,
+      "readback": "PASS",
+      "source_archive_bytes": 11184586,
+      "source_file": "/data/cripta/datasets/raw/20260518_20260816/SUIUSDT/public_trades/SUIUSDT2026-05-20.csv.gz",
+      "source_sha256": "4db2db5f068b88a80a8ad896d955f1fa78624f91865a5c480ba4ddaf7c3904c3"
+    },
+    {
+      "date_utc": "2026-05-21",
+      "independent_qc": {
+        "independent_minute_cells": 8640,
+        "mismatches": 0,
+        "native_rows": 796794
+      },
+      "output_bytes": 212050,
+      "output_filename": "SUIUSDT_2026-05-21_trade_minutes.jsonl.gz",
+      "output_sha256": "09bc27e1a6a2f6e0527729a2cb08fba4fc815849d811504f880acdaedfdcac4e",
+      "primary_stats": {
+        "first_last_order_tie_minutes": 1311,
+        "minute_rows": 1440,
+        "recorded_trade_minutes": 1440,
+        "size_price_quote_notional_variances_over_1ppm": 0,
+        "source_trade_rows": 796794
+      },
+      "raw_purge_allowed": false,
+      "readback": "PASS",
+      "source_archive_bytes": 26277674,
+      "source_file": "/data/cripta/datasets/raw/20260518_20260816/SUIUSDT/public_trades/SUIUSDT2026-05-21.csv.gz",
+      "source_sha256": "f9739c2781e3408a16e40772d2dc9816f83b209f7203d84c4ad7780bfc09da4f"
+    },
+    {
+      "date_utc": "2026-05-22",
+      "independent_qc": {
+        "independent_minute_cells": 8640,
+        "mismatches": 0,
+        "native_rows": 596481
+      },
+      "output_bytes": 209247,
+      "output_filename": "SUIUSDT_2026-05-22_trade_minutes.jsonl.gz",
+      "output_sha256": "d536530cb750f0626f9b0d55bb35e280bf43bbfec1e7883b6681793da9ec9b1b",
+      "primary_stats": {
+        "first_last_order_tie_minutes": 1327,
+        "minute_rows": 1440,
+        "recorded_trade_minutes": 1440,
+        "size_price_quote_notional_variances_over_1ppm": 0,
+        "source_trade_rows": 596481
+      },
+      "raw_purge_allowed": false,
+      "readback": "PASS",
+      "source_archive_bytes": 19738427,
+      "source_file": "/data/cripta/datasets/raw/20260518_20260816/SUIUSDT/public_trades/SUIUSDT2026-05-22.csv.gz",
+      "source_sha256": "ff9624f7008bac99701a07a7071eb5dd382d078c957eba0ec0421ce0eebb4cdb"
+    },
+    {
+      "date_utc": "2026-05-23",
+      "independent_qc": {
+        "independent_minute_cells": 8640,
+        "mismatches": 0,
+        "native_rows": 473761
+      },
+      "output_bytes": 205544,
+      "output_filename": "SUIUSDT_2026-05-23_trade_minutes.jsonl.gz",
+      "output_sha256": "8e806ffd3c3b94e244129585d42b3472b53662efe93e7f83fbc8226feb49db6e",
+      "primary_stats": {
+        "first_last_order_tie_minutes": 1264,
+        "minute_rows": 1440,
+        "recorded_trade_minutes": 1440,
+        "size_price_quote_notional_variances_over_1ppm": 0,
+        "source_trade_rows": 473761
+      },
+      "raw_purge_allowed": false,
+      "readback": "PASS",
+      "source_archive_bytes": 15803650,
+      "source_file": "/data/cripta/datasets/raw/20260518_20260816/SUIUSDT/public_trades/SUIUSDT2026-05-23.csv.gz",
+      "source_sha256": "96f236f1d2f06a0893d635b498f2c12b54c9de52ab8e0b539783559c7fd38c84"
+    },
+    {
+      "date_utc": "2026-05-24",
+      "independent_qc": {
+        "independent_minute_cells": 8640,
+        "mismatches": 0,
+        "native_rows": 290376
+      },
+      "output_bytes": 199332,
+      "output_filename": "SUIUSDT_2026-05-24_trade_minutes.jsonl.gz",
+      "output_sha256": "eeeee58f3109f268917309f4be7a5f85b41fef5a6c9af82bbc4734af19ff4461",
+      "primary_stats": {
+        "first_last_order_tie_minutes": 1264,
+        "minute_rows": 1440,
+        "recorded_trade_minutes": 1440,
+        "size_price_quote_notional_variances_over_1ppm": 0,
+        "source_trade_rows": 290376
+      },
+      "raw_purge_allowed": false,
+      "readback": "PASS",
+      "source_archive_bytes": 9654994,
+      "source_file": "/data/cripta/datasets/raw/20260518_20260816/SUIUSDT/public_trades/SUIUSDT2026-05-24.csv.gz",
+      "source_sha256": "04bb0ef048ee941a10eef1f047b62f1ff9f360d1a356ad1a3addd0ae07db88d9"
+    }
+  ],
+  "raw_purge_allowed": false,
+  "rows": 10080,
+  "source_archive_bytes": 106884715,
+  "source_instrument_identity_bound": false,
+  "source_script_sha256": "b30b76b2948d142a725657b3d8371489a47d8a1dd1467a09fe4ef899093165fa",
+  "status": "TRADE_ONLY_RESEARCH_MART_QC_PASS_NOT_FULL_MARKET_MART",
+  "symbol": "SUIUSDT",
+  "total_trade_rows": 3228488
+}

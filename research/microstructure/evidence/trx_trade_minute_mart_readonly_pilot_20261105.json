@@ -1,0 +1,56 @@
+{
+  "as_of_utc": "2026-11-05",
+  "status": "READ_ONLY_REAL_SOURCE_COLD_TRADE_MINUTE_PILOT_PASS_NOT_MATERIALIZED",
+  "authority": "PH1119057/cripta:main",
+  "tested_source_main_at_preflight": "281956868c1dc1a66882f8fd41d5a0cf186a6d6c",
+  "research_branch": "research/compact-native-minute-pilot-20261105",
+  "mart_script": "research/microstructure/experiments/historical_trade_minute_mart_v1.py",
+  "unit_tests": "research/microstructure/tests/test_historical_trade_minute_mart_v1.py",
+  "identity_status": "EXTERNAL_RESEARCH_IDENTITY_ONLY_INTERNAL_ID_UNBOUND",
+  "scope": {
+    "symbol": "TRXUSDT",
+    "date_utc": "2026-05-18",
+    "market": "Bybit public LINEAR",
+    "input_type": "public_trades daily CSV gzip",
+    "input": "TRXUSDT2026-05-18.csv.gz"
+  },
+  "validated_input": {
+    "compressed_bytes": 2360882,
+    "sha256": "231a61877d0ddccfe62d191d0f1d98ec6c9387c2df6d24fc545d3a78bf2f03ff",
+    "independently_reacquired_same_sha": true,
+    "independent_reacquisition_evidence": "research/microstructure/evidence/trx_20260518_20260524_public_source_reacquisition_sha256_20261105.json"
+  },
+  "real_in_memory_test": {
+    "native_trades": 61680,
+    "minutes": 1440,
+    "minutes_with_trades": 1411,
+    "minute_price_order_tied_boundary_count": 1038,
+    "size_times_price_quote_notional_1ppm_discrepancies": 0,
+    "independent_numeric_checks": 8640,
+    "mismatches": 0,
+    "in_memory_compressed_bytes": 184713,
+    "hypothetical_output_sha256": "9553d71be4b6fe334212e4c58da0fde97ea64fb9fb9b8a9eb380ff4b2edd5d1e",
+    "source_trades_gzip_to_in_memory_mart_factor": 12.78,
+    "wall_seconds": 0.91,
+    "server_files_written": 0
+  },
+  "offline_in_memory_unittests": {
+    "tests": 10,
+    "failures": 0,
+    "errors": 0,
+    "source_lines_syntax_pass": true,
+    "server_files_written": 0
+  },
+  "limitations": [
+    "Source-only experimental trade-minute mart; not a native Bybit closed candle and not R8 production analytics.market_minutes.",
+    "Notional/price and base-weighted VWAP from observed native rows only; historical source-completeness and receiver-time unknown.",
+    "Tied native timestamps can make file-order open/close ambiguous; 1038 of 1440 minutes for this sample.",
+    "No exact native trade sequence, OB200 deltas, OI, funding or liquidations retained.",
+    "Output compressed size is hypothetical in memory; no persistent mart created during busy-server inspection.",
+    "Source internal MarketSource/InstrumentIdentity remains deliberately UNBOUND until exact registry/venue evidence.",
+    "Current 20 old symbols are not the separate 15 new candidate instruments. Do not infer coverage for the 15.",
+    "No raw purge, no runtime/PostgreSQL/live action."
+  ],
+  "allowed_to_purge": false,
+  "reclaimed_bytes": 0
+}
