@@ -465,11 +465,12 @@ def test_immutable_publication_read_works_without_update_privilege():
 
     class RuntimeRoleDB(WriterDB):
         def execute(self, sql, params=()):
-            if "FROM analytics.market_publications" in sql:
-                if "FOR SHARE" in sql.upper() or "FOR UPDATE" in sql.upper():
-                    raise psycopg.errors.InsufficientPrivilege(
-                        "immutable market publication has no UPDATE grant"
-                    )
+            if "FROM analytics.market_publications" in sql and (
+                "FOR SHARE" in sql.upper() or "FOR UPDATE" in sql.upper()
+            ):
+                raise psycopg.errors.InsufficientPrivilege(
+                    "immutable market publication has no UPDATE grant"
+                )
             if "FROM analytics.native_public_trade_source_sessions" in sql:
                 assert "FOR SHARE" in sql
             return super().execute(sql, params)
