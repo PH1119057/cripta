@@ -1,17 +1,16 @@
 """Independent financial unit audit for unified portfolio H9 depth research #638."""
 from __future__ import annotations
 
+import importlib
+import sys
 from decimal import Decimal as D
 from pathlib import Path
-import sys
-
-# scripts/ is a source-tree namespace (not an installed wheel package).
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pytest
 
-from scripts.research import p90l90_unified_depth_three_period_qc_v1 as qc
-
+# Source-tree research namespace is not part of the installed wheel.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+qc = importlib.import_module("scripts.research.p90l90_unified_depth_three_period_qc_v1")
 
 def row(side="SHORT", entry="100", exit_="98", margin="200",
         maker=False, reason="HARD_STOP"):
