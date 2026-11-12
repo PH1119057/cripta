@@ -41,6 +41,10 @@ from bybit_workbench.universal_entry.execution_bridge import (
     prepare_runtime_entry_command,
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
+from bybit_workbench.universal_entry.r07_publication_provenance import (
+    R07PublicationProvenanceUnavailable,
+    require_r07_publication_provenance,
+)
 from bybit_workbench.universal_entry.owner_full_contour_control import (
     require_parent_p90_diagnostic_scope,
     retire_entry_rights as retire_owner_diagnostic_entry_rights,
@@ -1810,6 +1814,41 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
                 occurred_at=current, reason=reason,
             )
         return "BLOCKED:CRITICAL_LIFECYCLE_FAULT"
+
+    # R07: a REAL P90 request must reference an original native trade through
+    # the SAME durable R06 publication/decision epoch before financial ARM can
+    # be considered. The verifier is account-agnostic; the existing route,
+    # binding, capital, slot, connector and Exit gates stay account-local.
+    # No R06 no-order observation is promoted into a financial request here.
+    try:
+        require_r07_publication_provenance(connection, row)
+    except R07PublicationProvenanceUnavailable as exc:
+        reason = str(exc)
+        with connection.transaction():
+            _record_blocked(
+                connection,
+                request,
+                reason="R07_SOURCE_PUBLICATION_UNPROVEN:" + reason,
+                payload={
+                    "block_code": "R07_SOURCE_PUBLICATION_UNPROVEN",
+                    "source_reason": reason,
+                    "signal_id": request.signal_id,
+                },
+            )
+            _release_pre_exchange_admission(
+                connection,
+                request,
+                reason="PRE_EXCHANGE_BLOCK:R07_SOURCE_PUBLICATION_UNPROVEN",
+                now=current,
+            )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_CANCELLED",
+                occurred_at=current,
+                reason="R07_SOURCE_PUBLICATION_UNPROVEN:" + reason,
+            )
+        return "BLOCKED:R07_SOURCE_PUBLICATION_UNPROVEN"
 
     live_ready, failed_live_checks = _live_arm_ready(connection, row, now=current)
     if not live_ready:
