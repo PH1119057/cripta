@@ -28,11 +28,12 @@ SYMBOL = "LTCUSDT"
 
 def candles(minutes: int, count: int, symbol: str = SYMBOL) -> tuple[Candle, ...]:
     delta = timedelta(minutes=minutes)
+    start = BOUNDARY - count*delta
     return tuple(
         Candle(
             symbol=symbol,timeframe=str(minutes),
-            opened_at=BASE + i*delta,
-            closed_at=BASE + (i+1)*delta,
+            opened_at=start + i*delta,
+            closed_at=start + (i+1)*delta,
             open=D("100"),high=D("110"),low=D("90"),
             close=D("100"),volume=D("1"),
         ) for i in range(count)
@@ -40,7 +41,7 @@ def candles(minutes: int, count: int, symbol: str = SYMBOL) -> tuple[Candle, ...
 
 @pytest.fixture(scope="module")
 def history():
-    return candles(5,2592),candles(15,864)
+    return candles(5,2600),candles(15,1000)
 
 @pytest.mark.parametrize(("previous","price","side"),[
     ("91","90","LONG"),("109","110","SHORT"),
@@ -140,7 +141,7 @@ class FakeWriter:
     def execute(self,sql,params=()):
         self.queries.append((sql,params))
         if "SELECT causal_state,last_publication_id" in sql:
-            return Row((self.state,self.last_pub))
+            return Row((self.state,self.last_pub,BOUNDARY))
         if "INSERT INTO strategy_entry.p90_r06_publication_observations" in sql:
             return Row()
         if "UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints" in sql:
@@ -342,6 +343,75 @@ def test_worker_failure_classification_never_leaks_private_exception_detail():
             "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT:private-name"
         ),
     ) == "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT"
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_exact_seed_survives_changed_read_windows_restart_and_new_closed_bars(
+    monkeypatch, controlled, legacy,
+):
+    """Non-flat ATR seed exposes the rolling-window fingerprint regression."""
+    pin, bundle = controlled
+    writer = FakeWriter()
+
+    def variable(tf, count, end, symbol):
+        step = timedelta(minutes=tf)
+        start = end-count*step
+        return tuple(Candle(
+            symbol=symbol, timeframe=str(tf), opened_at=start+i*step,
+            closed_at=start+(i+1)*step, open=D("100"), close=D("100"),
+            high=D("110")+D(int((start+i*step).timestamp())//300 % 19)/100,
+            low=D("90")-D(int((start+i*step).timestamp())//300 % 11)/100,
+            volume=D("1"),
+        ) for i in range(count))
+
+    def histories(end, count):
+        fifteen = end.replace(minute=end.minute//15*15)
+        return {sym: {"5": variable(5, count, end, sym),
+                      "15": variable(15, 1000, fifteen, sym)}
+                for sym in ALLOWED_SYMBOLS[MAIN_ID]}
+
+    if legacy:
+        # Actual pre-fix recovery seeded a new boundary from 2601 bars.
+        close = BOUNDARY+timedelta(minutes=5)
+        history = histories(close, 2601)
+        model = restore_symbol(None, five=history[SYMBOL]["5"],
+                               fifteen=history[SYMBOL]["15"], published_closed_at=close)
+        advance_symbol(model, price=D("100"), event_at=close+timedelta(seconds=1),
+                       five=history[SYMBOL]["5"], fifteen=history[SYMBOL]["15"],
+                       published_closed_at=close)
+        writer.state = {"version": 1, "by_symbol": {SYMBOL: dump_symbol(model)}}
+        steps = [(close, 2601), (close, 2603),
+                 (close+timedelta(minutes=5), 2602),
+                 (close+timedelta(minutes=5), 2600)]
+    else:
+        steps = [(BOUNDARY, 2600), (BOUNDARY, 2603),
+                 (BOUNDARY+timedelta(minutes=5), 2601),
+                 (BOUNDARY+timedelta(minutes=5), 2600)]
+    old = None
+    old_close = None
+    for i, (close, count) in enumerate(steps):
+        pin.publication_id += 1
+        pin.closed_refs = {sym: {"5": close.isoformat()}
+                           for sym in ALLOWED_SYMBOLS[MAIN_ID]}
+        event_at = close+timedelta(seconds=i+2)
+        event = OrderedNativeTrade(100+i, 0, SYMBOL, 100+i, f"seed-{i}", event_at,
+                                   D("100"), D("1"), "Buy", event_at)
+
+        def deliver(_writer, *, on_publication_trade, _event=event, **_kw):
+            on_publication_trade(_event, pin.publication_id)
+            return (_event,)
+
+        monkeypatch.setattr(mod, "consume_pinned_entry_native_batch", deliver)
+        mod._observe_one(
+            writer, pin=pin, history=histories(close, count), source=object(),
+            bundle=bundle, engine=SimpleNamespace(process=lambda *_a, **_kw: ()),
+            loaded="d"*40, at=event_at,
+        )
+        current = writer.state["by_symbol"][SYMBOL]["geometry_fingerprint"]
+        if close == old_close:
+            assert current == old
+        old, old_close = current, close
+    assert writer.state["seed_counts_by_symbol"][SYMBOL] == {"5": 2600, "15": 1000}
 
 
 

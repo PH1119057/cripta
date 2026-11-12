@@ -53,7 +53,7 @@ class StateReader:
         self.raw = raw
 
     def execute(self, *_args):
-        return SimpleNamespace(fetchall=lambda: [(self.raw,)])
+        return SimpleNamespace(fetchall=lambda: [(NOW-timedelta(minutes=45), self.raw)])
 
 
 def test_backlog_reads_extra_original_geometry_without_moving_the_cursor():
