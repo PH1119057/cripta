@@ -300,12 +300,15 @@ def bootstrap_future_entry_checkpoints(
                 FOR SHARE""",
             (pin.source_session_id, _SOURCE),
         ).fetchone()
+        # Immutable publication facts need SELECT only. FOR SHARE would
+        # require an UPDATE grant that this runtime role deliberately lacks.
+        # The mutable source epoch stays locked; exact refs/age are rechecked
+        # in this same snapshot before both checkpoint rows commit.
         publication = connection.execute(
             """SELECT source_session_id,producer_release_commit,as_of_second,
                       native_watermarks,closed_candle_watermarks
                  FROM analytics.market_publications
-                WHERE publication_id=%s AND market_source_id=%s
-                FOR SHARE""",
+                WHERE publication_id=%s AND market_source_id=%s""",
             (pin.publication_id, _SOURCE),
         ).fetchone()
         now_row = connection.execute("SELECT clock_timestamp()").fetchone()
