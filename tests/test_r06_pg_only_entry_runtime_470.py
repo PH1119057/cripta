@@ -358,7 +358,7 @@ def test_worker_retries_conflict_with_fresh_proof_only_before_commit(monkeypatch
     conflicted = False
     loaded = "d" * 40
 
-    class Clock:
+    class Clock(datetime):
         @classmethod
         def now(cls, _zone):
             if calls and phase == "expired":
