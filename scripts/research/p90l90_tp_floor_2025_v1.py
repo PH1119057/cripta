@@ -144,8 +144,8 @@ def run(pilot_days):
  if pilot_days:
   state=engine.blank_state(data);start=0
  else:
-  OUT.mkdir(mode=0o2770,exist_ok=True)
-  CHECKPOINT.mkdir(mode=0o2770,exist_ok=True)
+  OUT.mkdir(mode=0o770,exist_ok=True)
+  CHECKPOINT.mkdir(mode=0o770,exist_ok=True)
   state,start=resume_state(data,books,sha(snap))
  base.take_profit_eligible=eligibility
  old.Book.handle=with_floor
