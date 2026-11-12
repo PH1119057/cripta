@@ -108,8 +108,15 @@ def require_r07_publication_provenance(
     published_at = proof.get("published_at")
     accepted_at = proof.get("accepted_at")
     as_of = proof.get("as_of_second")
-    times = (event_at, original_at, published_at, accepted_at, as_of)
-    if any(not isinstance(t, datetime) or t.tzinfo is None for t in times):
+    # Explicit narrowing is required: a tuple/generator validity check does
+    # not refine each distinct nullable field for static type checking.
+    if (
+        not isinstance(event_at, datetime) or event_at.tzinfo is None
+        or not isinstance(original_at, datetime) or original_at.tzinfo is None
+        or not isinstance(published_at, datetime) or published_at.tzinfo is None
+        or not isinstance(accepted_at, datetime) or accepted_at.tzinfo is None
+        or not isinstance(as_of, datetime) or as_of.tzinfo is None
+    ):
         raise R07PublicationProvenanceUnavailable("R07_SOURCE_PROOF_TIME_INVALID")
     request_utc = requested_at.astimezone(UTC)
     event_utc = event_at.astimezone(UTC)
