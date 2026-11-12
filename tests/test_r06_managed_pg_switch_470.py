@@ -447,12 +447,15 @@ def test_after_probe_requires_matching_observer_status(
             + " after",
         ]))
     monkeypatch.setattr(switch, "_call", fake_call)
-    monkeypatch.setattr(
-        switch.RELEASE.__class__, "read_text",
-        lambda _self, **_kw: "a" * 40 + "\n",
-    )
+    def static_read(path, **_kw):
+        if path == switch.RELEASE:
+            return "a" * 40 + "\n"
+        if str(path).endswith("status.json"):
+            return '{"state":"BLOCKED","source_commit":"unexpected"}'
+        raise AssertionError("unexpected path")
+    monkeypatch.setattr(switch.RELEASE.__class__, "read_text", static_read)
     with pytest.raises(
-        switch.R06ModeSwitchBlocked, match="AFTER_STATUS",
+        switch.R06ModeSwitchBlocked, match="AFTER_STATUS_PROVENANCE_DRIFT",
     ):
         switch._probe("after")
 
