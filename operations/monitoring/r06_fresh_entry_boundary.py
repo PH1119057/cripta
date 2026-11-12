@@ -332,6 +332,13 @@ def bootstrap_future_entry_checkpoints(
             raise R06FreshCutoverBlocked("R06_START_PUBLICATION_STALE_OR_CHANGED")
         _require_no_exposure_or_requests(connection)
 
+        from operations.monitoring.r06_entry_epoch import record_fresh_epoch
+
+        record_fresh_epoch(
+            connection, proof=proof, strategies=strategies,
+            consumer_release=consumer_release_commit,
+        )
+
         first_frame, first_index = proof.first_cursor
         inserted: list[str] = []
         for name,version,entry_fp,exit_fp in strategies:

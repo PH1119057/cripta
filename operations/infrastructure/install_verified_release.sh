@@ -738,6 +738,7 @@ migration_files=(
   # R06 additive provenance on the SAME P90 decision checkpoint; no source reset.
   operations/sql/20261112_r06_entry_publication_checkpoint_lineage.sql
   operations/sql/20261112_r06_checkpoint_release_bridge.sql
+  operations/sql/20261112_r06_fresh_epoch_transition.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
