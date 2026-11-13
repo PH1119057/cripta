@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 3.5 · 2026-10-04
+**Версия:** 3.6 · 2026-11-14
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -44,14 +44,7 @@ local C:\cripta and history are auxiliary only.
 
 ## 3. Mandatory pre-read and routing
 
-New chat:
-1. docs/CHATGPT_INTERACTION_RULES_RU*.md
-2. this WORK file
-3. docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md
-4. docs/DOCUMENTATION_INDEX_RU*.md
-5. docs/CRIPTA_GLOSSARY_RU*.md
-6. docs/CURRENT_PROJECT_MAP_RU*.md
-7. docs/SECURITY.md
+New chat: FULL META / WORK / SECURITY and INDEX §1–9 routing. ARCH, GLOSSARY, MAP and all routed contracts are mandatory by the exact task route, not read in full for every casual turn. Recheck GitHub main and relevant changed sections before each substantive task; see META §17 and INDEX §5.
 
 Then routed pre-read:
 - Strategy / Entry / Exit / Execution -> docs/TRADING_CONTOUR_RU*.md
@@ -431,3 +424,9 @@ forensic/class-wide correction, not more blind iterations.
 ## 14. Continuity across ChatGPT chats — OWNER DECISION 2026-10-22
 
 Before starting a supposedly new Git branch/worktree or rerunning a job on a previously discussed task, apply `DEVELOPMENT_RELEASE §50.4`: discover matching GitHub Issue/PR/branch, registered server worktree (including dirty/untracked bytes), active writer and actual job state; reuse the one exact verified unfinished task. Never infer that GitHub contains local uncommitted changes. Ambiguous or inaccessible pending work is a mutation HARD STOP, not permission to start over. Persist task ID/HEAD/worktree/job/evidence/next-step checkpoint for future chats; keep the one GitHub main authority unchanged.
+
+## 15. DOCS / CORE / RESEARCH and refusal-preflight
+
+DEV §50 defines three **workstream** scopes, not a replacement of ARCH §1 five technical layers. DOCS owns canon/index/bootstrap; CORE owns runtime/trading/observability/DB/Git/release; RESEARCH owns datasets/replay/OOS/evidence and jobs. SECURITY is one common canon. Context reuse requires exact SHA/task equivalence, not old-chat confidence.
+
+Before any denial or technical objection to an owner-approved task, META §17.3 requires the current DEV §19.5–19.6 / MAP §1.4 / specialized route and an exact tool-capability/actor/path/DB/authorization proof. Never mislabel a tool policy block as Unix permission or a wrong actor as no server rights. WORK §12.1 exact ENTRY/EXIT/COST/FILTERS/DATASET/POSITION report requirements stay in force until any future approved consolidation with RESEARCH_COMPUTE.
