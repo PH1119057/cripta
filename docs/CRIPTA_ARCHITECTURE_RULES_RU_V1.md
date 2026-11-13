@@ -1890,7 +1890,8 @@ an operational rollback checkpoint without promising that retired data
 is required to be reconstructible. This clause is the explicit narrow
 exception to §48.3(3)/(4) for the *unneeded old advisory payload* only.
 The full independently tested restore gate continues for changes that
-could affect irreplaceable/linked current P90 trading data.
+could affect irreplaceable/linked current P90 trading data, except for the
+separately bounded physical-only maintenance exception in §61.4.
 
 Before any DATA/DDL mutation:
 
@@ -1928,3 +1929,59 @@ Before any DATA/DDL mutation:
 **Status when adopted:** OWNER DECISION / CANON; execution and SQL purge NOT
 DONE by this documentation action. No LIVE-arm, Exchange mutation, service
 restart or strategy version change.
+
+### 61.4 Two-table context-only physical R12 — OWNER DECISION 2026-11-14 (#642)
+
+This is the **sole additional R12 permission** arising from the owner's
+direction to continue safe storage cleanup and update canon where necessary.
+It applies only to one offline `VACUUM (FULL, ANALYZE)` of
+`dispatcher_v2.coin_market_contexts` and `mayak_v2.coin_market_contexts`
+after old non-pinned rows were already retired. It is **not** permission to
+delete or alter any of the remaining linked rows or their evidence and is
+not a generic replacement for DEV §49 full physical cluster rollback.
+
+The narrow maintenance operation may proceed without an independently
+tested **whole production-cluster** restore only if all of the following
+specific protections pass immediately beforehand:
+
+1. Production Exchange/Entry/Exit/MarketSource writers are stopped and
+   PostgreSQL has no active writer or conflicting migration. LIVE arm remains
+   OFF. This operation does not touch any original native event, real order,
+   financial execution, fee, Position, private account generation, or actual
+   P90 Entry/Exit/MFE/SL/TP owner. Unknown signed Bybit status does **not**
+   waive the ordinary gate for those unrelated tables or allow LIVE.
+2. A fresh backup of the **complete affected physical-row logical contents**
+   and their direct event-link evidence has been independently restored in
+   a separate isolated PostgreSQL 16 cluster on the Data SSD. The isolation
+   proof must cover **all** 450 Dispatcher contexts, 450 MAYAK contexts,
+   and 718 linked `research_context.dispatcher_v2_event_links`, with
+   full-row hashes, exact original row fingerprints, no orphan references,
+   archive SHA256, successful scratch server restart and second comparison,
+   then stopped scratch server. It is a **scoped recovery proof**, not
+   a claim of complete P90/trading cluster recovery.
+3. Original system backup generations, GitHub source and exact loaded
+   maintenance script remain available. The scoped recovery archive and
+   manifest are on the independent Data volume, not the 20-GiB System SSD.
+   The maintenance code must be CI-tested, GitHub-main reviewed, installed
+   byte-identically root-owned read-only, and executed by the **actual Unix
+   and PostgreSQL `postgres` actor** via one exact allowlisted command.
+4. Preflight actual root free space at least **700 MiB** and independently
+   check WAL/free disk, source/target relation sizes, 450+450 row counts and
+   both context fingerprints, 718 links, and zero missing MAYAK contexts.
+   No active producer, speculative CASCADE, table/index DROP, new Strategy,
+   ad hoc SQL, or automated restart. One table at a time; bounded lock and
+   statement timeouts; checkpoint and full source/linked-row QC after each
+   independent physical table rewrite, including ext4 and PG bytes.
+5. If any gate or table QC fails, **stop** the second rewrite; report the
+   completed first rewrite separately, and preserve the verified Data-volume
+   archive. A `VACUUM FULL` cannot be rolled back atomically across the two
+   tables. Do not claim PASS solely because SQL returned exit code 0.
+
+This is a risk-bounded **physical representation maintenance** carveout:
+the protected logical contents and FK relationship are not being deleted or
+changed, and a complete independent restore of exactly those affected rows
+was demonstrated. The full cluster + roles/config/WAL tested rollback is
+**still mandatory** for DEV §49 move/rebuild, deleting or changing any P90
+financial/causal fact, unverified source/Position owners, or a future wider
+database rewrite. The existing scoped proof is not transferable to another
+table, batch, release, date or actor. No LIVE re-arm is authorized.
