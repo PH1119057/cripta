@@ -1,7 +1,7 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.10
-**Дата:** 2026-10-24
+**Версия:** 1.11
+**Дата:** 2026-11-14
 **Статус:** обязательный канонический META-контракт взаимодействия
 
 Этот документ регулирует способ совместной работы владельца проекта и ChatGPT.
@@ -316,3 +316,25 @@ CANON UPDATE
 # 16. Передача незавершённой задачи между чатами — OWNER DECISION 2026-10-22
 
 Новый чат при продолжении разработки, research или документации после mandatory/routed pre-read обязан **сначала найти предыдущее незавершённое задание**, а не автоматически создавать другую ветку. Exact task/Issue/PR, GitHub branches и server worktrees/dirty state/job проверяются по `DEVELOPMENT_RELEASE §50.4`. GitHub branch без локальных байтов не является полным WIP snapshot; память/старые чаты не подтверждают current статус. При неоднозначности — HARD_STOP для mutation и owner decision. Тот же worktree продолжать только после actor/writer/job verification. Не смешивать task continuity с принятием исторических файлов за current canon.
+
+# 17. Трёхконтурное чтение и запрет необоснованного отказа — OWNER DIRECTION 2026-11-14
+
+Организационные контуры `DOCS / CORE / RESEARCH` из DEVELOPMENT_RELEASE §50 определяют маршрут работы, а не изменяют пять верхнеуровневых слоёв ARCH §1. `SECURITY.md` — единый общий baseline; копировать его полный текст в остальные документы не нужно.
+
+## 17.1 Новый чат
+
+Проверить exact GitHub main SHA. Полностью прочитать META, WORK и SECURITY, затем INDEX §1–9 для authority, active files и task routes; перед documentation change — INDEX §17. ARCH, GLOSSARY, MAP и routed docs читать по релевантным разделам конкретного задания, а не целиком все 11 безотносительно задачи. Если задача cross-contour, читать всё затронутое.
+
+## 17.2 Перед каждым содержательным запросом
+
+Определить DOCS/CORE/RESEARCH, read-only либо mutation и применимый маршрут. Проверить GitHub main HEAD; при изменении SHA установить изменившиеся релевантные документы и перечитать их. При том же SHA, task, actor, target paths и unchanged contract не повторять полное чтение уже проверенных разделов внутри чата. При смене route, новой правовой/технической границе или отказе — targeted re-read. Memory, Project Source и старые чаты не являются current server/GitHub truth; недоступное verification помечать `NOT CHECKED HERE`, не выдумывать.
+
+## 17.3 Перед отказом, возражением или сообщением о невозможности
+
+До фраз «не могу», «нет прав», «запрещено», «запусти вручную» требуется: прочитать действующие DEV §19.5–19.6 и MAP §1.4 или relevant route; проверить connected tool и точные host capabilities; установить requested operation, effective actor, Unix path/permissions/systemd sandbox или DB role/grants и отдельно owner/project authorization; по безопасному разрешённому read-only пути выполнить bounded smoke. Только затем сообщить фактически доказанный gate, tool response и что проверено. Один ошибочно выбранный инструмент не является доказательством отсутствия другого уже разрешённого пути.
+
+Если владелец говорит «прочитай правила», выполнить такую проверку в текущем ходе без повторения закрытых вопросов и спора по предположению. Owner instruction — действующее поручение и человеческое согласие там, где оно уже дано, но не отменяет OpenAI tool-security, SentinelX allowlist, Unix/DB gates, архитектурный Hard Stop или отдельные LIVE/Exchange gates. Запрещено обходить защиту подменой actor, команд, кодированием либо transport.
+
+## 17.4 Выполнение и статус
+
+Server script/service/job с write или сменой actor: DEV §5.1, §19.1–19.6 и MAP §1.4 до `PREPARED`. Перед новой веткой/worktree/PR/job — DEV §50.4. Указание владельца на restart не требует бессодержательного повторного согласования, но actual service/actor, effects и safety gates нужно доказать. При tool отказе различать OpenAI upstream, SentinelX `command_not_allowed`, Unix `EACCES`, DB grants, GitHub/API error и timeout/unknown outcome. Не заявлять `RUNNING`, `DEPLOYED` или runtime behavior без exact evidence. Research jobs — RESEARCH_COMPUTE; многоэтапные проверки и notification отдельно от обещания background действий.
