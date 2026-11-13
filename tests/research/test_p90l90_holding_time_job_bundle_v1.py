@@ -92,7 +92,7 @@ class IndependentJobBundleTests(unittest.TestCase):
         self.assertIn("os.geteuid()", source)
         self.assertIn("os.statvfs(", source)
         self.assertTrue(any(isinstance(node, ast.FunctionDef)
-                            and node.name == "prepare" for node in tree))
+                            and node.name == "prepare" for node in tree.body))
 
     def test_manifest_covers_exact_no_cap_and_time_modes(self):
         for phase in pack.PHASES:
