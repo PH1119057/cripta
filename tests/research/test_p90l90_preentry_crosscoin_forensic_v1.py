@@ -108,3 +108,14 @@ def test_preentry_five_coin_causality_and_controls_without_server():
         cwd=repo, capture_output=True, text=True, check=False, timeout=60,
     )
     assert r.returncode == 0, r.stdout + "\n" + r.stderr
+
+
+def test_direct_absolute_file_cli_imports_pinned_modules_without_cwd_assumptions():
+    repo = Path(__file__).resolve().parents[2]
+    script = repo / "scripts/research/p90l90_preentry_crosscoin_forensic_v1.py"
+    result = subprocess.run(
+        [sys.executable, "-B", str(script), "--help"],
+        cwd=repo.parent, capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stdout + "\n" + result.stderr
+    assert "--period" in result.stdout
