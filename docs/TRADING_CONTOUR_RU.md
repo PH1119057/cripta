@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.8
-**Дата:** 2026-11-10
+**Версия:** 3.9
+**Дата:** 2026-11-14
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -2152,3 +2152,9 @@ P90L90 остаются прежними, новые Strategy и настрой�
 До доказанной замены current standalone public readers считаются migration findings; этот канон не удаляет код, не разрешает выкинуть capability или снять P90 OPEN Exit blocker. Физический план и приемка — DEV §59 / CURRENT_PROJECT_MAP.
 
 `OWNER_DECISION=YES`; `CANON=AFTER_MERGE`; `IMPLEMENTED=NO`; `LIVE_ARM=NO`.
+
+
+### 4.19.1 R07 подтверждение source epoch на границе финансовой команды — 2026-11-14 (#470)
+
+Единственный архитектурный owner синхронизации: ARCH §60.5.2. Для P90 R07 Universal Entry Consumer последний source proof и запись уже принятого `EntryExecutionRequest` в command/dispatch выполняются внутри одной DB-транзакции с доказанным SHARED transaction source-epoch fence и shared checkpoint-row protection. Если guard отсутствует, отключён, не соответствует ABI, epoch перешёл в GAP или защита/lock не получены, новая команда запрещена; существующий Exit не блокируется. Финансовый admission/permission/slot/capital и owner LIVE ARM остаются дополнительными независимыми gates, а R06 по OBS §7.10.5.6 не создаёт финансовую заявку. Не заменять этот технический fence торговой Strategy policy или правами superuser.
+
