@@ -1,6 +1,6 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.11
+**Версия:** 1.12
 **Дата:** 2026-11-14
 **Статус:** обязательный канонический META-контракт взаимодействия
 
@@ -331,7 +331,7 @@ CANON UPDATE
 
 ## 17.3 Перед отказом, возражением или сообщением о невозможности
 
-До фраз «не могу», «нет прав», «запрещено», «запусти вручную» требуется: прочитать действующие DEV §19.5–19.6 и MAP §1.4 или relevant route; проверить connected tool и точные host capabilities; установить requested operation, effective actor, Unix path/permissions/systemd sandbox или DB role/grants и отдельно owner/project authorization; по безопасному разрешённому read-only пути выполнить bounded smoke. Только затем сообщить фактически доказанный gate, tool response и что проверено. Один ошибочно выбранный инструмент не является доказательством отсутствия другого уже разрешённого пути.
+До фраз «не могу», «нет прав», «запрещено», «запусти вручную» требуется **вначале определить тип операции и её штатного actor по DEV §13.1 (DDL/migration не выполняется от runtime `cripta`)**; затем прочитать действующие DEV §19.5–19.6 и MAP §1.4 или relevant route; проверить connected tool и точные host capabilities; установить requested operation, effective actor, Unix path/permissions/systemd sandbox или DB role/grants и отдельно owner/project authorization; по безопасному разрешённому read-only пути выполнить bounded smoke. Только затем сообщить фактически доказанный gate, tool response и что проверено. Один ошибочно выбранный инструмент или actor не доказывает отсутствия штатного разрешённого пути. `TEST_FIXTURE_GRANTS`, `CANONICAL_SQL_GRANTS` и `PRODUCTION_EFFECTIVE_GRANTS` — независимы. `SELECT`-only test fixture не доказывает отсутствие `UPDATE` в production; transaction race не лечится выдачей прав.
 
 Если владелец говорит «прочитай правила», выполнить такую проверку в текущем ходе без повторения закрытых вопросов и спора по предположению. Owner instruction — действующее поручение и человеческое согласие там, где оно уже дано, но не отменяет OpenAI tool-security, SentinelX allowlist, Unix/DB gates, архитектурный Hard Stop или отдельные LIVE/Exchange gates. Запрещено обходить защиту подменой actor, команд, кодированием либо transport.
 
