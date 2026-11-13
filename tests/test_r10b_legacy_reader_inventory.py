@@ -24,6 +24,8 @@ ACTIVE_READER_FILES = (
 )
 
 PRESERVATION_OR_SCHEMA_FILES = {
+    # Owner-approved one-shot cold-row retirement; no active legacy reader.
+    "operations/monitoring/p90_only_cold_truncate_642.py",
     "operations/dashboard/app.py",
     "operations/dashboard/archive_v2.py",
     "operations/monitoring/causal_context_correlator.py",
