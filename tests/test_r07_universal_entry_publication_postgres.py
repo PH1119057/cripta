@@ -1,6 +1,7 @@
 """R07 exact SQL/ACL publication admission on disposable PostgreSQL 16 only."""
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, datetime, timedelta
 
@@ -50,13 +51,13 @@ def db():
         publication_id bigint PRIMARY KEY, source_session_id text,
         market_source_id text, producer_release_commit text,
         published_at timestamptz, as_of_second timestamptz,
-        publication_status text
+        publication_status text, native_watermarks jsonb
       )""")
     admin.execute("""
       CREATE TABLE analytics.native_public_trade_source_events (
         source_session_id text, frame_number bigint, frame_index int,
         market_source_id text, instrument_id text,
-        external_symbol text, exec_id text,
+        external_symbol text, exec_id text, exchange_sequence bigint,
         event_at timestamptz, accepted_at timestamptz,
         PRIMARY KEY(source_session_id, frame_number, frame_index)
       )""")
@@ -93,13 +94,24 @@ def db():
         (SESSION, SOURCE, PRODUCER),
     )
     admin.execute(
-        "INSERT INTO analytics.market_publications VALUES (45,%s,%s,%s,%s,%s,%s)",
+        "INSERT INTO analytics.market_publications "
+        "(publication_id,source_session_id,market_source_id,producer_release_commit,"
+        "published_at,as_of_second,publication_status,native_watermarks) "
+        "VALUES (45,%s,%s,%s,%s,%s,%s,%s::jsonb)",
         (SESSION, SOURCE, PRODUCER, EVENT + timedelta(seconds=1),
-         EVENT, "WATERMARKS_ONLY"),
+         EVENT, "WATERMARKS_ONLY", json.dumps({
+             "LTCUSDT": {
+                 "instrument_id": "inst-bybit-linear-ltcusdt",
+                 "frame_number": 100,
+                 "frame_index": 2,
+                 "exchange_sequence": 123456,
+                 "exec_id": "native-100",
+             },
+         })),
     )
     admin.execute(
         "INSERT INTO analytics.native_public_trade_source_events VALUES "
-        "(%s,100,2,%s,'inst-bybit-linear-ltcusdt','LTCUSDT','native-100',%s,%s)",
+        "(%s,100,2,%s,'inst-bybit-linear-ltcusdt','LTCUSDT','native-100',123456,%s,%s)",
         (SESSION, SOURCE, EVENT, EVENT + timedelta(milliseconds=100)),
     )
     admin.execute(
@@ -242,3 +254,40 @@ def test_pg16_active_source_session_producer_must_match_publication(db):
     )
     with pytest.raises(R07PublicationProvenanceUnavailable, match="INVARIANT_BROKEN"):
         require_r07_publication_provenance(runtime, request("ta-sub-2"))
+
+
+@pytest.mark.parametrize(("watermarks", "reason"), [
+    ({}, "MISSING"),
+    ({"LTCUSDT": {
+        "instrument_id": "inst-bybit-linear-ltcusdt",
+        "frame_number": 99, "frame_index": 5,
+        "exchange_sequence": 123455, "exec_id": "native-99",
+    }}, "INVALID"),
+    ({"LTCUSDT": {
+        "instrument_id": "inst-bybit-linear-ltcusdt",
+        "frame_number": 100, "frame_index": 2,
+        "exchange_sequence": 123456, "exec_id": "mismatched",
+    }}, "INVALID"),
+])
+def test_pg16_original_native_event_not_covered_by_publication_denies_entry(
+    db, watermarks, reason,
+):
+    admin, runtime = db
+    # Only disposable fixture admin may mutate an immutable source row here.
+    admin.execute(
+        "UPDATE analytics.market_publications SET native_watermarks=%s::jsonb "
+        "WHERE publication_id=45",
+        (json.dumps(watermarks),),
+    )
+    with pytest.raises(R07PublicationProvenanceUnavailable, match="WATERMARK_" + reason):
+        require_r07_publication_provenance(runtime, request("ta-sub-4"))
+
+
+def test_pg16_source_read_only_role_cannot_replace_publication_watermarks(db):
+    _admin, runtime = db
+    assert require_r07_publication_provenance(runtime, request("ta-main")) == 45
+    with pytest.raises(psycopg.errors.ReadOnlySqlTransaction):
+        runtime.execute(
+            "UPDATE analytics.market_publications SET native_watermarks='{}'::jsonb"
+        )
+    runtime.rollback()
