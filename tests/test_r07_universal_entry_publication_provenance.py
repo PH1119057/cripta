@@ -54,12 +54,20 @@ def evidence(**changes):
         "published_at": EVENT + timedelta(seconds=1),
         "as_of_second": EVENT,
         "publication_status": "WATERMARKS_ONLY",
+        "publication_native_watermarks": {
+            "LTCUSDT": {
+                "instrument_id": "inst-bybit-linear-ltcusdt",
+                "frame_number": 100, "frame_index": 2,
+                "exchange_sequence": 123456, "exec_id": "native-100",
+            },
+        },
         "source_session_state": "ACTIVE",
         "session_producer_release_commit": "c" * 40,
         "event_market_source_id": BYBIT_PUBLIC_MARKET_SOURCE_ID,
         "instrument_id": "inst-bybit-linear-ltcusdt",
         "external_symbol": "LTCUSDT",
         "exec_id": "native-100",
+        "original_exchange_sequence": 123456,
         "original_event_at": EVENT,
         "accepted_at": EVENT + timedelta(milliseconds=200),
         "checkpoint_frame_number": 101,
@@ -159,6 +167,46 @@ def test_r07_rejects_missing_exact_plan_even_with_valid_original_source():
     with pytest.raises(R07PublicationProvenanceUnavailable, match="PLAN_IDENTITY_INVALID"):
         require_r07_publication_provenance(db, row)
     assert db.calls == []
+
+
+@pytest.mark.parametrize(("watermarks", "reason"), [
+    ({}, "MISSING"),
+    ({"LTCUSDT": None}, "MISSING"),
+    ({"LTCUSDT": {"frame_number": 99, "frame_index": 1,
+                   "exchange_sequence": 123455, "exec_id": "native-old",
+                   "instrument_id": "inst-bybit-linear-ltcusdt"}}, "INVALID"),
+    ({"LTCUSDT": {"frame_number": 100, "frame_index": 2,
+                   "exchange_sequence": 123456, "exec_id": "forged",
+                   "instrument_id": "inst-bybit-linear-ltcusdt"}}, "INVALID"),
+    ({"LTCUSDT": {"frame_number": 100, "frame_index": 2,
+                   "exchange_sequence": 123999, "exec_id": "native-100",
+                   "instrument_id": "inst-bybit-linear-ltcusdt"}}, "INVALID"),
+    ({"LTCUSDT": {"frame_number": 100, "frame_index": 2,
+                   "exchange_sequence": 123456, "exec_id": "native-100",
+                   "instrument_id": "inst-bybit-spot-ltcusdt"}}, "INVALID"),
+    ({"LTCUSDT": {"frame_number": True, "frame_index": 2,
+                   "exchange_sequence": 123456, "exec_id": "native-100",
+                   "instrument_id": "inst-bybit-linear-ltcusdt"}}, "INVALID"),
+])
+def test_authentic_event_beyond_or_outside_native_publication_watermark_denied(
+    watermarks, reason,
+):
+    db = Query([evidence(publication_native_watermarks=watermarks)])
+    with pytest.raises(R07PublicationProvenanceUnavailable, match="WATERMARK_" + reason):
+        require_r07_publication_provenance(db, request())
+
+
+def test_native_publication_watermark_may_lie_after_observed_original_event():
+    later = {
+        "LTCUSDT": {
+            "instrument_id": "inst-bybit-linear-ltcusdt",
+            "frame_number": 101, "frame_index": 0,
+            "exchange_sequence": 123999, "exec_id": "native-101",
+        },
+    }
+    assert require_r07_publication_provenance(
+        Query([evidence(publication_native_watermarks=later)]), request(),
+    ) == 45
 
 
 def test_missing_or_duplicated_signal_is_not_silently_skipped():

@@ -34,11 +34,12 @@ SELECT o.publication_id, o.source_session_id, o.frame_number, o.frame_index,
        o.native_exec_id, o.event_at, o.symbol, o.direction,
        p.market_source_id, p.source_session_id AS publication_session_id,
        p.producer_release_commit, p.published_at, p.as_of_second,
-       p.publication_status,
+       p.publication_status, p.native_watermarks AS publication_native_watermarks,
        s.state AS source_session_state,
        s.producer_release_commit AS session_producer_release_commit,
        n.market_source_id AS event_market_source_id,
        n.instrument_id, n.external_symbol, n.exec_id,
+       n.exchange_sequence AS original_exchange_sequence,
        n.event_at AS original_event_at, n.accepted_at,
        cp.frame_number AS checkpoint_frame_number,
        cp.frame_index AS checkpoint_frame_index,
@@ -184,4 +185,35 @@ def require_r07_publication_provenance(
         or _SHA40.fullmatch(proof["consumer_release_commit"]) is None
     ):
         raise R07PublicationProvenanceUnavailable("R07_SOURCE_PROOF_INVARIANT_BROKEN")
+    # The publication is a bounded snapshot, not just a timestamp and
+    # foreign key. An authentic native event accepted before publication
+    # cannot be admitted if its exact source cursor was published later.
+    # Match R06 read_entry_publication_original_suffix's (frame, index)
+    # boundary; at the watermark itself, demand exact original identity.
+    native = proof.get("publication_native_watermarks")
+    watermark = native.get(symbol) if isinstance(native, Mapping) else None
+    if not isinstance(watermark, Mapping):
+        raise R07PublicationProvenanceUnavailable("R07_PUBLICATION_NATIVE_WATERMARK_MISSING")
+    bound_frame = watermark.get("frame_number")
+    bound_index = watermark.get("frame_index")
+    bound_seq = watermark.get("exchange_sequence")
+    original_seq = proof.get("original_exchange_sequence")
+    if (
+        type(bound_frame) is not int or bound_frame < 1
+        or type(bound_index) is not int or bound_index < 0
+        or type(bound_seq) is not int or bound_seq < 0
+        or type(original_seq) is not int or original_seq < 0
+        or watermark.get("instrument_id") != instrument_id
+        or not isinstance(watermark.get("exec_id"), str)
+        or not watermark["exec_id"]
+        or (frame, index) > (bound_frame, bound_index)
+        or (
+            (frame, index) == (bound_frame, bound_index)
+            and (
+                watermark["exec_id"] != proof.get("exec_id")
+                or bound_seq != original_seq
+            )
+        )
+    ):
+        raise R07PublicationProvenanceUnavailable("R07_PUBLICATION_NATIVE_WATERMARK_INVALID")
     return publication_id
