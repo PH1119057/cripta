@@ -24,14 +24,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import pwd
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import psycopg
+if TYPE_CHECKING:
+    import psycopg
 
 PARENT = Path("/data/cripta/research")
 ROOT = PARENT / "p90_context_r12_proof_642"
@@ -73,9 +73,12 @@ def run(argv: list[str], timeout: int = 80) -> str:
 
 
 def guard_filesystem() -> None:
-    cripta = pwd.getpwnam("cripta")
-    if os.geteuid() != cripta.pw_uid:
+    if not hasattr(os, "geteuid") or os.geteuid() != 107:
         raise RuntimeError("UNIX_ACTOR_MUST_BE_CRIPTA")
+    import pwd
+
+    if pwd.getpwnam("cripta").pw_uid != 107:
+        raise RuntimeError("CRITPA_ACTOR_IDENTITY_DRIFT")
     if not PARENT.is_dir() or not os.access(PARENT, os.W_OK | os.X_OK):
         raise RuntimeError("EXACT_DATA_DISK_PARENT_NOT_WRITABLE_BY_CRIPTA")
     if PARENT.stat().st_dev == Path("/").stat().st_dev:
@@ -92,6 +95,8 @@ def guard_filesystem() -> None:
 
 
 def sql_connection(db: str, *, scratch: bool = False) -> psycopg.Connection:
+    import psycopg
+
     return psycopg.connect(
         dbname=db,
         host=str(SOCKET) if scratch else "/var/run/postgresql",
