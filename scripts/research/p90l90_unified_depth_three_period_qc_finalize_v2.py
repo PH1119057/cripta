@@ -17,7 +17,6 @@ No database, system disk, production runtime, or Exchange mutations.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import importlib.util
 import json
@@ -102,6 +101,12 @@ def preflight(args: argparse.Namespace) -> object:
 
 
 def main() -> None:
+    # This finalizer runs on Linux only. Import lazily so cross-platform CI
+    # can safely import its source and validate the contract.
+    if os.name != "posix":
+        raise OSError("independent research QC finalizer requires Linux")
+    import fcntl
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("preflight", "finalize"), required=True)
     parser.add_argument("--auditor-head", required=True)
