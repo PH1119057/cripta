@@ -63,6 +63,32 @@ def test_unique_result_leaf_and_independent_verification_semantics():
     assert qc.run.RESERVED_MARGIN_EPSILON == D('0.000000000001')
 
 
+
+def test_missing_zero_denial_counter_is_valid():
+    qc.verify_capital_denials({}, 0)
+    qc.verify_capital_denials({"capital_blocked_candidate": 0}, 0)
+    qc.verify_capital_denials({"capital_blocked_candidate": 13}, 13)
+
+
+def test_missing_nonzero_or_inconsistent_denial_counter_rejected():
+    with pytest.raises(ValueError, match="capital denials"):
+        qc.verify_capital_denials({}, 1)
+    with pytest.raises(ValueError, match="capital denials"):
+        qc.verify_capital_denials({"capital_blocked_candidate": 7}, 6)
+    with pytest.raises(ValueError, match="capital denials"):
+        qc.verify_capital_denials({"capital_blocked_candidate": 0}, 2)
+
+
+def test_reviewed_audit_has_read_only_preflight_and_pinned_finalizer():
+    import inspect
+    from scripts.research import p90l90_unified_depth_three_period_qc_finalize_v2 as fin
+    params = inspect.signature(qc.audit).parameters
+    assert "dry_run" in params
+    assert "auditor_head" in params
+    assert fin.PRODUCER_HEAD == "d90e0a93117c5e7edc99ef6bd6ad3b0423e6c7ea"
+    assert fin.ROOT.name == "p90l90_unified_depth0_vs_0to15_capital_20261113_v2"
+    assert fin.PRODUCER != fin.AUDITOR.parents[2]
+
 for _name in sorted(name for name in globals() if name.startswith('test_')):
     globals()[_name]()
 '''

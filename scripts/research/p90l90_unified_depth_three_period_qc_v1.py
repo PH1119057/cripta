@@ -76,7 +76,14 @@ def candidates(period: str) -> dict:
     return {"eligible": found, "candidate_count": dict(stats)}
 
 
-def audit(period: str, root: Path, commit: str) -> dict:
+def verify_capital_denials(counts: dict, expected: int) -> None:
+    """A missing Counter key represents zero, never an unverified nonzero."""
+    if counts.get("capital_blocked_candidate", 0) != expected:
+        raise ValueError("capital denials not reconciled")
+
+
+def audit(period: str, root: Path, commit: str, *,
+          dry_run: bool = False, auditor_head: str | None = None) -> dict:
     if period not in run.WINDOW:
         raise ValueError("QC invalid period")
     if (os.geteuid(), os.getegid()) != (107, 109):
@@ -215,8 +222,7 @@ def audit(period: str, root: Path, commit: str) -> dict:
             raise ValueError("open position margin reservation mismatch")
         if summary["counts"]["qualified_candidate"] != source["candidate_count"][depth]:
             raise ValueError("qualified candidates different from immutable Entry catalog")
-        if summary["counts"]["capital_blocked_candidate"] != summary["capital_blocked_candidate_count"]:
-            raise ValueError("capital denials not reconciled")
+        verify_capital_denials(summary["counts"], summary["capital_blocked_candidate_count"])
         if summary["counts"].get("exit_HARD_STOP", 0) != summary["hardstop_count"]:
             raise ValueError("actual completed Hard Stops not reconciled")
         if int(summary["pause_trigger_count"]) != int(summary["counts"].get("second48_pause_triggers", 0)):
@@ -264,7 +270,23 @@ def audit(period: str, root: Path, commit: str) -> dict:
         "days": run.WINDOW[period]["days"],
         "cases": checked,
         "research_only_no_actual_exchange_fills": True,
+        # The frozen replay pinned the ORIGINAL QC bytes. A separately reviewed
+        # auditor may validate that immutable replay without changing its pins.
+        "auditor_git_head": auditor_head,
+        "auditor_code_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "producer_source_head": commit,
+        "absent_counter_semantics": "missing capital_blocked_candidate means zero",
     }
+    if dry_run:
+        return {
+            "status": "INDEPENDENT_QC_DRY_RUN_PASS",
+            "period": period,
+            "cases": len(checked),
+            "result_sha256": qc["result_sha256"],
+            "ledger_sha256": qc["ledger_sha256"],
+            "auditor_git_head": auditor_head,
+            "auditor_code_sha256": qc["auditor_code_sha256"],
+        }
     target = root / "qc.json"
     if target.exists() or target.is_symlink():
         raise FileExistsError("independent immutable QC already exists")
