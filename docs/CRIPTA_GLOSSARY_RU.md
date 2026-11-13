@@ -1289,5 +1289,5 @@ position, regardless of a general 24h/7d data window.
 
 **HOT_RECLAIMED_BYTES** — actual physical freed ext4 space verified after
 approved PostgreSQL physical reclamation, distinct from stale-row count,
-table size before purge, dead tuples, logical \`pg_database_size\` and
+table size before purge, dead tuples, logical `pg_database_size` and
 promised compression gain.
