@@ -1838,7 +1838,7 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   required preflight, physical reclaim); GLOSSARY §46 (terminology).
   No new Entry/Exit economics or LIVE permission; trading-specific original
   dependency remains TC §7.6 and §4.18, OBS §7.10 and ARCH §60.
-- **Execution owner:** DEV §§5.1, 14.2, 19, 48.3, 49, 50.4–50.5; DB/source
+- **Execution owner:** DEV §§5.1, 14.2–14.2.1, 19, 48.3, 49, 50.4–50.5; DB/source
   consumer retirement, restored backup, signed Bybit open-position scope,
   exact actor/permissions, R11 deletion/R12 physical reclaim/R13 >=7d
   observation. No arbitrary tool-policy/privilege bypass.
