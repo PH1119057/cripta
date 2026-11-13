@@ -102,6 +102,82 @@ def test_90day_independent_qc_finalizer_is_separate_from_183day():
     assert fin.GIB == 1024 ** 3
 
 
+
+def test_qc_crash_keeps_native_result_and_exact_stderr_on_data_disk():
+    import json
+    import tempfile
+    from unittest.mock import patch
+    from subprocess import CompletedProcess
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "result.json").write_text("already completed", encoding="utf-8")
+        (root / "trade_ledger.jsonl").write_text("immutable ledger", encoding="utf-8")
+        failure = CompletedProcess([], 1, "partial", "Traceback: KeyError: missing_count")
+        with patch.object(qc.run, "output", return_value=root):
+            with patch.object(qc.run.subprocess, "run", return_value=failure) as child:
+                with pytest.raises(RuntimeError, match="immutable qc_failure.json"):
+                    qc.run.independent_qc("90d", root, "a" * 40)
+        assert child.call_args.kwargs["cwd"] == str(qc.run.SOURCE)
+        assert child.call_args.args[0][:4] == [
+            sys.executable, "-B", "-m",
+            "scripts.research.p90l90_unified_depth_three_period_qc_v1",
+        ]
+        report = json.loads((root / "qc_failure.json").read_text())
+        assert report["failure_kind"] == "EXIT_CODE_1"
+        assert "KeyError: missing_count" in report["stderr_or_exception_tail"]
+        assert report["result_exists"] and report["ledger_exists"]
+        assert not report["qc_exists"]
+        assert (root / "result.json").read_text() == "already completed"
+        assert (root / "trade_ledger.jsonl").read_text() == "immutable ledger"
+        # Never overwrite the first failure with a misleading second reason.
+        with patch.object(qc.run, "output", return_value=root):
+            with patch.object(qc.run.subprocess, "run",
+                              return_value=CompletedProcess([], 2, "", "another")):
+                with pytest.raises(RuntimeError):
+                    qc.run.independent_qc("90d", root, "a" * 40)
+        assert json.loads((root / "qc_failure.json").read_text()) == report
+
+
+def test_qc_child_pass_requires_persisted_and_hashed_qc_artifact():
+    import json
+    import tempfile
+    from unittest.mock import patch
+    from subprocess import CompletedProcess
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        good = {"status": qc.STATUS, "cases": 8, "period": "90d"}
+        child = CompletedProcess([], 0, json.dumps(good) + "\n", "")
+        with patch.object(qc.run, "output", return_value=root):
+            with patch.object(qc.run.subprocess, "run", return_value=child):
+                with pytest.raises(RuntimeError, match="output validation failed"):
+                    qc.run.independent_qc("90d", root, "b" * 40)
+        recorded = json.loads((root / "qc_failure.json").read_text())
+        assert recorded["failure_kind"] in ("FileNotFoundError", "ValueError")
+
+        # A verifiable status and independently hashed QC file permit PASS.
+        (root / "qc_failure.json").unlink()
+        (root / "qc.json").write_text(json.dumps(good), encoding="utf-8")
+        status = {
+            "stage": "COMPLETED_INDEPENDENT_QC_PASS",
+            "qc_sha256": qc.run.sha(root / "qc.json"),
+        }
+        (root / "status.json").write_text(json.dumps(status), encoding="utf-8")
+        with patch.object(qc.run, "output", return_value=root):
+            with patch.object(qc.run.subprocess, "run", return_value=child):
+                assert qc.run.independent_qc("90d", root, "b" * 40) == good
+        assert not (root / "qc_failure.json").exists()
+
+
+def test_qc_worker_is_linux_only_and_supports_reentry_without_replay():
+    import inspect
+    assert callable(qc.main)
+    assert "subprocess.run" in inspect.getsource(qc.run.independent_qc)
+    assert "run.source_head()" in inspect.getsource(qc.main)
+    assert "COMPLETE_PENDING_INDEPENDENT_QC" in inspect.getsource(qc.main)
+    assert "fcntl.flock" in inspect.getsource(qc.main)
+
 for _name in sorted(name for name in globals() if name.startswith('test_')):
     globals()[_name]()
 '''

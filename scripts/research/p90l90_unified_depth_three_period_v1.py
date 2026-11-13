@@ -603,10 +603,83 @@ def replay_day(period: str, day: int, data: dict, books: dict,
     return {"ticks": n, "prices": prices, "smoke_partial": False}
 
 
+def _record_qc_failure(root: Path, period: str, commit: str,
+                       kind: str, detail: str, stdout: str = "") -> None:
+    """Keep the *original* QC exception on Data; never overwrite evidence.
+
+    The native result/ledger/checkpoints have already been committed. A failed
+    reviewer must be independently recoverable without re-running native ticks.
+    """
+    path = root / "qc_failure.json"
+    document = {
+        "stage": "INDEPENDENT_QC_FAILED",
+        "period": period,
+        "producer_source_head": commit,
+        "failure_kind": kind,
+        "stderr_or_exception_tail": detail[-16000:],
+        "stdout_tail": stdout[-4000:],
+        "result_exists": (root / "result.json").is_file(),
+        "ledger_exists": (root / "trade_ledger.jsonl").is_file(),
+        "qc_exists": (root / "qc.json").is_file(),
+        "research_only": True,
+    }
+    try:
+        with path.open("x", encoding="utf-8") as f:
+            json.dump(document, f, indent=2, sort_keys=True)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+    except FileExistsError:
+        # An earlier failure is immutable evidence, not a log to truncate.
+        pass
+
+
 def independent_qc(period: str, root: Path, commit: str) -> dict:
-    qc = importlib.import_module(
-        "scripts.research.p90l90_unified_depth_three_period_qc_v1")
-    return qc.audit(period, root, commit)
+    """Run QC in a *fresh* interpreter, outside the native replay's import state.
+
+    Preserve 29d/90d/183d serial orchestration. QC has its own memory,
+    traceback and Python module graph; an exception cannot erase completed
+    replay evidence. In particular, the original writer flock must have been
+    released before this function is called.
+    """
+    if root != output(period):
+        raise ValueError("QC requires exact frozen period result leaf")
+    command = [
+        sys.executable, "-B", "-m",
+        "scripts.research.p90l90_unified_depth_three_period_qc_v1",
+        "--period", period, "--source-head", commit,
+    ]
+    try:
+        child = subprocess.run(
+            command, cwd=str(SOURCE), capture_output=True,
+            text=True, check=False, timeout=900,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        _record_qc_failure(root, period, commit, type(exc).__name__, str(exc))
+        raise RuntimeError("independent QC subprocess could not complete; "
+                           "see immutable qc_failure.json") from exc
+    if child.returncode != 0:
+        _record_qc_failure(root, period, commit,
+                           "EXIT_CODE_" + str(child.returncode),
+                           child.stderr, child.stdout)
+        raise RuntimeError("independent QC subprocess failed; "
+                           "see immutable qc_failure.json")
+    try:
+        response = json.loads(child.stdout.strip().splitlines()[-1])
+        if response["status"] != (
+                "INDEPENDENT_QC_PASS_P90L90_UNIFIED_DEPTH_THREE_PERIODS_V2"):
+            raise ValueError("QC child returned non-PASS status")
+        status = json.loads((root / "status.json").read_text())
+        if (status.get("stage") != "COMPLETED_INDEPENDENT_QC_PASS"
+                or not (root / "qc.json").is_file()
+                or sha(root / "qc.json") != status.get("qc_sha256")):
+            raise ValueError("QC child did not persist verifiable PASS evidence")
+    except (IndexError, ValueError, KeyError, OSError) as exc:
+        _record_qc_failure(root, period, commit, type(exc).__name__, str(exc),
+                           child.stdout)
+        raise RuntimeError("independent QC output validation failed; "
+                           "see immutable qc_failure.json") from exc
+    return response
 
 
 def perform(period: str, commit: str, mode: str, smoke_minutes: int) -> dict:
@@ -758,9 +831,12 @@ def perform(period: str, commit: str, mode: str, smoke_minutes: int) -> dict:
             "days_done": WINDOW[period]["days"], "days_total": WINDOW[period]["days"],
             "result_sha256": sha(f), "ledger_sha256": sha(all_rows),
         })
-        qc = independent_qc(period, root, commit)
-        return {"period": period, "stage": qc["status"], "qc_sha256": sha(root / "qc.json"),
-                "cases": {name: result[name]["wallet_net_usdt"] for name in BOOK_NAMES}}
+    # Publish native result and release the writer lock before launching the
+    # independent reviewer in a different Python interpreter. An audit failure
+    # must never cause the native 90/183-day tick replay to run a second time.
+    qc = independent_qc(period, root, commit)
+    return {"period": period, "stage": qc["status"], "qc_sha256": sha(root / "qc.json"),
+            "cases": {name: result[name]["wallet_net_usdt"] for name in BOOK_NAMES}}
 
 
 def main() -> None:
