@@ -159,3 +159,32 @@ def test_pg16_original_source_invalidation_blocks_before_order(db,table,column,v
     admin.execute(f"UPDATE {table} SET {column}=%s", (value,))
     with pytest.raises(R07PublicationProvenanceUnavailable):
         require_r07_publication_provenance(runtime, request("ta-sub-2"))
+
+
+def test_pg16_dispatch_row_locks_prevent_source_epoch_revocation_mid_commit(db):
+    admin, runtime = db
+    # Disposable PostgreSQL only. Consumer obtains this lock in its command
+    # transaction, so a concurrent source GAP cannot slip between final
+    # provenance read and durable queue insertion.
+    with psycopg.connect(DSN, autocommit=True) as mutator:
+        mutator.execute("SET lock_timeout = '200ms'")
+        with admin.transaction():
+            assert require_r07_publication_provenance(
+                admin, request("ta-sub-9"), lock_source_rows=True,
+            ) == 45
+            with pytest.raises(psycopg.errors.LockNotAvailable):
+                mutator.execute(
+                    "UPDATE analytics.native_public_trade_source_sessions "
+                    "SET state='GAP' WHERE source_session_id=%s",
+                    (SESSION,),
+                )
+        mutator.execute("SET lock_timeout = '0'")
+        mutator.execute(
+            "UPDATE analytics.native_public_trade_source_sessions "
+            "SET state='GAP' WHERE source_session_id=%s",
+            (SESSION,),
+        )
+    with pytest.raises(
+        R07PublicationProvenanceUnavailable, match="R07_SOURCE_PROOF_INVARIANT_BROKEN",
+    ):
+        require_r07_publication_provenance(runtime, request("ta-sub-9"))
