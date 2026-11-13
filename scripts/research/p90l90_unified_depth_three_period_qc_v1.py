@@ -8,6 +8,7 @@ child. Never modify source, existing evidence, DB, Exchange or trading.
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -304,3 +305,42 @@ def audit(period: str, root: Path, commit: str, *,
     })
     return {"status": STATUS, "period": period, "cases": len(checked),
             "qc_sha256": run.sha(target)}
+
+
+def main() -> None:
+    """Run independently after the native producer has committed its evidence.
+
+    Distinct OS/Python process => original replay's module state is not reused.
+    Deliberately no replay capability, arbitrary path input, or production
+    dependency. The exact source SHA is checked again inside the child.
+    """
+    if os.name != "posix":
+        raise OSError("independent research QC worker requires POSIX flock")
+    import fcntl
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--period", choices=tuple(run.WINDOW), required=True)
+    parser.add_argument("--source-head", required=True)
+    args = parser.parse_args()
+    if (len(args.source_head) != 40
+            or any(c not in "0123456789abcdef" for c in args.source_head)):
+        raise ValueError("expected exact 40-hex GitHub producer HEAD")
+    if run.source_head() != args.source_head:
+        raise ValueError("effective QC source HEAD differs from producer pin")
+    root = run.output(args.period)
+    status = json.loads((root / "status.json").read_text())
+    if (root.is_symlink() or status.get("stage") != "COMPLETE_PENDING_INDEPENDENT_QC"
+            or status.get("source_head") != args.source_head
+            or status.get("days_done") != run.WINDOW[args.period]["days"]
+            or (root / "qc.json").exists()):
+        raise ValueError("independent QC requires complete, not-yet-audited native evidence")
+    # The original writer lock must have been released before spawning QC.
+    with (root / ".writer.lock").open("r") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        report = audit(args.period, root, args.source_head,
+                       auditor_head=args.source_head)
+    print(json.dumps(report, sort_keys=True), flush=True)
+
+
+if __name__ == "__main__":
+    main()
