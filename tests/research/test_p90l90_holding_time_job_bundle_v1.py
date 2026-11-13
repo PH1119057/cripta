@@ -60,6 +60,49 @@ class IndependentJobBundleTests(unittest.TestCase):
                     self.assertEqual(body, pack.build_bundle(
                         REPO, period, phase, job_id, TEST_HEAD)[0])
 
+    def test_2025_one_day_pilot_is_own_independent_job(self):
+        ident = "C2-R646-H25-PILOT1-20261114"
+        payload, manifest = pack.build_bundle(
+            REPO, "183d", "ALL", ident, TEST_HEAD, pilot_days=1,
+        )
+        self.assertEqual(intake.validate_manifest(manifest), manifest)
+        self.assertEqual(manifest["parameters"]["pilot_days"], 1)
+        self.assertFalse(
+            manifest["parameters"]["no_cap_original_ledger_parity_required"],
+        )
+        self.assertEqual(manifest["timeout_seconds"], 7200)
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            intake.inspect_archive(archive)
+            entry = archive.read("job_launcher.py").decode()
+            ast.parse(entry)
+            self.assertIn('"--pilot-days", "1"', entry)
+            self.assertIn("PILOT_DAYS = 1", entry)
+            self.assertIn("runpy.run_path", entry)
+            self.assertIn("manifest", entry)
+            self.assertEqual(
+                hashlib.sha256(archive.read(
+                    "source_snapshot/p90l90_holding_time_2025_v1.py"
+                )).hexdigest(), manifest["parameters"]["source_sha256"],
+            )
+        self.assertEqual(payload, pack.build_bundle(
+            REPO, "183d", "ALL", ident, TEST_HEAD, pilot_days=1,
+        )[0])
+
+    def test_one_day_pilot_is_fail_closed_to_other_periods_and_ids(self):
+        bad = [
+            ("29d", "C2-R646-H29-PILOT1-20261114", 1),
+            ("90d", "C2-R646-H90-PILOT1-20261114", 1),
+            ("183d", "C2-R646-H25-ALL-20261114", 1),
+            ("183d", "C2-R646-H25-PILOT1-20261114", 0),
+            ("183d", "C2-R646-H25-PILOT1-20261114", 2),
+        ]
+        for period, ident, pilot in bad:
+            with self.subTest(period=period, job_id=ident, pilot=pilot):
+                with self.assertRaises(ValueError):
+                    pack.build_bundle(
+                        REPO, period, "ALL", ident, TEST_HEAD, pilot,
+                    )
+
     def test_period_mismatch_and_invalid_identity_rejected(self):
         for period, ident in (("29d", "H90"),
                               ("90d", "H25"), ("183d", "H29")):

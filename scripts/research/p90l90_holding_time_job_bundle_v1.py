@@ -52,13 +52,26 @@ def validate_identity(period: str, phase: str, job_id: str,
         raise ValueError("source head must be a 40-digit Git SHA")
 
 
+def validate_pilot(period: str, job_id: str, pilot_days: int) -> None:
+    """The one-day 2025 smoke has a separate immutable job ID."""
+    if pilot_days not in (0, 1):
+        raise ValueError("pilot_days must be 0 or 1")
+    if pilot_days and period != "183d":
+        raise ValueError("one-day pilot only supported for 183d")
+    if bool(pilot_days) != ("-PILOT1-" in job_id):
+        raise ValueError("pilot identity and duration mismatch")
+
+
 def launcher(job_id: str, source_name: str, source_sha: str,
-             period: str, phase: str) -> bytes:
-    cli = (
-        f'sys.argv = [str(source), "--period", {period!r}, "--phase", {phase!r}]'
-        if period != "183d"
-        else f'sys.argv = [str(source), "--phase", {phase!r}]'
-    )
+             period: str, phase: str, pilot_days: int = 0) -> bytes:
+    if period == "183d":
+        cli = f'sys.argv = [str(source), "--phase", {phase!r}]'
+        if pilot_days == 1:
+            cli = (f'sys.argv = [str(source), "--phase", {phase!r}, '
+                   '"--pilot-days", "1"]')
+    else:
+        cli = (f'sys.argv = [str(source), "--period", {period!r}, '
+               f'"--phase", {phase!r}]')
     content = f'''#!/usr/bin/env python3
 """Independent CRIPTA job-runner entrypoint; no SentinelX process dependency."""
 import hashlib
@@ -73,6 +86,7 @@ SOURCE_SHA256 = {source_sha!r}
 SOURCE_NAME = {source_name!r}
 PERIOD = {period!r}
 PHASE = {phase!r}
+PILOT_DAYS = {pilot_days!r}
 
 if (os.geteuid(), os.getegid()) != (107, 109):
     raise PermissionError("expected cripta 107:109")
@@ -90,7 +104,8 @@ if (manifest["job_id"] != JOB_ID
         or manifest["entrypoint"] != "job_launcher.py"
         or manifest["parameters"]["phase"] != PHASE
         or manifest["parameters"]["period"] != PERIOD
-        or manifest["parameters"]["source_sha256"] != SOURCE_SHA256):
+        or manifest["parameters"]["source_sha256"] != SOURCE_SHA256
+        or manifest["parameters"].get("pilot_days", 0) != PILOT_DAYS):
     raise RuntimeError("job manifest does not match frozen entrypoint")
 source = root / "source_snapshot" / SOURCE_NAME
 if source.is_symlink() or not source.is_file():
@@ -104,9 +119,11 @@ runpy.run_path(str(source), run_name="__main__")
 
 
 def build_bundle(repo_root: pathlib.Path, period: str, phase: str,
-                 job_id: str, source_head: str) -> tuple[bytes, dict]:
+                 job_id: str, source_head: str,
+                 pilot_days: int = 0) -> tuple[bytes, dict]:
     """Pure builder, no filesystem writes; safe for offline contract tests."""
     validate_identity(period, phase, job_id, source_head)
+    validate_pilot(period, job_id, pilot_days)
     src_name = SOURCE_BY_PERIOD[period]
     path = repo_root / "scripts" / "research" / src_name
     # Windows Git checkouts may use CRLF; freeze repository blob LF bytes.
@@ -114,10 +131,11 @@ def build_bundle(repo_root: pathlib.Path, period: str, phase: str,
     if not body.startswith(b"#!/usr/bin/env python3\n"):
         raise ValueError("unexpected frozen research source header")
     source_sha = hashlib.sha256(body).hexdigest()
-    entrypoint = launcher(job_id, src_name, source_sha, period, phase)
+    entrypoint = launcher(job_id, src_name, source_sha, period, phase, pilot_days)
     manifest = {
         "job_id": job_id,
-        "title": f"P90L90 holding-age Exit #646 {period} {phase}",
+        "title": (f"P90L90 holding-age Exit #646 {period} {phase}"
+                  + (" PILOT1" if pilot_days else "")),
         "line": "legacy-recheck",
         "entrypoint": "job_launcher.py",
         "dataset": {
@@ -133,14 +151,15 @@ def build_bundle(repo_root: pathlib.Path, period: str, phase: str,
             "native_exit": "original RAW L5-3 structural TP",
             "same_tick_priority": "existing stop/resting TP before time limit",
             "time_limits_hours": [None, 3, 6, 12, 18, 24, 36, 48, 72],
-            "no_cap_original_ledger_parity_required": True,
+            "no_cap_original_ledger_parity_required": not bool(pilot_days),
         },
         "dependencies": [
             "GitHub PH1119057/cripta main synchronized source mirror",
             "verified historical native Bybit data on /data/cripta",
             "existing #635 NO_CAP independent baseline ledgers",
         ],
-        "timeout_seconds": 604800 if period == "183d" else 172800,
+        "timeout_seconds": (7200 if pilot_days else (
+            604800 if period == "183d" else 172800)),
         "notes": (
             "Historical offline research only; NO LIVE/DB/Exchange. "
             "Independent systemd job intake/runner, cripta actor. "
@@ -148,6 +167,8 @@ def build_bundle(repo_root: pathlib.Path, period: str, phase: str,
             "approved data-mounted reports. Do not run from SentinelX exec."
         ),
     }
+    if pilot_days:
+        manifest["parameters"]["pilot_days"] = pilot_days
     entries = {
         "job.json": (json.dumps(manifest, ensure_ascii=False,
                                 sort_keys=True, indent=2) + "\n").encode("utf-8"),
@@ -166,11 +187,12 @@ def build_bundle(repo_root: pathlib.Path, period: str, phase: str,
 
 
 def prepare(period: str, phase: str, job_id: str,
-            source_head: str) -> dict:
+            source_head: str, pilot_days: int = 0) -> dict:
     """Prepare unsubmitted ZIP; never mutate intake/queued/running state."""
     if (os.geteuid(), os.getegid()) != (107, 109):
         raise PermissionError("package creator must be Unix cripta 107:109")
     validate_identity(period, phase, job_id, source_head)
+    validate_pilot(period, job_id, pilot_days)
     repo = pathlib.Path(__file__).resolve().parents[2]
     actual = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "HEAD"],
@@ -185,7 +207,9 @@ def prepare(period: str, phase: str, job_id: str,
     v = os.statvfs(RESEARCH_RUNS)
     if v.f_bavail * v.f_frsize < 5 * 2**30:
         raise RuntimeError("data SSD has less than 5 GiB reserve")
-    contents, manifest = build_bundle(repo, period, phase, job_id, source_head)
+    contents, manifest = build_bundle(
+        repo, period, phase, job_id, source_head, pilot_days,
+    )
     task_dir = PACKAGE_ROOT.parent
     if task_dir.is_symlink():
         raise RuntimeError("task dir symlink refused")
@@ -229,9 +253,11 @@ def main() -> None:
     parser.add_argument("--phase", required=True, choices=PHASES)
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--source-head", required=True)
+    parser.add_argument("--pilot-days", type=int, choices=(0, 1), default=0)
     args = parser.parse_args()
     print(json.dumps(
-        prepare(args.period, args.phase, args.job_id, args.source_head),
+        prepare(args.period, args.phase, args.job_id,
+                args.source_head, args.pilot_days),
         sort_keys=True,
     ), flush=True)
 
