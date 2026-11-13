@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import importlib.util
-from datetime import UTC, datetime
 from pathlib import Path
 
 MODULE = (
@@ -26,7 +25,7 @@ def test_exact_owner_approved_symbol_scope() -> None:
     assert protected >= {"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"}
     assert protected >= {"BTCUSDT", "ETHUSDT"}
     assert retention.EXPECTED_LEGACY_PER_SYMBOL == 65180
-    assert retention.CUTOFF == datetime(2026, 11, 12, tzinfo=UTC)
+    assert retention.CUTOFF.isoformat() == "2026-11-12T00:00:00+00:00"
 
 
 def test_bounded_sql_targets_only_market_minutes() -> None:
