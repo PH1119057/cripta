@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from bybit_workbench.account_entry_readiness import entry_blocking_lifecycle_fault
-
 import json
 import os
 import signal
@@ -14,11 +12,9 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.account_entry_readiness import entry_blocking_lifecycle_fault
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
-from bybit_workbench.strategy_execution_binding_policy import (
-    real_binding_allocation_allowed,
-)
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -31,6 +27,9 @@ from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_
 from bybit_workbench.lifecycle_ack import record_plan_consumption
 from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
+from bybit_workbench.strategy_execution_binding_policy import (
+    real_binding_allocation_allowed,
+)
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 from bybit_workbench.universal_entry.contracts import ExecutionRequest, FrozenPolicy, TradeDirection
@@ -43,7 +42,11 @@ from bybit_workbench.universal_entry.execution_bridge import (
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 from bybit_workbench.universal_entry.owner_full_contour_control import (
     require_parent_p90_diagnostic_scope,
+)
+from bybit_workbench.universal_entry.owner_full_contour_control import (
     retire_entry_rights as retire_owner_diagnostic_entry_rights,
+)
+from bybit_workbench.universal_entry.owner_full_contour_control import (
     set_run_state as set_owner_diagnostic_run_state,
 )
 from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
@@ -52,6 +55,10 @@ from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
 from bybit_workbench.universal_entry.owner_full_contour_runtime import (
     materialize_requested_run,
     refresh_run_lifecycle,
+)
+from bybit_workbench.universal_entry.r07_publication_provenance import (
+    R07PublicationProvenanceUnavailable,
+    require_r07_publication_provenance,
 )
 
 CURRENT_ACCOUNT_REF = "BYBIT:UNIFIED"
@@ -588,7 +595,10 @@ def _publish_command(
             str(existing["command_type"]) != "entry"
             or str(existing["symbol"]) != prepared.symbol
             or json.loads(str(existing["payload_json"])) != prepared.payload
-            or str(existing["strategy_execution_binding_id"]) != prepared.strategy_execution_binding_id
+            or (
+                str(existing["strategy_execution_binding_id"])
+                != prepared.strategy_execution_binding_id
+            )
             or str(existing["execution_leg"]) != prepared.execution_leg
             or str(existing["trading_account_id"]) != prepared.trading_account_id
             or str(existing["identity_status"]) != "PROVEN"
@@ -1810,6 +1820,41 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
                 occurred_at=current, reason=reason,
             )
         return "BLOCKED:CRITICAL_LIFECYCLE_FAULT"
+
+    # R07: a REAL P90 request must reference an original native trade through
+    # the SAME durable R06 publication/decision epoch before financial ARM can
+    # be considered. The verifier is account-agnostic; the existing route,
+    # binding, capital, slot, connector and Exit gates stay account-local.
+    # No R06 no-order observation is promoted into a financial request here.
+    try:
+        require_r07_publication_provenance(connection, row)
+    except R07PublicationProvenanceUnavailable as exc:
+        reason = str(exc)
+        with connection.transaction():
+            _record_blocked(
+                connection,
+                request,
+                reason="R07_SOURCE_PUBLICATION_UNPROVEN:" + reason,
+                payload={
+                    "block_code": "R07_SOURCE_PUBLICATION_UNPROVEN",
+                    "source_reason": reason,
+                    "signal_id": request.signal_id,
+                },
+            )
+            _release_pre_exchange_admission(
+                connection,
+                request,
+                reason="PRE_EXCHANGE_BLOCK:R07_SOURCE_PUBLICATION_UNPROVEN",
+                now=current,
+            )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_CANCELLED",
+                occurred_at=current,
+                reason="R07_SOURCE_PUBLICATION_UNPROVEN:" + reason,
+            )
+        return "BLOCKED:R07_SOURCE_PUBLICATION_UNPROVEN"
 
     live_ready, failed_live_checks = _live_arm_ready(connection, row, now=current)
     if not live_ready:
