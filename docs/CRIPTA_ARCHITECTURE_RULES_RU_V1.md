@@ -1883,8 +1883,8 @@ Before any DATA/DDL mutation:
    and post-count verification. Physical reclaim R12 uses exact current
    heap/index/lock/available-space evidence: avoid blind VACUUM FULL or
    other large rewrites on the 20-GiB full SSD. Report actual
-   \`pg_total_relation_size\`, \`pg_database_size\`, \`PGDATA\` and ext4
-   \`df\` before and after separately, never equate DELETE rows with bytes
+   `pg_total_relation_size`, `pg_database_size`, `PGDATA` and ext4
+   `df` before and after separately, never equate DELETE rows with bytes
    returned to filesystem.
 7. Accept a measured System-SSD growth/retention budget (OS/runtime + PGDATA
    + WAL + emergency free reserve) below physical 20 GiB; test representative
