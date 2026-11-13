@@ -10,7 +10,8 @@
     "original_signal": "strategy_entry.p90_r06_publication_observations(signal_id,strategy_id,strategy_version,symbol,direction,source_session_id,frame_number,frame_index,native_exec_id)",
     "publication": "analytics.market_publications(publication_id,market_source_id,producer_release_commit,published_at,source_session_id)",
     "original_event": "analytics.native_public_trade_source_events(source_session_id,frame_number,frame_index,exec_id,instrument_id,external_symbol,event_at)",
-    "checkpoint": "strategy_entry.p90_scoped_native_consumer_checkpoints(strategy_id,strategy_version,source_session_id,last_publication_id,bootstrap_publication_id,frame_number,frame_index)",
+    "checkpoint": "strategy_entry.p90_scoped_native_consumer_checkpoints(strategy_id,strategy_version,source_session_id,last_publication_id,bootstrap_publication_id,frame_number,frame_index,entry_plan_fingerprint,exit_plan_fingerprint,producer_release_commit)",
+    "plan_and_producer_identity": "the request EntryPlan/ExitPlan must exactly match the durable R06 Strategy checkpoint; its producer_release_commit must equal the referenced immutable MarketPublication producer commit; no surrogate source approval by matching StrategyVersion alone",
     "freshness_seconds": 5,
     "freshness_source": "existing P90 REAL v3 immutable EntryPlan maximum request age; not a new Strategy threshold",
     "missing_or_mixed_proof": "fail closed before financial permission check or command creation",
@@ -34,6 +35,7 @@
   "tests": [
     "one original published signal supports 1+10 synthetic isolated account identities",
     "missing/duplicated/unpublished/stale/changed original native refs deny Entry",
+    "valid native signal paired with a forged EntryPlan/ExitPlan or mismatched producer commit denies Entry",
     "source epoch/checkpoint/release fingerprint mismatches deny Entry",
     "failed P90 proof stops before LIVE ARM/command and records cancelled request",
     "non-P90 strategy dispatch contract is left untouched",
