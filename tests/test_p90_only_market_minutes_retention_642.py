@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 MODULE = (
@@ -23,10 +23,10 @@ def test_exact_owner_approved_symbol_scope() -> None:
     assert len(legacy) == 13
     assert len(protected) == 7
     assert not (legacy & protected)
-    assert {"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"} <= protected
-    assert {"BTCUSDT", "ETHUSDT"} <= protected
+    assert protected >= {"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"}
+    assert protected >= {"BTCUSDT", "ETHUSDT"}
     assert retention.EXPECTED_LEGACY_PER_SYMBOL == 65180
-    assert retention.CUTOFF == datetime(2026, 11, 12, tzinfo=timezone.utc)
+    assert retention.CUTOFF == datetime(2026, 11, 12, tzinfo=UTC)
 
 
 def test_bounded_sql_targets_only_market_minutes() -> None:
@@ -54,7 +54,7 @@ class FakeQuery:
             ]
         )
 
-    def execute(self, sql: str, params: object = None) -> "FakeQuery":
+    def execute(self, sql: str, params: object = None) -> FakeQuery:
         return self
 
     def fetchone(self) -> tuple:
