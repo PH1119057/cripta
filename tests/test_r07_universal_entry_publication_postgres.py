@@ -62,6 +62,8 @@ def db():
     admin.execute("""
       CREATE TABLE strategy_entry.p90_scoped_native_consumer_checkpoints (
         strategy_id text, strategy_version text, source_session_id text,
+        entry_plan_fingerprint text, exit_plan_fingerprint text,
+        producer_release_commit text,
         frame_number bigint, frame_index int,
         bootstrap_publication_id bigint, last_publication_id bigint,
         consumer_release_commit text,
@@ -99,8 +101,8 @@ def db():
     )
     admin.execute(
         "INSERT INTO strategy_entry.p90_scoped_native_consumer_checkpoints "
-        "VALUES (%s,%s,%s,101,0,40,46,%s)",
-        (MAIN_ID, VERSION, SESSION, CONSUMER),
+        "VALUES (%s,%s,%s,%s,%s,%s,101,0,40,46,%s)",
+        (MAIN_ID, VERSION, SESSION, "e" * 64, "f" * 64, PRODUCER, CONSUMER),
     )
     admin.execute(
         "INSERT INTO strategy_entry.p90_r06_publication_observations "
@@ -124,6 +126,8 @@ def request(account):
         "strategy_id": MAIN_ID, "strategy_version": VERSION,
         "signal_id": "signal-100", "symbol": "LTCUSDT",
         "direction": "LONG", "requested_at": NOW,
+        "entry_plan_fingerprint": "e" * 64,
+        "exit_plan_fingerprint": "f" * 64,
         "trading_account_id": account,
     }
 
@@ -151,6 +155,12 @@ def test_three_accounts_share_proven_original_without_cross_account_order(db):
     ("strategy_entry.p90_scoped_native_consumer_checkpoints",
      "last_publication_id", "44"),
     ("analytics.market_publications","producer_release_commit","invalid"),
+    ("strategy_entry.p90_scoped_native_consumer_checkpoints",
+     "entry_plan_fingerprint", "0" * 64),
+    ("strategy_entry.p90_scoped_native_consumer_checkpoints",
+     "exit_plan_fingerprint", "1" * 64),
+    ("strategy_entry.p90_scoped_native_consumer_checkpoints",
+     "producer_release_commit", "a" * 40),
 ])
 def test_pg16_original_source_invalidation_blocks_before_order(db,table,column,value):
     admin, runtime = db
@@ -159,6 +169,18 @@ def test_pg16_original_source_invalidation_blocks_before_order(db,table,column,v
     admin.execute(f"UPDATE {table} SET {column}=%s", (value,))
     with pytest.raises(R07PublicationProvenanceUnavailable):
         require_r07_publication_provenance(runtime, request("ta-sub-2"))
+
+
+@pytest.mark.parametrize(("field", "forged"), [
+    ("entry_plan_fingerprint", "0" * 64),
+    ("exit_plan_fingerprint", "1" * 64),
+])
+def test_pg16_original_cannot_authorize_changed_financial_plan(db, field, forged):
+    _admin, runtime = db
+    changed = request("ta-sub-2")
+    changed[field] = forged
+    with pytest.raises(R07PublicationProvenanceUnavailable, match="INVARIANT_BROKEN"):
+        require_r07_publication_provenance(runtime, changed)
 
 
 def test_pg16_select_only_final_proof_rejects_gap_between_preflight_and_dispatch(db):
