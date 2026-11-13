@@ -14,11 +14,24 @@ TEXT = SRC.read_text(encoding="utf-8")
 TREE = ast.parse(TEXT)
 ORIGINAL_CALLS = []
 
+def hits_stop(side, price, level):
+    return price <= level if side == "LONG" else price >= level
+
+def hits_tp(side, price, level):
+    return price >= level if side == "LONG" else price <= level
+
 def old_on_trade(pos, price, seq, bucket, tp, kind):
     ORIGINAL_CALLS.append((pos, price, seq, tp, kind))
+    if seq > pos.entry_seq:
+        if hits_stop(pos.side, price, pos.stop):
+            return None, ("HARD_STOP", price, False)
+        if (pos.tp is not None and seq > pos.tp_live_after_seq
+                and hits_tp(pos.side, price, pos.tp)):
+            return None, ("RESTING_TP", pos.tp, True)
     return pos, None
 
-base = types.SimpleNamespace(on_trade=old_on_trade)
+base = types.SimpleNamespace(on_trade=old_on_trade,
+                             hits_stop=hits_stop, hits_tp=hits_tp)
 
 def gross_and_net(pos, price, maker):
     return D(0), D("0.0055"), D("0.0055"), price
@@ -29,17 +42,20 @@ class FakeEntryEmbargo:
     def __init__(self, stops, pause):
         self.stops = stops
         self.pause = pause
+        self.position = SimpleNamespace(
+            entry_seq=100, entry_ts=1000, side="LONG",
+            stop=D("-1000"), tp=None, tp_live_after_seq=-1)
 
     def handle(self, symbol, timestamp, seq, price, candidates, state):
-        return base.on_trade(SimpleNamespace(entry_seq=100,
-                             entry_ts=1000), price, seq, 300, None, "TRAIL035")
+        return base.on_trade(self.position, price, seq, 300, None, "TRAIL035")
 
 embargo = types.SimpleNamespace(EntryEmbargo=FakeEntryEmbargo)
 scope = {
     "D": D, "base": base, "embargo": embargo,
     "ORIGINAL_ON_TRADE": old_on_trade,
 }
-want = {"cap_label", "age_gate", "force_time_exit", "TimeBook"}
+want = {"cap_label", "age_gate", "force_time_exit",
+        "original_resting_exit_due", "TimeBook"}
 extract = [node for node in TREE.body
            if isinstance(node, (ast.FunctionDef, ast.ClassDef))
            and node.name in want]
@@ -99,6 +115,52 @@ class AgeGateTests(unittest.TestCase):
         self.assertIsNone(result[1])
         result = b.handle("LTCUSDT", 1000 + 10801, 102, D("-0.01"), (), None)
         self.assertEqual(result[1][0], "TIME_LIMIT")
+        self.assertIs(base.on_trade, old_on_trade)
+
+    def test_preexisting_hard_stop_precedes_time_exit_both_sides(self):
+        for side, stop, px in (("LONG", "1.1", "1.0"),
+                               ("SHORT", "0.9", "1.0")):
+            with self.subTest(side=side):
+                b = scope["TimeBook"](3, "ALL")
+                b.position.side = side
+                b.position.stop = D(stop)
+                before = len(ORIGINAL_CALLS)
+                result = b.handle("LTCUSDT", 1000 + 10800, 101,
+                                  D(px), (), None)
+                self.assertEqual(result[1], ("HARD_STOP", D(px), False))
+                self.assertEqual(len(ORIGINAL_CALLS), before + 1)
+                self.assertIs(base.on_trade, old_on_trade)
+
+    def test_preexisting_resting_tp_precedes_time_exit_both_sides(self):
+        for side, stop, tp, px in (("LONG", "-1000", "1.15", "1.2"),
+                                   ("SHORT", "1000", "0.85", "0.8")):
+            with self.subTest(side=side):
+                b = scope["TimeBook"](3, "ALL")
+                b.position.side = side
+                b.position.stop = D(stop)
+                b.position.tp = D(tp)
+                b.position.tp_live_after_seq = 100
+                result = b.handle("LTCUSDT", 1000 + 10800, 101,
+                                  D(px), (), None)
+                self.assertEqual(result[1], ("RESTING_TP", D(tp), True))
+                self.assertIs(base.on_trade, old_on_trade)
+
+    def test_not_yet_resting_tp_does_not_preempt_time_exit(self):
+        b = scope["TimeBook"](3, "ALL")
+        b.position.tp = D("1.1")
+        b.position.tp_live_after_seq = 101
+        result = b.handle("LTCUSDT", 1000 + 10800, 101,
+                          D("1.2"), (), None)
+        self.assertEqual(result[1], ("TIME_LIMIT", D("1.2"), False))
+        self.assertEqual(ORIGINAL_CALLS, [])
+        self.assertIs(base.on_trade, old_on_trade)
+
+    def test_protected_stop_still_precedes_conditional_time_gate(self):
+        b = scope["TimeBook"](3, "NEG")
+        b.position.stop = D("1.3")
+        result = b.handle("LTCUSDT", 1000 + 10800, 101,
+                          D("1.2"), (), None)
+        self.assertEqual(result[1], ("HARD_STOP", D("1.2"), False))
         self.assertIs(base.on_trade, old_on_trade)
 
     def test_original_tp_eligibility_is_never_overridden(self):

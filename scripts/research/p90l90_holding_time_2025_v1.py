@@ -74,6 +74,16 @@ def should_force(book, symbol: str, pos, timestamp: float, seq: int,
     fee = old.money(notional * px / pos.entry * old.TAKER)
     return gross - book.open_fee[symbol] - fee <= 0
 
+def original_resting_exit_due(pos, price: D, seq: int) -> bool:
+    """Preserve pre-existing stop/TP on deadline collisions; no new TP arm."""
+    if seq <= pos.entry_seq:
+        return False
+    if base.hits_stop(pos.side, price, pos.stop):
+        return True
+    return (pos.tp is not None and seq > pos.tp_live_after_seq
+            and base.hits_tp(pos.side, price, pos.tp))
+
+
 def timed_handle(self, symbol, timestamp, seq, px, events, state, priority):
     """Temporarily replace the native Exit decision for THIS isolated book."""
     if base.on_trade is not ORIGINAL_ON_TRADE:
@@ -85,6 +95,8 @@ def timed_handle(self, symbol, timestamp, seq, px, events, state, priority):
     )
 
     def native_with_deadline(pos, price, native_seq, bucket, tp, kind):
+        if original_resting_exit_due(pos, price, native_seq):
+            return ORIGINAL_ON_TRADE(pos, price, native_seq, bucket, tp, kind)
         if should_force(self, symbol, pos, timestamp, native_seq, price):
             return None, ("TIME_LIMIT", price, False)
         return ORIGINAL_ON_TRADE(pos, price, native_seq, bucket, tp, kind)
@@ -290,6 +302,7 @@ def run(phase: str, pilot_days: int) -> dict:
         "original_raw_l53_dynamic_tp": True,
         "gross_tp_eligibility_pct": "0.50",
         "fixed_percentage_take_profit": False,
+        "same_tick_priority": "pre-existing Stop/resting TP before TIME_LIMIT",
         "trailing": "TRAIL035 favorable +0.50 distance0.35pp",
         "SECOND48": "independent per side/book",
         "nominal_usdt_per_trade": "100",

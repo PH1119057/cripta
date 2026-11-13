@@ -72,6 +72,16 @@ def force_time_exit(pos, seq: int, timestamp: float, price: D,
         return base.gross_and_net(pos, price, False)[-1] <= 0
     raise ValueError("unsupported research-only time phase")
 
+def original_resting_exit_due(pos, price: D, seq: int) -> bool:
+    """Preserve pre-existing stop/TP on deadline collisions; no new TP arm."""
+    if seq <= pos.entry_seq:
+        return False
+    if base.hits_stop(pos.side, price, pos.stop):
+        return True
+    return (pos.tp is not None and seq > pos.tp_live_after_seq
+            and base.hits_tp(pos.side, price, pos.tp))
+
+
 class TimeBook(embargo.EntryEmbargo):
     """One isolated LONG or SHORT book, including its own SECOND48."""
 
@@ -87,6 +97,8 @@ class TimeBook(embargo.EntryEmbargo):
             raise RuntimeError("unexpected concurrent Exit callback modification")
 
         def with_time_gate(pos, px, source_seq, bucket, tp, kind):
+            if original_resting_exit_due(pos, px, source_seq):
+                return ORIGINAL_ON_TRADE(pos, px, source_seq, bucket, tp, kind)
             if force_time_exit(pos, source_seq, timestamp, px,
                                self.cap, self.phase):
                 return None, ("TIME_LIMIT", px, False)
@@ -231,7 +243,7 @@ def run(period: str, phase: str, smoke_hours: int) -> dict:
         "fixed_percentage_take_profit": False,
         "notional_usdt_per_entry": "10",
         "exit_execution": ("first original native tick at/after deadline; "
-                           "TIME_LIMIT market taker before existing exit checks; "
+                           "pre-existing Stop/resting TP first, then TIME_LIMIT taker; "
                            "same-tick reopening blocked; NEG mode checks immediate "
                            "model net at every subsequent native tick"),
         "source_sha256": digest(src), "caps_h": list(CAPS_H),

@@ -11,22 +11,36 @@ SRC = Path(__file__).parents[2] / "scripts/research/p90l90_holding_time_2025_v1.
 AST = ast.parse(SRC.read_text(encoding="utf-8"))
 CALLS = []
 
+def hits_stop(side, price, level):
+    return price <= level if side == "LONG" else price >= level
+
+def hits_tp(side, price, level):
+    return price >= level if side == "LONG" else price <= level
+
 def original_on_trade(position, price, seq, bucket, tp, kind):
     CALLS.append((price, seq, tp))
+    if seq > position.entry_seq:
+        if hits_stop(position.side, price, position.stop):
+            return None, ("HARD_STOP", price, False)
+        if (position.tp is not None and seq > position.tp_live_after_seq
+                and hits_tp(position.side, price, position.tp)):
+            return None, ("RESTING_TP", position.tp, True)
     return position, None
 
 def original_handle(book, symbol, timestamp, seq, px, qualified, state, priority):
     CALLS.append(tuple(e["depth_pct"] for e in qualified))
     return base.on_trade(book.position, px, seq, 300, None, "TRAIL035")
 
-base = SimpleNamespace(on_trade=original_on_trade)
+base = SimpleNamespace(on_trade=original_on_trade,
+                       hits_stop=hits_stop, hits_tp=hits_tp)
 old = SimpleNamespace(LEVERAGE=D(5), TAKER=D("0.00055"), money=lambda v: v)
 scope = {
     "base": base, "old": old, "D": D,
     "ORIGINAL_ON_TRADE": original_on_trade,
     "ORIGINAL_HANDLE": original_handle,
 }
-names = {"label", "gate", "should_force", "timed_handle"}
+names = {"label", "gate", "should_force",
+         "original_resting_exit_due", "timed_handle"}
 nodes = [n for n in AST.body if isinstance(n, ast.FunctionDef) and n.name in names]
 assert len(nodes) == len(names)
 exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SRC), "exec"), scope, scope)
@@ -36,7 +50,8 @@ class Time2025ContractTests(unittest.TestCase):
         base.on_trade = original_on_trade
         CALLS.clear()
         self.pos = SimpleNamespace(entry_seq=77, entry_ts=1000., entry=D("100"),
-                                   side="LONG")
+                                   side="LONG", stop=D("90"), tp=None,
+                                   tp_live_after_seq=-1)
         self.book = SimpleNamespace(cap_h=24, phase="NEG", side="LONG",
                                     position=self.pos, margin={"LTCUSDT": D("20")},
                                     open_fee={"LTCUSDT": D("0.055")})
@@ -86,6 +101,48 @@ class Time2025ContractTests(unittest.TestCase):
                                     79, D("120"), q, None, 0)
         self.assertIsNone(ret[1])
         self.assertEqual(len(CALLS), 2)
+        self.assertIs(base.on_trade, original_on_trade)
+
+    def test_existing_stop_outweighs_timeout_long_and_short(self):
+        self.book.phase = "ALL"
+        for side, stop, px in (("LONG", "100", "99"),
+                               ("SHORT", "98", "99")):
+            with self.subTest(side=side):
+                self.pos.side = side
+                self.book.side = side
+                self.pos.stop = D(stop)
+                self.pos.tp = None
+                result = scope["timed_handle"](
+                    self.book, "LTCUSDT", 1000 + 24 * 3600, 78,
+                    D(px), (), None, 0)
+                self.assertEqual(result[1], ("HARD_STOP", D(px), False))
+                self.assertIs(base.on_trade, original_on_trade)
+
+    def test_existing_resting_tp_outweighs_timeout_long_and_short(self):
+        self.book.phase = "ALL"
+        for side, stop, tp, px in (("LONG", "90", "101", "102"),
+                                   ("SHORT", "110", "99", "98")):
+            with self.subTest(side=side):
+                self.pos.side = side
+                self.book.side = side
+                self.pos.stop = D(stop)
+                self.pos.tp = D(tp)
+                self.pos.tp_live_after_seq = 77
+                result = scope["timed_handle"](
+                    self.book, "LTCUSDT", 1000 + 24 * 3600, 78,
+                    D(px), (), None, 0)
+                self.assertEqual(result[1], ("RESTING_TP", D(tp), True))
+                self.assertIs(base.on_trade, original_on_trade)
+
+    def test_unarmed_tp_same_seq_cannot_block_timeout(self):
+        self.book.phase = "ALL"
+        self.pos.tp = D("101")
+        self.pos.tp_live_after_seq = 78
+        result = scope["timed_handle"](
+            self.book, "LTCUSDT", 1000 + 24 * 3600, 78,
+            D("102"), (), None, 0)
+        self.assertEqual(result[1], ("TIME_LIMIT", D("102"), False))
+        self.assertEqual(CALLS, [()])
         self.assertIs(base.on_trade, original_on_trade)
 
     def test_structural_tp_eligibility_not_modified(self):
