@@ -42,14 +42,7 @@ SOURCE_REF_TABLES = (
     ("mayak_v2.coin_market_contexts", "mayak_snapshot_id"),
     ("mayak_v2.shared_market_contexts", "mayak_snapshot_id"),
 )
-EMPTY_REF_TABLES = (
-    ("mayak_v2.coin_minutes", "snapshot_id"),
-    ("mayak_v2.events", "snapshot_id"),
-    ("mayak_v2.observation_journal", "snapshot_id"),
-    ("mayak_v2.state_events", "snapshot_id"),
-    ("research_context.event_links", "observed_mayak_snapshot_id"),
-)
-ALL_REFERENCES = SOURCE_REF_TABLES + EMPTY_REF_TABLES
+EXPECTED_INBOUND_FK_COUNT = 9
 ROW_COPY = (
     "COPY (SELECT row_to_json(t)::text FROM mayak_v2.snapshots t "
     "ORDER BY t.id) TO STDOUT WITH (FORMAT text)"
@@ -142,25 +135,47 @@ def evidence(conn: psycopg.Connection) -> dict[str, Any]:
 
 
 def references(conn: psycopg.Connection) -> dict[str, Any]:
+    from psycopg import sql
+
     samples: dict[str, Any] = {}
     union: set[int] = set()
     with conn.cursor() as q:
-        q.execute("SELECT count(*) FROM pg_constraint c WHERE "
-                  "c.contype='f' AND c.confrelid=%s::regclass", (TABLE,))
-        if q.fetchone()[0] != len(ALL_REFERENCES):
-            raise RuntimeError("SNAPSHOT_INBOUND_FK_COUNT_CHANGED")
-        for name, field in ALL_REFERENCES:
-            q.execute(
-                "SELECT " + field + " FROM " + name + " WHERE "
-                + field + " IS NOT NULL ORDER BY " + field
+        q.execute(
+            """SELECT n.nspname,r.relname,a.attname
+               FROM pg_constraint c
+               JOIN pg_class r ON r.oid=c.conrelid
+               JOIN pg_namespace n ON n.oid=r.relnamespace
+               JOIN pg_attribute a ON a.attrelid=c.conrelid
+                                    AND a.attnum=c.conkey[1]
+               WHERE c.contype='f'
+                 AND c.confrelid=%s::regclass
+                 AND array_length(c.conkey,1)=1
+               ORDER BY n.nspname,r.relname,a.attname""",
+            (TABLE,),
+        )
+        found = q.fetchall()
+        names = {(n + "." + r, field) for n, r, field in found}
+        if len(found) != EXPECTED_INBOUND_FK_COUNT or not (
+            set(SOURCE_REF_TABLES) <= names
+        ):
+            raise RuntimeError("SNAPSHOT_INBOUND_FK_INVENTORY_CHANGED")
+        for namespace, rel, field in found:
+            name = namespace + "." + rel
+            query = sql.SQL(
+                "SELECT {field} FROM {relation} "
+                "WHERE {field} IS NOT NULL ORDER BY {field}"
+            ).format(
+                field=sql.Identifier(field),
+                relation=sql.Identifier(namespace, rel),
             )
+            q.execute(query)
             rows = [int(x[0]) for x in q.fetchall()]
             expected = PINNED if (name, field) in SOURCE_REF_TABLES else 0
             if len(rows) != expected or len(set(rows)) != expected:
                 raise RuntimeError("PROTECTED_CONTEXT_REFERENCE_DRIFT:" + name)
             sha = hashlib.sha256()
             for value in rows:
-                sha.update(str(value).encode("ascii") + b"\n")
+                sha.update(str(value).encode("ascii") + b"\\n")
             samples[name + "." + field] = {
                 "count": len(rows), "sha256": sha.hexdigest(),
             }
