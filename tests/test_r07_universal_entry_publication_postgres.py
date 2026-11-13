@@ -161,7 +161,6 @@ def test_pg16_original_source_invalidation_blocks_before_order(db,table,column,v
         require_r07_publication_provenance(runtime, request("ta-sub-2"))
 
 
-
 def test_pg16_select_only_final_proof_rejects_gap_between_preflight_and_dispatch(db):
     admin, runtime = db
     # The Consumer's source role has SELECT, never UPDATE. PostgreSQL
