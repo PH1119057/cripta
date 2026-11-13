@@ -457,7 +457,7 @@ def test_r07_epoch_guard_requires_migration_and_holds_exact_source_shared_lock()
     db = _EpochGuardDB()
     require_r07_dispatch_epoch_guard(db, request())
     assert len(db.calls) == 3
-    assert "ACCESS SHARE MODE NOWAIT" in db.calls[0][0]
+    assert "ROW EXCLUSIVE MODE NOWAIT" in db.calls[0][0]
     assert "tgenabled='O'" in db.calls[1][0]
     assert "tgtype=31" in db.calls[1][0]
     assert "pg_try_advisory_xact_lock_shared" in db.calls[2][0]
