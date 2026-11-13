@@ -1932,7 +1932,7 @@ restart or strategy version change.
 
 ### 61.4 Two-table context-only physical R12 — OWNER DECISION 2026-11-14 (#642)
 
-This is the **sole additional R12 permission** arising from the owner's
+This is an **exact context-only R12 permission** arising from the owner's
 direction to continue safe storage cleanup and update canon where necessary.
 It applies only to one offline `VACUUM (FULL, ANALYZE)` of
 `dispatcher_v2.coin_market_contexts` and `mayak_v2.coin_market_contexts`
@@ -1985,3 +1985,55 @@ was demonstrated. The full cluster + roles/config/WAL tested rollback is
 financial/causal fact, unverified source/Position owners, or a future wider
 database rewrite. The existing scoped proof is not transferable to another
 table, batch, release, date or actor. No LIVE re-arm is authorized.
+
+### 61.5 Single-table `analytics.market_minutes` R12 — OWNER CONTINUATION #642
+
+This is a separate, narrowly scoped **physical-only** PostgreSQL
+`VACUUM (FULL, ANALYZE)` maintenance permission for exactly one relation:
+`analytics.market_minutes`. The owner approved removal of historical
+non-P90 minute evidence (13 obsolete symbols already deleted through the
+separate 847,340-row R11) and instructed continuation to physically reclaim
+space. The remaining **483,770** minute rows across exactly seven symbols
+(LTCUSDT/INJUSDT/DOTUSDT/ARBUSDT/APTUSDT and BTCUSDT/ETHUSDT; **69,110 per
+symbol**, source `ms-bybit-mainnet-public-v1`) are **KEEP, not DELETE**.
+
+Do **not** extrapolate §61.4's prior 450+450 context proof to this table.
+A new, complete scoped production SELECT backup and independently restarted,
+isolated PostgreSQL 16 restore must pass for **all 483,770 current rows**,
+with streaming content SHA-256 over primary-key-ordered full rows, unique
+PK integrity, all three ready original indexes, source identity and exact
+seven cohort counts. The compressed custom-format dump and verified SHA256
+manifest must remain on the independent Data disk. A single missing row,
+changed full-row hash, missing index or source drift blocks physical R12.
+
+Execution restrictions:
+1. Production Entry/Exit/MarketSource/exchange-mutating writers must remain
+   stopped, mainnet ARM must not be enabled as part of maintenance. No active
+   conflicting SQL writer, migration, backup restore, or table lock.
+2. Before: approved GitHub `main` source, scoped CI PASS, exact byte-matched
+   root-owned non-writable maintenance script, Unix **and** PostgreSQL
+   `postgres` actor, and **one exact SentinelX allowlisted command**. No
+   generic sudo/Python/SQL execution, actor escalation or security workaround.
+3. Exactly 483,770 source rows, unique `market_source_id, instrument_id,
+   observed_minute` primary key, correct seven symbol groups, three valid
+   indexes, no inbound FKs/custom triggers, and SHA256 identical to the
+   isolated restored archive. Retained P90/ATR seed/minute continuity may
+   not be changed by this R12 operation.
+4. At least **2.5 GiB actual root filesystem free** immediately before
+   beginning, measured WAL bytes and clean CHECKPOINT; fail closed if
+   insufficient headroom, blocked lock or signature drift. Do not disable
+   `fsync`, remove `pg_wal`, drop indexes or change DB configuration.
+   `VACUUM FULL` is a separate non-transactional physical rewrite;
+   set bounded lock/statement timeouts, then recompute source/full-row
+   hash, rows, index integrity, PGDATA/WAL and ext4 free bytes independently.
+5. Stop and classify failed/unknown work. Never claim physical reclaim
+   without independent SQL plus filesystem before/after and no-op
+   preservation of all protected rows. The isolated backup scope is
+   sufficient **only for this single physical-only relation rewrite**, not
+   for deleting any protected P90 minute, native events, source checkpoints,
+   signed private/financial evidence or broader PGDATA/cluster relocation.
+
+All other full-system backup, independently tested cluster rollback, actor,
+consumer, signed Bybit and LIVE gates remain unchanged. This physical-only
+permission does not authorize another trading Strategy, producer restart,
+LIVE ARM or general PostgreSQL retention change.
