@@ -9,7 +9,7 @@
 
 Для нового чата: целиком `docs/CHATGPT_INTERACTION_RULES_RU*.md`, `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`, `docs/SECURITY.md`; INDEX §1–9 для authority/route и §17 перед docs mutation. ARCH/GLOSSARY/MAP/routed docs — точные релевантные разделы по DOCS/CORE/RESEARCH, а не весь набор при каждой реплике.
 
-Перед каждым содержательным ответом: current GitHub SHA, task route, свежесть релевантного канона. До отказа/спора о правах — META §17.3 + DEV §19.5–19.6 + MAP §1.4 + actual capabilities / effective actor / DB grants / project authorization. Уже данное owner approval не спрашивать повторно без отдельного обязательного gate.
+Перед каждым содержательным ответом: current GitHub SHA, task route, свежесть релевантного канона. До отказа/спора о правах — **сначала выбрать штатный actor по операции (DEV §13.1)**, затем META §17.3 + DEV §19.5–19.6 + MAP §1.4 + actual capabilities / effective actor / DB grants / project authorization. Test fixture grants ≠ canonical SQL grants ≠ production ACL; race ≠ permission fault. Уже данное owner approval не спрашивать повторно без отдельного обязательного gate.
 
 Все 11 current docs должны быть доступны в Project Source. Наличие файла там
 не отменяет routed reading и не делает routed doc mandatory every-chat.
