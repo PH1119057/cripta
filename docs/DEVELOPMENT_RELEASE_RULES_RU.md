@@ -392,8 +392,8 @@ postgres / migration role
 -> historical UPDATE/backfill
 
 cripta runtime role
--> operational SELECT/INSERT only where required
--> no historical UPDATE unless explicitly approved
+-> operational SELECT / INSERT / UPDATE only when explicitly approved by exact canonical SQL grants and required by the runtime contract
+-> no DDL, migration or historical UPDATE unless an independently approved migration actor/contract allows it
 ```
 
 Перед migration проверить реальные права, а не узнавать о `permission denied` после backup/apply.
