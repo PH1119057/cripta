@@ -234,6 +234,9 @@ def _session_start(connection: psycopg.Connection[Any], session: str) -> None:
     # A power loss/SIGKILL leaves an ACTIVE row without a clean shutdown.
     # Close that previous epoch as an explicit gap, never as continuity.
     with connection.transaction():
+        # Source epoch transition may briefly wait for an in-flight R07
+        # Consumer SHARED commit guard. Bounded wait, never indefinite.
+        connection.execute("SET LOCAL lock_timeout='3s'")
         connection.execute(
             """UPDATE analytics.native_public_trade_source_sessions
                   SET state='GAP', ended_at=clock_timestamp(),
@@ -254,6 +257,9 @@ def _session_gap(
     connection: psycopg.Connection[Any], session: str, reason: str,
 ) -> None:
     with connection.transaction():
+        # Source epoch transition may briefly wait for an in-flight R07
+        # Consumer SHARED commit guard. Bounded wait, never indefinite.
+        connection.execute("SET LOCAL lock_timeout='3s'")
         connection.execute(
             """UPDATE analytics.native_public_trade_source_sessions
                SET state='GAP',ended_at=clock_timestamp(),reason=%s
