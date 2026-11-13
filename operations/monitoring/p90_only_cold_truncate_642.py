@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import pwd
 import sys
 
 TABLE_ROWS: dict[str, int] = {
@@ -51,6 +50,7 @@ def _preflight(cursor: object, apply: bool) -> dict[str, object]:
     if db != "cripta" or recovery:
         raise RuntimeError("WRONG_DB_OR_IN_RECOVERY")
     if apply:
+        import pwd
         if os.geteuid() != pwd.getpwnam("postgres").pw_uid or (role, session) != ("postgres", "postgres"):
             raise RuntimeError("POSTGRES_UNIX_AND_DB_ACTOR_REQUIRED")
         vfs = os.statvfs("/")
@@ -97,8 +97,10 @@ def main() -> int:
     opts = parser.parse_args()
 
     # Even an accidental --apply from a non-postgres Unix actor is rejected.
-    if opts.apply and os.geteuid() != pwd.getpwnam("postgres").pw_uid:
-        raise SystemExit("POSTGRES_UNIX_ACTOR_REQUIRED")
+    if opts.apply:
+        import pwd
+        if os.geteuid() != pwd.getpwnam("postgres").pw_uid:
+            raise SystemExit("POSTGRES_UNIX_ACTOR_REQUIRED")
     import psycopg
 
     role = "postgres" if opts.apply else "cripta"
