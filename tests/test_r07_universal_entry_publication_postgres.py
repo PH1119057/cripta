@@ -42,7 +42,8 @@ def db():
     admin.execute("GRANT USAGE ON SCHEMA analytics,strategy_entry TO cripta")
     admin.execute("""
       CREATE TABLE analytics.native_public_trade_source_sessions (
-        source_session_id text PRIMARY KEY, market_source_id text, state text
+        source_session_id text PRIMARY KEY, market_source_id text, state text,
+        producer_release_commit text
       )""")
     admin.execute("""
       CREATE TABLE analytics.market_publications (
@@ -86,8 +87,10 @@ def db():
         admin.execute("GRANT SELECT ON " + table + " TO cripta")
 
     admin.execute(
-        "INSERT INTO analytics.native_public_trade_source_sessions VALUES (%s,%s,'ACTIVE')",
-        (SESSION, SOURCE),
+        "INSERT INTO analytics.native_public_trade_source_sessions "
+        "(source_session_id,market_source_id,state,producer_release_commit) "
+        "VALUES (%s,%s,'ACTIVE',%s)",
+        (SESSION, SOURCE, PRODUCER),
     )
     admin.execute(
         "INSERT INTO analytics.market_publications VALUES (45,%s,%s,%s,%s,%s,%s)",
@@ -161,6 +164,8 @@ def test_three_accounts_share_proven_original_without_cross_account_order(db):
      "exit_plan_fingerprint", "1" * 64),
     ("strategy_entry.p90_scoped_native_consumer_checkpoints",
      "producer_release_commit", "a" * 40),
+    ("analytics.native_public_trade_source_sessions",
+     "producer_release_commit", "a" * 40),
 ])
 def test_pg16_original_source_invalidation_blocks_before_order(db,table,column,value):
     admin, runtime = db
@@ -203,3 +208,37 @@ def test_pg16_select_only_final_proof_rejects_gap_between_preflight_and_dispatch
         R07PublicationProvenanceUnavailable, match="R07_SOURCE_PROOF_INVARIANT_BROKEN",
     ):
         require_r07_publication_provenance(runtime, request("ta-sub-9"))
+
+
+def test_pg16_second_active_session_same_market_source_denies_financial_entry(db):
+    admin, runtime = db
+    assert require_r07_publication_provenance(runtime, request("ta-main")) == 45
+    # R06 _one_pin rejects TWO active epochs; R07 must not accept a request
+    # from the older session simply because that session remains ACTIVE.
+    admin.execute(
+        "INSERT INTO analytics.native_public_trade_source_sessions "
+        "(source_session_id,market_source_id,state,producer_release_commit) "
+        "VALUES (%s,%s,'ACTIVE',%s)",
+        ("a" * 32, SOURCE, PRODUCER),
+    )
+    with pytest.raises(R07PublicationProvenanceUnavailable, match="MISSING_OR_AMBIGUOUS"):
+        require_r07_publication_provenance(runtime, request("ta-sub-3"))
+    # A GAP-only historical session must not make the real ACTIVE owner ambiguous.
+    admin.execute(
+        "UPDATE analytics.native_public_trade_source_sessions "
+        "SET state='GAP' WHERE source_session_id=%s",
+        ("a" * 32,),
+    )
+    assert require_r07_publication_provenance(runtime, request("ta-sub-3")) == 45
+
+
+def test_pg16_active_source_session_producer_must_match_publication(db):
+    admin, runtime = db
+    assert require_r07_publication_provenance(runtime, request("ta-main")) == 45
+    admin.execute(
+        "UPDATE analytics.native_public_trade_source_sessions "
+        "SET producer_release_commit=%s WHERE source_session_id=%s",
+        ("a" * 40, SESSION),
+    )
+    with pytest.raises(R07PublicationProvenanceUnavailable, match="INVARIANT_BROKEN"):
+        require_r07_publication_provenance(runtime, request("ta-sub-2"))

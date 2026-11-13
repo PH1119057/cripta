@@ -36,6 +36,7 @@ SELECT o.publication_id, o.source_session_id, o.frame_number, o.frame_index,
        p.producer_release_commit, p.published_at, p.as_of_second,
        p.publication_status,
        s.state AS source_session_state,
+       s.producer_release_commit AS session_producer_release_commit,
        n.market_source_id AS event_market_source_id,
        n.instrument_id, n.external_symbol, n.exec_id,
        n.event_at AS original_event_at, n.accepted_at,
@@ -61,6 +62,13 @@ SELECT o.publication_id, o.source_session_id, o.frame_number, o.frame_index,
    AND cp.source_session_id=o.source_session_id
  WHERE o.strategy_id=%s AND o.strategy_version=%s
    AND o.signal_id=%s AND o.symbol=%s AND o.direction=%s
+   AND NOT EXISTS (
+       SELECT 1
+         FROM analytics.native_public_trade_source_sessions competing
+        WHERE competing.market_source_id=s.market_source_id
+          AND competing.state='ACTIVE'
+          AND competing.source_session_id<>s.source_session_id
+   )
  ORDER BY o.publication_id, o.source_session_id
  LIMIT 2
 """
@@ -161,6 +169,7 @@ def require_r07_publication_provenance(
         or proof.get("entry_plan_fingerprint") != entry_plan_fingerprint
         or proof.get("exit_plan_fingerprint") != exit_plan_fingerprint
         or proof.get("checkpoint_producer_release_commit") != proof.get("producer_release_commit")
+        or proof.get("session_producer_release_commit") != proof.get("producer_release_commit")
         or proof.get("publication_session_id") != proof.get("source_session_id")
         or proof.get("source_session_state") != "ACTIVE"
         or proof.get("market_source_id") != BYBIT_PUBLIC_MARKET_SOURCE_ID
