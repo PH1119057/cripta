@@ -198,14 +198,12 @@ def test_runtime_does_not_reach_live_arm_or_publish_when_publication_unproven(mo
     assert calls == ["blocked", "reservation released", "cancelled"]
 
 
-def test_dispatch_proof_uses_source_row_locks_only_when_requested():
+def test_dispatch_proof_keeps_read_only_source_acl():
     db = Query([evidence()])
     assert require_r07_publication_provenance(db, request()) == 45
+    assert len(db.calls) == 1
     assert "FOR SHARE" not in db.calls[0][0]
-    assert require_r07_publication_provenance(
-        db, request(), lock_source_rows=True
-    ) == 45
-    assert "FOR SHARE OF o, p, s, n, cp" in db.calls[1][0]
+    assert "FOR UPDATE" not in db.calls[0][0]
 
 
 def test_final_source_check_and_both_dispatch_writes_share_transaction(monkeypatch):
@@ -221,9 +219,8 @@ def test_final_source_check_and_both_dispatch_writes_share_transaction(monkeypat
 
     db = SimpleNamespace(transaction=transaction)
 
-    def prove(_db, _request, *, lock_source_rows=False):
-        assert lock_source_rows
-        events.append("locked-source-proof")
+    def prove(_db, _request):
+        events.append("final-source-recheck")
         return 45
 
     monkeypatch.setattr(consumer, "require_r07_publication_provenance", prove)
@@ -240,7 +237,7 @@ def test_final_source_check_and_both_dispatch_writes_share_transaction(monkeypat
         now=AT,
     )
     assert events == [
-        "begin", "locked-source-proof", "command",
+        "begin", "final-source-recheck", "command",
         "diagnostic-finalize", "end",
     ]
 
@@ -295,10 +292,9 @@ def test_runtime_revoked_source_after_first_check_never_queues_command(monkeypat
         consumer, "_critical_lifecycle_fault_code", lambda *_a, **_kw: None,
     )
 
-    def prove(_db, _row, *, lock_source_rows=False):
-        checks.append(lock_source_rows)
-        if lock_source_rows:
-            assert events[-1] == "begin"
+    def prove(_db, _row):
+        checks.append("final" if events and events[-1] == "begin" else "early")
+        if checks[-1] == "final":
             raise R07PublicationProvenanceUnavailable("R07_SOURCE_SESSION_REVOKED")
         return 45
 
@@ -329,7 +325,7 @@ def test_runtime_revoked_source_after_first_check_never_queues_command(monkeypat
         lambda *_a, **_kw: events.append("cancelled"),
     )
     assert consumer.run_once(db, now=AT) == "BLOCKED:R07_SOURCE_PUBLICATION_UNPROVEN"
-    assert checks == [False, True]
+    assert checks == ["early", "final"]
     assert events == [
         "begin", "end", "begin", "blocked",
         "reservation released", "cancelled", "end",
