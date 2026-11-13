@@ -626,7 +626,7 @@ def _record_qc_failure(root: Path, period: str, commit: str,
     try:
         with path.open("x", encoding="utf-8") as f:
             json.dump(document, f, indent=2, sort_keys=True)
-            f.write("\\n")
+            f.write("\n")
             f.flush()
             os.fsync(f.fileno())
     except FileExistsError:
