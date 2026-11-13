@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -528,22 +528,26 @@ def test_epoch_barrier_spike_does_not_stop_normal_frame_or_other_market(db):
 
 def test_pg16_prod_source_guard_missing_or_disabled_denies_before_dispatch(db):
     admin, _runtime = db
-    with _spike_consumer() as consumer, consumer.transaction():
-        with pytest.raises(
-            R07PublicationProvenanceUnavailable, match="GUARD_",
-        ):
-            require_r07_dispatch_epoch_guard(consumer, request("ta-sub-1"))
+    with (
+        _spike_consumer() as consumer,
+        consumer.transaction(),
+        pytest.raises(R07PublicationProvenanceUnavailable, match="GUARD_"),
+    ):
+        require_r07_dispatch_epoch_guard(consumer, request("ta-sub-1"))
 
     _install_epoch_fence_spike(admin)
     admin.execute(
         "ALTER TABLE analytics.native_public_trade_source_sessions "
         "DISABLE TRIGGER r07_source_epoch_guard_v1"
     )
-    with _spike_consumer() as consumer, consumer.transaction():
-        with pytest.raises(
+    with (
+        _spike_consumer() as consumer,
+        consumer.transaction(),
+        pytest.raises(
             R07PublicationProvenanceUnavailable, match="GUARD_MISSING_OR_DISABLED",
-        ):
-            require_r07_dispatch_epoch_guard(consumer, request("ta-sub-2"))
+        ),
+    ):
+        require_r07_dispatch_epoch_guard(consumer, request("ta-sub-2"))
 
 
 def test_pg16_prod_source_guard_prevents_disable_trigger_ddl_after_lock(db):
@@ -601,33 +605,37 @@ def test_pg16_mutable_r06_checkpoint_cannot_change_under_final_command_proof(db)
 def test_pg16_many_accounts_can_hold_shared_source_and_checkpoint_guards(db):
     admin, _runtime = db
     _install_epoch_fence_spike(admin)
-    with _spike_consumer() as main, _spike_consumer() as sub:
-        with main.transaction(), sub.transaction():
-            _spike_lock_read(main)
-            _spike_lock_read(sub)
-            assert require_r07_publication_provenance(
-                main, request("ta-main"), lock_checkpoint_for_dispatch=True,
-            ) == 45
-            assert require_r07_publication_provenance(
-                sub, request("ta-sub-10"), lock_checkpoint_for_dispatch=True,
-            ) == 45
-            admin.execute("SET lock_timeout='250ms'")
-            with pytest.raises(psycopg.errors.LockNotAvailable):
-                admin.execute(
-                    "UPDATE analytics.native_public_trade_source_sessions "
-                    "SET state='GAP' WHERE source_session_id=%s",
-                    (SESSION,),
-                )
-            main.execute(
-                "INSERT INTO strategy_entry.r07_epoch_dispatch_probe "
-                "(signal_id,source_session_id) VALUES (%s,%s)",
-                ("main-guard", SESSION),
+    with (
+        _spike_consumer() as main,
+        _spike_consumer() as sub,
+        main.transaction(),
+        sub.transaction(),
+    ):
+        _spike_lock_read(main)
+        _spike_lock_read(sub)
+        assert require_r07_publication_provenance(
+            main, request("ta-main"), lock_checkpoint_for_dispatch=True,
+        ) == 45
+        assert require_r07_publication_provenance(
+            sub, request("ta-sub-10"), lock_checkpoint_for_dispatch=True,
+        ) == 45
+        admin.execute("SET lock_timeout='250ms'")
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            admin.execute(
+                "UPDATE analytics.native_public_trade_source_sessions "
+                "SET state='GAP' WHERE source_session_id=%s",
+                (SESSION,),
             )
-            sub.execute(
-                "INSERT INTO strategy_entry.r07_epoch_dispatch_probe "
-                "(signal_id,source_session_id) VALUES (%s,%s)",
-                ("sub-guard", SESSION),
-            )
+        main.execute(
+            "INSERT INTO strategy_entry.r07_epoch_dispatch_probe "
+            "(signal_id,source_session_id) VALUES (%s,%s)",
+            ("main-guard", SESSION),
+        )
+        sub.execute(
+            "INSERT INTO strategy_entry.r07_epoch_dispatch_probe "
+            "(signal_id,source_session_id) VALUES (%s,%s)",
+            ("sub-guard", SESSION),
+        )
     assert admin.execute(
         "SELECT count(*) FROM strategy_entry.r07_epoch_dispatch_probe"
     ).fetchone()[0] == 2
