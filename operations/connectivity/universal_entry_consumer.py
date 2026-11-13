@@ -58,6 +58,7 @@ from bybit_workbench.universal_entry.owner_full_contour_runtime import (
 )
 from bybit_workbench.universal_entry.r07_publication_provenance import (
     R07PublicationProvenanceUnavailable,
+    require_r07_dispatch_epoch_guard,
     require_r07_publication_provenance,
 )
 
@@ -724,17 +725,21 @@ def _publish_command_after_r07_recheck(
     prepared: PreparedRuntimeEntryCommand,
     now: datetime,
 ) -> None:
-    """Recheck R06 evidence immediately before transactional Entry dispatch.
+    """Fence MarketSource epoch and exact R06 checkpoint through command COMMIT.
 
-    The early check precedes LIVE-arm/policy work. If the source is revoked
-    during preparation, this second read blocks command insertion and the
-    transaction rolls back. Source tables remain SELECT-only for Consumer;
-    the proof does NOT lock a concurrent producer after this read. A fully
-    atomic cross-owner epoch requires a separately approved coordination
-    contract. Independent Exit processing remains unaffected.
+    Early proof precedes LIVE-arm and policy processing. In this last command
+    transaction: (1) require DB-side epoch guard ABI and acquire SHARED
+    transaction lock, (2) lock mutable Strategy checkpoint row with SHARE and
+    recheck exact original source, (3) publish command and dispatch. The
+    MarketSource trigger holds EXCLUSIVE on epoch changes until source COMMIT,
+    while R06 checkpoint writers hold row UPDATE locks. Missing migration or
+    incompatible runtime privileges fail closed; independent Exit is unaffected.
     """
     with connection.transaction():
-        require_r07_publication_provenance(connection, row)
+        require_r07_dispatch_epoch_guard(connection, row)
+        require_r07_publication_provenance(
+            connection, row, lock_checkpoint_for_dispatch=True,
+        )
         _publish_command(connection, prepared, now=now)
         _finalize_owner_diagnostic_dispatch(
             connection, prepared, now=now,

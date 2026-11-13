@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -14,6 +15,7 @@ from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
 from bybit_workbench.universal_entry.r07_publication_provenance import (
     R07PublicationProvenanceUnavailable,
+    require_r07_dispatch_epoch_guard,
     require_r07_publication_provenance,
 )
 
@@ -364,42 +366,26 @@ def test_pg16_known_unfenced_gap_after_final_proof_before_dispatch_commit(db):
 # R07 RACE SPIKE (EVIDENCE ONLY).  This trigger and probe table exist ONLY
 # inside the disposable PostgreSQL16 fixture; neither is a production
 # migration, a runtime fence or permission to enable financial Entry.
-_EPOCH_GUARD_KEY = "CRIPTA:R07:SOURCE_EPOCH_TRANSITION:V1:" + SOURCE
-
 
 def _install_epoch_fence_spike(admin):
-    """Prototype DB-enforced serialization even for direct source-row writers.
+    """Install the checked-in production SQL only in disposable PG16.
 
-    The MarketSource long-lived producer ownership lock MUST NOT be reused:
-    its exclusive lifetime spans all market publication, and would starve
-    every Consumer shared-lock attempt. This independent, scoped xact lock
-    fences epoch changes only; unrelated frame/cursor writes may continue.
+    Fixture SELECT-only tests remain independent. This isolated test changes
+    no real source ACL: it models the existing canonical SQL's already-granted
+    INSERT/UPDATE rights for the shared runtime role before executing the
+    postgres-owned DDL. The migration itself grants no source privileges.
     """
-    admin.execute("""
-        CREATE FUNCTION analytics.r07_spike_epoch_guard()
-        RETURNS trigger LANGUAGE plpgsql AS $trigger$
-        BEGIN
-            IF TG_OP = 'UPDATE'
-               AND OLD.market_source_id IS DISTINCT FROM NEW.market_source_id
-            THEN
-                RAISE EXCEPTION 'R07_SOURCE_MARKET_IDENTITY_IMMUTABLE';
-            END IF;
-            PERFORM pg_advisory_xact_lock(
-                hashtextextended(
-                    'CRIPTA:R07:SOURCE_EPOCH_TRANSITION:V1:'
-                    || NEW.market_source_id, 0
-                )
-            );
-            RETURN NEW;
-        END
-        $trigger$
-    """)
-    admin.execute("""
-        CREATE TRIGGER r07_spike_epoch_guard
-        BEFORE INSERT OR UPDATE OF state,market_source_id,producer_release_commit
-        ON analytics.native_public_trade_source_sessions
-        FOR EACH ROW EXECUTE FUNCTION analytics.r07_spike_epoch_guard()
-    """)
+    admin.execute(
+        "GRANT INSERT,UPDATE ON analytics.native_public_trade_source_sessions TO cripta"
+    )
+    admin.execute(
+        "GRANT UPDATE ON strategy_entry.p90_scoped_native_consumer_checkpoints TO cripta"
+    )
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "operations/sql/20261114_r07_source_epoch_transaction_guard.sql"
+    )
+    admin.execute(migration.read_text(encoding="utf-8"))
     admin.execute("""
         CREATE TABLE strategy_entry.r07_epoch_dispatch_probe (
             signal_id text PRIMARY KEY, source_session_id text NOT NULL
@@ -408,6 +394,11 @@ def _install_epoch_fence_spike(admin):
     admin.execute(
         "GRANT INSERT, SELECT ON strategy_entry.r07_epoch_dispatch_probe TO cripta"
     )
+    assert admin.execute(
+        "SELECT tgenabled,tgtype FROM pg_trigger "
+        "WHERE tgrelid='analytics.native_public_trade_source_sessions'::regclass "
+        "AND tgname='r07_source_epoch_guard_v1'"
+    ).fetchone() == ("O", 31)
 
 
 def _spike_consumer():
@@ -418,10 +409,8 @@ def _spike_consumer():
 
 
 def _spike_lock_read(connection):
-    connection.execute(
-        "SELECT pg_advisory_xact_lock_shared(hashtextextended(%s,0))",
-        (_EPOCH_GUARD_KEY,),
-    )
+    # Real R07 Consumer source guard (ABI check + shared transaction lock).
+    require_r07_dispatch_epoch_guard(connection, request("ta-spike"))
 
 
 def test_epoch_barrier_spike_source_gap_cannot_commit_before_consumer_dispatch(db):
@@ -430,7 +419,7 @@ def test_epoch_barrier_spike_source_gap_cannot_commit_before_consumer_dispatch(d
     assert admin.execute(
         "SELECT has_table_privilege('cripta', %s, 'UPDATE')",
         ("analytics.native_public_trade_source_sessions",),
-    ).fetchone()[0] is False
+    ).fetchone()[0] is True
 
     # BEFORE: the unfenced race is preserved by the separate regression test.
     # AFTER prototype: the Consumer holds a shared transaction advisory lock
@@ -484,7 +473,10 @@ def test_epoch_barrier_spike_consumer_cannot_prove_while_source_revokes(db):
                 (SESSION,),
             ).rowcount == 1
             # Producer holds exclusive epoch lock until its transaction commits.
-            with pytest.raises(psycopg.errors.LockNotAvailable), consumer.transaction():
+            with (
+                pytest.raises(R07PublicationProvenanceUnavailable, match="LOCK_UNAVAILABLE"),
+                consumer.transaction(),
+            ):
                 consumer.execute("SET LOCAL lock_timeout = '250ms'")
                 _spike_lock_read(consumer)
             assert admin.execute(
@@ -534,3 +526,119 @@ def test_epoch_barrier_spike_does_not_stop_normal_frame_or_other_market(db):
         assert require_r07_publication_provenance(
             consumer, request("ta-sub-1"),
         ) == 45
+
+
+
+def test_pg16_prod_source_guard_missing_or_disabled_denies_before_dispatch(db):
+    admin, _runtime = db
+    with (
+        _spike_consumer() as consumer,
+        consumer.transaction(),
+        pytest.raises(R07PublicationProvenanceUnavailable, match="GUARD_"),
+    ):
+        require_r07_dispatch_epoch_guard(consumer, request("ta-sub-1"))
+
+    _install_epoch_fence_spike(admin)
+    admin.execute(
+        "ALTER TABLE analytics.native_public_trade_source_sessions "
+        "DISABLE TRIGGER r07_source_epoch_guard_v1"
+    )
+    with (
+        _spike_consumer() as consumer,
+        consumer.transaction(),
+        pytest.raises(
+            R07PublicationProvenanceUnavailable, match="GUARD_MISSING_OR_DISABLED",
+        ),
+    ):
+        require_r07_dispatch_epoch_guard(consumer, request("ta-sub-2"))
+
+
+def test_pg16_prod_source_guard_prevents_disable_trigger_ddl_after_lock(db):
+    admin, _runtime = db
+    _install_epoch_fence_spike(admin)
+    with _spike_consumer() as consumer, consumer.transaction():
+        _spike_lock_read(consumer)
+        assert require_r07_publication_provenance(
+            consumer, request("ta-main"), lock_checkpoint_for_dispatch=True,
+        ) == 45
+        admin.execute("SET lock_timeout='250ms'")
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            admin.execute(
+                "ALTER TABLE analytics.native_public_trade_source_sessions "
+                "DISABLE TRIGGER r07_source_epoch_guard_v1"
+            )
+        assert admin.execute(
+            "SELECT tgenabled FROM pg_trigger "
+            "WHERE tgrelid='analytics.native_public_trade_source_sessions'::regclass "
+            "AND tgname='r07_source_epoch_guard_v1'"
+        ).fetchone()[0] == "O"
+
+
+def test_pg16_mutable_r06_checkpoint_cannot_change_under_final_command_proof(db):
+    admin, _runtime = db
+    _install_epoch_fence_spike(admin)
+    with _spike_consumer() as consumer, consumer.transaction():
+        _spike_lock_read(consumer)
+        assert require_r07_publication_provenance(
+            consumer, request("ta-main"), lock_checkpoint_for_dispatch=True,
+        ) == 45
+        admin.execute("SET lock_timeout='250ms'")
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            admin.execute(
+                "UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints "
+                "SET entry_plan_fingerprint=%s "
+                "WHERE strategy_id=%s AND source_session_id=%s",
+                ("0" * 64, MAIN_ID, SESSION),
+            )
+        consumer.execute(
+            "INSERT INTO strategy_entry.r07_epoch_dispatch_probe "
+            "(signal_id,source_session_id) VALUES (%s,%s)",
+            ("protected-checkpoint", SESSION),
+        )
+    admin.execute(
+        "UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints "
+        "SET entry_plan_fingerprint=%s "
+        "WHERE strategy_id=%s AND source_session_id=%s",
+        ("0" * 64, MAIN_ID, SESSION),
+    )
+    with pytest.raises(R07PublicationProvenanceUnavailable, match="INVARIANT_BROKEN"):
+        require_r07_publication_provenance(_runtime, request("ta-main"))
+
+
+def test_pg16_many_accounts_can_hold_shared_source_and_checkpoint_guards(db):
+    admin, _runtime = db
+    _install_epoch_fence_spike(admin)
+    with (
+        _spike_consumer() as main,
+        _spike_consumer() as sub,
+        main.transaction(),
+        sub.transaction(),
+    ):
+        _spike_lock_read(main)
+        _spike_lock_read(sub)
+        assert require_r07_publication_provenance(
+            main, request("ta-main"), lock_checkpoint_for_dispatch=True,
+        ) == 45
+        assert require_r07_publication_provenance(
+            sub, request("ta-sub-10"), lock_checkpoint_for_dispatch=True,
+        ) == 45
+        admin.execute("SET lock_timeout='250ms'")
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            admin.execute(
+                "UPDATE analytics.native_public_trade_source_sessions "
+                "SET state='GAP' WHERE source_session_id=%s",
+                (SESSION,),
+            )
+        main.execute(
+            "INSERT INTO strategy_entry.r07_epoch_dispatch_probe "
+            "(signal_id,source_session_id) VALUES (%s,%s)",
+            ("main-guard", SESSION),
+        )
+        sub.execute(
+            "INSERT INTO strategy_entry.r07_epoch_dispatch_probe "
+            "(signal_id,source_session_id) VALUES (%s,%s)",
+            ("sub-guard", SESSION),
+        )
+    assert admin.execute(
+        "SELECT count(*) FROM strategy_entry.r07_epoch_dispatch_probe"
+    ).fetchone()[0] == 2
