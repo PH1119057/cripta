@@ -17,8 +17,11 @@
     "freshness_seconds": 5,
     "freshness_source": "existing P90 REAL v3 immutable EntryPlan maximum request age; not a new Strategy threshold",
     "missing_or_mixed_proof": "fail closed before financial permission check or command creation",
-    "commit_time_recheck": "one final SELECT-only R06 publication/source-original/checkpoint proof immediately before Entry command, execution dispatch and reservation state in one command transaction; a GAP between earlier preflight and final proof denies a command; an independently concurrent producer change AFTER final read is not fully excluded without separately approved producer-consumer coordination",
-    "post_final_read_race_evidence": "disposable PostgreSQL16 two-connection regression shows a source-owned GAP commits after Consumer final SELECT but before a synthetic non-trading insert in the same transaction; this is a KNOWN UNFENCED boundary, not an accepted financial safety guarantee"
+    "commit_time_recheck": "R07 source epoch transaction SHARED guard is acquired before the final source proof and held until command + dispatch transaction commit; DB-side postgres-installed trigger acquires transaction EXCLUSIVE on original native source-session identity/state transitions. Exact mutable R06 checkpoint rows are FOR SHARE until command commit; missing/disabled ABI, lock failure or rejected source proof blocks new Entry. R06 SOURCE_ONLY financial request generation remains forbidden.",
+    "post_final_read_race_evidence": "Pre-fix PR #659 disposable PG16 showed source GAP committing after final SELECT and before synthetic command. PR #666 verified the separate transaction lock as a fixture-only spike. Current source migration + R07 code reproduce both orders and lock the mutable R06 checkpoint in disposable PG16; production deployment/runtime verification is a separate gate.",
+    "epoch_guard_sql": "operations/sql/20261114_r07_source_epoch_transaction_guard.sql (additive authorized postgres migration, source role grants unchanged)",
+    "guard_lock_abi": "CRIPTA:R07:SOURCE_EPOCH_TRANSITION:V1:<market_source_id>, pg_catalog.hashtextextended(key,0); EXCLUSIVE pg_advisory_xact_lock in database source trigger, SHARED pg_try_advisory_xact_lock_shared in Consumer command transaction",
+    "checkpoint_row_lock": "FOR SHARE OF cp only during final command/dispatch transaction, compatible with existing R06 checkpoint UPDATE role grants; early read is SELECT-only and cannot create financial permission"
   },
   "account_boundary": {
     "execution_route": "exact TradingAccount + exact AccountConnector, no credentials in publication",
@@ -46,14 +49,21 @@
     "non-P90 strategy dispatch contract is left untouched",
     "independent Exit remains runnable when Entry disabled",
     "PG16 disposable integration with independent source GAP between early and final proof under SELECT-only ACL, existing consumer/Exit regressions and CI",
-    "PG16 synthetic sink reproduces source GAP after final SELECT while Consumer transaction remains writable; no financial tables/Exchange mutation; explicit unresolved cross-owner coordination finding"
+    "PG16 synthetic sink reproduces source GAP after final SELECT while Consumer transaction remains writable; no financial tables/Exchange mutation; explicit unresolved cross-owner coordination finding",
+    "exact checked-in postgres migration SQL in disposable PostgreSQL16 and guard enabled/type/function ABI; missing or disabled trigger denies before command",
+    "competing source GAP versus final command in both orders, with ordinary last_accepted_at journal updates and other MarketSource unaffected",
+    "R06 checkpoint writer UPDATE cannot invalidate proof after the Consumer takes final FOR SHARE until command commit",
+    "two account-scoped Consumers hold SHARED lock concurrently while writer epoch transition blocks; trigger disabling DDL cannot race after Consumer table ACCESS SHARE"
   ],
   "release": {
     "source_branch": "core/r07-universal-entry-provenance-20261112",
     "financial_entry_enabled": false,
     "source_only_R06_no_order_preserved": true,
-    "owner_arm": "never implicit",
+    "owner_arm": "never implicit; no per-release or financial ARM from GitHub source or SQL migration",
     "exit": "never stopped or gated by R07",
-    "operational_readiness": "requires live account/portal control and independent signed OPEN Exit evidence before financial Entry; no PASS from process liveness"
+    "operational_readiness": "requires live account/portal control and independent signed OPEN Exit evidence before financial Entry; no PASS from process liveness",
+    "migration_actor": "postgres via existing approved migration/release rail, after actual Unix + DB role, backup, trigger/schema and source release verification; NEVER via cripta as surrogate",
+    "migration_installed": false,
+    "runtime_verified": false
   }
 }
