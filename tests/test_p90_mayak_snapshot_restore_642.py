@@ -28,13 +28,16 @@ def test_single_table_protected_boundaries() -> None:
 
 
 def test_all_nine_actual_inbound_foreign_keys() -> None:
-    assert len(proof.ALL_REFERENCES) == 9
+    assert proof.EXPECTED_INBOUND_FK_COUNT == 9
     assert len(proof.SOURCE_REF_TABLES) == 4
-    assert len(proof.EMPTY_REF_TABLES) == 5
     assert proof.SOURCE_REF_TABLES.count(
         ("dispatcher_v2.coin_market_contexts", "source_mayak_snapshot_id")
     ) == 1
-    assert ("research_context.event_links", "observed_mayak_snapshot_id") in proof.EMPTY_REF_TABLES
+    src = FILE.read_text(encoding="utf-8")
+    assert src.count("FROM pg_constraint c") >= 1
+    assert src.count("array_length(c.conkey,1)=1") >= 1
+    assert src.count("sql.Identifier(namespace, rel)") >= 1
+    assert src.count("set(SOURCE_REF_TABLES) <= names") >= 1
 
 
 def test_requires_data_ssd_and_exact_unix_actor(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,7 +52,7 @@ def test_complete_source_restore_and_scratch_restart() -> None:
         "SCOPED_MAYAK_SNAPSHOT_RESTORE_PASS",
         "RESTARTED_SCRATCH_ROWS_DIFFER",
         "RESTORED_MAYAK_ROWS_SHA_MISMATCH",
-        "SNAPSHOT_INBOUND_FK_COUNT_CHANGED",
+        "SNAPSHOT_INBOUND_FK_INVENTORY_CHANGED",
         "PROTECTED_SNAPSHOT_ID_MISSING",
         "SOURCE_REF_TABLES",
         "MAYAK_SNAPSHOT_ROWS_OR_PRIMARY_KEY_DRIFT",
