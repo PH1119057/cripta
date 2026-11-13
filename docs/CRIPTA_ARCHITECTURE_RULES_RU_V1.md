@@ -2037,3 +2037,56 @@ All other full-system backup, independently tested cluster rollback, actor,
 consumer, signed Bybit and LIVE gates remain unchanged. This physical-only
 permission does not authorize another trading Strategy, producer restart,
 LIVE ARM or general PostgreSQL retention change.
+
+### 61.6 Single-table `mayak_v2.snapshots` physical-only R12 — OWNER CONTINUATION #642
+
+Following §61.4 and §61.5 owner-directed storage maintenance, a new,
+independently bounded physical-only `VACUUM (FULL, ANALYZE)` is permitted
+for the exact relation `mayak_v2.snapshots` **without any logical DELETE**,
+DROP, CASCADE, index removal or change to linked research/real evidence.
+Current production evidence: 7,883 rows, approximately 990,740,480 bytes
+total (including approximately 987,824,128 TOAST bytes). Of these, 450
+snapshot IDs are retained FK references from the four current MAYAK/
+Dispatcher coin/global/shared context tables; 7,433 others are not FK-linked
+at this checkpoint. The current unpinned JSON payload is small, so the
+large physical TOAST size is evidence of bloat, **not** proof that simply
+deleting the 7,433 rows will free nearly a gigabyte.
+
+Guard rails for this **new single-relation scope**:
+
+1. Preserve **all 7,883** source rows exactly, including all original
+   `id/observed_at/state/confidence/payload/engine_version/
+   snapshot_kind/regular_minute` values, the primary key/index definitions,
+   and every present outbound/inbound FK. Do not apply an advisory TTL DELETE
+   here. Before and after, verify the complete row set via streamed SHA256
+   over PK-ordered full rows and exact source row count. Any source drift
+   blocks execution.
+2. Independently restore a fresh complete scoped custom-format `pg_dump`
+   into an isolated PostgreSQL 16 instance on the separate Data SSD;
+   validate all 7,883 rows, table constraints, PK and indexes, complete-row
+   SHA256, exact referenced IDs in the **four** 450-row context tables,
+   and stable identity of all nine inbound snapshot-reference FK classes.
+   Stop/restart the scratch cluster, revalidate, then stop it and retain
+   SHA256-verified archives plus a root-owned read-only manifest. This is
+   scoped restore evidence, not full production cluster recovery.
+3. Trading Entry/Exit/MarketSource/Exchange-mutating services must remain
+   stopped, with no active competing PostgreSQL producer/DDL/migration or
+   conflicting table lock. Independent research jobs are not implicitly
+   stopped; verify they do not write this table. No LIVE arm.
+4. Execute only byte-identical CI-tested GitHub-main code, installed
+   root:root 0644, as **actual Unix+DB `postgres`** using a single
+   exact command in the SentinelX allowlist, after root filesystem
+   free >= **2.0 GiB**, WAL <=768MiB and independent source/manifest
+   preflight PASS. Lock timeout <=3s, statement timeout bounded,
+   PostgreSQL CHECKPOINT, no index DROP/other PostgreSQL config change.
+   If insufficient space, evidence or host permissions, stop before write.
+5. Independently verify post-rewrite exactly the same 7,883 complete rows
+   and full SHA256, all original indexes and all inbound FK references,
+   original 450 context-linked IDs, actual SQL relation size and ext4
+   free-space delta. A lost SentinelX result requires host-state proof
+   before retry. Do not re-run a completed physical rewrite.
+6. This single physical-only carveout is **not** consent to delete pinned
+   snapshots, old financial/private accounts, P90 causal rows or native
+   publicTrade source tapes, nor permission for wider PGDATA/cluster changes
+   or LIVE/trading-service restart. All ordinary scoped and full-cluster
+   gates continue outside this one exact table.
