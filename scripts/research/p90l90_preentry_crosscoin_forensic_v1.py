@@ -19,8 +19,13 @@ import hashlib
 import json
 import math
 import os
+import sys
 from pathlib import Path
 
+# Direct absolute-file invocation does not place repository root on sys.path.
+# Keep import resolution pinned to this exact detached GitHub checkout.
+SOURCE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(SOURCE))
 from scripts.research import p90l90_unified_portfolio_forensic_v1 as prior
 
 SYMBOLS = ("LTCUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT", "INJUSDT")
