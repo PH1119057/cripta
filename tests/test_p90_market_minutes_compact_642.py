@@ -23,9 +23,9 @@ def test_relation_and_disk_scope() -> None:
     assert compact.ROWS_PER_SYMBOL == 69110
     assert compact.MIN_FREE_BEFORE_BYTES >= 2.5 * 1024**3
     assert compact.MAX_WAL_BEFORE_BYTES <= 768 * 1024**2
-    assert compact.PROOF_FILE == Path(
+    assert Path(
         "/usr/local/libexec/cripta-p90-market-minutes-proof-642.json"
-    )
+    ) == compact.PROOF_FILE
     assert set(compact.PROTECTED) == {
         "APTUSDT", "ARBUSDT", "BTCUSDT", "DOTUSDT", "ETHUSDT",
         "INJUSDT", "LTCUSDT",
