@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.55
-**Дата:** 2026-11-11
+**Версия:** 3.56
+**Дата:** 2026-11-14
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1886,3 +1886,11 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   unchanged because document topology unchanged. Implementation needs an
   independently tested Git-first release; this policy commit alone makes
   no PostgreSQL, service, Exchange or LIVE mutation.
+
+
+## 81. R07 MarketSource epoch/Consumer atomic handoff — OWNER CONTINUATION 2026-11-14 (#470)
+
+Owner directed completion of the safety gaps identified in R07, with no repeated privilege-role discussions. ARCH §60.5.2 is the sole owner/consumer and separate transaction lock contract; TC §4.19.1 retains actual financial request and independent Exit gates; OBS §7.10.5.7 owns MarketSource writer behavior; DEV §59.5 owns postgres DDL/runtime release sequence, actor/ACL and rollback; GLOSSARY §45 defines Source Epoch Transaction Fence; MAP records dated source/CI/deploy/runtime status; Issue #470 is the single operational checkpoint. The disposable PG16 evidence in PRs #659/#666 does not prove migration has been installed.
+
+No new sixth trading layer, second public writer, Strategy/Exit parameter, source-only→financial bridge, credential, historical rewrite or LIVE-arm. No change to current canonical document set (11), routes, source paths, README/AGENTS or derived Project Instructions/bootstrap. Before any deployed DDL verify effective Unix/DB `postgres` actor separately from application `cripta`, actual rights and permissions; never grant blanket admin privilege to `cripta` to mask an operator error. Source sync != migration != deploy != loaded behavior.
+
