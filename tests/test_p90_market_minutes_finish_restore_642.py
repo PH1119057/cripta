@@ -20,9 +20,9 @@ def test_exact_failed_job_continuation_only() -> None:
     assert recovery.MARKET_ARCHIVE_BYTES == 248268366
     assert len(recovery.MARKET_SHA256) == 64
     assert len(recovery.EXPECTED_MARKET_HASH) == 64
-    assert recovery.ROOT == Path(
+    assert Path(
         "/data/cripta/research/p90_market_minutes_r12_proof_642"
-    )
+    ) == recovery.ROOT
     assert recovery.REF_ARCHIVE.parent == recovery.ROOT
     assert recovery.SCRATCH_RESULT == recovery.ROOT / "proof_result.json"
 
