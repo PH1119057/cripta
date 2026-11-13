@@ -1870,6 +1870,17 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   This does NOT broaden §61.4, permit any protected/native/financial
   data deletion, satisfy full-cluster recovery for other changes or
   authorize Strategy/LIVE/producer restart. Execution facts: Issue #642.
+- **2026-11-14 — physical-only MAYAK snapshot R12, continuing owner cleanup:**
+  ARCH §61.6 authorizes exactly one independently guarded physical
+  `VACUUM FULL` of `mayak_v2.snapshots`, preserving all 7,883 current
+  rows (including all 450 FK-pinned snapshot IDs) and every FK/index.
+  Nine inbound FK classes; four reference classes each pin 450 IDs.
+  Current logical unpinned JSON is tiny, while physical TOAST is bloated:
+  no claim that a logical DELETE alone frees ~988MB. Exact isolated
+  PostgreSQL16 complete table restore with SHA256/content/PK/links/restart,
+  root>=2GiB, WAL check, Unix+DB postgres exact allowlist, bounded lock,
+  independent post-SQL/df reclaim QC. No new trading permission or
+  authorization for unrelated native/financial data deletion.
 - Existing Project Source set remains 11; no current-doc rename/path, mandatory
   pre-read, routing or Instructions/bootstrap changes. Root README/AGENTS
   unchanged because document topology unchanged. Implementation needs an
