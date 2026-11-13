@@ -49,7 +49,8 @@ def require_r07_dispatch_epoch_guard(
 
     Only applicable to the P90 R07 source path; other strategies retain their
     independent contracts. No financial EntryDecision/Request is synthesized.
-    ACCESS SHARE prevents a privileged concurrent DISABLE TRIGGER DDL from
+    ROW EXCLUSIVE (self-compatible with other Consumers and MarketSource DML)
+    prevents a concurrent DISABLE TRIGGER DDL from
     racing after ABI preflight. This lock is independent of the lifetime
     source-writer single-producer advisory lock.
     """
@@ -58,7 +59,7 @@ def require_r07_dispatch_epoch_guard(
     try:
         connection.execute(
             "LOCK TABLE analytics.native_public_trade_source_sessions "
-            "IN ACCESS SHARE MODE NOWAIT"
+            "IN ROW EXCLUSIVE MODE NOWAIT"
         )
         trigger = connection.execute(_TRIGGER_SQL).fetchone()
         if (
