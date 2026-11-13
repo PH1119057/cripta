@@ -724,18 +724,17 @@ def _publish_command_after_r07_recheck(
     prepared: PreparedRuntimeEntryCommand,
     now: datetime,
 ) -> None:
-    """Make final source proof and Entry dispatch one atomic DB operation.
+    """Recheck R06 evidence immediately before transactional Entry dispatch.
 
-    The earlier proof runs before LIVE-arm/policy work. Original native
-    evidence and the active source epoch can change during that work;
-    the second proof holds SHARE row locks until the command transaction
-    commits. A failed recheck rolls back every command/dispatch mutation.
-    Independent Exit processing has no dependency on this gate.
+    The early check precedes LIVE-arm/policy work. If the source is revoked
+    during preparation, this second read blocks command insertion and the
+    transaction rolls back. Source tables remain SELECT-only for Consumer;
+    the proof does NOT lock a concurrent producer after this read. A fully
+    atomic cross-owner epoch requires a separately approved coordination
+    contract. Independent Exit processing remains unaffected.
     """
     with connection.transaction():
-        require_r07_publication_provenance(
-            connection, row, lock_source_rows=True,
-        )
+        require_r07_publication_provenance(connection, row)
         _publish_command(connection, prepared, now=now)
         _finalize_owner_diagnostic_dispatch(
             connection, prepared, now=now,
