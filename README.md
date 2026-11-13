@@ -12,7 +12,7 @@ Strategy, исполнения, сопровождения позиций и в�
 
 Новый чат: целиком META (CHATGPT_INTERACTION), WORK, SECURITY; INDEX §1–9 для выбора current authority и route, INDEX §17 перед документационными изменениями. ARCH/GLOSSARY/MAP и routed docs читать по затронутым главам. DOCS/CORE/RESEARCH — три рабочих контура по DEV §50, не новые пять уровней ARCH.
 
-Каждый содержательный запрос: GitHub main SHA + актуальный route; перечитывать изменённые релевантные разделы, а не все 11 файлов. До отказа/спора о разрешённой операции — META §17.3, DEV §19.5–19.6, MAP §1.4 и фактические tool/actor/DB/owner gates.
+Каждый содержательный запрос: GitHub main SHA + актуальный route; перечитывать изменённые релевантные разделы, а не все 11 файлов. До отказа/спора о разрешённой операции — сначала штатный actor по типу операции (DEV §13.1), затем META §17.3, DEV §19.5–19.6, MAP §1.4 и фактические tool/actor/DB/owner gates. Test grants ≠ SQL grants ≠ production ACL; transaction race ≠ дефект прав.
 
 Все 11 current docs должны быть доступны в Project Source; mandatory reading
 определяется base pre-read + task route.
