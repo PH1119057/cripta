@@ -435,31 +435,30 @@ def test_epoch_barrier_spike_source_gap_cannot_commit_before_consumer_dispatch(d
     # BEFORE: the unfenced race is preserved by the separate regression test.
     # AFTER prototype: the Consumer holds a shared transaction advisory lock
     # for the actual source proof + synthetic command insertion transaction.
-    with _spike_consumer() as consumer:
-        with consumer.transaction():
-            _spike_lock_read(consumer)
-            assert require_r07_publication_provenance(
-                consumer, request("ta-sub-2"),
-            ) == 45
-            admin.execute("SET lock_timeout = '250ms'")
-            # Independent source owner cannot commit ACTIVE -> GAP after proof
-            # but before synthetic dispatch. The timeout is an expected guard.
-            with pytest.raises(psycopg.errors.LockNotAvailable):
-                admin.execute(
-                    "UPDATE analytics.native_public_trade_source_sessions "
-                    "SET state='GAP' WHERE source_session_id=%s",
-                    (SESSION,),
-                )
-            assert admin.execute(
-                "SELECT state FROM analytics.native_public_trade_source_sessions "
-                "WHERE source_session_id=%s",
+    with _spike_consumer() as consumer, consumer.transaction():
+        _spike_lock_read(consumer)
+        assert require_r07_publication_provenance(
+            consumer, request("ta-sub-2"),
+        ) == 45
+        admin.execute("SET lock_timeout = '250ms'")
+        # Independent source owner cannot commit ACTIVE -> GAP after proof
+        # but before synthetic dispatch. The timeout is an expected guard.
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            admin.execute(
+                "UPDATE analytics.native_public_trade_source_sessions "
+                "SET state='GAP' WHERE source_session_id=%s",
                 (SESSION,),
-            ).fetchone()[0] == "ACTIVE"
-            consumer.execute(
-                "INSERT INTO strategy_entry.r07_epoch_dispatch_probe "
-                "(signal_id,source_session_id) VALUES (%s,%s)",
-                ("signal-100", SESSION),
             )
+        assert admin.execute(
+            "SELECT state FROM analytics.native_public_trade_source_sessions "
+            "WHERE source_session_id=%s",
+            (SESSION,),
+        ).fetchone()[0] == "ACTIVE"
+        consumer.execute(
+            "INSERT INTO strategy_entry.r07_epoch_dispatch_probe "
+            "(signal_id,source_session_id) VALUES (%s,%s)",
+            ("signal-100", SESSION),
+        )
 
     # The real source owner may revoke as soon as Consumer commits.
     assert admin.execute(
@@ -485,10 +484,9 @@ def test_epoch_barrier_spike_consumer_cannot_prove_while_source_revokes(db):
                 (SESSION,),
             ).rowcount == 1
             # Producer holds exclusive epoch lock until its transaction commits.
-            with pytest.raises(psycopg.errors.LockNotAvailable):
-                with consumer.transaction():
-                    consumer.execute("SET LOCAL lock_timeout = '250ms'")
-                    _spike_lock_read(consumer)
+            with pytest.raises(psycopg.errors.LockNotAvailable), consumer.transaction():
+                consumer.execute("SET LOCAL lock_timeout = '250ms'")
+                _spike_lock_read(consumer)
             assert admin.execute(
                 "SELECT count(*) FROM strategy_entry.r07_epoch_dispatch_probe"
             ).fetchone()[0] == 0
@@ -514,26 +512,25 @@ def test_epoch_barrier_spike_does_not_stop_normal_frame_or_other_market(db):
         "ALTER TABLE analytics.native_public_trade_source_sessions "
         "ADD COLUMN last_accepted_at timestamptz"
     )
-    with _spike_consumer() as consumer:
-        with consumer.transaction():
-            _spike_lock_read(consumer)
-            assert require_r07_publication_provenance(
-                consumer, request("ta-sub-1"),
-            ) == 45
-            admin.execute("SET lock_timeout = '250ms'")
-            # Normal journaling updates no source epoch/ABI and cannot be stalled.
-            assert admin.execute(
-                "UPDATE analytics.native_public_trade_source_sessions "
-                "SET last_accepted_at=%s WHERE source_session_id=%s",
-                (NOW, SESSION),
-            ).rowcount == 1
-            # Advisory locks are MarketSource-scoped, not a global ENTRY veto.
-            assert admin.execute(
-                "INSERT INTO analytics.native_public_trade_source_sessions "
-                "(source_session_id,market_source_id,state,producer_release_commit) "
-                "VALUES (%s,%s,'ACTIVE',%s)",
-                ("a" * 32, "a-different-market-source", PRODUCER),
-            ).rowcount == 1
-            assert require_r07_publication_provenance(
-                consumer, request("ta-sub-1"),
-            ) == 45
+    with _spike_consumer() as consumer, consumer.transaction():
+        _spike_lock_read(consumer)
+        assert require_r07_publication_provenance(
+            consumer, request("ta-sub-1"),
+        ) == 45
+        admin.execute("SET lock_timeout = '250ms'")
+        # Normal journaling updates no source epoch/ABI and cannot be stalled.
+        assert admin.execute(
+            "UPDATE analytics.native_public_trade_source_sessions "
+            "SET last_accepted_at=%s WHERE source_session_id=%s",
+            (NOW, SESSION),
+        ).rowcount == 1
+        # Advisory locks are MarketSource-scoped, not a global ENTRY veto.
+        assert admin.execute(
+            "INSERT INTO analytics.native_public_trade_source_sessions "
+            "(source_session_id,market_source_id,state,producer_release_commit) "
+            "VALUES (%s,%s,'ACTIVE',%s)",
+            ("a" * 32, "a-different-market-source", PRODUCER),
+        ).rowcount == 1
+        assert require_r07_publication_provenance(
+            consumer, request("ta-sub-1"),
+        ) == 45
