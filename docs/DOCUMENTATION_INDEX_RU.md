@@ -1849,6 +1849,16 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   reclaim 0 bytes, backup full restore and independent Bybit protection
   NOT CHECKED/PASS. The legacy P90 diagnostic StrategyActivation enabled
   rows require consumer classification before retirement.
+- **2026-11-14 owner follow-up — exact offline context-only R12:**
+  ARCH §61.4 permits one guarded `VACUUM FULL` of 450 Dispatcher and 450
+  MAYAK linked contexts after the independent isolated PostgreSQL 16
+  complete affected-row restore with 718 event links, SHA256/full-row
+  fingerprint proof and scratch-restart verification. This is a scoped
+  physical-only maintenance exception, not a full production-cluster restore
+  waiver for DEV §49, financial/P90 data deletion, DB relocation or LIVE.
+  Required execution evidence and before/after physical bytes: Issue #642;
+  root-free, exact actor/permissions, no current writer and rollback gates
+  remain mandatory. No Source files, pre-read paths or routing changed.
 - Existing Project Source set remains 11; no current-doc rename/path, mandatory
   pre-read, routing or Instructions/bootstrap changes. Root README/AGENTS
   unchanged because document topology unchanged. Implementation needs an
