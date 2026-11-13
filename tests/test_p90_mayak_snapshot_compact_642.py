@@ -30,11 +30,14 @@ def test_exact_physical_scope_and_reserves() -> None:
 
 
 def test_all_nine_protected_referencing_tables() -> None:
-    assert len(compact.REFERENCES) == 9
-    assert sum(row[2] for row in compact.REFERENCES) == 1800
-    assert len([r for r in compact.REFERENCES if r[2] == 450]) == 4
-    assert len([r for r in compact.REFERENCES if r[2] == 0]) == 5
+    assert compact.FK_COUNT == 9
+    assert len(compact.SOURCE_REF_TABLES) == 4
+    assert compact.PINNED * len(compact.SOURCE_REF_TABLES) == 1800
     assert compact.LOCK_KEY == "cripta-mayak-snapshot-physical-r12-642"
+    src = FILE.read_text(encoding="utf-8")
+    assert src.count("FROM pg_constraint c") >= 1
+    assert src.count("sql.Identifier(namespace, rel)") >= 1
+    assert src.count("set(SOURCE_REF_TABLES) <= names") >= 1
 
 
 def test_only_supported_physical_rewrite_no_logical_deletions() -> None:
