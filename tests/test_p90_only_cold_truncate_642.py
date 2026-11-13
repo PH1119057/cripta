@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-PATH = Path(__file__).resolve().parents[1] / "operations" / "monitoring" / "p90_only_cold_truncate_642.py"
+PATH = (
+    Path(__file__).resolve().parents[1]
+    / "operations"
+    / "monitoring"
+    / "p90_only_cold_truncate_642.py"
+)
 SPEC = importlib.util.spec_from_file_location("cold_purge_642", PATH)
 assert SPEC is not None and SPEC.loader is not None
 MOD = importlib.util.module_from_spec(SPEC)
