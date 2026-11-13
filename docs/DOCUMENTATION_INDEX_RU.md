@@ -1859,6 +1859,17 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   Required execution evidence and before/after physical bytes: Issue #642;
   root-free, exact actor/permissions, no current writer and rollback gates
   remain mandatory. No Source files, pre-read paths or routing changed.
+- **2026-11-14 next P90L90-only R12 owner continuation — market_minutes:**
+  ARCH §61.5 separately permits only one physical
+  `VACUUM (FULL, ANALYZE) analytics.market_minutes` after independent
+  scoped PostgreSQL 16 backup/restore of all 483,770 protected minute
+  rows, exact seven P90+BTC/ETH cohorts, full-row SHA256 over primary-key
+  order, three indexes and verified source continuity. Requires >=2.5 GiB
+  root free, WAL/lock gates, Unix+DB postgres exact allowlist, CI-tested
+  GitHub-main maintenance code, post-hash plus ext4 physical reclaim QC.
+  This does NOT broaden §61.4, permit any protected/native/financial
+  data deletion, satisfy full-cluster recovery for other changes or
+  authorize Strategy/LIVE/producer restart. Execution facts: Issue #642.
 - Existing Project Source set remains 11; no current-doc rename/path, mandatory
   pre-read, routing or Instructions/bootstrap changes. Root README/AGENTS
   unchanged because document topology unchanged. Implementation needs an
