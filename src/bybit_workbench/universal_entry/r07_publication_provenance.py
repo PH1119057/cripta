@@ -21,6 +21,7 @@ from bybit_workbench.market_identity import (
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
+_SHA64 = re.compile(r"^[0-9a-f]{64}$")
 _MAX_SIGNAL_AGE = timedelta(seconds=5)  # Existing REAL v3 EntryPlan request limit.
 
 
@@ -41,6 +42,8 @@ SELECT o.publication_id, o.source_session_id, o.frame_number, o.frame_index,
        cp.frame_number AS checkpoint_frame_number,
        cp.frame_index AS checkpoint_frame_index,
        cp.last_publication_id, cp.bootstrap_publication_id,
+       cp.entry_plan_fingerprint, cp.exit_plan_fingerprint,
+       cp.producer_release_commit AS checkpoint_producer_release_commit,
        cp.consumer_release_commit
   FROM strategy_entry.p90_r06_publication_observations o
   JOIN analytics.market_publications p
@@ -85,6 +88,8 @@ def require_r07_publication_provenance(
     direction = str(request.get("direction") or "")
     signal_id = str(request.get("signal_id") or "")
     requested_at = request.get("requested_at")
+    entry_plan_fingerprint = request.get("entry_plan_fingerprint")
+    exit_plan_fingerprint = request.get("exit_plan_fingerprint")
     if (
         symbol not in ALLOWED_SYMBOLS[strategy_id]
         or direction not in {"LONG", "SHORT"}
@@ -93,6 +98,14 @@ def require_r07_publication_provenance(
         or requested_at.tzinfo is None
     ):
         raise R07PublicationProvenanceUnavailable("R07_REQUEST_SOURCE_IDENTITY_INVALID")
+
+    if (
+        not isinstance(entry_plan_fingerprint, str)
+        or _SHA64.fullmatch(entry_plan_fingerprint) is None
+        or not isinstance(exit_plan_fingerprint, str)
+        or _SHA64.fullmatch(exit_plan_fingerprint) is None
+    ):
+        raise R07PublicationProvenanceUnavailable("R07_REQUEST_PLAN_IDENTITY_INVALID")
 
     observations = connection.execute(
         _SQL, (strategy_id, version, signal_id, symbol, direction)
@@ -145,6 +158,9 @@ def require_r07_publication_provenance(
         or type(bootstrap_id) is not int or type(last_publication_id) is not int
         or not (1 <= bootstrap_id <= publication_id <= last_publication_id)
         or frame < 0 or index < 0 or (last_frame, last_index) < (frame, index)
+        or proof.get("entry_plan_fingerprint") != entry_plan_fingerprint
+        or proof.get("exit_plan_fingerprint") != exit_plan_fingerprint
+        or proof.get("checkpoint_producer_release_commit") != proof.get("producer_release_commit")
         or proof.get("publication_session_id") != proof.get("source_session_id")
         or proof.get("source_session_state") != "ACTIVE"
         or proof.get("market_source_id") != BYBIT_PUBLIC_MARKET_SOURCE_ID

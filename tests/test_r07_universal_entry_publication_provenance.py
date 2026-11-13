@@ -66,6 +66,9 @@ def evidence(**changes):
         "last_publication_id": 46,
         "bootstrap_publication_id": 40,
         "consumer_release_commit": "d" * 40,
+        "checkpoint_producer_release_commit": "c" * 40,
+        "entry_plan_fingerprint": "e" * 64,
+        "exit_plan_fingerprint": "f" * 64,
     }
     row.update(changes)
     return row
@@ -80,6 +83,8 @@ def request(account_id="ta-account", strategy_id=MAIN_ID, version=VERSION):
         "direction": "LONG",
         "trading_account_id": account_id,
         "requested_at": AT,
+        "entry_plan_fingerprint": "e" * 64,
+        "exit_plan_fingerprint": "f" * 64,
     }
 
 
@@ -108,6 +113,9 @@ def test_one_published_signal_is_proven_for_arbitrary_independent_account_scopes
     ({"exec_id": "forged"}, "INVARIANT"),
     ({"publication_status": "STALE"}, "INVARIANT"),
     ({"producer_release_commit": "bad"}, "INVARIANT"),
+    ({"checkpoint_producer_release_commit": "a" * 40}, "INVARIANT"),
+    ({"entry_plan_fingerprint": "0" * 64}, "INVARIANT"),
+    ({"exit_plan_fingerprint": "1" * 64}, "INVARIANT"),
     ({"consumer_release_commit": "bad"}, "INVARIANT"),
     ({"bootstrap_publication_id": 46}, "INVARIANT"),
     ({"last_publication_id": 44}, "INVARIANT"),
@@ -123,6 +131,29 @@ def test_malformed_or_stale_pinned_evidence_blocks_without_order(changes, reason
     db = Query([evidence(**changes)])
     with pytest.raises(R07PublicationProvenanceUnavailable, match=reason):
         require_r07_publication_provenance(db, request())
+
+
+@pytest.mark.parametrize(("wrong_plan", "reason"), [
+    ({"entry_plan_fingerprint": "0" * 64}, "INVARIANT"),
+    ({"exit_plan_fingerprint": "1" * 64}, "INVARIANT"),
+    ({"entry_plan_fingerprint": ""}, "PLAN_IDENTITY_INVALID"),
+    ({"exit_plan_fingerprint": None}, "PLAN_IDENTITY_INVALID"),
+])
+def test_valid_original_signal_cannot_be_rebound_to_other_plan(wrong_plan, reason):
+    db = Query([evidence()])
+    with pytest.raises(R07PublicationProvenanceUnavailable, match=reason):
+        require_r07_publication_provenance(db, {**request(), **wrong_plan})
+    if "PLAN_IDENTITY_INVALID" in reason:
+        assert db.calls == []
+
+
+def test_r07_rejects_missing_exact_plan_even_with_valid_original_source():
+    db = Query([evidence()])
+    row = request()
+    del row["entry_plan_fingerprint"]
+    with pytest.raises(R07PublicationProvenanceUnavailable, match="PLAN_IDENTITY_INVALID"):
+        require_r07_publication_provenance(db, row)
+    assert db.calls == []
 
 
 def test_missing_or_duplicated_signal_is_not_silently_skipped():
