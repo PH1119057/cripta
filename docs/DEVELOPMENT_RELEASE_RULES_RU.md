@@ -526,6 +526,28 @@ SYSTEM BACKUP RETENTION = exactly 2 latest verified generations
   решения и не считаются покрытыми system backup только потому, что project
   runtime сохранён.
 
+
+### 14.2.1 P90L90-only system-backup allowlist — OWNER DECISION 2026-11-13 (#642)
+
+ARCH §61 supersedes the presumption that all old report ZIPs under
+`/srv/cripta-share/reports` must be copied into every operational system
+backup forever. The required backup is a **restore-tested allowlist** of
+current P90L90 Strategy/Entry/Exit/Execution, signed MAIN/SUB financial and
+position/protection evidence, needed exact market-source causal lineage,
+PostgreSQL roles/config, current immutable release and critical operating
+credentials/configuration. Preserve the two newest verified system
+backup generations until the replacement mechanism and independently tested
+restore are proven.
+
+The currently installed `research/server/backup/backup.sh` still creates a
+`project.tar.gz` containing all shared historical reports. This owner
+decision alone does NOT change its runtime behavior. Source changes require
+one scoped Git-first code/test/release, backup manifest coverage for required
+readers and restoration proof. Do not automatically copy old August/September
+V1/M3/R1 ZIP, reproducible raw market files, duplicate derived JSON or
+unbounded research caches into each backup. Do not prune an old generation
+before a new verified generation and independent rollback check.
+
 ## 15. Migration + backfill должны быть атомарны
 
 Если технически возможно:
