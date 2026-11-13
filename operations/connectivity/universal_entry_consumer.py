@@ -717,6 +717,31 @@ def _finalize_owner_diagnostic_dispatch(
     )
 
 
+def _publish_command_after_r07_recheck(
+    connection: psycopg.Connection[Any],
+    *,
+    row: Mapping[str, object],
+    prepared: PreparedRuntimeEntryCommand,
+    now: datetime,
+) -> None:
+    """Make final source proof and Entry dispatch one atomic DB operation.
+
+    The earlier proof runs before LIVE-arm/policy work. Original native
+    evidence and the active source epoch can change during that work;
+    the second proof holds SHARE row locks until the command transaction
+    commits. A failed recheck rolls back every command/dispatch mutation.
+    Independent Exit processing has no dependency on this gate.
+    """
+    with connection.transaction():
+        require_r07_publication_provenance(
+            connection, row, lock_source_rows=True,
+        )
+        _publish_command(connection, prepared, now=now)
+        _finalize_owner_diagnostic_dispatch(
+            connection, prepared, now=now,
+        )
+
+
 def _generation_pre_dispatch_status(
     connection: psycopg.Connection[Any],
     row: Mapping[str, object],
@@ -1940,13 +1965,39 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
                 reason="PRE_EXCHANGE_BLOCK:STRUCTURAL_ERROR",
             )
         return "BLOCKED:STRUCTURAL_ERROR"
-    with connection.transaction():
-        _publish_command(connection, prepared, now=current)
-        _finalize_owner_diagnostic_dispatch(
-            connection,
-            prepared,
-            now=current,
+    try:
+        _publish_command_after_r07_recheck(
+            connection, row=row, prepared=prepared, now=current,
         )
+    except R07PublicationProvenanceUnavailable as exc:
+        # The source epoch may have been revoked after the early check.
+        # A rolled-back dispatch is never represented as a queued command.
+        reason = str(exc)
+        with connection.transaction():
+            _record_blocked(
+                connection,
+                request,
+                reason="R07_SOURCE_PUBLICATION_UNPROVEN:" + reason,
+                payload={
+                    "block_code": "R07_SOURCE_PUBLICATION_UNPROVEN",
+                    "source_reason": reason,
+                    "signal_id": request.signal_id,
+                },
+            )
+            _release_pre_exchange_admission(
+                connection,
+                request,
+                reason="PRE_EXCHANGE_BLOCK:R07_SOURCE_PUBLICATION_UNPROVEN",
+                now=current,
+            )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_CANCELLED",
+                occurred_at=current,
+                reason="R07_SOURCE_PUBLICATION_UNPROVEN:" + reason,
+            )
+        return "BLOCKED:R07_SOURCE_PUBLICATION_UNPROVEN"
     return f"DISPATCHED:{prepared.command_id}"
 
 
