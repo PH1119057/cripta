@@ -109,7 +109,8 @@ def build_bundle(repo_root: pathlib.Path, period: str, phase: str,
     validate_identity(period, phase, job_id, source_head)
     src_name = SOURCE_BY_PERIOD[period]
     path = repo_root / "scripts" / "research" / src_name
-    body = path.read_bytes()
+    # Windows Git checkouts may use CRLF; freeze repository blob LF bytes.
+    body = path.read_bytes().replace(b"\r\n", b"\n")
     if not body.startswith(b"#!/usr/bin/env python3\n"):
         raise ValueError("unexpected frozen research source header")
     source_sha = hashlib.sha256(body).hexdigest()

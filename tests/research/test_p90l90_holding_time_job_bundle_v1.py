@@ -47,7 +47,8 @@ class IndependentJobBundleTests(unittest.TestCase):
                         )
                         self.assertEqual(
                             frozen, (REPO / "scripts" / "research"
-                                     / pack.SOURCE_BY_PERIOD[period]).read_bytes(),
+                                     / pack.SOURCE_BY_PERIOD[period])
+                            .read_bytes().replace(b"\r\n", b"\n"),
                         )
                         launcher = archive.read("job_launcher.py").decode()
                         self.assertIsInstance(ast.parse(launcher), ast.Module)
