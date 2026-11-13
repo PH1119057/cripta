@@ -34,12 +34,12 @@ def test_relation_and_disk_scope() -> None:
 
 def test_no_deletion_and_exact_rewrite_only() -> None:
     src = FILE.read_text(encoding="utf-8")
-    assert "VACUUM (FULL, ANALYZE) analytics.market_minutes" in src
-    assert "COPY (SELECT row_to_json(t)::text" in src
-    assert "ORDER BY t.market_source_id, t.instrument_id, t.observed_minute" in src
-    assert "SCOPED_MARKET_MINUTES_RESTORE_PASS" in src
-    assert "CURRENT_SOURCE_DIFFERS_FROM_RESTORED_PROOF" in src
-    assert "PROTECTED_ROWS_CHANGED_AFTER_REWRITE" in src
+    assert src.count("VACUUM (FULL, ANALYZE) analytics.market_minutes") >= 1
+    assert src.count("COPY (SELECT row_to_json(t)::text") >= 1
+    assert src.count("ORDER BY t.market_source_id, t.instrument_id, t.observed_minute") >= 1
+    assert src.count("SCOPED_MARKET_MINUTES_RESTORE_PASS") >= 1
+    assert src.count("CURRENT_SOURCE_DIFFERS_FROM_RESTORED_PROOF") >= 1
+    assert src.count("PROTECTED_ROWS_CHANGED_AFTER_REWRITE") >= 1
     for bad in (
         "sudo ", "DELETE FROM ", "TRUNCATE TABLE ", "DROP TABLE ",
         "DROP INDEX ", "ALTER TABLE ", "CASCADE;",
@@ -64,7 +64,7 @@ def test_refuses_unprivileged_db_actor_before_mutation() -> None:
     fake = FakeQuery(("cripta", "cripta", "cripta", False))
     with pytest.raises(RuntimeError, match="POSTGRES_DATABASE_ACTOR_REQUIRED"):
         compact.gate(fake, applying=True)
-    assert all("VACUUM" not in sql for sql in fake.executed)
+    assert all(sql.count("VACUUM") == 0 for sql in fake.executed)
 
 
 def test_hashes_are_streaming_and_no_dynamic_relation() -> None:
