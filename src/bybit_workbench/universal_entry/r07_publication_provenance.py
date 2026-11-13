@@ -61,6 +61,8 @@ SELECT o.publication_id, o.source_session_id, o.frame_number, o.frame_index,
  ORDER BY o.publication_id, o.source_session_id
  LIMIT 2
 """
+
+
 def require_r07_publication_provenance(
     connection: Any,
     request: Mapping[str, object],
