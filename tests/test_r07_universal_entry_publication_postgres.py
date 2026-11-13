@@ -473,7 +473,7 @@ def test_epoch_barrier_spike_consumer_cannot_prove_while_source_revokes(db):
                 (SESSION,),
             ).rowcount == 1
             # Producer holds exclusive epoch lock until its transaction commits.
-            with pytest.raises(psycopg.errors.LockNotAvailable), consumer.transaction():
+            with pytest.raises(R07PublicationProvenanceUnavailable, match="LOCK_UNAVAILABLE"), consumer.transaction():
                 consumer.execute("SET LOCAL lock_timeout = '250ms'")
                 _spike_lock_read(consumer)
             assert admin.execute(
