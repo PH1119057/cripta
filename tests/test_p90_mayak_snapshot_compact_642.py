@@ -24,9 +24,9 @@ def test_exact_physical_scope_and_reserves() -> None:
     assert compact.MAX_WAL_BEFORE <= 768 * 1024**2
     assert compact.MIN_RELATION_BEFORE >= 900 * 1024**2
     assert compact.MIN_POST_FREE >= 512 * 1024**2
-    assert compact.PROOF_FILE == Path(
+    assert Path(
         "/usr/local/libexec/cripta-p90-mayak-snapshot-proof-642.json"
-    )
+    ) == compact.PROOF_FILE
 
 
 def test_all_nine_protected_referencing_tables() -> None:
@@ -57,5 +57,5 @@ def test_only_supported_physical_rewrite_no_logical_deletions() -> None:
 
 
 def test_strict_canonical_scoped_manifest() -> None:
-    assert compact.PROOF_FILE.parent == Path("/usr/local/libexec")
+    assert Path("/usr/local/libexec") == compact.PROOF_FILE.parent
     assert compact.ROW_COPY.count("mayak_v2.snapshots") == 1
