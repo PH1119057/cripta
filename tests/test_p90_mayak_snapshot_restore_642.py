@@ -31,7 +31,9 @@ def test_all_nine_actual_inbound_foreign_keys() -> None:
     assert len(proof.ALL_REFERENCES) == 9
     assert len(proof.SOURCE_REF_TABLES) == 4
     assert len(proof.EMPTY_REF_TABLES) == 5
-    assert ("dispatcher_v2.coin_market_contexts", "source_mayak_snapshot_id") in proof.SOURCE_REF_TABLES
+    assert proof.SOURCE_REF_TABLES.count(
+        ("dispatcher_v2.coin_market_contexts", "source_mayak_snapshot_id")
+    ) == 1
     assert ("research_context.event_links", "observed_mayak_snapshot_id") in proof.EMPTY_REF_TABLES
 
 
