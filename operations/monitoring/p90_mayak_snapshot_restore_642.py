@@ -18,9 +18,10 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import psycopg
+if TYPE_CHECKING:
+    import psycopg
 
 PARENT = Path("/data/cripta/research")
 ROOT = PARENT / "p90_mayak_snapshot_r12_proof_642"
@@ -68,6 +69,8 @@ def command_checked(args: list[str], *, timeout: int) -> None:
 
 
 def connection(db: str, *, scratch: bool = False) -> psycopg.Connection:
+    import psycopg
+
     return psycopg.connect(
         dbname=db, user="cripta",
         host=str(SOCKET) if scratch else "/var/run/postgresql",
