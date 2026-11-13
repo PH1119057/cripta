@@ -5,7 +5,6 @@ import ast
 import hashlib
 import io
 import json
-import re
 import unittest
 import zipfile
 from pathlib import Path
