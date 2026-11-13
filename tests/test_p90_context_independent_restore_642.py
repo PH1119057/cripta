@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -46,6 +47,9 @@ def test_reviewed_script_is_nonprivileged_and_production_read_only() -> None:
 
 def test_guard_refuses_unapproved_fs_actor(monkeypatch) -> None:
     monkeypatch.setattr(recovery.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(
+        recovery.pwd, "getpwnam", lambda name: SimpleNamespace(pw_uid=107)
+    )
     with pytest.raises(RuntimeError, match="UNIX_ACTOR_MUST_BE_CRIPTA"):
         recovery.guard_filesystem()
 
