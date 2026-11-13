@@ -24,7 +24,7 @@ No counterfactual "saved profit" is inferred. All money after modeled fees.
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal as D
 import json
@@ -356,12 +356,6 @@ def analyze(periods: tuple[str, ...]) -> dict:
         ):
             raise ValueError("native ledger monetary QC mismatch")
         comps = stop_overlap_components(stops)
-        cluster_ids = set()
-        for component in comps:
-            names = set(component["all_stop_victim_symbols_side"])
-            # Stop positions on same coin may occur at different times; do NOT
-            # identify components via symbol/side. Monetary sum below is from
-            # actual components returned by independently computed function.
         # Independently re-evaluate component money (all stopped members are
         # disjoint across connected components); numeric aggregate is in comps.
         component_loss = sum(
