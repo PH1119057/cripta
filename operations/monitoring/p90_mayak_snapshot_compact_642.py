@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import pwd
 import stat
 import sys
 from pathlib import Path
@@ -167,6 +166,8 @@ def wal_size(q: Any) -> int:
 
 
 def execute() -> int:
+    import pwd
+
     if len(sys.argv) != 2 or sys.argv[1] not in ("--check", "--apply"):
         raise RuntimeError("ONLY_FIXED_CHECK_AND_APPLY_MODES")
     applying = sys.argv[1] == "--apply"
