@@ -169,9 +169,12 @@ def test_pg16_dispatch_row_locks_prevent_source_epoch_revocation_mid_commit(db):
     with psycopg.connect(DSN, autocommit=True) as mutator:
         mutator.execute("SET lock_timeout = '200ms'")
         with admin.transaction():
-            assert require_r07_publication_provenance(
-                admin, request("ta-sub-9"), lock_source_rows=True,
-            ) == 45
+            # SQL fixture admin uses the default tuple row factory; the proof
+            # API requires the same mapping rows as production Consumer.
+            with admin.cursor(row_factory=dict_row) as proof_cursor:
+                assert require_r07_publication_provenance(
+                    proof_cursor, request("ta-sub-9"), lock_source_rows=True,
+                ) == 45
             with pytest.raises(psycopg.errors.LockNotAvailable):
                 mutator.execute(
                     "UPDATE analytics.native_public_trade_source_sessions "
