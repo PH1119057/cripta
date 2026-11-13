@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 3.6 · 2026-11-14
+**Версия:** 3.7 · 2026-11-14
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -429,4 +429,4 @@ Before starting a supposedly new Git branch/worktree or rerunning a job on a pre
 
 DEV §50 defines three **workstream** scopes, not a replacement of ARCH §1 five technical layers. DOCS owns canon/index/bootstrap; CORE owns runtime/trading/observability/DB/Git/release; RESEARCH owns datasets/replay/OOS/evidence and jobs. SECURITY is one common canon. Context reuse requires exact SHA/task equivalence, not old-chat confidence.
 
-Before any denial or technical objection to an owner-approved task, META §17.3 requires the current DEV §19.5–19.6 / MAP §1.4 / specialized route and an exact tool-capability/actor/path/DB/authorization proof. Never mislabel a tool policy block as Unix permission or a wrong actor as no server rights. WORK §12.1 exact ENTRY/EXIT/COST/FILTERS/DATASET/POSITION report requirements stay in force until any future approved consolidation with RESEARCH_COMPUTE.
+Before any denial or technical objection to an owner-approved task, classify exact operation and correct Unix/DB actor **first** per DEV §13.1. Do not ask `cripta` to run migration/DDL, do not confuse a test-only `SELECT` grant with production ACL, and do not suggest privilege escalation to fix transaction races. META §17.3 requires the current DEV §19.5–19.6 / MAP §1.4 / specialized route and an exact tool-capability/actor/path/DB/authorization proof. Never mislabel a tool policy block as Unix permission or a wrong actor as no server rights. WORK §12.1 exact ENTRY/EXIT/COST/FILTERS/DATASET/POSITION report requirements stay in force until any future approved consolidation with RESEARCH_COMPUTE.
