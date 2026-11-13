@@ -161,32 +161,23 @@ def test_pg16_original_source_invalidation_blocks_before_order(db,table,column,v
         require_r07_publication_provenance(runtime, request("ta-sub-2"))
 
 
-def test_pg16_dispatch_row_locks_prevent_source_epoch_revocation_mid_commit(db):
+
+def test_pg16_select_only_final_proof_rejects_gap_between_preflight_and_dispatch(db):
     admin, runtime = db
-    # Disposable PostgreSQL only. Consumer obtains this lock in its command
-    # transaction, so a concurrent source GAP cannot slip between final
-    # provenance read and durable queue insertion.
-    with psycopg.connect(DSN, autocommit=True) as mutator:
-        mutator.execute("SET lock_timeout = '200ms'")
-        with admin.transaction():
-            # SQL fixture admin uses the default tuple row factory; the proof
-            # API requires the same mapping rows as production Consumer.
-            with admin.cursor(row_factory=dict_row) as proof_cursor:
-                assert require_r07_publication_provenance(
-                    proof_cursor, request("ta-sub-9"), lock_source_rows=True,
-                ) == 45
-            with pytest.raises(psycopg.errors.LockNotAvailable):
-                mutator.execute(
-                    "UPDATE analytics.native_public_trade_source_sessions "
-                    "SET state='GAP' WHERE source_session_id=%s",
-                    (SESSION,),
-                )
-        mutator.execute("SET lock_timeout = '0'")
-        mutator.execute(
-            "UPDATE analytics.native_public_trade_source_sessions "
-            "SET state='GAP' WHERE source_session_id=%s",
-            (SESSION,),
-        )
+    # The Consumer's source role has SELECT, never UPDATE. PostgreSQL
+    # FOR SHARE would require UPDATE on these source-owned tables.
+    assert admin.execute(
+        "SELECT has_table_privilege('cripta', %s, 'UPDATE')",
+        ("analytics.native_public_trade_source_sessions",),
+    ).fetchone()[0] is False
+    assert require_r07_publication_provenance(runtime, request("ta-sub-9")) == 45
+    # Independent source writer revokes ACTIVE between Consumer reads.
+    # No production database or shared test service is used here.
+    admin.execute(
+        "UPDATE analytics.native_public_trade_source_sessions "
+        "SET state='GAP' WHERE source_session_id=%s",
+        (SESSION,),
+    )
     with pytest.raises(
         R07PublicationProvenanceUnavailable, match="R07_SOURCE_PROOF_INVARIANT_BROKEN",
     ):
