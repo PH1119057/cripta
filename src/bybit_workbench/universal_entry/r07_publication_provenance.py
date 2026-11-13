@@ -61,17 +61,9 @@ SELECT o.publication_id, o.source_session_id, o.frame_number, o.frame_index,
  ORDER BY o.publication_id, o.source_session_id
  LIMIT 2
 """
-# Used only in the command-creation transaction: block source-session GAP,
-# publication/native evidence replacement and checkpoint updates until COMMIT.
-# Do not hold these row locks during the earlier, non-dispatch preflight.
-_DISPATCH_LOCK = " FOR SHARE OF o, p, s, n, cp"
-
-
 def require_r07_publication_provenance(
     connection: Any,
     request: Mapping[str, object],
-    *,
-    lock_source_rows: bool = False,
 ) -> int | None:
     """Return exact immutable publication ID, or block before command creation.
 
@@ -101,8 +93,7 @@ def require_r07_publication_provenance(
         raise R07PublicationProvenanceUnavailable("R07_REQUEST_SOURCE_IDENTITY_INVALID")
 
     observations = connection.execute(
-        _SQL + (_DISPATCH_LOCK if lock_source_rows else ""),
-        (strategy_id, version, signal_id, symbol, direction),
+        _SQL, (strategy_id, version, signal_id, symbol, direction)
     ).fetchall()
     if len(observations) != 1:
         raise R07PublicationProvenanceUnavailable("R07_SOURCE_SIGNAL_MISSING_OR_AMBIGUOUS")
