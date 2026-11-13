@@ -41,7 +41,7 @@ def test_actual_overlap_not_just_calendar_day():
     assert occ["max_same_side_slots"]==2
     assert occ["max_total_notional_usdt"]=="3000.00"
     assert occ["max_same_side_notional_usdt"]=="2000.00"
-    assert occ["time_fraction_pct_by_active_slots"]["0"]==10.0
+    assert occ["time_fraction_pct_by_active_slots"]["0"]==5.0
     assert occ["avg_active_slots_time_weighted"]==1.7
     assert m.exposure(a,allpos,"exit")["same"]==2
     assert m.exposure(a,allpos,"exit")["opposite"]==1
