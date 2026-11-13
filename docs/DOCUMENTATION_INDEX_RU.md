@@ -1827,3 +1827,30 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
 ## 79. R06 future published-boundary bootstrap instead of full old replay — OWNER DECISION 2026-11-12 (#470)
 
 Для R06 владелец явно утвердил single-pass новую `MarketPublication` + полный current 5m/15m/ATR seed + positive/negative source parity + новый no-order decision checkpoint по будущей полностью закрытой 5m границе + controlled cutover/rollback. Full historical entry replay старой native-сессии **не является** mandatory. Architecture остаётся ARCH §60.2.1/§60.5 и TC §4.19, конкретный owner этого уточнения — OBS §7.10.5.6, release/actor — DEV §59.4, текущий source/runtime evidence — Issue #470 и датированный MAP. Ни technical ACK, ни старые Engine/P90 checkpoints не могут подменять новый источник. Сначала потребительская эквивалентность и no-order/signed safety, потом физическое переключение; при недоказанной замене HARD_STOP. Пять native symbols, current 11 canonical docs и Project Source set, обязательные paths/pre-read/routing/README/AGENTS/Instructions без изменений. LIVE/R07 не разрешены.
+
+## 80. P90L90-only minimum HOT PostgreSQL, backup and reclaim — OWNER DECISION 2026-11-13 (#642)
+
+- Owner selected all eight former-system retirement groups; keep in
+  production PostgreSQL only the current P90L90 MAIN/SUB five-symbol
+  source/Strategy/Exit/Execution, required ATR/PREV7D seeds, signed
+  account/position/protection/reconciliation and bounded current evidence.
+- **CANON owner:** ARCH §61 (scope, preservation, before/after, 8 retire groups,
+  required preflight, physical reclaim); GLOSSARY §46 (terminology).
+  No new Entry/Exit economics or LIVE permission; trading-specific original
+  dependency remains TC §7.6 and §4.18, OBS §7.10 and ARCH §60.
+- **Execution owner:** DEV §§5.1, 14.2–14.2.1, 19, 48.3, 49, 50.4–50.5; DB/source
+  consumer retirement, restored backup, signed Bybit open-position scope,
+  exact actor/permissions, R11 deletion/R12 physical reclaim/R13 >=7d
+  observation. No arbitrary tool-policy/privilege bypass.
+- **Current SQL status at owner decision:** source GitHub main
+  `7f33f3ae2e06d807115864169af3a3a63a1a66c4`, installed runtime
+  `99a1ba4c16edbe5cb32022addf6c52888574716d` (pre-publication
+  snapshot); owner approval YES, but production SQL purge NOT STARTED,
+  reclaim 0 bytes, backup full restore and independent Bybit protection
+  NOT CHECKED/PASS. The legacy P90 diagnostic StrategyActivation enabled
+  rows require consumer classification before retirement.
+- Existing Project Source set remains 11; no current-doc rename/path, mandatory
+  pre-read, routing or Instructions/bootstrap changes. Root README/AGENTS
+  unchanged because document topology unchanged. Implementation needs an
+  independently tested Git-first release; this policy commit alone makes
+  no PostgreSQL, service, Exchange or LIVE mutation.
