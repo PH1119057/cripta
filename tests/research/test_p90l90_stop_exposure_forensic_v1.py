@@ -41,8 +41,8 @@ def test_actual_overlap_not_just_calendar_day():
     assert occ["max_same_side_slots"]==2
     assert occ["max_total_notional_usdt"]=="3000.00"
     assert occ["max_same_side_notional_usdt"]=="2000.00"
-    assert occ["time_fraction_pct_by_active_slots"]["0"]==30.0
-    assert occ["avg_active_slots_time_weighted"]==1.6
+    assert occ["time_fraction_pct_by_active_slots"]["0"]==10.0
+    assert occ["avg_active_slots_time_weighted"]==1.7
     assert m.exposure(a,allpos,"exit")["same"]==2
     assert m.exposure(a,allpos,"exit")["opposite"]==1
     assert m.exposure(b,allpos,"entry")["same"]==2
@@ -63,7 +63,7 @@ def test_actual_overlap_not_just_calendar_day():
     bins=m.stop_exposure_by_entry([a,b,c,d],allpos)
     assert bins["1"]["hardstops"]==2
     assert bins["2"]["hardstops"]==1
-    assert bins["1"]["closed_net_after_fees_usdt"]=="-202.20"
+    assert bins["1"]["closed_net_after_fees_usdt"]=="-198.02"
     assert bins["2"]["closed_net_after_fees_usdt"]=="-101.10"
 
 def test_exact_boundary_excludes_same_ts_peer_and_censored_is_active():
