@@ -175,7 +175,7 @@ def references(conn: psycopg.Connection) -> dict[str, Any]:
                 raise RuntimeError("PROTECTED_CONTEXT_REFERENCE_DRIFT:" + name)
             sha = hashlib.sha256()
             for value in rows:
-                sha.update(str(value).encode("ascii") + b"\\n")
+                sha.update(str(value).encode("ascii") + b"\n")
             samples[name + "." + field] = {
                 "count": len(rows), "sha256": sha.hexdigest(),
             }
