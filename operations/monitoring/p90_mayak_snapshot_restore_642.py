@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import pwd
 import stat
 import subprocess
 import sys
@@ -81,6 +80,8 @@ def connection(db: str, *, scratch: bool = False) -> psycopg.Connection:
 
 
 def initial_actor_path() -> None:
+    import pwd
+
     if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
         raise RuntimeError("EXACT_CRIPTA_UNIX_ACTOR_REQUIRED")
     parent = os.lstat(PARENT)
