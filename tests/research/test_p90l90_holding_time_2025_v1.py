@@ -77,7 +77,7 @@ class Time2025ContractTests(unittest.TestCase):
         ret = scope["timed_handle"](self.book, "LTCUSDT", 1000 + 24 * 3600,
                                     78, D("99"), q, None, 0)
         self.assertEqual(ret[1][0], "TIME_LIMIT")
-        self.assertEqual(CALLS, [(D("0"),)])
+        self.assertEqual(CALLS, [("0",)])
         self.assertIs(base.on_trade, original_on_trade)
 
     def test_no_time_limit_matches_existing_exit(self):
