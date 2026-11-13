@@ -27,16 +27,11 @@ MIN_POST_FREE = 512 * 1024**2
 MAX_WAL_BEFORE = 768 * 1024**2
 MIN_RELATION_BEFORE = 900 * 1024**2
 LOCK_KEY = "cripta-mayak-snapshot-physical-r12-642"
-REFERENCES = (
-    ("dispatcher_v2.coin_market_contexts", "source_mayak_snapshot_id", 450),
-    ("dispatcher_v2.global_market_contexts", "source_mayak_snapshot_id", 450),
-    ("mayak_v2.coin_market_contexts", "mayak_snapshot_id", 450),
-    ("mayak_v2.shared_market_contexts", "mayak_snapshot_id", 450),
-    ("mayak_v2.coin_minutes", "snapshot_id", 0),
-    ("mayak_v2.events", "snapshot_id", 0),
-    ("mayak_v2.observation_journal", "snapshot_id", 0),
-    ("mayak_v2.state_events", "snapshot_id", 0),
-    ("research_context.event_links", "observed_mayak_snapshot_id", 0),
+SOURCE_REF_TABLES = (
+    ("dispatcher_v2.coin_market_contexts", "source_mayak_snapshot_id"),
+    ("dispatcher_v2.global_market_contexts", "source_mayak_snapshot_id"),
+    ("mayak_v2.coin_market_contexts", "mayak_snapshot_id"),
+    ("mayak_v2.shared_market_contexts", "mayak_snapshot_id"),
 )
 ROW_COPY = (
     "COPY (SELECT row_to_json(t)::text FROM mayak_v2.snapshots t "
@@ -84,20 +79,40 @@ def proof() -> dict[str, Any]:
 
 
 def reference_truth(q: Any) -> dict[str, Any]:
+    from psycopg import sql
+
     union: set[int] = set()
     by_fk: dict[str, Any] = {}
     q.execute(
-        "SELECT count(*) FROM pg_constraint WHERE contype='f' "
-        "AND confrelid=%s::regclass", (TABLE,),
+        """SELECT n.nspname,r.relname,a.attname
+           FROM pg_constraint c
+           JOIN pg_class r ON r.oid=c.conrelid
+           JOIN pg_namespace n ON n.oid=r.relnamespace
+           JOIN pg_attribute a ON a.attrelid=c.conrelid
+                                AND a.attnum=c.conkey[1]
+           WHERE c.contype='f'
+             AND c.confrelid=%s::regclass
+             AND array_length(c.conkey,1)=1
+           ORDER BY n.nspname,r.relname,a.attname""",
+        (TABLE,),
     )
-    if q.fetchone()[0] != FK_COUNT:
-        raise RuntimeError("CURRENT_INBOUND_FK_COUNT_DRIFT")
-    for name, col, expected in REFERENCES:
-        q.execute(
-            "SELECT " + col + " FROM " + name
-            + " WHERE " + col + " IS NOT NULL ORDER BY " + col
+    found = q.fetchall()
+    names = {(namespace + "." + rel, col)
+             for namespace, rel, col in found}
+    if len(found) != FK_COUNT or not set(SOURCE_REF_TABLES) <= names:
+        raise RuntimeError("CURRENT_INBOUND_FK_INVENTORY_DRIFT")
+    for namespace, rel, col in found:
+        name = namespace + "." + rel
+        query = sql.SQL(
+            "SELECT {field} FROM {relation} "
+            "WHERE {field} IS NOT NULL ORDER BY {field}"
+        ).format(
+            field=sql.Identifier(col),
+            relation=sql.Identifier(namespace, rel),
         )
-        ids = [int(a[0]) for a in q.fetchall()]
+        q.execute(query)
+        ids = [int(row[0]) for row in q.fetchall()]
+        expected = PINNED if (name, col) in SOURCE_REF_TABLES else 0
         if len(ids) != expected or len(set(ids)) != expected:
             raise RuntimeError("CURRENT_REFERENCE_SCOPE_DRIFT:" + name)
         digest = hashlib.sha256()
