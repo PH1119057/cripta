@@ -55,6 +55,7 @@ def evidence(**changes):
         "as_of_second": EVENT,
         "publication_status": "WATERMARKS_ONLY",
         "source_session_state": "ACTIVE",
+        "session_producer_release_commit": "c" * 40,
         "event_market_source_id": BYBIT_PUBLIC_MARKET_SOURCE_ID,
         "instrument_id": "inst-bybit-linear-ltcusdt",
         "external_symbol": "LTCUSDT",
@@ -101,6 +102,8 @@ def test_one_published_signal_is_proven_for_arbitrary_independent_account_scopes
     )
     assert "analytics.native_public_trade_source_events" in db.calls[0][0]
     assert "strategy_entry.p90_scoped_native_consumer_checkpoints" in db.calls[0][0]
+    assert "competing.state=\'ACTIVE\'" in db.calls[0][0]
+    assert "competing.market_source_id=s.market_source_id" in db.calls[0][0]
 
 
 @pytest.mark.parametrize(("changes", "reason"), [
@@ -114,6 +117,8 @@ def test_one_published_signal_is_proven_for_arbitrary_independent_account_scopes
     ({"publication_status": "STALE"}, "INVARIANT"),
     ({"producer_release_commit": "bad"}, "INVARIANT"),
     ({"checkpoint_producer_release_commit": "a" * 40}, "INVARIANT"),
+    ({"session_producer_release_commit": "a" * 40}, "INVARIANT"),
+    ({"session_producer_release_commit": None}, "INVARIANT"),
     ({"entry_plan_fingerprint": "0" * 64}, "INVARIANT"),
     ({"exit_plan_fingerprint": "1" * 64}, "INVARIANT"),
     ({"consumer_release_commit": "bad"}, "INVARIANT"),
