@@ -41,8 +41,8 @@ def test_all_nine_actual_inbound_foreign_keys() -> None:
 
 
 def test_requires_data_ssd_and_exact_unix_actor(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(proof.os, "geteuid", lambda: 0, raising=False)
-    with pytest.raises(RuntimeError, match="EXACT_CRIPTA_UNIX_ACTOR_REQUIRED"):
+    monkeypatch.delattr(proof.os, "geteuid", raising=False)
+    with pytest.raises(RuntimeError, match="POSIX_ACTOR_REQUIRED"):
         proof.initial_actor_path()
 
 
