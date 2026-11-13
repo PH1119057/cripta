@@ -7,15 +7,9 @@
 
 ## Mandatory pre-read
 
-Для ChatGPT первым читать:
+Для нового чата: целиком `docs/CHATGPT_INTERACTION_RULES_RU*.md`, `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`, `docs/SECURITY.md`; INDEX §1–9 для authority/route и §17 перед docs mutation. ARCH/GLOSSARY/MAP/routed docs — точные релевантные разделы по DOCS/CORE/RESEARCH, а не весь набор при каждой реплике.
 
-1. `docs/CHATGPT_INTERACTION_RULES_RU*.md`
-2. `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`
-3. `docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md`
-4. `docs/DOCUMENTATION_INDEX_RU*.md`
-5. `docs/CRIPTA_GLOSSARY_RU*.md`
-6. `docs/CURRENT_PROJECT_MAP_RU*.md`
-7. `docs/SECURITY.md`
+Перед каждым содержательным ответом: current GitHub SHA, task route, свежесть релевантного канона. До отказа/спора о правах — META §17.3 + DEV §19.5–19.6 + MAP §1.4 + actual capabilities / effective actor / DB grants / project authorization. Уже данное owner approval не спрашивать повторно без отдельного обязательного gate.
 
 Все 11 current docs должны быть доступны в Project Source. Наличие файла там
 не отменяет routed reading и не делает routed doc mandatory every-chat.
