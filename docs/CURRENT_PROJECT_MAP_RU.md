@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.45
-**Дата:** 2026-11-11
+**Версия:** 12.46
+**Дата:** 2026-11-14
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -5234,3 +5234,13 @@ readback, not live producer union. Finances/ARM unchanged.
 #### R06 fresh-boundary owner decision and one-pass execution — 2026-11-12 (#470)
 
 **OWNER DECISION:** вместо полного replay старой native-сессии новый Entry reader должен использовать только новую общую `MarketPublication`, её immutable original refs и current verified causal 5m/15m history, а старт собственного решения выполнять с новой будущей 5m publication boundary, после остановки прежнего самостоятельного public-market Entry read и independent MAIN/SUB flat/pending safety. Bootstrap в существующем decision checkpoint, а не technical Observer ACK; до публикации границы прежние Entry events не повторять и не исполнять. Независимый Exit и все signed/execution gates сохраняются. Authoritative canon: OBS §7.10.5.6; physical release order: DEV §59.4. Этот документ не означает фактическое изменение production или R06 READY.
+
+
+## 2026-11-14 R07 source-epoch serialization authoring — GitHub source-only checkpoint / runtime NOT CHECKED HERE
+
+CHECKED HERE, GitHub: previously merged PR #659 proved final-SELECT vs independent GAP race, PR #666 tested separate market-scoped transaction SHARED/EXCLUSIVE fence only inside disposable PostgreSQL16; protected main after #666 was `51ba4fcf1191b363e7b6ee436033f91334530abf` with postmerge 7/7 CI PASS. New R07 canon/implementation authoring began from protected GitHub main `904f067c0d3cc31cf950da0b207c4a971c89d1fe` in scoped branch `core/r07-epoch-serialization-canon-impl-20261114`. Only staged GitHub source changes are evidence until exact PR-head CI/merge. Current owner work on production PostgreSQL/storage is independent; no production R07 migration, service restart or financial ARM authorized here.
+
+Current source code after last verified main: source transition helper `operations/monitoring/native_public_trade_source.py:_session_start/_session_gap`, Consumer `operations/connectivity/universal_entry_consumer.py:_publish_command_after_r07_recheck`, exact R06 source proof `src/bybit_workbench/universal_entry/r07_publication_provenance.py`. Proposed AFTER: transaction source-epoch trigger installed by `postgres`, shared Consumer lock + last R07 provenance + R06 checkpoint row shared protection in command transaction, independent OPEN Exit. The actual production grants must be read: SQL baseline already grants `SELECT,INSERT,UPDATE` on original source sessions to `cripta`, while isolated R07 PG fixture grants source SELECT only. Test privilege differences do not represent production ACL defects. Never substitute root/SentinelX for actual SQL role.
+
+Source checkout read-only `git status --porcelain` returned clean (no output) and worktree inventory 113, no matching R07 worktree. SentinelX subsequently reported one **orphaned tool execution** `job_23ab99f07bdd` with unknown result: it is NOT a proven active R07 job and must be forensically identified before any matching server-side mutation. No R07 server job launched in this authoring. Actual `SOURCE_HEAD`, `INSTALLED_COMMIT`, `LOADED_COMMIT`, `OPERATIONAL_DELTA_COMMITS`, live account/Exit and production PostgreSQL ACL state **NOT CHECKED HERE**. R07 `C=PASS, M/I/T=PARTIAL, D/R=NOT_STARTED`; R08–R14 do not advance before R07 full acceptance per DEV §59.2. No source sync/deploy, PostgreSQL DDL, Exchange mutation or LIVE.
+

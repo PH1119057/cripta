@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.18
-**Дата:** 2026-11-10
+**Версия:** 3.19
+**Дата:** 2026-11-14
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -1266,6 +1266,8 @@ ARCH §55/§60, OBS §7.10, TC §4.18.
 **Dual market truth (запрещённое состояние после cutover)** — самостоятельное получение одной Strategy/Exit/Execution/Position/analytics текущей цены/свечей/native trades из прямого Bybit Public WS/REST при параллельно работающем общем PG источнике, так что один и тот же decision boundary видит разные исходные факты или timestamps. До доказанной замены старый путь — именованный migration finding, не источник права удалить незаменённую capability. Owner: TC §4.19, DEV §59.
 
 Текущий статус: `OWNER_DECISION=YES`; `CANON=AFTER_MERGE`; `IMPLEMENTED=NO`; `LIVE_CHANGE=NO`.
+
+**R07 Source Epoch Transaction Fence** — отдельная от lifetime exclusive MarketSource producer lock версия PostgreSQL transaction-level advisory lock одного exact `market_source_id`. Database-side source-session transition удерживает EXCLUSIVE до commit/rollback; R07 Consumer удерживает SHARED от последней source-проверки до commit/rollback уже разрешённой команды. Это техническая синхронизация причинности, не StrategySignal, EntryDecision, разрешение торговли или owner ARM. Канонический контракт — ARCH §60.5.2, рабочий порядок — DEV §59.5.
 
 ## 46. P90L90-only production data boundary — OWNER DECISION 2026-11-13 (#642)
 
