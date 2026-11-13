@@ -1859,6 +1859,39 @@ symbols with the five-symbol P90 MarketSource.
 
 ### 61.3 One bounded destructive migration and capacity acceptance
 
+### 61.2.1 Explicit owner waiver for **disposable old advisory rows**
+
+The 2026-11-13 owner re-confirmed that **rows** belonging exclusively
+to retired Entry V1/M3/R1/Dispatcher/PAPER/research advisory contours may
+be permanently discarded, even if an inactive old service still refers to
+their tables. Keep the table schema when that minimizes compatibility
+impact. No archive or restore copy of this *retired non-financial,
+non-P90* historical payload is required. The owner accepts losing the
+ability to retrieve those old advisory rows.
+
+This narrow waiver applies **only** when production SQL and installed-code
+evidence prove: (a) no current P90L90 Entry/Exit/Execution/MarketSource
+consumer needs the rows, (b) no actual Exchange fill/fee, signed account
+state, active/pending order, immutable Strategy configuration, position/Exit
+proof or causal native event is lost, (c) there is no required FK/trigger
+reference and the DB actor is exactly authorized, and (d) a bounded,
+recoverable migration plan exists with independent P90 operational
+continuity. A stale mention in an inactive retired code path does not
+itself protect the rows. A still-running writer must be retired or proved
+not to use that old path. This is an owner-approved **non-retention
+classification**, not permission to bypass tool, Unix, database, release
+or open-position safety gates.
+
+For qualifying disposable rows, DEV backup/rollback checkpoints protect
+the current **required** P90L90 data and code, not the discarded legacy
+payload itself. Legacy archives need not be re-created or independently
+restored merely to throw them away. An existing system backup can remain
+an operational rollback checkpoint without promising that retired data
+is required to be reconstructible. This clause is the explicit narrow
+exception to §48.3(3)/(4) for the *unneeded old advisory payload* only.
+The full independently tested restore gate continues for changes that
+could affect irreplaceable/linked current P90 trading data.
+
 Before any DATA/DDL mutation:
 
 1. Verify GitHub authority, installed/loaded identity, all active writers,
