@@ -1843,8 +1843,8 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   exact actor/permissions, R11 deletion/R12 physical reclaim/R13 >=7d
   observation. No arbitrary tool-policy/privilege bypass.
 - **Current SQL status at owner decision:** source GitHub main
-  \`7f33f3ae2e06d807115864169af3a3a63a1a66c4\`, installed runtime
-  \`99a1ba4c16edbe5cb32022addf6c52888574716d\` (pre-publication
+  `7f33f3ae2e06d807115864169af3a3a63a1a66c4`, installed runtime
+  `99a1ba4c16edbe5cb32022addf6c52888574716d` (pre-publication
   snapshot); owner approval YES, but production SQL purge NOT STARTED,
   reclaim 0 bytes, backup full restore and independent Bybit protection
   NOT CHECKED/PASS. The legacy P90 diagnostic StrategyActivation enabled
