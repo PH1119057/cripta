@@ -1,7 +1,7 @@
 """R07 universal consumer: original-native publication proof and account isolation."""
 from __future__ import annotations
 
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -196,3 +196,137 @@ def test_runtime_does_not_reach_live_arm_or_publish_when_publication_unproven(mo
                         lambda *_a, **_kw: calls.append("cancelled"))
     assert consumer.run_once(db, now=AT) == "BLOCKED:R07_SOURCE_PUBLICATION_UNPROVEN"
     assert calls == ["blocked", "reservation released", "cancelled"]
+
+
+def test_dispatch_proof_keeps_read_only_source_acl():
+    db = Query([evidence()])
+    assert require_r07_publication_provenance(db, request()) == 45
+    assert len(db.calls) == 1
+    assert "FOR SHARE" not in db.calls[0][0]
+    assert "FOR UPDATE" not in db.calls[0][0]
+
+
+def test_final_source_check_and_both_dispatch_writes_share_transaction(monkeypatch):
+    events = []
+
+    @contextmanager
+    def transaction():
+        events.append("begin")
+        try:
+            yield
+        finally:
+            events.append("end")
+
+    db = SimpleNamespace(transaction=transaction)
+
+    def prove(_db, _request):
+        events.append("final-source-recheck")
+        return 45
+
+    monkeypatch.setattr(consumer, "require_r07_publication_provenance", prove)
+    monkeypatch.setattr(
+        consumer, "_publish_command",
+        lambda *_a, **_kw: events.append("command"),
+    )
+    monkeypatch.setattr(
+        consumer, "_finalize_owner_diagnostic_dispatch",
+        lambda *_a, **_kw: events.append("diagnostic-finalize"),
+    )
+    consumer._publish_command_after_r07_recheck(
+        db, row=request(), prepared=SimpleNamespace(command_id="test"),
+        now=AT,
+    )
+    assert events == [
+        "begin", "final-source-recheck", "command",
+        "diagnostic-finalize", "end",
+    ]
+
+
+def test_runtime_revoked_source_after_first_check_never_queues_command(monkeypatch):
+    events = []
+    checks = []
+
+    @contextmanager
+    def transaction():
+        events.append("begin")
+        try:
+            yield
+        finally:
+            events.append("end")
+
+    db = SimpleNamespace(transaction=transaction)
+    monkeypatch.setattr(consumer, "TRADING_ACCOUNT_ID", "ta-sub-7")
+    monkeypatch.setattr(consumer, "ACCOUNT_CONNECTOR_ID", "ac-sub-7")
+    monkeypatch.setattr(
+        consumer, "_release_expired_reserved_requests", lambda *_a, **_kw: None,
+    )
+    monkeypatch.setattr(
+        consumer, "check_consumer_worker_route",
+        lambda *_a, **_kw: SimpleNamespace(ready=True, reasons=()),
+    )
+    monkeypatch.setattr(consumer, "_execution_gate_enabled", lambda *_a: True)
+    monkeypatch.setattr(
+        consumer, "account_entry_safety_ready", lambda *_a, **_kw: (True, ()),
+    )
+    monkeypatch.setattr(
+        consumer, "_next_request",
+        lambda *_a, **_kw: {
+            **request(account_id="ta-sub-7"),
+            "capital_reservation_state": "RESERVED",
+        },
+    )
+    monkeypatch.setattr(
+        consumer, "_request_from_row",
+        lambda _row: SimpleNamespace(
+            signal_id="signal-100",
+            capital_reservation_id="reserve-7",
+            exchange_position_slot_claim_id="slot-7",
+            position_mode_state_ref="mode-7",
+            trading_account_id="ta-sub-7",
+        ),
+    )
+    monkeypatch.setattr(
+        consumer, "_admission_pre_dispatch_status", lambda *_a, **_kw: ("OK", ""),
+    )
+    monkeypatch.setattr(
+        consumer, "_critical_lifecycle_fault_code", lambda *_a, **_kw: None,
+    )
+
+    def prove(_db, _row):
+        checks.append("final" if events and events[-1] == "begin" else "early")
+        if checks[-1] == "final":
+            raise R07PublicationProvenanceUnavailable("R07_SOURCE_SESSION_REVOKED")
+        return 45
+
+    monkeypatch.setattr(consumer, "require_r07_publication_provenance", prove)
+    monkeypatch.setattr(consumer, "_live_arm_ready", lambda *_a, **_kw: (True, ()))
+    monkeypatch.setattr(consumer, "_policy_bundle", lambda *_a: object())
+    monkeypatch.setattr(
+        consumer, "prepare_runtime_entry_command",
+        lambda *_a, **_kw: SimpleNamespace(command_id="never-sent"),
+    )
+    monkeypatch.setattr(
+        consumer, "_publish_command",
+        lambda *_a, **_kw: pytest.fail("unproven source published an Entry command"),
+    )
+    monkeypatch.setattr(
+        consumer, "_finalize_owner_diagnostic_dispatch",
+        lambda *_a, **_kw: pytest.fail("unproven source finalized an Entry"),
+    )
+    monkeypatch.setattr(
+        consumer, "_record_blocked", lambda *_a, **_kw: events.append("blocked"),
+    )
+    monkeypatch.setattr(
+        consumer, "_release_pre_exchange_admission",
+        lambda *_a, **_kw: events.append("reservation released"),
+    )
+    monkeypatch.setattr(
+        consumer, "_record_request_state",
+        lambda *_a, **_kw: events.append("cancelled"),
+    )
+    assert consumer.run_once(db, now=AT) == "BLOCKED:R07_SOURCE_PUBLICATION_UNPROVEN"
+    assert checks == ["early", "final"]
+    assert events == [
+        "begin", "end", "begin", "blocked",
+        "reservation released", "cancelled", "end",
+    ]

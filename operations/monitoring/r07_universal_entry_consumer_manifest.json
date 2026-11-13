@@ -13,7 +13,8 @@
     "checkpoint": "strategy_entry.p90_scoped_native_consumer_checkpoints(strategy_id,strategy_version,source_session_id,last_publication_id,bootstrap_publication_id,frame_number,frame_index)",
     "freshness_seconds": 5,
     "freshness_source": "existing P90 REAL v3 immutable EntryPlan maximum request age; not a new Strategy threshold",
-    "missing_or_mixed_proof": "fail closed before financial permission check or command creation"
+    "missing_or_mixed_proof": "fail closed before financial permission check or command creation",
+    "commit_time_recheck": "one final SELECT-only R06 publication/source-original/checkpoint proof immediately before Entry command, execution dispatch and reservation state in one command transaction; a GAP between earlier preflight and final proof denies a command; an independently concurrent producer change AFTER final read is not fully excluded without separately approved producer-consumer coordination"
   },
   "account_boundary": {
     "execution_route": "exact TradingAccount + exact AccountConnector, no credentials in publication",
@@ -37,7 +38,7 @@
     "failed P90 proof stops before LIVE ARM/command and records cancelled request",
     "non-P90 strategy dispatch contract is left untouched",
     "independent Exit remains runnable when Entry disabled",
-    "PG16 disposable integration, existing consumer/Exit regressions and CI"
+    "PG16 disposable integration with independent source GAP between early and final proof under SELECT-only ACL, existing consumer/Exit regressions and CI"
   ],
   "release": {
     "source_branch": "core/r07-universal-entry-provenance-20261112",

@@ -665,17 +665,19 @@ def test_retire_entry_rights_rejects_mismatched_dict_row_disarm_result() -> None
 
 def test_entry_consumer_atomically_retires_diagnostic_rights_after_dispatch() -> None:
     assert "retire_owner_diagnostic_entry_rights" in ENTRY_CONSUMER
-    publish = ENTRY_CONSUMER.index("_publish_command(connection, prepared, now=current)")
-    finalize = ENTRY_CONSUMER.index(
-        "_finalize_owner_diagnostic_dispatch(",
-        publish,
-    )
-    transaction = ENTRY_CONSUMER.rfind(
-        "with connection.transaction():",
-        0,
-        publish,
-    )
-    assert transaction < publish < finalize
+    # R07 wraps source reproof, command and diagnostic-rights retirement
+    # in the same transaction. Inspect the new dispatch helper rather than
+    # assuming command publication is textually inside run_once.
+    start = ENTRY_CONSUMER.index("def _publish_command_after_r07_recheck(")
+    end = ENTRY_CONSUMER.index("def _generation_pre_dispatch_status(", start)
+    dispatch = ENTRY_CONSUMER[start:end]
+    transaction = dispatch.index("with connection.transaction():")
+    proof = dispatch.index("require_r07_publication_provenance(")
+    publish = dispatch.index("_publish_command(connection, prepared, now=now)")
+    finalize = dispatch.index("_finalize_owner_diagnostic_dispatch(", publish)
+    assert transaction < proof < publish < finalize
+    run_once = ENTRY_CONSUMER[ENTRY_CONSUMER.index("def run_once("):]
+    assert "_publish_command_after_r07_recheck(" in run_once
     helper = ENTRY_CONSUMER.index("def _finalize_owner_diagnostic_dispatch(")
     helper_end = ENTRY_CONSUMER.index("def _generation_pre_dispatch_status(", helper)
     helper_body = ENTRY_CONSUMER[helper:helper_end]

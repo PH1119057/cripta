@@ -159,3 +159,25 @@ def test_pg16_original_source_invalidation_blocks_before_order(db,table,column,v
     admin.execute(f"UPDATE {table} SET {column}=%s", (value,))
     with pytest.raises(R07PublicationProvenanceUnavailable):
         require_r07_publication_provenance(runtime, request("ta-sub-2"))
+
+
+def test_pg16_select_only_final_proof_rejects_gap_between_preflight_and_dispatch(db):
+    admin, runtime = db
+    # The Consumer's source role has SELECT, never UPDATE. PostgreSQL
+    # FOR SHARE would require UPDATE on these source-owned tables.
+    assert admin.execute(
+        "SELECT has_table_privilege('cripta', %s, 'UPDATE')",
+        ("analytics.native_public_trade_source_sessions",),
+    ).fetchone()[0] is False
+    assert require_r07_publication_provenance(runtime, request("ta-sub-9")) == 45
+    # Independent source writer revokes ACTIVE between Consumer reads.
+    # No production database or shared test service is used here.
+    admin.execute(
+        "UPDATE analytics.native_public_trade_source_sessions "
+        "SET state='GAP' WHERE source_session_id=%s",
+        (SESSION,),
+    )
+    with pytest.raises(
+        R07PublicationProvenanceUnavailable, match="R07_SOURCE_PROOF_INVARIANT_BROKEN",
+    ):
+        require_r07_publication_provenance(runtime, request("ta-sub-9"))
