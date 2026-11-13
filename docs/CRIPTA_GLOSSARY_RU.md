@@ -1267,6 +1267,8 @@ ARCH §55/§60, OBS §7.10, TC §4.18.
 
 Текущий статус: `OWNER_DECISION=YES`; `CANON=AFTER_MERGE`; `IMPLEMENTED=NO`; `LIVE_CHANGE=NO`.
 
+**R07 Source Epoch Transaction Fence** — отдельная от lifetime exclusive MarketSource producer lock версия PostgreSQL transaction-level advisory lock одного exact `market_source_id`. Database-side source-session transition удерживает EXCLUSIVE до commit/rollback; R07 Consumer удерживает SHARED от последней source-проверки до commit/rollback уже разрешённой команды. Это техническая синхронизация причинности, не StrategySignal, EntryDecision, разрешение торговли или owner ARM. Канонический контракт — ARCH §60.5.2, рабочий порядок — DEV §59.5.
+
 ## 46. P90L90-only production data boundary — OWNER DECISION 2026-11-13 (#642)
 
 **P90_ONLY_HOT_SCOPE** — the owner-approved minimal *operational*
