@@ -421,7 +421,7 @@ def test_runtime_revoked_source_after_first_check_never_queues_command(monkeypat
     assert consumer.run_once(db, now=AT) == "BLOCKED:R07_SOURCE_PUBLICATION_UNPROVEN"
     assert checks == ["early", "final"]
     assert events == [
-        "begin", "end", "begin", "epoch-fence", "blocked",
+        "begin", "epoch-fence", "end", "begin", "blocked",
         "reservation released", "cancelled", "end",
     ]
 
