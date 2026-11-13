@@ -21,7 +21,7 @@ def source(direction):
     d={}
     for symbol in m.SYMBOLS:
         d[symbol]={}
-        for i in range(15):
+        for i in range(-12, 15):
             t=i*300
             # All five coins share same adverse directional trend.
             price=100+(i*direction)
