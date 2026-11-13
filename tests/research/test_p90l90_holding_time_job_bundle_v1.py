@@ -97,11 +97,13 @@ class IndependentJobBundleTests(unittest.TestCase):
             ("183d", "C2-R646-H25-PILOT1-20261114", 2),
         ]
         for period, ident, pilot in bad:
-            with self.subTest(period=period, job_id=ident, pilot=pilot):
-                with self.assertRaises(ValueError):
-                    pack.build_bundle(
-                        REPO, period, "ALL", ident, TEST_HEAD, pilot,
-                    )
+            with (
+                self.subTest(period=period, job_id=ident, pilot=pilot),
+                self.assertRaises(ValueError),
+            ):
+                pack.build_bundle(
+                    REPO, period, "ALL", ident, TEST_HEAD, pilot,
+                )
 
     def test_period_mismatch_and_invalid_identity_rejected(self):
         for period, ident in (("29d", "H90"),
