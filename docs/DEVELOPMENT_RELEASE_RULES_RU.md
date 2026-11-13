@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.10 · 2026-11-11
+**Версия:** 2.11 · 2026-11-11
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
