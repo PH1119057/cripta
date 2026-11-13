@@ -148,7 +148,7 @@ def test_qc_child_pass_requires_persisted_and_hashed_qc_artifact():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         good = {"status": qc.STATUS, "cases": 8, "period": "90d"}
-        child = CompletedProcess([], 0, json.dumps(good) + "\\n", "")
+        child = CompletedProcess([], 0, json.dumps(good) + "\n", "")
         with patch.object(qc.run, "output", return_value=root):
             with patch.object(qc.run.subprocess, "run", return_value=child):
                 with pytest.raises(RuntimeError, match="output validation failed"):
