@@ -1797,3 +1797,101 @@ replacement; documentation alone does not repair Observer or clear SUB latch.
 Прямое последующее решение владельца разрешает сократить прежний **20-symbol MAYAK collector** до **7-symbol observational panel**: APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT, BTCUSDT, ETHUSDT, при сохранении существующих аналитических возможностей на выбранных инструментах и истории прежнего 20-symbol BEFORE. Это точное owner-approved исключение из исторического preservation gate §60.5; оно **не** является семисимвольным расширением native MarketSource R01–R05 (там ровно пять), не переносит MarketSource ownership в MAYAK, не разрешает удалить другие producers/consumers и не даёт права автоматически включать LIVE.
 
 Physical MAYAK source/consumer scope, качество BTC/ETH reference anchors, изменения cross-coin breadth и startup WARMUP — OBS §7.10.5.3; actor/retention/release/rollback — DEV §59 и ARCH §48; конкретный BEFORE→AFTER и статус — MAP/Issue #470. Не считать урезанную 7-symbol ширину статистически эквивалентной старой 20-symbol; все остальные требуемые trading/safety feed capabilities сохраняются независимо. `OWNER_DECISION=YES`; `CANON_AFTER_MERGE=YES`; `PHYSICAL_CUTOVER=NOT_VERIFIED`.
+## 61. P90L90-only minimum production storage — OWNER DECISION 2026-11-13 (Issue #642)
+
+**Decision and scope.** Owner approved retirement of all eight obsolete-data
+packages from production PostgreSQL (cold MAYAK/Dispatcher copies, Entry V1/M3,
+old Strategy Dispatcher, historical parity, old R1 PAPER, full unpinned JSON
+telemetry, obsolete minute history and superseded state generations).
+**Target:** keep only the minimum independently proven current P90L90
+MAIN/SUB trading and recovery dependencies on a 20-GiB System SSD. The owner
+does not require old research/market downloads or retired Strategy telemetry
+to be kept merely for convenience and may acquire external inputs again.
+This decision does not reactivate any Strategy or grant Exchange/LIVE rights.
+
+This section **supersedes any presumption that inactive V1/M3/R1 research,
+old MAYAK/Dispatcher full snapshots, or *_cold_20261107 SQL copies must
+remain in hot PostgreSQL indefinitely**. It does **not** override §§48.3,
+60.2–60.3 or DEV §§48–49 destructive migration gates: no SQL purge is
+authorized by this document commit alone. A previous financial fill, real
+position, order, original signed account evidence, actual fee, immutable
+Strategy/ExitPlan or P90 source/causal lineage is not re-downloadable simply
+because the owner will reacquire public market history.
+
+### 61.1 Required minimum and exact consumers
+
+| Retained class in production PostgreSQL | Required boundary | Proven owner/consumer |
+|---|---|---|
+| Current immutable StrategyCard/Version/Activation, binding, EntryPlan/ExitPlan, eligibility/permissions and SECOND48 | Current P90L90 MAIN LTC/INJ; SUB DOT/ARB/APT; exact immutable versions and real-account scopes. Two owner-diagnostic v3 activations are currently enabled and must be classified before retirement | Strategy materializer, Entry/Exit, scoped admission, Execution, operator audit |
+| Market-source candles, compact minute objective facts and seeds | Exact closed 5m/15m and all other required timeframes; PREV7D plus independently determined ATR200/warmup, quality, corrections, UTC identity, lineage and continuity | Shared MarketSource → Geometry/Entry/Exit |
+| Native event facts and source checkpoints | **Minimum original ordered event/seq/execId/epoch/price-time range** needed by a real pending/open P90 Position, MFE/Exit and recovery; no blanket 7-day raw-trade lake | Native MarketSource → position-scoped Exit/MFE and causal consumers |
+| Signed private account state and financial truth | Latest verified MAIN/SUB exposure/SL/TP/pending orders + immutable linked fills, fees, positions, ownership, protection, reconciliation and operator/control decisions | Private adapter → Execution/Lifecycle/Universal Exit + audit |
+| Current hot observation and failure evidence | Only exact live consumer windows; unpinned full high-frequency JSON <=24h; older originals retained only for position/event evidence | Monitoring / read-model and incident owner |
+| System recovery and reproducibility | **Allowlisted** necessary PostgreSQL/roles/config/secrets, source release and verified relevant audit; no repeated backup of stale ZIP reports, raw market archives or regenerable caches | Deployment/backup owner; separately verified restore |
+
+A seven-day PREV7D trading input does **not** imply deleting needed older
+ATR seeds or OPEN-Position native evidence at day 7. Conversely, a market
+source that can repopulate seconds quickly is not authorized to accumulate
+unbounded days of second-level data or multiple redundant physical views.
+
+### 61.2 Explicit retired packages (not yet physically purged)
+
+| Owner-approved package | Retirement boundary / safety exception |
+|---|---|
+| Six *_cold_20261107 tables | Cold copies of former MAYAK/Dispatcher; remove from hot SQL after FK/reader/writer and validated recovery proof, with exact authorized PostgreSQL DDL actor |
+| Legacy Entry V1/M3 | Old decision events, advisory shadow contexts, geometry and opportunity history; remove retired writers and readers first; preserve any still-linked real exchange fills/fees/owner proof |
+| Legacy Strategy Dispatcher | Assessments/runs and old event links; preserve only proven P90/real-position linked evidence |
+| Legacy parity tests | Retire Entry V1 parity rows/runs after signed test-result and dependency disposition |
+| R1 PAPER | Retire PAPER positions/orders/events **only after** resolving four historical OPEN PAPER rows; do not infer these are actual Exchange exposure |
+| MAYAK/Dispatcher full JSON | Child→parent FK-aware <=24h retention; event-pinned records kept until independently safe |
+| Historical market_minutes | Retain exact current approved P90 horizons and necessary seeds; older raw/compact facts expire unless explicitly necessary for live causal/recovery |
+| Old account/capacity/reconciliation/supervisor generations | Retain latest signed state per account plus complete linked position/order/Exit/fault/financial evidence; retire superseded unpinned generations only after referential and independent audit checks |
+
+**Before/after capability.** BEFORE: legacy observation, historical
+strategy/report/research tables remain physically queryable. AFTER: their
+legacy-only full-history/report capabilities are intentionally retired by
+owner; **P90L90 Entry/Exit/Execution, private account reconciliation and
+source-gap recovery must not lose any current required fact**. Any legacy
+capability with an active non-P90 consumer is a separate explicit retirement
+decision/manifest, not an implicit replacement by a five-symbol source.
+Retiring 7-symbol MAYAK observation is not equivalent to covering all seven
+symbols with the five-symbol P90 MarketSource.
+
+### 61.3 One bounded destructive migration and capacity acceptance
+
+Before any DATA/DDL mutation:
+
+1. Verify GitHub authority, installed/loaded identity, all active writers,
+   consumers and FKs, append-only triggers, views/SQL function dependencies,
+   jobs/locks and safe maintenance execution actor (DEV §50.4, §§5.1/19).
+2. Independently verify signed Bybit MAIN **and** SUB open positions,
+   protective orders, pending commands, partial fills and actual Exit owner.
+   Incomplete proof => no mutation affecting their data/operational producer;
+   mainnet=OFF or local empty hot_positions alone is not enough.
+3. Produce a row/table-specific immutable manifest: KEEP / DELETE / MOVE,
+   exact reason, scope, cutoff/ATR seed and position pin, dependency owners,
+   expected rows/bytes, method and rollback path; no guessed market
+   re-download equivalence for native seq.
+4. Test required backup/restore for protected data/roles/config with exact
+   approved filesystem + PostgreSQL actor; never use a tool-security denial
+   as permission to switch to root or change actor. Do not delete original
+   protected financial/causal evidence.
+5. Retire obsolete *effective* writers/readers in a tested exact Git-first
+   release; preserve dashboard/report/analysis behavior where still required.
+   Do not silently DROP a table that loaded code still writes.
+6. Apply reviewed, FK/trigger-aware bounded R11 purge with operator approval
+   and post-count verification. Physical reclaim R12 uses exact current
+   heap/index/lock/available-space evidence: avoid blind VACUUM FULL or
+   other large rewrites on the 20-GiB full SSD. Report actual
+   \`pg_total_relation_size\`, \`pg_database_size\`, \`PGDATA\` and ext4
+   \`df\` before and after separately, never equate DELETE rows with bytes
+   returned to filesystem.
+7. Accept a measured System-SSD growth/retention budget (OS/runtime + PGDATA
+   + WAL + emergency free reserve) below physical 20 GiB; test representative
+   market-source ingestion for >=7 days (R13). The implementation may not
+   cure repeated disk exhaustion by increasing SSD without an explicit
+   separate owner decision.
+
+**Status when adopted:** OWNER DECISION / CANON; execution and SQL purge NOT
+DONE by this documentation action. No LIVE-arm, Exchange mutation, service
+restart or strategy version change.
