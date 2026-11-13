@@ -398,7 +398,7 @@ def _install_epoch_fence_spike(admin):
         "SELECT tgenabled,tgtype FROM pg_trigger "
         "WHERE tgrelid='analytics.native_public_trade_source_sessions'::regclass "
         "AND tgname='r07_source_epoch_guard_v1'"
-    ).fetchone() == {"tgenabled": "O", "tgtype": 31}
+    ).fetchone() == ("O", 31)
 
 
 def _spike_consumer():
@@ -564,7 +564,7 @@ def test_pg16_prod_source_guard_prevents_disable_trigger_ddl_after_lock(db):
             "SELECT tgenabled FROM pg_trigger "
             "WHERE tgrelid='analytics.native_public_trade_source_sessions'::regclass "
             "AND tgname='r07_source_epoch_guard_v1'"
-        ).fetchone()["tgenabled"] == "O"
+        ).fetchone()[0] == "O"
 
 
 def test_pg16_mutable_r06_checkpoint_cannot_change_under_final_command_proof(db):
@@ -630,4 +630,4 @@ def test_pg16_many_accounts_can_hold_shared_source_and_checkpoint_guards(db):
             )
     assert admin.execute(
         "SELECT count(*) FROM strategy_entry.r07_epoch_dispatch_probe"
-    ).fetchone()["count"] == 2
+    ).fetchone()[0] == 2
