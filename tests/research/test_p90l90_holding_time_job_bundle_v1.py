@@ -62,22 +62,22 @@ class IndependentJobBundleTests(unittest.TestCase):
     def test_period_mismatch_and_invalid_identity_rejected(self):
         for period, ident in (("29d", "H90"),
                               ("90d", "H25"), ("183d", "H29")):
-            with self.subTest(period=period):
-                with self.assertRaisesRegex(ValueError, "another period"):
-                    pack.validate_identity(
-                        period, "ALL", f"C2-R646-{ident}-ALL-V1",
-                        TEST_HEAD,
-                    )
+            with (
+                self.subTest(period=period),
+                self.assertRaisesRegex(ValueError, "another period"),
+            ):
+                pack.validate_identity(
+                    period, "ALL", f"C2-R646-{ident}-ALL-V1",
+                    TEST_HEAD,
+                )
         for wrong in ("C2-R635-H29-ALL", "C2-R646-H29-",
                       "C2-R646-H29-ALL;rm"):
-            with self.subTest(job_id=wrong):
-                with self.assertRaises(ValueError):
-                    pack.validate_identity("29d", "ALL", wrong, TEST_HEAD)
+            with self.subTest(job_id=wrong), self.assertRaises(ValueError):
+                pack.validate_identity("29d", "ALL", wrong, TEST_HEAD)
         for head in ("main", "0" * 39, "G" * 40):
-            with self.subTest(head=head):
-                with self.assertRaises(ValueError):
-                    pack.validate_identity("29d", "ALL",
-                                           "C2-R646-H29-ALL-V1", head)
+            with self.subTest(head=head), self.assertRaises(ValueError):
+                pack.validate_identity("29d", "ALL",
+                                       "C2-R646-H29-ALL-V1", head)
 
     def test_no_runtime_or_service_mutation_from_builder(self):
         source = (REPO / "scripts" / "research"
