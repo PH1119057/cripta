@@ -5,7 +5,7 @@ Unix and production PostgreSQL actor: cripta. File CREATE/WRITE only inside
 /data/cripta/research/p90_mayak_snapshot_r12_proof_642 on Data SSD. No
 production SQL mutation, no PGDATA/Exchange/trading writes or sudo/root.
 Reclaims NO space. Generates scoped recoverability evidence for a later
-separately approved physical-only VACUUM FULL of mayak_v2.snapshots.
+separately approved physical-only compaction of mayak_v2.snapshots.
 """
 from __future__ import annotations
 
@@ -73,9 +73,15 @@ def connection(db: str, *, scratch: bool = False) -> psycopg.Connection:
 
 
 def initial_actor_path() -> None:
+    if not hasattr(os, "geteuid"):
+        raise RuntimeError("POSIX_ACTOR_REQUIRED")
     import pwd
 
-    if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
+    try:
+        actor_uid = pwd.getpwnam("cripta").pw_uid
+    except KeyError as exc:
+        raise RuntimeError("EXACT_CRIPTA_UNIX_ACTOR_REQUIRED") from exc
+    if os.geteuid() != actor_uid:
         raise RuntimeError("EXACT_CRIPTA_UNIX_ACTOR_REQUIRED")
     parent = os.lstat(PARENT)
     if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid():
