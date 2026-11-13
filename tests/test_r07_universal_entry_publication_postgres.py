@@ -291,3 +291,71 @@ def test_pg16_source_read_only_role_cannot_replace_publication_watermarks(db):
             "UPDATE analytics.market_publications SET native_watermarks='{}'::jsonb"
         )
     runtime.rollback()
+
+
+def test_pg16_known_unfenced_gap_after_final_proof_before_dispatch_commit(db):
+    """Document the remaining cross-owner race without permitting a real order.
+
+    Synthetic dispatch is intentionally a local disposable table, NOT
+    runtime.trade_commands or strategy_entry.execution_dispatches. The
+    existing SELECT-only final proof cannot lock the independent source
+    writer. Producer/Consumer atomic fencing requires an owner-approved
+    cross-component coordination contract, not a silent UPDATE grant.
+    """
+    admin, _readonly = db
+    assert admin.execute(
+        "SELECT has_table_privilege('cripta', %s, 'UPDATE')",
+        ("analytics.native_public_trade_source_sessions",),
+    ).fetchone()[0] is False
+    admin.execute(
+        "CREATE TABLE strategy_entry.r07_unfenced_dispatch_probe "
+        "(signal_id text PRIMARY KEY, source_session_id text NOT NULL)"
+    )
+    admin.execute(
+        "GRANT SELECT, INSERT ON strategy_entry.r07_unfenced_dispatch_probe TO cripta"
+    )
+
+    # A separate connection stands in for the account-scoped Consumer. It may
+    # write ONLY to the synthetic probe, never to original source facts.
+    with psycopg.connect(DSN, row_factory=dict_row) as consumer:
+        consumer.execute("SET ROLE cripta")
+        consumer.commit()
+        with consumer.transaction():
+            consumer.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+            assert require_r07_publication_provenance(
+                consumer, request("ta-sub-2"),
+            ) == 45
+            # A separate source-owned connection can commit GAP while the
+            # Consumer transaction remains alive, after final proof.
+            admin.execute("SET lock_timeout = '500ms'")
+            changed = admin.execute(
+                "UPDATE analytics.native_public_trade_source_sessions "
+                "SET state='GAP' WHERE source_session_id=%s",
+                (SESSION,),
+            )
+            assert changed.rowcount == 1
+
+            # This harmless stand-in models command insertion *after* the
+            # source has become GAP. A further SELECT would reject, but the
+            # current R07 command path has no source-row fence after its proof.
+            consumer.execute(
+                "INSERT INTO strategy_entry.r07_unfenced_dispatch_probe "
+                "(signal_id,source_session_id) VALUES (%s,%s)",
+                ("signal-100", SESSION),
+            )
+            with pytest.raises(
+                R07PublicationProvenanceUnavailable,
+                match="R07_SOURCE_PROOF_INVARIANT_BROKEN",
+            ):
+                require_r07_publication_provenance(
+                    consumer, request("ta-sub-2"),
+                )
+
+    assert admin.execute(
+        "SELECT count(*) FROM strategy_entry.r07_unfenced_dispatch_probe"
+    ).fetchone()[0] == 1
+    assert admin.execute(
+        "SELECT state FROM analytics.native_public_trade_source_sessions "
+        "WHERE source_session_id=%s",
+        (SESSION,),
+    ).fetchone()[0] == "GAP"
