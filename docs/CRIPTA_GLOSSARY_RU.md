@@ -1266,3 +1266,28 @@ ARCH §55/§60, OBS §7.10, TC §4.18.
 **Dual market truth (запрещённое состояние после cutover)** — самостоятельное получение одной Strategy/Exit/Execution/Position/analytics текущей цены/свечей/native trades из прямого Bybit Public WS/REST при параллельно работающем общем PG источнике, так что один и тот же decision boundary видит разные исходные факты или timestamps. До доказанной замены старый путь — именованный migration finding, не источник права удалить незаменённую capability. Owner: TC §4.19, DEV §59.
 
 Текущий статус: `OWNER_DECISION=YES`; `CANON=AFTER_MERGE`; `IMPLEMENTED=NO`; `LIVE_CHANGE=NO`.
+
+## 46. P90L90-only production data boundary — OWNER DECISION 2026-11-13 (#642)
+
+**P90_ONLY_HOT_SCOPE** — the owner-approved minimal *operational*
+PostgreSQL dataset supporting the two current P90L90 MAIN/SUB StrategyVersions,
+their five exact instrument/MarketSource identities, current eligibility,
+EntryPlan/ExitPlan, necessary PREV7D + ATR seeds, native causal Exit/MFE,
+financial accounts, immutable execution/protection and bounded recovery.
+This is a **storage retention boundary**, not a new StrategyVersion, Entry
+filter, LIVE-arm or permission. Authoritative boundary: ARCH §61.
+
+**LEGACY_RETIRED_FROM_HOT** — history or full-derived data proven to have
+no active consumer, current P90 position/audit pin, uniqueness/recovery
+obligation or remaining write-path. It may be removed from *hot PostgreSQL*
+under DEV R11/R12 after complete gates; the term alone is not DELETE approval.
+
+**POSITION_EVIDENCE_PIN** — an immutable reference and required time interval
+protecting original fills, orders, account/protection/Exit/MFE records and
+necessary original MarketSource identity for an actual OPEN/pending or audited
+position, regardless of a general 24h/7d data window.
+
+**HOT_RECLAIMED_BYTES** — actual physical freed ext4 space verified after
+approved PostgreSQL physical reclamation, distinct from stale-row count,
+table size before purge, dead tuples, logical \`pg_database_size\` and
+promised compression gain.
