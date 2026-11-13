@@ -120,7 +120,9 @@ def verify_scope(q: Any, *, applying: bool) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Owner-approved P90-only minute retention #642")
+    parser = argparse.ArgumentParser(
+        description="Owner-approved P90-only minute retention #642"
+    )
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--check", action="store_true")
     modes.add_argument("--apply", action="store_true")
@@ -145,7 +147,9 @@ def main() -> int:
                 q.execute("SET statement_timeout='30000ms'")
                 before = verify_scope(q, applying=args.apply)
                 if args.check:
-                    print(json.dumps({"status": status, "scope": before}, sort_keys=True))
+                    print(
+                        json.dumps({"status": status, "scope": before}, sort_keys=True)
+                    )
                     return 0
                 if before["root_free_bytes"] < MIN_ROOT_FREE_BYTES:
                     raise RuntimeError("LOW_ROOT_RESERVE_BEFORE_MUTATION")
@@ -158,7 +162,9 @@ def main() -> int:
                     # Important: CHECKPOINT is legal as postgres on an
                     # autocommit connection. Never manipulate pg_wal files.
                     q.execute("CHECKPOINT")
-                    remaining_budget = min(MAX_ROWS_PER_INVOCATION, before["legacy_rows"])
+                    remaining_budget = min(
+                        MAX_ROWS_PER_INVOCATION, before["legacy_rows"]
+                    )
                     while remaining_budget:
                         if root_free_bytes() < MIN_ROOT_FREE_BYTES:
                             status = "PARTIAL_ROOT_RESERVE_STOP"
