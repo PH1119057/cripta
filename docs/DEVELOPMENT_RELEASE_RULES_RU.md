@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.10 · 2026-11-11
+**Версия:** 2.11 · 2026-11-14
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -400,6 +400,41 @@ cripta runtime role
 
 Для ChatGPT текущий approved server-management rail — SentinelX. Его service principal не считается автоматически repository owner, runtime actor или migration actor. Перед PostgreSQL operation фиксировать `SentinelX actor -> effective Unix actor -> interpreter -> DB role`; runtime/read/research smoke выполняется доказанным `cripta` actor/role path, DDL/backfill — только migration actor. Wrong-user failure не является основанием менять grants.
 
+
+## 13.1 Operation-first PostgreSQL actor selection and evidence separation — OWNER DIRECTION 2026-11-14
+
+**Сначала определить операцию и назначенного для неё исполнителя, только затем проверять права.** Запрещено использовать удобную текущую роль, получать предсказуемый отказ и на этом основании предлагать повысить права `cripta`/системному пользователю или отказаться от задачи. Для каждой DB-sensitive работы до запуска фиксировать:
+
+```text
+TASK / OPERATION = SELECT | OPERATIONAL_DML | DDL | MIGRATION | BACKFILL | GRANT_AUDIT
+OBJECT / SCHEMA / EXACT PATH
+CANONICAL_OPERATION_OWNER
+TOOL / MANAGEMENT_RAIL
+EFFECTIVE_UNIX_ACTOR
+POSTGRESQL_CURRENT_USER / ROLE
+CANONICAL_SQL_PRIVILEGE_CONTRACT
+ACTUAL_DB_GRANTS / OBJECT_OWNER = CHECKED HERE | NOT CHECKED HERE
+REQUIRED_OWNER_APPROVAL / RELEASE_GATE
+```
+
+- **DDL, migration, schema repair, historical backfill** — только approved migration actor и DB role (обычно system/DB `postgres`), с проверкой actual rights/tool rail, backup и migration approval. Не выполнять работу мигратора от runtime `cripta`, а также не приписывать Unix `postgres` автоматически статус DB superuser: это разные сущности.
+- **Runtime Consumer/Service, Entry/Exit, application DML** — только их штатный effective actor/DB role (обычно `cripta`) с exact canonical SQL GRANT и actual DB verification. `SELECT`, `INSERT` и `UPDATE` разрешены только там и тем субъектам, где они явно предусмотрены контрактом и доказаны; `UPDATE` для штатной source-session записи нельзя молча запрещать общим утверждением «runtime only SELECT». Исторический backfill не становится runtime DML.
+- **Проверка прав** — read-only `pg_catalog`/`information_schema`, `has_table_privilege`, owner, GRANT и `current_user` с exact approved connection; отдельно smoke мигратора и отдельно Consumer согласно операциям, а не один чужой успешный smoke.
+
+Строго различать три источника доказательств:
+
+```text
+TEST_FIXTURE_GRANTS          = сконструированные grants в изолированном тесте
+CANONICAL_SQL_GRANTS        = GRANT/REVOKE из current GitHub source/migrations
+PRODUCTION_EFFECTIVE_GRANTS = фактическая production ACL / owner / role inheritance
+```
+
+`TEST_FIXTURE_GRANTS` с моделью `SELECT`-only при ином `CANONICAL_SQL_GRANTS` — это `TEST_MODEL_DIVERGENCE / FINDING`, а не доказанный дефект `PRODUCTION_EFFECTIVE_GRANTS`. Если actual host ACL не проверена — `NOT CHECKED HERE`; нельзя объявлять её PASS или FAIL. Отрицательные тесты с урезанными grants допустимы, но не заменяют позитивные тесты с canonical SQL privileges. Исправление теста, изменение SQL grant и production GRANT — разные изменения с независимыми owner/actor/release gates; новых привилегий без доказанной необходимости не выдавать.
+
+**Concurrency/transaction race, source epoch, transactional serialization и DB locks — отдельная проблема корректности, не проблема GRANT сама по себе.** Даже административный DB actor не сериализует независимые транзакции автоматически. При подтверждённой гонке проверять ownership, consumer/producer transaction boundaries и DB-enforced protection по отдельному утверждённому cross-component contract; не устранять её выдачей superuser, широкого sudo или произвольного UPDATE.
+
+При первом отказе сначала перепроверить верность выбранного штатного actor по матрице выше; если actor неверен — исправить маршрут до вывода «невозможно». Только реальное отсутствие разрешённого tool/actor/authorization пути классифицируется как BLOCKED по §19.5–19.6. Owner intent не отменяет настоящих security/DB/release/LIVE gates. Этот раздел **не выдаёт новых прав** и **не заявляет current production ACL проверенными**.
+
 ## 14. Backup должен быть доступен тому actor, который его пишет
 
 Root-only temp directory нельзя использовать как destination для команды, выполняемой от `postgres`, если `postgres` не может туда писать.
@@ -700,6 +735,8 @@ smoke безопасен для данного пути.
 
 
 ## 19.5 SentinelX / effective actor: обязательный маршрут доступа
+
+**Сначала §13.1: classify operation → canonical actor → tool/Unix/DB grants → owner approval.** `SELECT`-only тестовая fixture не является доказательством production ACL, а отказ нештатного actor не является запретом требуемой операции.
 
 Этот раздел определяет **процедуру выбора способа доступа**, а не раздаёт
 дополнительные полномочия. Актуальные Unix users, filesystem roots и snapshot
