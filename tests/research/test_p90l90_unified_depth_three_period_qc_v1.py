@@ -89,6 +89,19 @@ def test_reviewed_audit_has_read_only_preflight_and_pinned_finalizer():
     assert fin.ROOT.name == "p90l90_unified_depth0_vs_0to15_capital_20261113_v2"
     assert fin.PRODUCER != fin.AUDITOR.parents[2]
 
+
+def test_90day_independent_qc_finalizer_is_separate_from_183day():
+    from scripts.research import p90l90_unified_depth_90d_qc_finalize_v1 as fin
+    from scripts.research import p90l90_unified_depth_three_period_qc_finalize_v2 as prior
+    assert fin.PRODUCER_HEAD == "500e4b381642d98d117c5b57f62fd81418156cb7"
+    assert fin.ROOT.parent.name == "results"
+    assert "90d_warmup" in str(fin.ROOT)
+    assert fin.ROOT != prior.ROOT
+    assert fin.PRODUCER != prior.PRODUCER
+    assert fin.AUDITOR.name == "p90l90_unified_depth_three_period_qc_v1.py"
+    assert fin.GIB == 1024 ** 3
+
+
 for _name in sorted(name for name in globals() if name.startswith('test_')):
     globals()[_name]()
 '''
