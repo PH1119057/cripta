@@ -69,5 +69,5 @@ def test_refuses_unprivileged_db_actor_before_mutation() -> None:
 
 def test_hashes_are_streaming_and_no_dynamic_relation() -> None:
     assert compact.ROW_HASH_QUERY.count("analytics.market_minutes") == 1
-    assert "sha256" in FILE.read_text(encoding="utf-8")
+    assert FILE.read_text(encoding="utf-8").count("sha256") >= 1
     assert compact.LOCK_KEY == "cripta-market-minutes-r12-642"
