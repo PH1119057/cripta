@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.56
+**Версия:** 3.57
 **Дата:** 2026-11-14
 **Статус:** канонический индекс документации
 
@@ -99,7 +99,7 @@ Base new-chat reading contract — OWNER DIRECTION 2026-11-14:
 - FULL: META (docs/CHATGPT_INTERACTION_RULES_RU*.md), WORK (docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md), SECURITY (docs/SECURITY.md).
 - INDEX §1–9 mandatory to choose the exact current owner / task route; INDEX §17 additionally before any documentation change.
 - ROUTED TARGET: ARCH (ownership/architecture), GLOSSARY (exact terms/tokens), MAP (actual current actor/path/release/status), TC / OBS (Core subject), DEV (Git/PostgreSQL/server mutation/deploy), RESEARCH_COMPUTE (Research). Read all affected routes for cross-contour work, but do not reread unchanged full documents on every reply.
-- Every substantive turn: check GitHub main SHA; reread modified relevant docs if SHA moved, reuse already-checked sections for unchanged SHA/task. Before refusal / rights objection: META §17.3 + DEV §19.5–19.6 + MAP §1.4 and live tool/actor/DB/authorization evidence.
+- Every substantive turn: check GitHub main SHA; reread modified relevant docs if SHA moved, reuse already-checked sections for unchanged SHA/task. Before refusal / rights objection: **select operation owner first (DEV §13.1)**, then META §17.3 + DEV §19.5–19.6 + MAP §1.4 and live tool/actor/DB/authorization evidence. Test fixture grants, canonical SQL grants, production ACL and transaction-concurrency behavior remain separate facts.
 - Three process workstreams DOCS / CORE / RESEARCH (DEV §50) are not the five product architecture layers (ARCH §1). SECURITY remains one global canon without copying full text.
 
 Then route:
