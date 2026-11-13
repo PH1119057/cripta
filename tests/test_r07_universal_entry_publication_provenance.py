@@ -12,6 +12,7 @@ from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
 from bybit_workbench.universal_entry.r07_publication_provenance import (
     R07PublicationProvenanceUnavailable,
+    require_r07_dispatch_epoch_guard,
     require_r07_publication_provenance,
 )
 from operations.connectivity import universal_entry_consumer as consumer
@@ -303,11 +304,16 @@ def test_final_source_check_and_both_dispatch_writes_share_transaction(monkeypat
 
     db = SimpleNamespace(transaction=transaction)
 
-    def prove(_db, _request):
+    def prove(_db, _request, *, lock_checkpoint_for_dispatch=False):
+        assert lock_checkpoint_for_dispatch is True
         events.append("final-source-recheck")
         return 45
 
     monkeypatch.setattr(consumer, "require_r07_publication_provenance", prove)
+    monkeypatch.setattr(
+        consumer, "require_r07_dispatch_epoch_guard",
+        lambda *_a: events.append("epoch-fence"),
+    )
     monkeypatch.setattr(
         consumer, "_publish_command",
         lambda *_a, **_kw: events.append("command"),
@@ -321,7 +327,7 @@ def test_final_source_check_and_both_dispatch_writes_share_transaction(monkeypat
         now=AT,
     )
     assert events == [
-        "begin", "final-source-recheck", "command",
+        "begin", "epoch-fence", "final-source-recheck", "command",
         "diagnostic-finalize", "end",
     ]
 
@@ -376,13 +382,17 @@ def test_runtime_revoked_source_after_first_check_never_queues_command(monkeypat
         consumer, "_critical_lifecycle_fault_code", lambda *_a, **_kw: None,
     )
 
-    def prove(_db, _row):
-        checks.append("final" if events and events[-1] == "begin" else "early")
+    def prove(_db, _row, *, lock_checkpoint_for_dispatch=False):
+        checks.append("final" if lock_checkpoint_for_dispatch else "early")
         if checks[-1] == "final":
             raise R07PublicationProvenanceUnavailable("R07_SOURCE_SESSION_REVOKED")
         return 45
 
     monkeypatch.setattr(consumer, "require_r07_publication_provenance", prove)
+    monkeypatch.setattr(
+        consumer, "require_r07_dispatch_epoch_guard",
+        lambda *_a: events.append("epoch-fence"),
+    )
     monkeypatch.setattr(consumer, "_live_arm_ready", lambda *_a, **_kw: (True, ()))
     monkeypatch.setattr(consumer, "_policy_bundle", lambda *_a: object())
     monkeypatch.setattr(
@@ -411,6 +421,81 @@ def test_runtime_revoked_source_after_first_check_never_queues_command(monkeypat
     assert consumer.run_once(db, now=AT) == "BLOCKED:R07_SOURCE_PUBLICATION_UNPROVEN"
     assert checks == ["early", "final"]
     assert events == [
-        "begin", "end", "begin", "blocked",
+        "begin", "end", "begin", "epoch-fence", "blocked",
         "reservation released", "cancelled", "end",
     ]
+
+
+
+class _One:
+    def __init__(self, value):
+        self.value = value
+
+    def fetchone(self):
+        return self.value
+
+
+class _EpochGuardDB:
+    def __init__(self, *, installed=True, acquired=True, sql_error=False):
+        self.installed = installed
+        self.acquired = acquired
+        self.sql_error = sql_error
+        self.calls = []
+
+    def execute(self, sql, params=()):
+        self.calls.append((sql, params))
+        if self.sql_error:
+            raise RuntimeError("synthetic SQL unavailable")
+        if "pg_catalog.pg_trigger" in sql:
+            return _One({"guard_valid": self.installed} if self.installed is not None else None)
+        if "pg_try_advisory_xact_lock_shared" in sql:
+            return _One({"locked": self.acquired})
+        return _One(None)
+
+
+def test_r07_epoch_guard_requires_migration_and_holds_exact_source_shared_lock():
+    db = _EpochGuardDB()
+    require_r07_dispatch_epoch_guard(db, request())
+    assert len(db.calls) == 3
+    assert "ACCESS SHARE MODE NOWAIT" in db.calls[0][0]
+    assert "tgenabled='O'" in db.calls[1][0]
+    assert "tgtype=31" in db.calls[1][0]
+    assert "pg_try_advisory_xact_lock_shared" in db.calls[2][0]
+    assert len(db.calls[2][1]) == 1
+    assert db.calls[2][1][0] == (
+        "CRIPTA:R07:SOURCE_EPOCH_TRANSITION:V1:" + BYBIT_PUBLIC_MARKET_SOURCE_ID
+    )
+
+
+@pytest.mark.parametrize(("installed", "acquired", "reason"), [
+    (False, True, "GUARD_MISSING_OR_DISABLED"),
+    (None, True, "GUARD_MISSING_OR_DISABLED"),
+    (True, False, "LOCK_UNAVAILABLE"),
+])
+def test_r07_epoch_guard_fails_closed_before_any_financial_dispatch(
+    installed, acquired, reason,
+):
+    with pytest.raises(R07PublicationProvenanceUnavailable, match=reason):
+        require_r07_dispatch_epoch_guard(
+            _EpochGuardDB(installed=installed, acquired=acquired), request(),
+        )
+
+
+def test_r07_epoch_guard_db_error_is_typed_and_non_p90_unchanged():
+    with pytest.raises(R07PublicationProvenanceUnavailable, match="SQL_UNAVAILABLE"):
+        require_r07_dispatch_epoch_guard(_EpochGuardDB(sql_error=True), request())
+    db = _EpochGuardDB(sql_error=True)
+    require_r07_dispatch_epoch_guard(db, request(strategy_id="independent-r1"))
+    assert db.calls == []
+
+
+def test_r07_final_checkpoint_proof_requires_row_share_only_at_dispatch():
+    db = Query([evidence()])
+    assert require_r07_publication_provenance(
+        db, request(), lock_checkpoint_for_dispatch=True,
+    ) == 45
+    assert "FOR SHARE OF cp" in db.calls[0][0]
+    assert "FOR UPDATE" not in db.calls[0][0]
+    earlier = Query([evidence()])
+    require_r07_publication_provenance(earlier, request())
+    assert "FOR SHARE OF cp" not in earlier.calls[0][0]
