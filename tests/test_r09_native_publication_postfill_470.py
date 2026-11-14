@@ -104,6 +104,7 @@ class FakePG:
     def __init__(self) -> None:
         self.isolation = "repeatable read"
         self.read_only = True
+        self.metadata_row_style = "tuple"
         self.strategy_epoch = (STRATEGY_COMMIT, "ACTIVE")
         self.session_rows = [(
             SESSION, SOURCE, PRODUCER, "ACTIVE", AT - timedelta(seconds=40),
@@ -132,9 +133,14 @@ class FakePG:
     def execute(self, sql: str, params: object = ()) -> Cursor:
         self.queries.append(sql)
         if sql == "SHOW transaction_isolation":
+            if self.metadata_row_style == "dict":
+                return Cursor([{"transaction_isolation": self.isolation}])
             return Cursor([(self.isolation,)])
         if sql == "SHOW transaction_read_only":
-            return Cursor([("on" if self.read_only else "off",)])
+            state = "on" if self.read_only else "off"
+            if self.metadata_row_style == "dict":
+                return Cursor([{"transaction_read_only": state}])
+            return Cursor([(state,)])
         if "FROM strategy_entry.p90l90_real_source_epochs" in sql:
             assert params == (EPOCH,)
             return Cursor([self.strategy_epoch])
@@ -178,6 +184,7 @@ def proof(db: FakePG, now: datetime = NOW):
 def test_original_postfill_uses_proven_pinned_epoch_and_mfe(style: str) -> None:
     db = FakePG()
     db.row_style = style
+    db.metadata_row_style = style
     source = proof(db)
     assert source.native_continuity_verified is False
     assert source.exit_ready is False
