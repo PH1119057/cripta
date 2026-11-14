@@ -142,11 +142,12 @@ def read_r09_native_publication_postfill(
         and _positive(position.actual_avg_fill) > 0,
         "SCOPE_OR_PROTECTED_FIRST_FILL_INVALID",
     )
+    isolation = connection.execute("SHOW transaction_isolation").fetchone()
+    read_only = connection.execute("SHOW transaction_read_only").fetchone()
     _need(
-        connection.execute("SHOW transaction_isolation").fetchone()
-        == ("repeatable read",)
-        and connection.execute("SHOW transaction_read_only").fetchone()
-        == ("on",),
+        isolation is not None and read_only is not None
+        and _fields(isolation, "transaction_isolation") == ("repeatable read",)
+        and _fields(read_only, "transaction_read_only") == ("on",),
         "ATOMIC_READ_ONLY_SNAPSHOT_REQUIRED",
     )
     epoch = connection.execute(
