@@ -39,8 +39,11 @@ OPERATIONAL MIRROR:
 ```
 
 Mirror обязан быть синхронизирован с verified GitHub ref перед source-based
-forensic/deploy. Project Source, memory, old chats, ZIP, transport manifests,
-local C:\cripta and history are auxiliary only.
+forensic/deploy. Project Source is the working copy of current canonical docs if its version
+matches GitHub main: read and apply it. Memory and past conversations
+preserve owner decisions and task continuity, but do not replace current
+host/runtime/ACL evidence. Historical ZIP/archive/Git history are evidence
+rather than a competing current policy.
 
 ## 3. Mandatory pre-read and routing
 
@@ -430,3 +433,17 @@ Before starting a supposedly new Git branch/worktree or rerunning a job on a pre
 DEV §50 defines three **workstream** scopes, not a replacement of ARCH §1 five technical layers. DOCS owns canon/index/bootstrap; CORE owns runtime/trading/observability/DB/Git/release; RESEARCH owns datasets/replay/OOS/evidence and jobs. SECURITY is one common canon. Context reuse requires exact SHA/task equivalence, not old-chat confidence.
 
 Before any denial or technical objection to an owner-approved task, classify exact operation and correct Unix/DB actor **first** per DEV §13.1. Do not ask `cripta` to run migration/DDL, do not confuse a test-only `SELECT` grant with production ACL, and do not suggest privilege escalation to fix transaction races. META §17.3 requires the current DEV §19.5–19.6 / MAP §1.4 / specialized route and an exact tool-capability/actor/path/DB/authorization proof. Never mislabel a tool policy block as Unix permission or a wrong actor as no server rights. WORK §12.1 exact ENTRY/EXIT/COST/FILTERS/DATASET/POSITION report requirements stay in force until any future approved consolidation with RESEARCH_COMPUTE.
+
+## 16. Owner one-off exception and persistent research execution — 2026-11-14
+
+A scoped, explicit owner override of an INTERNAL project workflow is a
+one-time operational decision when security/tool/Unix/DB/LIVE and
+architecture-capability gates still pass; execute without re-approval,
+record outcome and ask once whether to make the exception permanent canon
+(META §4.1). Architectural/Strategy/intercomponent contract mutations
+still require CANON UPDATE before dangerous implementation.
+
+Long-running research/replay jobs are independent supervised server jobs
+(RESEARCH_COMPUTE §8.1), **never** synchronous multi-hour SentinelX
+tool invocations. SentinelX is a bounded control/status rail, not the
+lifetime owner of the calculation. No newly assumed tool/actor grants.
