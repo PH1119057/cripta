@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import pwd
 from typing import Any
 
 EVENTS = "strategy_entry.shadow_parity_events"
@@ -151,6 +150,7 @@ def main() -> int:
     args = parser.parse_args()
     require(os.name == "posix", "LINUX_REQUIRED")
     import psycopg
+    import pwd
 
     username = pwd.getpwuid(os.geteuid()).pw_name
     if args.apply:
@@ -165,7 +165,7 @@ def main() -> int:
     ) as connection:
         if args.check:
             with connection.transaction():
-                connection.execute("SET LOCAL TRANSACTION READ ONLY")
+                connection.execute("SET TRANSACTION READ ONLY")
                 before = evidence(connection.cursor(), empty=False)
             print(json.dumps({
                 "status": "READ_ONLY_READY_NO_MUTATION",
@@ -182,10 +182,11 @@ def main() -> int:
                 "strategy_entry.shadow_parity_runs "
                 "IN ACCESS EXCLUSIVE MODE NOWAIT"
             )
-            connection.execute(
-                "SELECT pg_advisory_xact_lock(hashtext(%s))",
+            locked = connection.execute(
+                "SELECT pg_try_advisory_xact_lock(hashtext(%s))",
                 ("CRIPTA_642_RETIRED_PARITY_R11",),
-            )
+            ).fetchone()
+            require(locked == (True,), "ADVISORY_LOCK_BUSY")
             before = evidence(connection.cursor(), empty=False)
             require(
                 (before["db_user"], before["db_session"])
