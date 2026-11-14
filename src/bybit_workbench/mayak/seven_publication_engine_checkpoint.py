@@ -20,7 +20,7 @@ from collections import deque
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from bybit_workbench.mayak.core.live import LiveMayakEngine, SourceStamp
 from bybit_workbench.mayak.native_trade_replay_parity import R11ReplayCursor
@@ -57,7 +57,7 @@ def _need(ok: bool, code: str) -> None:
 def _utc(raw: object) -> datetime:
     _need(isinstance(raw, str), "TIME_TYPE_INVALID")
     try:
-        value = datetime.fromisoformat(raw)
+        value = datetime.fromisoformat(cast(str, raw))
     except ValueError as exc:
         raise R11MayakStateUnverified("R11_MAYAK_STATE_TIME_INVALID") from exc
     _need(value.tzinfo is not None and value.utcoffset() == timedelta(0),
@@ -68,7 +68,7 @@ def _utc(raw: object) -> datetime:
 def _finite(raw: object) -> float:
     _need(not isinstance(raw, bool) and isinstance(raw, (int, float)),
           "NONNUMERIC_VALUE")
-    number = float(raw)
+    number = float(cast(int | float, raw))
     _need(math.isfinite(number), "NONFINITE_VALUE")
     return number
 
@@ -114,11 +114,14 @@ def _encode_checkpoint(
         ],
     }
     # The source wire representation is JSON arrays, never Python tuples.
-    return json.loads(json.dumps(object_value, allow_nan=False))
+    return cast(dict[str, Any], json.loads(
+        json.dumps(object_value, allow_nan=False)
+    ))
 
 
 def _decode_checkpoint(raw: object) -> R11SevenMayakReplayCheckpoint:
     _need(isinstance(raw, dict), "CHECKPOINT_NOT_OBJECT")
+    raw = cast(dict[str, Any], raw)
     opt: list[R11OptionalMayakCursor] = []
     for item in raw["optional_cursors"]:
         books = tuple(R11MayakBookState(
@@ -207,7 +210,7 @@ def _engine_payload(engine: LiveMayakEngine) -> dict[str, Any]:
         ],
         "instrument_support": {
             product: (
-                sorted(engine.instrument_support[product])
+                sorted(engine.instrument_support[product] or ())
                 if engine.instrument_support[product] is not None else None
             )
             for product in ("spot", "linear")
@@ -245,6 +248,8 @@ def encode_r11_mayak_state(replay: R11MayakPublicationReplay) -> bytes:
         and replay.observations > 0,
         "REPLAY_NOT_CHECKPOINTABLE",
     )
+    assert replay.checkpoint is not None
+    assert replay.first_publication_at is not None
     payload = {
         "format_version": 1,
         "checkpoint": _encode_checkpoint(replay.checkpoint),
@@ -382,13 +387,17 @@ def decode_r11_mayak_state(
         )
         engine.tickers = state["tickers"]
         for symbol in _SEVEN:
-            engine.ticker_history[symbol] = _history(
-                state["ticker_history"][symbol],
-                width=2, limit=100_000,
+            engine.ticker_history[symbol] = cast(
+                deque[tuple[float, float]], _history(
+                    state["ticker_history"][symbol],
+                    width=2, limit=100_000,
+                ),
             )
-            engine.funding_history[symbol] = _history(
-                state["funding_history"][symbol],
-                width=2, limit=100_000,
+            engine.funding_history[symbol] = cast(
+                deque[tuple[float, float]], _history(
+                    state["funding_history"][symbol],
+                    width=2, limit=100_000,
+                ),
             )
         for market, symbol, value in state["books"]:
             _need(market in ("spot", "linear") and symbol in _SEVEN
@@ -474,7 +483,7 @@ def atomic_write_r11_mayak_state(path: Path, binary: bytes) -> None:
         prefix=".r11-mayak-", suffix=".tmp", dir=str(path.parent),
     )
     try:
-        os.fchmod(fd, 0o600)
+        os.chmod(temp, 0o600)
         with os.fdopen(fd, "wb") as stream:
             stream.write(binary)
             stream.flush()
