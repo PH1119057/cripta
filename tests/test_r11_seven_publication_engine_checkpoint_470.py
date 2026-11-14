@@ -10,7 +10,8 @@ import pytest
 
 from bybit_workbench.mayak.native_trade_replay_parity import R11ReplayCursor
 from bybit_workbench.mayak.optional_original_event_parity import (
-    R11MayakBookState, R11OptionalMayakCursor,
+    R11MayakBookState,
+    R11OptionalMayakCursor,
 )
 from bybit_workbench.mayak.seven_publication_engine_checkpoint import (
     R11MayakStateUnverified,
