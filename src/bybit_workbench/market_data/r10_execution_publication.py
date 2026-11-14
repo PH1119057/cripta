@@ -191,7 +191,9 @@ def read_r10_execution_quote(
         source_session_id=pin.source_session_id,
         producer_release_commit=pin.producer_release_commit,
         as_of_second=pin.as_of_second,
-        field_times=field_times,  # type: ignore[arg-type]
+        field_times=(
+            field_times[0], field_times[1], field_times[2],
+        ),
     )
 
 
@@ -227,6 +229,10 @@ def read_r10_exact_r1_causal_snapshot(
         or pin.source_session_id != quote.source_session_id
         or pin.producer_release_commit != quote.producer_release_commit
         or len(candles) != 240
+        or not isinstance(pin.closed_refs, dict)
+        or not isinstance(pin.closed_refs.get("5"), dict)
+        or _utc(pin.closed_refs["5"].get("closed_at"))
+        != candles[-1].closed_at
         or any(not bar.is_closed or bar.timeframe != "5" for bar in candles)
     ):
         raise R10ExecutionPublicationUnavailable(
