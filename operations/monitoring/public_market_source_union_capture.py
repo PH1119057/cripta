@@ -526,6 +526,22 @@ def run_source_union(
 ) -> None:
     """Exact stage-scoped source; all PG writes remain in one native process."""
     r11_original_enabled = r11_optional_original_frames_enabled()
+    r11_anchor_symbols = tuple(sorted({
+        item.symbol for item in union.requirements
+        if item.consumer_id == "MAYAK_REFERENCE"
+    }))
+    if r11_anchor_symbols and (
+        r11_anchor_symbols != _R11_REFERENCE_ANCHORS
+        or not r11_original_enabled or not publish_seconds or closed_only
+        or any(
+            item.symbol in r11_anchor_symbols
+            and (item.consumer_id != "MAYAK_REFERENCE" or item.required)
+            for item in union.requirements
+        )
+    ):
+        raise SourceManifestInvalid(
+            "R11_ANCHOR_REQUIREMENTS_OR_CAPTURE_UNVERIFIED"
+        )
     if r11_original_enabled:
         if closed_only:
             raise SourceManifestInvalid(
@@ -1043,10 +1059,14 @@ def run_source_union(
                 topic = str(item.get("topic") or "")
                 if product == "LINEAR" and topic.startswith("publicTrade."):
                     symbol = topic.split(".", 1)[1]
-                    if symbol in p90_symbols:
+                    # The canonical LINEAR original tape may also hold
+                    # BTC/ETH observational anchor trades; actual trading
+                    # consumers still request only the P90 five symbols.
+                    native_scope = frozenset((*p90_symbols, *r11_anchor_symbols))
+                    if symbol in native_scope:
                         frame_index += 1
                         facts = native.decode_native_trades(
-                            item, symbols=frozenset(p90_symbols),
+                            item, symbols=native_scope,
                             release=producer_release_commit,
                         )
                         native._persist_frame(
@@ -1361,7 +1381,7 @@ def run_source_union(
                     publish_market_source_second(
                         connection, source_session_id=session,
                         producer_release_commit=producer_release_commit,
-                        symbols=p90_symbols,
+                        symbols=tuple((*p90_symbols, *r11_anchor_symbols)),
                         timeframes=intervals or ("1", "5", "15"),
                         public_requirements=public_requirements,
                         original_optional_transport_epochs=(
