@@ -12,6 +12,7 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from bybit_workbench.mayak.native_trade_publication_reader import (
     R11OriginalNativePage,
@@ -80,6 +81,10 @@ def _require(condition: bool, reason: str) -> None:
 
 
 def _finite_float(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(
+        value, (str, int, float, Decimal),
+    ):
+        raise R11TradeReplayUnverified("R11_MAYAK_REPLAY_FLOAT_INVALID")
     try:
         numeric = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
