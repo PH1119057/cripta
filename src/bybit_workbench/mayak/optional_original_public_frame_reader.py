@@ -89,6 +89,7 @@ def read_r11_optional_original_frame_page(
     after_frame: int = 0,
     after_digest: str | None = None,
     max_frames: int = _PAGE_LIMIT,
+    through_frame: int | None = None,
 ) -> R11OriginalFramePage:
     """Fetch exact canonical original-frame rows without invented continuity.
 
@@ -105,6 +106,10 @@ def read_r11_optional_original_frame_page(
         and product_category in ("SPOT", "LINEAR")
         and type(after_frame) is int and after_frame >= 0
         and type(max_frames) is int and 1 <= max_frames <= _PAGE_LIMIT
+        and (
+            through_frame is None
+            or (type(through_frame) is int and through_frame >= after_frame)
+        )
         and (
             (after_frame == 0 and after_digest is None)
             or (
@@ -151,7 +156,12 @@ def read_r11_optional_original_frame_page(
             anchor == (after_digest,),
             "CURSOR_HASH_OR_TRANSPORT_EPOCH_NOT_FOUND",
         )
-    rows = connection.execute(
+    # The bounded read variant cannot consume frames committed AFTER the
+    # immutable MarketPublication's pinned source cursor.
+    upper_filter = (
+        " AND source_frame_number<=%s" if through_frame is not None else ""
+    )
+    sql = (
         """SELECT source_session_id,transport_epoch_id,market_source_id,
                   venue_id,instrument_id,product_category,external_symbol,
                   fact_family,source_topic,source_frame_number,frame_type,
@@ -160,11 +170,18 @@ def read_r11_optional_original_frame_page(
                   frame_content_sha256,producer_release_commit
              FROM analytics.public_source_original_event_frames
             WHERE source_session_id=%s AND transport_epoch_id=%s
-              AND product_category=%s AND source_frame_number>%s
-            ORDER BY source_frame_number LIMIT %s""",
+              AND product_category=%s AND source_frame_number>%s"""
+        + upper_filter
+        + " ORDER BY source_frame_number LIMIT %s"
+    )
+    params: tuple[object, ...] = (
         (source_session_id, transport_epoch_id, product_category,
-         after_frame, max_frames + 1),
-    ).fetchall()
+         after_frame, max_frames + 1)
+        if through_frame is None
+        else (source_session_id, transport_epoch_id, product_category,
+              after_frame, through_frame, max_frames + 1)
+    )
+    rows = connection.execute(sql, params).fetchall()
     _need(isinstance(rows, list) and len(rows) <= max_frames + 1,
           "ORIGINAL_FRAME_PAGE_BUDGET_INVALID")
     more = len(rows) > max_frames
