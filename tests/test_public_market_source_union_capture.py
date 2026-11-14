@@ -587,9 +587,18 @@ def test_r04_optional_spot_failure_does_not_gap_required_linear(
         for state, reason in progress
     )
     assert quality_rows
-    assert all(event.product == "SPOT"
-               or failure_mode == "bad_linear_book"
-               for event in quality_rows)
+    assert all(
+        event.product == "SPOT"
+        or event.reason == "PUBLIC_LINEAR_SUBSCRIPTIONS_ACKED"
+        or failure_mode == "bad_linear_book"
+        for event in quality_rows
+    )
+    linear_ack = tuple(
+        event for event in quality_rows
+        if event.reason == "PUBLIC_LINEAR_SUBSCRIPTIONS_ACKED"
+    )
+    assert len(linear_ack) == 1
+    assert linear_ack[0].quality == "RECOVERING"
     assert any(
         event.quality in ("GAP", "NO_DATA", "UNKNOWN")
         for event in quality_rows

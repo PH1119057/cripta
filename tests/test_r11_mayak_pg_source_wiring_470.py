@@ -56,6 +56,8 @@ def test_pg_source_has_no_socket_rest_or_exchange_side_effects() -> None:
     assert "api.bybit" not in source
     assert "run_r11_pg_observation" in source
     assert "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY" in source
+    assert "require_provider_continuity=True" in source
+    assert "replay.require_provider_continuity = True" in source
     assert "source_mode == \"PG_PUBLICATION\"" in Path(
         mayak_v2.__file__
     ).read_text(encoding="utf-8")

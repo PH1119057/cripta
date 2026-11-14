@@ -14,6 +14,9 @@ from bybit_workbench.mayak.core.live import LiveMayakEngine
 from bybit_workbench.mayak.optional_original_event_parity import (
     R11OptionalMayakReplayUnverified,
 )
+from bybit_workbench.mayak.provider_continuity import (
+    r11_provider_continuity_proof_matches,
+)
 from bybit_workbench.mayak.publication_rest_parity import (
     R11MayakRestPublicationUnverified,
     apply_r11_mayak_rest_candidates_offline,
@@ -57,6 +60,7 @@ class R11MayakPublicationReplay:
     last_original_event_at: float | None = None
     failed: bool = False
     observations: int = 0
+    require_provider_continuity: bool = False
 
     def apply(
         self, candidate: R11SevenMayakObservationCandidate, *,
@@ -85,13 +89,29 @@ class R11MayakPublicationReplay:
         self, candidate: R11SevenMayakObservationCandidate, *,
         now: datetime,
     ) -> dict[str, Any]:
+        proof = candidate.provider_continuity_proof
+        continuity_ok = (
+            candidate.provider_continuity_verified is False
+            and proof is None
+            if not self.require_provider_continuity
+            else (
+                candidate.provider_continuity_verified is True
+                and r11_provider_continuity_proof_matches(
+                    proof,
+                    publication_id=candidate.publication_id,
+                    source_session_id=candidate.source_session_id,
+                    release_commit=candidate.release_commit,
+                    as_of_second=candidate.as_of_second,
+                )
+            )
+        )
         _need(
             isinstance(candidate, R11SevenMayakObservationCandidate)
             and isinstance(now, datetime)
             and now.tzinfo is not None
             and now.utcoffset() == timedelta(0)
             and candidate.physical_source_refs_verified is True
-            and candidate.provider_continuity_verified is False
+            and continuity_ok
             and candidate.durable_cursor_and_warmup_verified is False
             and candidate.dispatcher_seven_coin_parity_verified is False
             and candidate.mayak_cutover_ready is False
@@ -219,7 +239,9 @@ class R11MayakPublicationReplay:
             "warmup_seconds_observed": max(0, elapsed),
             "warmup_time_sufficient": elapsed >= 7200,
             "book_snapshot_coverage_sufficient": complete_books,
-            "source_transport_continuity_verified": False,
+            "source_transport_continuity_verified": (
+                self.require_provider_continuity
+            ),
             "durable_restart_verified": False,
             "dispatcher_runtime_parity_verified": False,
             "consumer_ready": False,
@@ -233,7 +255,9 @@ class R11MayakPublicationReplay:
         handoff["provenance"]["r11_source_session_id"] = (
             candidate.source_session_id
         )
-        handoff["provenance"]["r11_source_continuity_verified"] = False
+        handoff["provenance"]["r11_source_continuity_verified"] = (
+            self.require_provider_continuity
+        )
         handoff["provenance"]["r11_consumer_ready"] = False
         _need(
             all(

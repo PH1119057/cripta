@@ -94,6 +94,8 @@ class R11OptionalMayakEvent:
     bids: tuple[tuple[float, float], ...] = ()
     asks: tuple[tuple[float, float], ...] = ()
     ticker_updates: tuple[tuple[str, float], ...] = ()
+    received_at: datetime | None = None
+    frame_type: str = ""
 
     def apply_offline(self, engine: LiveMayakEngine) -> None:
         """Call actual MAYAK formulas in disposable parity/replay tests only."""
@@ -429,6 +431,7 @@ def project_r11_optional_mayak_page(
                     source_fact_index=index,
                     source_sequence=fact.exchange_sequence, exec_id=fact.exec_id,
                     side=cast(str, side), price=price, quantity=size,
+                    received_at=frame.received_at, frame_type=frame.frame_type,
                 ))
             elif frame.fact_family == "ORDERBOOK_50":
                 _need(fact.kind == "BOOK", "BOOK_CODEC_KIND_MISMATCH")
@@ -440,6 +443,7 @@ def project_r11_optional_mayak_page(
                     source_fact_index=index,
                     source_sequence=fact.exchange_sequence, exec_id=fact.exec_id,
                     bids=book.bids[:50], asks=book.asks[:50],
+                    received_at=frame.received_at, frame_type=frame.frame_type,
                 ))
             elif frame.fact_family == "TICKER":
                 _need(
@@ -461,6 +465,7 @@ def project_r11_optional_mayak_page(
                     source_fact_index=index,
                     source_sequence=fact.exchange_sequence, exec_id=fact.exec_id,
                     ticker_updates=updates,
+                    received_at=frame.received_at, frame_type=frame.frame_type,
                 ))
             elif frame.fact_family == "LIQUIDATION":
                 _need(
@@ -481,6 +486,7 @@ def project_r11_optional_mayak_page(
                     source_sequence=fact.exchange_sequence, exec_id=fact.exec_id,
                     side=cast(str, side),
                     price=price, quantity=size,
+                    received_at=frame.received_at, frame_type=frame.frame_type,
                 ))
             else:
                 raise R11OptionalMayakReplayUnverified(

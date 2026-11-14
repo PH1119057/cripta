@@ -30,6 +30,12 @@ from bybit_workbench.mayak.pinned_original_publication_page import (
     R11PinnedMayakPublicationUnverified,
     read_r11_pinned_mayak_optional_page,
 )
+from bybit_workbench.mayak.provider_continuity import (
+    R11ProviderContinuityProof,
+    R11ProviderObservation,
+    r11_provider_continuity_proof_matches,
+    read_r11_provider_continuity_for_candidate,
+)
 from bybit_workbench.mayak.publication_rest_parity import (
     R11MayakRestCandidate,
     R11MayakRestPublicationUnverified,
@@ -86,6 +92,7 @@ class R11SevenMayakObservationCandidate:
     durable_cursor_and_warmup_verified: bool = False
     dispatcher_seven_coin_parity_verified: bool = False
     mayak_cutover_ready: bool = False
+    provider_continuity_proof: R11ProviderContinuityProof | None = None
 
     def checkpoint(self) -> R11SevenMayakReplayCheckpoint:
         """Carry only exact source positions; does not certify WARMUP."""
@@ -111,6 +118,7 @@ def collect_r11_seven_mayak_candidate(
     publication_id: int,
     observed_at: datetime,
     previous: R11SevenMayakReplayCheckpoint | None = None,
+    require_provider_continuity: bool = False,
 ) -> R11SevenMayakObservationCandidate:
     """Bounded full source transaction; caller owns RR READ ONLY.
 
@@ -120,6 +128,7 @@ def collect_r11_seven_mayak_candidate(
     """
     _need(
         type(publication_id) is int and publication_id > 0
+        and type(require_provider_continuity) is bool
         and isinstance(observed_at, datetime)
         and observed_at.tzinfo is not None
         and observed_at.utcoffset() == timedelta(0),
@@ -164,6 +173,7 @@ def collect_r11_seven_mayak_candidate(
     release: str | None = None
     published: datetime | None = None
     epochs: dict[str, str] = {}
+    transport_witnesses: list[R11ProviderObservation] = []
     source_backlog = False
     previous_optional = (
         {row.product_category: row for row in previous.optional_cursors}
@@ -215,6 +225,20 @@ def collect_r11_seven_mayak_candidate(
                 originals.extend(result.batch.events)
                 state = result.batch.cursor
                 if not result.batch.has_more_pages:
+                    if require_provider_continuity:
+                        _need(
+                            isinstance(
+                                result.pinned_frame_received_at, datetime,
+                            ),
+                            "TRANSPORT_WITNESS_CLOCK_MISSING",
+                        )
+                        assert result.pinned_frame_received_at is not None
+                        transport_witnesses.append(R11ProviderObservation(
+                            transport_epoch_id=result.transport_epoch_id,
+                            product=product, topic="*", symbol="",
+                            observed_at=result.pinned_frame_received_at,
+                            kind="TRANSPORT_FRAME",
+                        ))
                     option_states.append(state)
                     break
             else:
@@ -282,6 +306,29 @@ def collect_r11_seven_mayak_candidate(
             "R11_SEVEN_MAYAK_SOURCE_READ_FAILED"
         ) from exc
     assert session is not None and release is not None and published is not None
+    continuity: R11ProviderContinuityProof | None = None
+    if require_provider_continuity:
+        continuity = read_r11_provider_continuity_for_candidate(
+            connection,
+            publication_id=publication_id,
+            source_session_id=session,
+            release_commit=release,
+            as_of_second=published,
+            transport_epochs=epochs,
+            transport_witnesses=tuple(transport_witnesses),
+            optional_events=tuple(originals),
+            rest_facts=rest,
+        )
+        _need(
+            r11_provider_continuity_proof_matches(
+                continuity,
+                publication_id=publication_id,
+                source_session_id=session,
+                release_commit=release,
+                as_of_second=published,
+            ),
+            "PROVIDER_CONTINUITY_NOT_PROVEN",
+        )
     return R11SevenMayakObservationCandidate(
         publication_id=publication_id,
         source_session_id=session, release_commit=release,
@@ -293,6 +340,8 @@ def collect_r11_seven_mayak_candidate(
         native_cursors=tuple(native_states),
         read_after_checkpoint=previous,
         has_more_source_pages=source_backlog,
+        provider_continuity_verified=continuity is not None,
+        provider_continuity_proof=continuity,
     )
 
 

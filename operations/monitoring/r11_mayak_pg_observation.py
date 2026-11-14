@@ -89,6 +89,7 @@ def _read_one(
     candidate = collect_r11_seven_mayak_candidate(
         db, publication_id=latest[0], observed_at=now,
         previous=replay.checkpoint,
+        require_provider_continuity=True,
     )
     _need(
         0 <= (now-candidate.as_of_second).total_seconds()
@@ -96,8 +97,8 @@ def _read_one(
         "PUBLICATION_STALE",
     )
     snapshot = replay.apply(candidate, now=now)
-    # The PG read is original and causally source-pinned but this does NOT
-    # prove upstream transport continuity or Dispatcher acceptance.
+    # Provider continuity is proven per scope, but WARMUP, durable consumer
+    # commit and Dispatcher acceptance remain independent gates.
     _need(
         snapshot["r11_market_publication"]["consumer_ready"] is False
         and snapshot["r11_market_publication"][
@@ -144,7 +145,7 @@ def run_r11_pg_observation(collector: Collector) -> None:
         and not saved.is_symlink(),
         "STATE_CHECKPOINT_PATH_INVALID",
     )
-    replay = R11MayakPublicationReplay()
+    replay = R11MayakPublicationReplay(require_provider_continuity=True)
     if saved.exists():
         binary = saved.read_bytes()
         with psycopg.connect(
@@ -158,6 +159,7 @@ def run_r11_pg_observation(collector: Collector) -> None:
                 binary, expected_source_session_id=source_session,
                 expected_release_commit=release,
             )
+            replay.require_provider_continuity = True
     last_saved_minute: datetime | None = None
     while not collector.stop.wait(1.0):
         now = datetime.now(UTC)
