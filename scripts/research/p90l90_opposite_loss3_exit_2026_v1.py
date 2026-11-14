@@ -1,0 +1,392 @@
+#!/usr/bin/env python3
+"""Research-only P90L90 2026 opposite-position loss>=3% Exit, Issue #690.
+
+Purpose: two independent LONG and SHORT books on same native tick sequence.
+At new Entry, only when already-open opposite book is at <=-3.00% gross
+unrealized drawdown, replace RAW L5-3 dynamic TP with frozen hypothetical
+original -10% hardstop price of opposite position, and switch TRAIL to
+activation +1.20%, distance 1.00pp. Nonqualifying Entry unchanged.
+No future hardstop identification, no combined one-way book, no LIVE.
+
+FS contract: writer cripta uid107 gid109, interpreter /usr/bin/python3 -I.
+Read-only source imports from the GitHub-main synchronized operational mirror;
+read-only archived native 29d/90d ticks, frozen geometry and research ledgers.
+The only writes are under the isolated
+/data/cripta/jobs/running/C2-R690-X26-*/bundle job spool, which the
+independent cripta-job-runner relocates to completed/failed. No database,
+system disk research output, Exchange, runtime, deploy, LIVE, branch reset,
+source mirror write or service mutation. No deletes or external rename.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import heapq
+import json
+import os
+import pathlib
+import sys
+import time
+from collections import Counter
+from decimal import Decimal as D
+
+SOURCE = pathlib.Path("/srv/cripta/source_checkout")
+sys.path.insert(0, str(SOURCE))
+
+from scripts.research import p90l90_exit_90d_v2 as base
+from scripts.research import p90l90_portfolio_pause_v1 as ninety
+from scripts.research import p90l90_entry_only_hardstop_embargo_v1 as embargo
+from scripts.research import p90l90_29d_exit_replay_v1 as sep
+
+RESEARCH = "P90L90_OPPOSITE_LOSS3_INDEPENDENT_2026_V1"
+SIDES = ("LONG_ONLY", "SHORT_ONLY")
+COINS = ("LTCUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT", "INJUSDT")
+CAPS_H = (None, "OPP3")
+PHASES = ("ALL", "NEG")
+JOB_ID = os.environ.get("CRIPTA_JOB_ID", "")
+ROOT = pathlib.Path.cwd().resolve()
+ORIGINAL_ON_TRADE = base.on_trade
+ORIGINAL_INIT = base.initial_position
+ORIGINAL_TP_ELIGIBILITY = base.take_profit_eligible
+
+def digest(path: pathlib.Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1048576), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+def cap_label(cap: int | None) -> str:
+    return "NO_CAP" if cap is None else "OPP3"
+
+
+def special_on_trade(pos, px: D, seq: int, bucket: int, candidate_tp, kind):
+    """Only flagged positions get fixed counterposition TP and +1.2/-1.0 trail."""
+    if not getattr(pos, "_r690_special", False):
+        return ORIGINAL_ON_TRADE(pos, px, seq, bucket, candidate_tp, kind)
+    if seq <= pos.entry_seq:
+        return pos, None
+    if base.hits_stop(pos.side, px, pos.stop):
+        return None, ("PROTECTED_STOP" if pos.protected else "HARD_STOP", px, False)
+    if pos.tp is not None and seq > pos.tp_live_after_seq and base.hits_tp(pos.side, px, pos.tp):
+        return None, ("RESTING_TP", pos.tp, True)
+    # Freeze target for this position. Ignore later raw L5-3 repositions.
+    pos.state_bucket = bucket
+    fav = base.favorable(pos.side, pos.entry, px)
+    if fav > pos.best_favorable:
+        pos.best_favorable = fav
+    if pos.best_favorable >= D("1.2"):
+        proposed = base.threshold_price(pos.side, pos.entry, pos.best_favorable - D("1.0"))
+        if (proposed > pos.stop if pos.side == "LONG" else proposed < pos.stop):
+            pos.stop = proposed
+            pos.protected = True
+            pos.protection_seq = seq
+    return pos, None
+
+
+class TimeBook(embargo.EntryEmbargo):
+    """Independent Entry/Exit/SECOND48 book. Two-stage tick loop coordinates books."""
+
+    def __init__(self, cap, phase):
+        super().__init__(2, 48)
+        self.cap = cap
+        self.phase = phase
+        self.special_entries = []
+        self.special_ids = set()
+
+    def handle(self, symbol, timestamp, seq, price, candidates, state,
+               opponent=None):
+        if (base.on_trade is not ORIGINAL_ON_TRADE
+                or base.initial_position is not ORIGINAL_INIT
+                or base.take_profit_eligible is not ORIGINAL_TP_ELIGIBILITY):
+            raise RuntimeError("unexpected shared Exit callback mutation")
+        pending = None
+        opponent_pnl = None
+        if self.cap == "OPP3" and opponent is not None:
+            opponent_pnl = base.favorable(opponent.side, opponent.entry, price)
+            if opponent_pnl <= D("-3"):
+                pending = base.threshold_price(opponent.side, opponent.entry, D("-10"))
+                if base.favorable("LONG" if opponent.side == "SHORT" else "SHORT",
+                                  price, pending) <= D(0):
+                    raise ValueError("invalid nonfavorable opponent hardstop TP")
+
+        made = None
+        def with_initial(event, source_seq, bucket, cohort, kind):
+            nonlocal made
+            p = ORIGINAL_INIT(event, source_seq, bucket, cohort, kind)
+            made = p
+            if pending is not None:
+                if p.side == opponent.side:
+                    raise ValueError("opposite-book side does not match new Entry")
+                p._r690_special = True
+                p.tp = pending
+                p.tp_live_after_seq = source_seq
+                self.special_ids.add(p.entry_event_id)
+                self.special_entries.append({
+                    "entry_event_id": p.entry_event_id,
+                    "entry_ts": repr(timestamp),
+                    "entry_price": str(p.entry),
+                    "symbol": symbol, "side": p.side,
+                    "opponent_entry_event_id": opponent.entry_event_id,
+                    "opponent_entry_price": str(opponent.entry),
+                    "opponent_unrealized_gross_pct": str(opponent_pnl),
+                    "target_price": str(pending),
+                })
+            return p
+
+        def with_eligibility(side, entry, target):
+            if made is not None and getattr(made, "_r690_special", False):
+                return False  # original L5-3 TP must not overwrite fixed target
+            return ORIGINAL_TP_ELIGIBILITY(side, entry, target)
+
+        base.initial_position = with_initial
+        base.take_profit_eligible = with_eligibility
+        base.on_trade = special_on_trade
+        try:
+            return super().handle(symbol, timestamp, seq, price, candidates, state)
+        finally:
+            base.initial_position = ORIGINAL_INIT
+            base.take_profit_eligible = ORIGINAL_TP_ELIGIBILITY
+            base.on_trade = ORIGINAL_ON_TRADE
+
+
+def preflight(period: str, phase: str) -> pathlib.Path:
+    if period not in ("29d", "90d") or phase not in PHASES:
+        raise ValueError("unsupported research period or phase")
+    if os.geteuid() != 107 or os.getegid() != 109:
+        raise PermissionError("actual actor must be cripta uid107 gid109")
+    prefix = "C2-R646-H29-" if period == "29d" else "C2-R646-H90-"
+    if not JOB_ID.startswith("C2-R690-X26-"):
+        raise RuntimeError("wrong durable job identity")
+    expected = pathlib.Path("/data/cripta/jobs/running") / JOB_ID / "bundle"
+    if ROOT != expected or ROOT.is_symlink() or not ROOT.is_dir():
+        raise PermissionError("research worker is outside exact job spool")
+    if ROOT.stat().st_uid != 107 or not os.access(ROOT, os.W_OK | os.X_OK):
+        raise PermissionError("job output path inaccessible to cripta")
+    if os.statvfs(ROOT).f_bavail * os.statvfs(ROOT).f_frsize < 5 * 2**30:
+        raise RuntimeError("research data disk below 5 GiB reserve")
+    source = ROOT / "source_snapshot" / "p90l90_opposite_loss3_exit_2026_v1.py"
+    if (not source.is_file() or source.is_symlink()
+            or source.resolve() != pathlib.Path(__file__).resolve()):
+        raise RuntimeError("unverified frozen research driver")
+    if (ROOT / period).exists():
+        raise FileExistsError("immutable result directory collision")
+    if base.take_profit_eligible is not ORIGINAL_TP_ELIGIBILITY:
+        raise RuntimeError("structural TP eligibility was modified")
+    if base.on_trade is not ORIGINAL_ON_TRADE:
+        raise RuntimeError("baseline Exit callback was modified")
+    return source
+
+def inputs(period: str):
+    if period == "29d":
+        data = {s: sep.read_inputs(s) for s in COINS}
+        streams = {s: sep.native_ticks(data[s]) for s in COINS}
+        start, end = sep.entry.START_TS, sep.entry.END_TS
+    else:
+        data = {s: ninety.inputs(s, ninety.RAW_DEFAULT,
+                                ninety.FROZEN_DEFAULT) for s in COINS}
+        streams = {s: ninety.ticks(data[s]) for s in COINS}
+        start, end = ninety.START_TS, ninety.END_TS
+    refjob = "C2-R635-TP29-FULL2" if period == "29d" else "C2-R635-TP90-FULL2"
+    refroot = pathlib.Path("/data/cripta/jobs/completed") / refjob / "bundle" / period
+    refmanifest = json.loads((refroot / "result.json").read_text())
+    if refmanifest["baseline_050_exact_ledger_parity"] is not True:
+        raise RuntimeError("baseline independent source QC missing")
+    original = refmanifest.get("scenarios", refmanifest.get("books"))
+    references = {}
+    for side in SIDES:
+        path = refroot / f"{side.lower()}_floor0p50.jsonl"
+        if digest(path) != original[side + "|0.50"]["ledger_sha256"]:
+            raise ValueError("original 0.50 structural TP ledger SHA mismatch")
+        references[side] = [json.loads(z) for z in path.open() if z.strip()]
+    return data, streams, start, end, references, refjob
+
+def run(period: str, phase: str, smoke_hours: int) -> dict:
+    src = preflight(period, phase)
+    data, streams, start, end, references, refjob = inputs(period)
+    until = min(end, start + smoke_hours * 3600) if smoke_hours else end
+    books = {(side, cap): TimeBook(cap, phase)
+             for side in SIDES for cap in CAPS_H}
+    assert len(books) == 4 and len(set(map(id, books.values()))) == 4
+    heap = []
+    for priority, coin in enumerate(COINS):
+        tick = next(streams[coin], None)
+        if tick is None:
+            raise ValueError("missing native Bybit stream " + coin)
+        heapq.heappush(heap, (tick[0], priority, tick))
+
+    total_ticks = 0
+    last_day = None
+    began = time.monotonic()
+    heartbeat = began
+    while heap:
+        t, priority, (_, seq, price, trade_id) = heapq.heappop(heap)
+        if t >= until:
+            break
+        coin = COINS[priority]
+        candidates = data[coin]["events"].get(seq, ())
+        state = data[coin]["states"].get(int(t // 300) * 300)
+        by_side = {
+            side: tuple(e for e in candidates if e["side"] == side.split("_")[0])
+            for side in SIDES
+        }
+        for variant in CAPS_H:
+            # Exact same native record: settle BOTH already-open sides first.
+            before = {}
+            just_closed = {}
+            for side in SIDES:
+                book = books[(side, variant)]
+                before[side] = book.pos[coin] is not None
+                if before[side]:
+                    book.handle(coin, t, seq, price, (), state)
+                just_closed[side] = before[side] and book.pos[coin] is None
+            # Snapshot opposing positions after pre-existing exits and before
+            # any new Entry on this record. Never use a newly opened same-tick.
+            snapshot = {side: books[(side, variant)].pos[coin] for side in SIDES}
+            for side, other in (("LONG_ONLY", "SHORT_ONLY"),
+                                ("SHORT_ONLY", "LONG_ONLY")):
+                selected = by_side[side]
+                if not selected:
+                    continue
+                book = books[(side, variant)]
+                if just_closed[side] or book.pos[coin] is not None:
+                    # Avoid replaying Exit twice on same print; protection
+                    # first established this print cannot fill immediately.
+                    n = sum(bool(e["PREV7D"]) for e in selected)
+                    book.count["qualified_candidate"] += n
+                    book.count["busy_or_same_tick"] += n
+                else:
+                    book.handle(coin, t, seq, price, selected, state,
+                                opponent=snapshot[other])
+        total_ticks += 1
+        utc_day = int(t // 86400)
+        if utc_day != last_day:
+            last_day = utc_day
+            print(json.dumps({"phase": "DAY", "period": period, "mode": phase,
+                "utc_day_epoch": utc_day, "native_ticks": total_ticks,
+                "seconds_elapsed": round(time.monotonic() - began, 1)}),
+                flush=True)
+        if time.monotonic() - heartbeat >= 25:
+            print(json.dumps({"phase": "HEARTBEAT", "period": period,
+                "mode": phase, "native_ticks": total_ticks,
+                "seconds_elapsed": round(time.monotonic() - began, 1)}),
+                flush=True)
+            heartbeat = time.monotonic()
+        nxt = next(streams[coin], None)
+        if nxt is not None:
+            heapq.heappush(heap, (nxt[0], priority, nxt))
+
+    if (base.on_trade is not ORIGINAL_ON_TRADE
+            or base.initial_position is not ORIGINAL_INIT
+            or base.take_profit_eligible is not ORIGINAL_TP_ELIGIBILITY):
+        raise RuntimeError("Exit function was not restored")
+
+    if smoke_hours:
+        return {"status": "SMOKE_PASS_NO_WRITES", "period": period,
+                "phase": phase, "native_ticks": total_ticks,
+                "scenarios": len(books)}
+
+    # The exact NO_CAP legacy structural-TP books must reproduce 2 original
+    # 2026 fee-inclusive ledgers byte-for-byte at the record level.
+    for side in SIDES:
+        produced = books[(side, None)].trades
+        if produced != references[side]:
+            raise RuntimeError("NO_CAP exact ledger parity failed " + period
+                               + " " + side + " expected=" + str(len(references[side]))
+                               + " got=" + str(len(produced)))
+    print(json.dumps({"phase": "NO_CAP_PARITY_PASS", "period": period,
+        "long_trades": len(books[("LONG_ONLY", None)].trades),
+        "short_trades": len(books[("SHORT_ONLY", None)].trades)}),
+        flush=True)
+
+    result = {
+        "research": RESEARCH, "status": "RESEARCH_INTERNAL_QC_PASS",
+        "period": period, "phase": phase, "job_id": JOB_ID,
+        "original_reference_job": refjob,
+        "original_raw_l53_dynamic_tp": True,
+        "special_requires_opposite_open_loss_pct_at_most": "-3.00",
+        "special_tp": "opponent fixed original gross -10% stop price",
+        "special_trail": "activation +1.20%, distance 1.00pp",
+        "gross_tp_eligibility_pct": "0.50",
+        "fixed_percentage_take_profit": False,
+        "notional_usdt_per_entry": "10",
+        "exit_execution": ("causal two-book snapshot after pre-existing Exit; "
+                           "at new Entry only if opponent marked <= -3% gross "
+                           "TP frozen at opponent original -10% hardstop; "
+                           "special trail +1.20%/1.00pp; otherwise unchanged"),
+
+        "source_sha256": digest(src), "exit_cases": [cap_label(v) for v in CAPS_H],
+        "native_ticks": total_ticks, "baseline_exact_ledger_parity": True,
+        "scenarios": {}, "unmodeled": [
+            "bid_ask_spread", "slippage", "funding", "latency", "real_exchange_fills"],
+    }
+    output = ROOT / period
+    output.mkdir(mode=0o770)
+    for (side, cap), book in books.items():
+        summary = book.finish()
+        trades = book.trades
+        if summary["counts"]["closed"] != len(trades):
+            raise ValueError("closed trade count mismatch")
+        amount = sum((D(row["net_usdt"]) for row in trades), D(0))
+        if amount != D(summary["money"]["net_usdt"]):
+            raise ValueError("scenario PnL parity failed")
+        if summary["counts"]["accepted"] != (
+                len(trades) + summary["counts"]["censored_open"]):
+            raise ValueError("scenario position accounting failed")
+        label = side + "|" + cap_label(cap)
+        file = output / (side.lower() + "_" + cap_label(cap).lower() + ".jsonl")
+        with file.open("x", encoding="utf-8") as fd:
+            for row in trades:
+                fd.write(json.dumps(row, sort_keys=True,
+                                    separators=(",", ":")) + "\n")
+            fd.flush()
+            os.fsync(fd.fileno())
+        orig = books[(side, None)]
+        orig_ids = {r["candidate_event_id"] for r in orig.trades}
+        orig_ids.update(x["entry_event_id"] for x in orig.finish()["censored"])
+        own_ids = {r["candidate_event_id"] for r in trades}
+        own_ids.update(x["entry_event_id"] for x in summary["censored"])
+        result["scenarios"][label] = {
+            "counts": summary["counts"], "money": summary["money"],
+            "net_after_fees_usdt": str(amount),
+            "ledger_sha256": digest(file),
+            "extra_entries_not_in_uncapped": len(own_ids - orig_ids),
+            "missing_original_entries": len(orig_ids - own_ids),
+            "extra_hardstops_from_new_entries": sum(
+                r["exit_reason"] == "HARD_STOP"
+                and r["candidate_event_id"] not in orig_ids for r in trades),
+            "special_entries": book.special_entries,
+            "special_count": len(book.special_entries),
+            "special_closed": sum(
+                r["candidate_event_id"] in book.special_ids for r in trades),
+            "net_taker_taker_same_fill_proxy_usdt": str(
+                sum((D(r["gross_usdt"]) - D(r["entry_fee_usdt"]) -
+                     (base.NOMINAL * D(r["exit_price"]) / D(r["entry_price"]) *
+                      base.TAKER).quantize(base.MONEY_QUANTUM)
+                     for r in trades), D(0))),
+            "censored": summary["censored"],
+        }
+    with (output / "result.json").open("x", encoding="utf-8") as fd:
+        json.dump(result, fd, indent=2, sort_keys=True, ensure_ascii=False)
+        fd.write("\n")
+        fd.flush()
+        os.fsync(fd.fileno())
+    return {"status": result["status"], "period": period, "phase": phase,
+            "native_ticks": total_ticks,
+            "scenarios": len(result["scenarios"]),
+            "control_parity": True,
+            "result_path": str(output / "result.json")}
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--period", choices=("29d", "90d"), required=True)
+    parser.add_argument("--phase", choices=PHASES, required=True)
+    parser.add_argument("--smoke-hours", type=int, default=0)
+    args = parser.parse_args()
+    if not 0 <= args.smoke_hours <= 2:
+        raise ValueError("smoke must be 0..2 source hours")
+    print(json.dumps(run(args.period, args.phase, args.smoke_hours),
+                     sort_keys=True), flush=True)
+
+if __name__ == "__main__":
+    main()
