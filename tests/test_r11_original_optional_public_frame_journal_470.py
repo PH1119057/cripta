@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from bybit_workbench.market_data.public_source_event_codec import (
+    PublicSourceFrameInvalid,
     decode_bybit_public_frame,
 )
 from bybit_workbench.market_data.r11_optional_original_frame_journal import (
@@ -154,7 +155,6 @@ def test_five_symbol_optional_public_frame_preserves_original_facts(
         }
     if family == "ORDERBOOK_50":
         payload = frame.decoded_original_facts[0]["payload"]
-        assert payload["source_sequence"] if False else True
         assert frame.decoded_original_facts[0]["exchange_sequence"] == 911
         assert payload["update_id"] == 17
         assert payload["bids"][0] == ["100", "2"]
@@ -177,47 +177,28 @@ def test_canonical_json_hash_is_stable_when_provider_key_order_changes() -> None
 
 
 @pytest.mark.parametrize(
-    "change,reason",
+    "field,bad",
     [
-        (
-            lambda f: replace(f, source_session_id="bad"),
-            "SOURCE_FRAME_IDENTITY",
-        ),
-        (
-            lambda f: replace(f, transport_epoch_id="bad"),
-            "SOURCE_FRAME_IDENTITY",
-        ),
-        (
-            lambda f: replace(f, producer_release_commit="no-sha"),
-            "SOURCE_FRAME_IDENTITY",
-        ),
-        (
-            lambda f: replace(f, source_frame_number=0),
-            "SOURCE_FRAME_IDENTITY",
-        ),
+        ("source_session", "bad"),
+        ("transport_epoch", "bad"),
+        ("commit", "no-sha"),
+        ("number", 0),
     ],
 )
 def test_new_frame_builder_rejects_bad_session_epoch_release_or_number(
-    change, reason: str,
+    field: str, bad,
 ) -> None:
-    base = {
-        "source_session_id": SESSION,
-        "transport_epoch_id": EPOCH,
-        "producer_release_commit": COMMIT,
-        "source_frame_number": 1,
+    kwargs = {
+        "source_session": SESSION,
+        "transport_epoch": EPOCH,
+        "commit": COMMIT,
+        "number": 1,
     }
-    # The builder, not the resulting dataclass, is the authority to encode.
-    altered = change(type("BuildInput", (), base)())
-    kwargs = dict(base)
-    for key in base:
-        kwargs[key] = getattr(altered, key)
-    with pytest.raises(R11OriginalFrameUnavailable, match=reason):
-        build(
-            source_session=kwargs["source_session_id"],
-            transport_epoch=kwargs["transport_epoch_id"],
-            commit=kwargs["producer_release_commit"],
-            number=kwargs["source_frame_number"],
-        )
+    kwargs[field] = bad
+    with pytest.raises(
+        R11OriginalFrameUnavailable, match="SOURCE_FRAME_IDENTITY",
+    ):
+        build(**kwargs)
 
 
 @pytest.mark.parametrize(
@@ -233,7 +214,7 @@ def test_missing_or_duplicate_original_scope_never_creates_second_tape(
 ) -> None:
     frame = bybit_frame(family, product)
     with pytest.raises(
-        (R11OriginalFrameUnavailable, ValueError),
+        (R11OriginalFrameUnavailable, PublicSourceFrameInvalid),
     ):
         build(family, product=product, message=frame)
 
