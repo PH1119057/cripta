@@ -9,6 +9,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from bybit_workbench.dispatcher_v2.builders import (
+    build_coin_market_context,
+    build_global_market_context,
+)
+from bybit_workbench.mayak.context_records import (
+    coin_market_context_records,
+    shared_market_context_record,
+)
 from bybit_workbench.mayak.native_trade_replay_parity import (
     R11MayakTradeInput,
     R11ReplayCursor,
@@ -18,14 +26,6 @@ from bybit_workbench.mayak.optional_original_event_parity import (
 )
 from bybit_workbench.mayak.publication_rest_parity import (
     R11MayakRestCandidate,
-)
-from bybit_workbench.dispatcher_v2.builders import (
-    build_coin_market_context,
-    build_global_market_context,
-)
-from bybit_workbench.mayak.context_records import (
-    coin_market_context_records,
-    shared_market_context_record,
 )
 from bybit_workbench.mayak.seven_publication_engine_checkpoint import (
     decode_r11_mayak_state,
