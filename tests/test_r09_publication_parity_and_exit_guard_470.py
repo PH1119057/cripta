@@ -177,7 +177,7 @@ def test_r09_reader_uses_separate_repeatable_read_read_only_pg_snapshot(
         return source_candidate()
 
     monkeypatch.setattr(real_exit, "read_r09_native_publication_postfill", reader)
-    real_exit.require_r09_original_postfill_source_parity(
+    verified = real_exit.require_r09_original_postfill_source_parity(
         position=SimpleNamespace(),
         source_epoch_id="epoch",
         source_commit="c" * 40,
@@ -185,6 +185,15 @@ def test_r09_reader_uses_separate_repeatable_read_read_only_pg_snapshot(
         broker_window=source_broker(),
         observed_at=AT,
     )
+    assert verified.position_id == "POS-r09"
+    assert verified.complete_native_window is True
+    assert verified.no_new_native_trade_rest_verified is False
+    assert verified.last_native_price == source_candidate().last_native_price
+    assert verified.best_favorable_price == (
+        source_candidate().observed_favorable_price
+    )
+    assert verified.source_refs == source_candidate().source_refs
+    assert verified.covered_through == source_broker().covered_through
     assert source_db.closed is True
     assert source_db.commands == [
         "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
@@ -238,6 +247,7 @@ def test_r09_enforce_requires_source_fence_before_signed_private_exit() -> None:
         < main.index("private_client = P90PrivateProofClient(")
     )
     assert 'R09_PARITY_MODE == "REQUIRE"' in main
+    assert "coverage = require_r09_original_postfill_source_parity(" in main
     assert 'R09_PARITY_MODE = os.environ.get(' in runtime
     assert '"DISABLED"' in runtime
     assert "ORDER" not in Path(
