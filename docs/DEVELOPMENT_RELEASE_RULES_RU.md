@@ -850,6 +850,21 @@ SYSTEMD_SANDBOX, DB_ROLE, EXPECTED_OWNER/GROUP/MODE/ACL, PREFLIGHT_COMMAND`;
 не доказывает Unix write permission. Успешный read-only smoke
 не считается разрешением на mutation.
 
+### 19.5.1 Долгие research jobs не привязываются к вызову SentinelX
+
+SentinelX управляет краткими допустимыми preflight, job submit и status
+запросами. Research/replay/OOS/long compute выполняется автономным
+**долговечным server job** через существующий approved research intake/runner
+либо отдельно утверждённый systemd service/job rail. Не держать тяжёлый
+расчёт в длительном `sentinel_exec`/tool call: отключение/restart агента
+или другой чат не должны завершать вычисление.
+
+До запуска доказать exact actor/path/ACL/service sandbox, approved supervision,
+параметры/source SHA, ID, logs/checkpoints/heartbeat/result manifest.
+Tool timeout/disconnect = UNKNOWN до server PID/job/manifest reconciliation,
+не новый автоматический запуск. Действующие tool-policy, writes и owner
+approval не расширяются. Detailed owner: RESEARCH_COMPUTE §8.1.
+
 ## 19.6 Ошибки tool access — обязательная классификация, не server permission
 
 Для каждого отказа фиксировать: точную операцию, actor, exit/returncode, исходное сообщение, достигла ли команда host, и `CHECKED HERE` либо `NOT CHECKED HERE`. Не говорить «SentinelX не дал доступ», если фактически ошибку вернул защитный уровень OpenAI.
