@@ -1,7 +1,6 @@
 """#470 R11 Stage 4: bounded publication backlog/restart semantics."""
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
