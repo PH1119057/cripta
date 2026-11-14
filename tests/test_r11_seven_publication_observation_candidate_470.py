@@ -220,3 +220,63 @@ def test_missing_or_mixed_input_fails_before_cutover(
         stage.collect_r11_seven_mayak_candidate(
             db, publication_id=42, observed_at=at,
         )
+
+
+def test_offline_replay_preserves_seven_coin_mayak_dispatcher_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_all(monkeypatch)
+    candidate = stage.collect_r11_seven_mayak_candidate(
+        ReadOnlyPG(), publication_id=42, observed_at=NOW,
+    )
+    snapshot = stage.replay_r11_seven_candidate_offline(
+        candidate, now=NOW,
+    )
+    assert set(snapshot["coins"]) == set(SEVEN)
+    assert snapshot["btc"] == snapshot["coins"]["BTCUSDT"]
+    assert snapshot["eth"] == snapshot["coins"]["ETHUSDT"]
+    assert snapshot["money_breadth"]["spot_coverage"]["total"] == 7
+    assert snapshot["money_breadth"]["derivatives_coverage"]["total"] == 7
+    assert len(snapshot["dispatcher_handoff"]["instrument_lineage"]) == 7
+    assert "btc.state" in snapshot["dispatcher_handoff"][
+        "dispatcher_features"
+    ]
+    assert "eth.state" in snapshot["dispatcher_handoff"][
+        "dispatcher_features"
+    ]
+    assert snapshot["dispatcher_handoff"]["provenance"][
+        "config_fingerprint"
+    ] == snapshot["config_fingerprint"]
+    assert all(
+        not row["connected"] for row in snapshot["transport"].values()
+    )
+
+
+@pytest.mark.parametrize("change", [
+    "false_ready", "source_continuity", "missing_coin",
+    "mixed_publication", "old_clock",
+])
+def test_offline_projection_rejects_forged_readiness_and_incomplete_panel(
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+) -> None:
+    mock_all(monkeypatch)
+    candidate = stage.collect_r11_seven_mayak_candidate(
+        ReadOnlyPG(), publication_id=42, observed_at=NOW,
+    )
+    at = NOW
+    if change == "false_ready":
+        candidate = replace(candidate, mayak_cutover_ready=True)
+    elif change == "source_continuity":
+        candidate = replace(candidate, provider_continuity_verified=True)
+    elif change == "missing_coin":
+        candidate = replace(candidate, rest_facts=candidate.rest_facts[:-1])
+    elif change == "mixed_publication":
+        candidate = replace(candidate, rest_facts=(
+            replace(candidate.rest_facts[0], publication_id=43),
+            *candidate.rest_facts[1:],
+        ))
+    elif change == "old_clock":
+        at = NOW + timedelta(seconds=31)
+    with pytest.raises(stage.R11SevenMayakCollectionUnverified):
+        stage.replay_r11_seven_candidate_offline(candidate, now=at)
