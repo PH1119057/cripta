@@ -77,6 +77,7 @@ class R11SevenMayakObservationCandidate:
     rest_facts: tuple[R11MayakRestCandidate, ...]
     optional_cursors: tuple[R11OptionalMayakCursor, ...]
     native_cursors: tuple[R11ReplayCursor, ...]
+    read_after_checkpoint: R11SevenMayakReplayCheckpoint | None = None
     has_more_source_pages: bool = False
     # Every event is physically publication-pinned; no REST fallback.
     physical_source_refs_verified: bool = True
@@ -290,6 +291,7 @@ def collect_r11_seven_mayak_candidate(
         rest_facts=rest,
         optional_cursors=tuple(option_states),
         native_cursors=tuple(native_states),
+        read_after_checkpoint=previous,
         has_more_source_pages=source_backlog,
     )
 
