@@ -131,8 +131,19 @@ def _r11_optional_frame_preflight(
         raise SourceManifestInvalid("R11_ORIGINAL_FRAME_ROLE_GRANTS_INVALID")
 
 
+_R11_REFERENCE_ANCHORS = ("BTCUSDT", "ETHUSDT")
+_R11_MAYAK_REQUIREMENTS = frozenset((
+    ("SPOT", "PUBLIC_TRADE"), ("SPOT", "ORDERBOOK_50"),
+    ("SPOT", "INSTRUMENT_INFO"),
+    ("LINEAR", "PUBLIC_TRADE"), ("LINEAR", "ORDERBOOK_50"),
+    ("LINEAR", "TICKER"), ("LINEAR", "LIQUIDATION"),
+    ("LINEAR", "ACCOUNT_RATIO"), ("LINEAR", "INSTRUMENT_INFO"),
+))
+
+
 def parse_explicit_source_manifest(
     manifest: str, *, native_symbols: tuple[str, ...],
+    mayak_reference_symbols: tuple[str, ...] = (),
 ) -> PublicFeedUnion:
     """No guessed topic list; the operator must publish exact source consumers."""
     if not manifest or len(manifest) > 300000:
@@ -152,11 +163,42 @@ def parse_explicit_source_manifest(
     # reviewed native producer symbol set. Different SPOT/LINEAR products
     # of the SAME symbol remain valid; no new symbol can be silently
     # subscribed or REST-polled by an optional consumer requirement.
-    approved = frozenset(native_symbols)
-    if not approved or len(approved) != len(native_symbols):
+    # The two explicit MAYAK anchors are NOT trading symbols. This exact
+    # opt-in keeps R01-R10 native/Entry/Exit/Execution consumers five-only.
+    if mayak_reference_symbols not in ((), _R11_REFERENCE_ANCHORS):
+        raise SourceManifestInvalid("R11_MAYAK_ANCHOR_UNIVERSE_INVALID")
+    approved_native = frozenset(native_symbols)
+    anchor_set = frozenset(mayak_reference_symbols)
+    if (not approved_native or len(approved_native) != len(native_symbols)
+            or approved_native & anchor_set):
         raise SourceManifestInvalid("SOURCE_NATIVE_SYMBOL_SCOPE_INVALID")
+    approved = approved_native | anchor_set
     if any(item.symbol not in approved for item in required):
-        raise SourceManifestInvalid("SOURCE_OUTSIDE_ACTIVE_TRADING_UNIVERSE")
+        raise SourceManifestInvalid("SOURCE_OUTSIDE_APPROVED_UNIVERSE")
+    reference_rows = [
+        item for item in required if item.symbol in anchor_set
+    ]
+    if mayak_reference_symbols:
+        if (
+            len(reference_rows) != 18
+            or any(item.consumer_id != "MAYAK_REFERENCE" or item.required
+                   or item.timeframe or item.lookback_bars
+                   for item in reference_rows)
+            or any(
+                frozenset((item.product, item.dataset)
+                          for item in reference_rows
+                          if item.symbol == symbol)
+                != _R11_MAYAK_REQUIREMENTS
+                or len([item for item in reference_rows
+                        if item.symbol == symbol]) != 9
+                for symbol in mayak_reference_symbols
+            )
+        ):
+            raise SourceManifestInvalid(
+                "R11_MAYAK_ANCHOR_REQUIRED_FEEDS_INVALID"
+            )
+    elif any(item.consumer_id == "MAYAK_REFERENCE" for item in required):
+        raise SourceManifestInvalid("R11_MAYAK_ANCHORS_NOT_ENABLED")
     feeds = union_public_feed_requirements(required)
     # Only the explicitly validated LINEAR one-minute forming adapter is
     # implemented. Confirmed SPOT closed bars use the *same canonical*
