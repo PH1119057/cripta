@@ -274,7 +274,8 @@ def test_publication_feature_gaps_cannot_be_promoted_to_parity(
 def test_r11_adapter_cannot_start_network_or_mutate_strategy() -> None:
     code = Path("src/bybit_workbench/mayak/source_publication_parity.py").read_text()
     assert "urllib" not in code
-    assert "websocket" not in code.lower()
+    assert "import websocket" not in code
+    assert "websocket.create_connection" not in code
     assert "psycopg.connect" not in code
     assert "ready_to_replace_mayak_websockets" in code
     assert "original_spot_and_linear_trade_replay_verified: bool = False" in code
