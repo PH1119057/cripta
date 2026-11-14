@@ -393,20 +393,20 @@ def run(phase: str, pilot_days: int) -> dict:
             "net_after_fees_usdt": str(net),
             "wallet_delta_includes_open_entry_fees": summary[
                 "wallet_change_includes_open_entry_fees_usdt"],
-            "censored": summary["open_censored"],
+
             "ledger_sha256": digest(file),
             "special_entries": book.special_entries,
             "special_count": len(book.special_entries),
             "special_closed": sum(
                 r["candidate_event_id"] in book.special_ids
                 for r in book.trades),
-            "net_taker_taker_same_fill_proxy_usdt": str(sum(
+            "net_taker_taker_same_fill_proxy_usdt": str(sum([
                 (D(r["gross_usdt"]) - D(r["entry_fee_usdt"]) -
                  old.money(D(r["notional_usdt"]) *
                            D(r["exit_price"]) / D(r["entry_price"]) *
                            old.TAKER))
                 for r in book.trades
-            , D(0))),
+            ], D(0))),
             "censored": summary["open_censored"],
         }
     final = {
