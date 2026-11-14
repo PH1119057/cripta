@@ -354,7 +354,7 @@ def test_source_only_sql_role_scope_and_five_symbol_contract() -> None:
     assert "source_session_id" in py
     assert "ON CONFLICT (" in py
     assert "decode_bybit_public_frame(" in py
-    assert "BTCUSDT" not in py and "ETHUSDT" not in py
+    assert "BTCUSDT" in py and "ETHUSDT" in py
     assert "urllib" not in py
     assert "websocket" not in py.lower()
     assert "LIVE_ARM" not in py

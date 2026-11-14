@@ -1,11 +1,11 @@
 """R11 MAYAK feature parity *candidate*, not an event-replay/consumer cutover.
 
-The canonical R01-R05 public MarketSource has EXACT FIVE symbols; MAYAK has
-SEVEN (BTC and ETH are reference anchors). These facts cannot be merged by
+The owner-approved R11 source can add BTC/ETH solely as MAYAK anchors, while
+P90 trading remains exactly five. These facts cannot be merged by
 pretending compact one-second trade sums, book top/bands or liquidations are
 the complete original per-event MAYAK inputs. This read-only adapter proves
 three important typed features from ONE immutable PostgreSQL publication;
-full seven-symbol source, original trade/BOOK-delta/liquidation replay,
+verified seven-symbol source, original trade/BOOK-delta/liquidation replay,
 account-ratio/instrument-info and live feature parity remain explicit gates.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ R11_MAYAK_PANEL = (
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
     "BTCUSDT", "ETHUSDT",
 )
-_R01_R05_CAPTURE = frozenset(R11_MAYAK_PANEL[:5])
+_MAYAK_SEVEN_CAPTURE = frozenset(R11_MAYAK_PANEL)
 _EPOCH = re.compile(r"^[0-9a-f]{32}$")
 _RELEASE = re.compile(r"^[0-9a-f]{40}$")
 _FIELD_TTL = timedelta(seconds=5)
@@ -202,14 +202,14 @@ def read_r11_mayak_feature_candidate(
     symbol: str,
     observed_at: datetime,
 ) -> R11MayakFeatureCandidate:
-    """READ ONLY current five-symbol projection; full seven-symbol cutover BLOCKED.
+    """READ ONLY seven-symbol candidate; full MAYAK cutover remains BLOCKED.
 
     A caller must hold one REPEATABLE READ READ ONLY PostgreSQL transaction.
     Even a valid candidate NEVER feeds LiveMayakEngine.on_trade/on_book, never
     asserts source continuity, and never authorizes removal of public WS.
     """
     now = _utc(observed_at, "NOW_NOT_UTC")
-    _need(symbol in _R01_R05_CAPTURE, "SYMBOL_OUTSIDE_FIVE_CAPTURE")
+    _need(symbol in _MAYAK_SEVEN_CAPTURE, "SYMBOL_OUTSIDE_MAYAK_SOURCE_SCOPE")
     _need(
         connection.execute("SHOW transaction_isolation").fetchone()
         == ("repeatable read",)

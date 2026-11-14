@@ -234,7 +234,7 @@ def test_gapped_session_and_silent_page_do_not_claim_no_trade() -> None:
         ), "PHYSICAL_IDENTITY"),
         (lambda db: db.physical_rows.__setitem__(
             0, tuple(
-                "BTCUSDT" if i == 6 else item
+                "XRPUSDT" if i == 6 else item
                 for i, item in enumerate(db.physical_rows[0])
             ),
         ), "PHYSICAL_IDENTITY"),

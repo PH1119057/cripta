@@ -71,6 +71,8 @@ _PUBLICATION_FLAG = os.environ.get("CRIPTA_SOURCE_PUBLICATION", "0")
 # enabling the union requires an exact operator-reviewed manifest on disk,
 # dedicated release preflight and one-producer identity verification.
 _UNION_CAPTURE_FLAG = os.environ.get("CRIPTA_SOURCE_UNION_CAPTURE", "0")
+# R11 BTC/ETH are MAYAK observational anchors only, never P90 signals.
+_R11_MAYAK_ANCHORS_FLAG = os.environ.get("CRIPTA_R11_MAYAK_ANCHORS", "0")
 _UNION_MANIFEST_FILE = os.environ.get("CRIPTA_SOURCE_UNION_MANIFEST_FILE", "")
 _KLINE_INTERVALS = frozenset(
     part.strip()
@@ -523,6 +525,14 @@ def main() -> int:
     symbols = _checked_symbols(_ALLOWED_SYMBOLS)
     capture_closed = _source_feature_enabled(_KLINE_CAPTURE_FLAG)
     capture_union = _source_feature_enabled(_UNION_CAPTURE_FLAG)
+    reference_anchors = _source_feature_enabled(_R11_MAYAK_ANCHORS_FLAG)
+    if reference_anchors and (
+        not capture_union or capture_closed
+        or not _source_feature_enabled(_PUBLICATION_FLAG)
+    ):
+        raise NativeSourceInputUnverified(
+            "R11_REFERENCES_REQUIRE_EXPLICIT_UNION_PUBLICATION"
+        )
     if capture_closed and capture_union:
         raise NativeSourceInputUnverified(
             "NATIVE_R03_CLOSED_ONLY_CANNOT_ENABLE_R04_UNION"
@@ -541,15 +551,23 @@ def main() -> int:
         from operations.monitoring.public_market_source_union_capture import (
             parse_explicit_source_manifest,
             r03_closed_only_feed_union,
+            r11_optional_original_frames_enabled,
         )
         manifest_path = Path(_UNION_MANIFEST_FILE)
         if not manifest_path.is_file() or manifest_path.is_symlink():
             raise NativeSourceInputUnverified(
                 "NATIVE_SOURCE_UNION_MANIFEST_NOT_REGULAR"
             )
+        if reference_anchors and not r11_optional_original_frames_enabled():
+            raise NativeSourceInputUnverified(
+                "R11_REFERENCES_REQUIRE_ORIGINAL_JOURNAL"
+            )
         full_union = parse_explicit_source_manifest(
             manifest_path.read_text(encoding="utf-8"),
             native_symbols=symbols,
+            mayak_reference_symbols=(
+                ("BTCUSDT", "ETHUSDT") if reference_anchors else ()
+            ),
         )
         union = (
             r03_closed_only_feed_union(full_union, native_symbols=symbols)

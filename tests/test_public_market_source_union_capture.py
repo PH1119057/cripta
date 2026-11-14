@@ -263,7 +263,7 @@ def test_extra_unapproved_symbol_never_enters_source_capture(
     extra["required"] = False  # Optional still must not subscribe/poll.
     rows.append(extra)
     with pytest.raises(
-        SourceManifestInvalid, match="SOURCE_OUTSIDE_ACTIVE_TRADING_UNIVERSE",
+        SourceManifestInvalid, match="SOURCE_OUTSIDE_APPROVED_UNIVERSE",
     ):
         parse_explicit_source_manifest(json.dumps(rows), native_symbols=P90)
 
