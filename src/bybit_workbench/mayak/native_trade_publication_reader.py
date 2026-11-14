@@ -1,6 +1,7 @@
 """R11: Original LINEAR publicTrade page, source-pinned to one PG publication.
 
-The approved five P90 symbols plus BTC/ETH MAYAK-only source anchors. No Bybit public REST/WS, no independent market
+Five P90 trading symbols plus BTC/ETH observational anchors. No public
+Bybit REST/WS, independent market
 writer, and no live MAYAK mutation. Page/cursor identity is independently
 verified; CATCH_UP is NOT source continuity, SPOT source parity or permission
 to retire MAYAK's seven-coin collector. A silent market can have zero rows.
