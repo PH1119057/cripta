@@ -236,6 +236,7 @@ def test_r1_public_rate_limit_maps_to_deferred_validity() -> None:
         "ExchangeMutationBarrier": MutationBarrier,
         "EntryValidityReadUnavailable": Deferred,
         "ExchangeReadUnavailable": Deferred,
+        "_r10_pg_publication_enabled": lambda: False,
         "api_get": lambda *_a, **_k: ({"result": {"list": [{"lastPrice": "1"}]}}, 0),
         "urllib": types.SimpleNamespace(parse=urllib.parse, request=request),
         "REST_URL": "https://invalid.example",
