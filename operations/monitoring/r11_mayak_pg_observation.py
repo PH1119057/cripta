@@ -14,8 +14,17 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
+from bybit_workbench.mayak.compact_analytics import (
+    compact_market_minute_insert_sql,
+    compact_market_minute_rows,
+)
+from bybit_workbench.mayak.context_records import (
+    coin_market_context_records,
+    shared_market_context_record,
+)
 from bybit_workbench.mayak.publication_consumer_commit import (
     R11ConsumerCommitUnverified,
     commit_r11_mayak_publication,
@@ -255,6 +264,212 @@ def _restore_or_reset_replay(
     )
 
 
+
+def _persist_mayak_dispatcher_outputs(
+    db: Any,
+    snapshot: dict[str, Any],
+    *,
+    symbols: tuple[str, ...],
+) -> int | None:
+    """Atomically publish one regular MAYAK minute for existing Dispatcher V2.
+
+    This is derived observational output only.  It never writes Dispatcher
+    tables directly: the existing Dispatcher runtime remains the sole owner of
+    dispatcher_v2 persistence and consumes the normal MAYAK context tables.
+    """
+    observed_raw = snapshot.get("observed_at")
+    _need(isinstance(observed_raw, str), "OUTPUT_OBSERVED_AT_INVALID")
+    try:
+        observed_at = datetime.fromisoformat(observed_raw)
+    except ValueError as exc:
+        raise R11MayakPGSourceUnavailable(
+            "R11_MAYAK_PG_OUTPUT_OBSERVED_AT_INVALID"
+        ) from exc
+    _need(
+        observed_at.utcoffset() is not None
+        and observed_at.utcoffset().total_seconds() == 0,
+        "OUTPUT_OBSERVED_AT_NOT_UTC",
+    )
+    status = snapshot.get("r11_market_publication")
+    handoff = snapshot.get("dispatcher_handoff")
+    coins = snapshot.get("coins")
+    _need(
+        isinstance(status, dict)
+        and status.get("source_mode") == "PG_ORIGINAL_REPLAY"
+        and status.get("consumer_ready") is False
+        and status.get("mayak_ws_retirement_allowed") is False
+        and status.get("trading_effect") == "NONE"
+        and isinstance(handoff, dict)
+        and handoff.get("provenance", {}).get("trading_command") is False
+        and isinstance(coins, dict)
+        and set(coins) == set(symbols),
+        "OUTPUT_FALSE_READY_OR_SCOPE",
+    )
+    minute = observed_at.replace(second=0, microsecond=0)
+    existing = db.execute(
+        """SELECT id FROM mayak_v2.snapshots
+             WHERE snapshot_kind='REGULAR' AND regular_minute=%s
+             FOR UPDATE""",
+        (minute,),
+    ).fetchone()
+    if existing is not None:
+        _need(
+            isinstance(existing, (tuple, list))
+            and len(existing) == 1
+            and type(existing[0]) is int
+            and existing[0] > 0,
+            "OUTPUT_EXISTING_SNAPSHOT_INVALID",
+        )
+        return None
+
+    previous = db.execute(
+        """SELECT state FROM mayak_v2.snapshots
+             WHERE snapshot_kind='REGULAR'
+               AND regular_minute IS NOT NULL
+               AND regular_minute < %s
+             ORDER BY regular_minute DESC LIMIT 1""",
+        (minute,),
+    ).fetchone()
+    previous_state = (
+        str(previous[0])
+        if isinstance(previous, (tuple, list)) and len(previous) == 1
+        else None
+    )
+    row = db.execute(
+        """INSERT INTO mayak_v2.snapshots(
+               observed_at,state,confidence,payload,engine_version,
+               snapshot_kind,regular_minute)
+           VALUES(%s,%s,%s,%s,%s,'REGULAR',%s)
+           RETURNING id""",
+        (
+            observed_at,
+            str(snapshot["state"]),
+            snapshot["confidence"],
+            Jsonb(snapshot),
+            str(snapshot["engine_version"]),
+            minute,
+        ),
+    ).fetchone()
+    _need(
+        isinstance(row, (tuple, list))
+        and len(row) == 1
+        and type(row[0]) is int
+        and row[0] > 0,
+        "OUTPUT_SNAPSHOT_INSERT_FAILED",
+    )
+    snapshot_id = int(row[0])
+
+    compact_rows = compact_market_minute_rows(snapshot_id, snapshot)
+    if compact_rows:
+        db.cursor().executemany(
+            compact_market_minute_insert_sql(),
+            compact_rows,
+        )
+
+    coin_records = coin_market_context_records(snapshot_id, snapshot)
+    if coin_records:
+        db.cursor().executemany(
+            """INSERT INTO mayak_v2.coin_market_contexts(
+                   coin_context_id,market_source_id,spot_instrument_id,
+                   linear_instrument_id,mayak_snapshot_id,observed_at,symbol,
+                   schema_version,engine_version,feature_version,
+                   config_fingerprint,data_quality,payload,provenance,content_hash)
+               VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               ON CONFLICT(coin_context_id) DO NOTHING""",
+            [
+                (
+                    item["coin_context_id"],
+                    item["market_source_id"],
+                    item["spot_instrument_id"],
+                    item["linear_instrument_id"],
+                    item["mayak_snapshot_id"],
+                    item["observed_at"],
+                    item["symbol"],
+                    item["schema_version"],
+                    item["engine_version"],
+                    item["feature_version"],
+                    item["config_fingerprint"],
+                    item["data_quality"],
+                    Jsonb(item["payload"]),
+                    Jsonb(item["provenance"]),
+                    item["content_hash"],
+                )
+                for item in coin_records
+            ],
+        )
+
+    data_quality = {
+        symbol: coin.get("quality", {})
+        for symbol, coin in coins.items()
+    }
+    db.execute(
+        """INSERT INTO mayak_v2.observation_journal(
+               snapshot_id,observed_at,market_state,confidence,reasons,
+               price_breadth,money_breadth,direction_synchronization,
+               btc_context,eth_context,data_quality,architecture_version,
+               engine_version,feature_version,config_fingerprint,
+               dispatcher_handoff)
+           VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           ON CONFLICT(snapshot_id) DO NOTHING""",
+        (
+            snapshot_id,
+            observed_at,
+            str(snapshot["state"]),
+            snapshot["confidence"],
+            Jsonb(snapshot["reasons"]),
+            Jsonb(snapshot["price_breadth"]),
+            Jsonb(snapshot["money_breadth"]),
+            Jsonb(snapshot["direction_synchronization"]),
+            Jsonb(snapshot.get("btc")),
+            Jsonb(snapshot.get("eth")),
+            Jsonb(data_quality),
+            snapshot["architecture_version"],
+            snapshot["engine_version"],
+            snapshot["feature_version"],
+            snapshot["config_fingerprint"],
+            Jsonb(handoff),
+        ),
+    )
+
+    shared = shared_market_context_record(snapshot_id, snapshot)
+    db.execute(
+        """INSERT INTO mayak_v2.shared_market_contexts(
+               market_context_id,market_source_id,mayak_snapshot_id,observed_at,
+               mayak_version,schema_version,config_fingerprint,data_quality,
+               payload,provenance,content_hash)
+           VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           ON CONFLICT(market_context_id) DO NOTHING""",
+        (
+            shared["market_context_id"],
+            shared["market_source_id"],
+            shared["mayak_snapshot_id"],
+            shared["observed_at"],
+            shared["mayak_version"],
+            shared["schema_version"],
+            shared["config_fingerprint"],
+            shared["data_quality"],
+            Jsonb(shared["payload"]),
+            Jsonb(shared["provenance"]),
+            shared["content_hash"],
+        ),
+    )
+    if str(snapshot["state"]) != previous_state:
+        db.execute(
+            """INSERT INTO mayak_v2.state_events(
+                   occurred_at,state,previous_state,confidence,reasons,snapshot_id)
+               VALUES(%s,%s,%s,%s,%s,%s)""",
+            (
+                observed_at,
+                str(snapshot["state"]),
+                previous_state,
+                snapshot["confidence"],
+                Jsonb(snapshot["reasons"]),
+                snapshot_id,
+            ),
+        )
+    return snapshot_id
+
+
 def run_r11_pg_observation(collector: Collector) -> None:
     """PG-only seven-symbol dry-run path; no new market collector sockets.
 
@@ -297,15 +512,25 @@ def run_r11_pg_observation(collector: Collector) -> None:
             if snapshot is None:
                 continue
             with psycopg.connect(DSN) as writer:
-                committed = commit_r11_mayak_publication(
-                    writer, replay=replay, snapshot=snapshot,
-                    expected_generation=generation,
-                    expected_previous_publication_id=previous_publication_id,
-                    expected_previous_source_session_id=(
-                        previous_source_session_id
-                    ),
-                    expected_previous_release_commit=previous_release_commit,
-                )
+                with writer.transaction():
+                    committed = commit_r11_mayak_publication(
+                        writer, replay=replay, snapshot=snapshot,
+                        expected_generation=generation,
+                        expected_previous_publication_id=(
+                            previous_publication_id
+                        ),
+                        expected_previous_source_session_id=(
+                            previous_source_session_id
+                        ),
+                        expected_previous_release_commit=(
+                            previous_release_commit
+                        ),
+                    )
+                    _persist_mayak_dispatcher_outputs(
+                        writer,
+                        committed.snapshot,
+                        symbols=collector.symbols,
+                    )
             generation = committed.generation
             previous_source_session_id = None
             previous_release_commit = None
