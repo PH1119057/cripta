@@ -278,6 +278,44 @@ def append_r11_original_optional_frame(
         and frame.mayak_event_replay_ready is False,
         "APPEND_CALLER_FRAME_INVALID",
     )
+    # Reverify a dataclass that may have been constructed, copied or
+    # modified outside the canonical codec before ANY PostgreSQL DML.
+    image = {
+        "session": frame.source_session_id,
+        "epoch": frame.transport_epoch_id,
+        "producer": frame.producer_release_commit,
+        "source": frame.market_source_id,
+        "instrument": frame.instrument_id,
+        "product": frame.product_category,
+        "symbol": frame.external_symbol,
+        "topic": frame.source_topic,
+        "frame": frame.source_frame_number,
+        "family": frame.fact_family,
+        "frame_type": frame.frame_type,
+        "frame_at": frame.provider_frame_at.isoformat(),
+        "received_at": frame.received_at.isoformat(),
+        "provider": frame.provider_frame,
+        "decoded_facts": list(frame.decoded_original_facts),
+    }
+    try:
+        expected_digest = hashlib.sha256(json.dumps(
+            image, ensure_ascii=True, sort_keys=True,
+            separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise R11OriginalFrameUnavailable(
+            "R11_ORIGINAL_FRAME_APPEND_JSON_INVALID"
+        ) from exc
+    _need(
+        expected_digest == frame.frame_content_sha256
+        and isinstance(frame.source_session_id, str)
+        and _EPOCH.fullmatch(frame.source_session_id) is not None
+        and isinstance(frame.transport_epoch_id, str)
+        and _EPOCH.fullmatch(frame.transport_epoch_id) is not None
+        and isinstance(frame.producer_release_commit, str)
+        and _RELEASE.fullmatch(frame.producer_release_commit) is not None,
+        "APPEND_DIGEST_OR_SOURCE_IDENTITY_INVALID",
+    )
     from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
 
     with connection.transaction():
