@@ -241,8 +241,31 @@ def replay_r11_seven_candidate_offline(
         and candidate.dispatcher_seven_coin_parity_verified is False
         and candidate.mayak_cutover_ready is False
         and tuple(row.symbol for row in candidate.rest_facts) == _SEVEN
+        and all(
+            row.publication_id == candidate.publication_id
+            and row.source_session_id == candidate.source_session_id
+            and row.release_commit == candidate.release_commit
+            and row.as_of == candidate.as_of_second
+            and row.physical_rest_proven
+            and not row.mayak_cutover_ready
+            for row in candidate.rest_facts
+        )
         and len(candidate.optional_cursors) == 2
         and len(candidate.native_cursors) == 7
+        and {row.product_category for row in candidate.optional_cursors}
+        == {"SPOT", "LINEAR"}
+        and all(
+            row.source_session_id == candidate.source_session_id
+            and row.producer_release_commit == candidate.release_commit
+            for row in candidate.optional_cursors
+        )
+        and {row.symbol for row in candidate.native_cursors} == set(_SEVEN)
+        and all(
+            row.source_session_id == candidate.source_session_id
+            and row.producer_release_commit == candidate.release_commit
+            and row.publication_id == candidate.publication_id
+            for row in candidate.native_cursors
+        )
         and isinstance(now, datetime)
         and now.tzinfo is not None
         and now.utcoffset() == timedelta(0)
