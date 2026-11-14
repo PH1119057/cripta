@@ -496,11 +496,14 @@ def atomic_write_r11_mayak_state(path: Path, binary: bytes) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temp, path)
-        directory_fd = os.open(str(path.parent), os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        # Unix production durability includes the containing directory.
+        # Windows CI cannot open directories with os.open for fsync.
+        if os.name == "posix":
+            directory_fd = os.open(str(path.parent), os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
     finally:
         if os.path.exists(temp):
             os.unlink(temp)
