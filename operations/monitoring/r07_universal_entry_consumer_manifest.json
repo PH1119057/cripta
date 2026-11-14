@@ -22,6 +22,8 @@
     "epoch_guard_sql": "operations/sql/20261114_r07_source_epoch_transaction_guard.sql (additive authorized postgres migration, source role grants unchanged)",
     "guard_lock_abi": "CRIPTA:R07:SOURCE_EPOCH_TRANSITION:V1:<market_source_id>, pg_catalog.hashtextextended(key,0); EXCLUSIVE pg_advisory_xact_lock in database source trigger, SHARED pg_try_advisory_xact_lock_shared in Consumer command transaction",
     "checkpoint_row_lock": "FOR SHARE OF cp only during final command/dispatch transaction, compatible with existing R06 checkpoint UPDATE role grants; early read is SELECT-only and cannot create financial permission",
+    "source_session_primary_identity": "source_session_id is immutable under the DB-side R07 BEFORE UPDATE trigger, alongside market_source_id; source epoch identity cannot silently change outside the guarded transition contract",
+    "pre_dispatch_expiry": "the atomic RESERVED->DISPATCHED capital reservation UPDATE checks pre_dispatch_expires_at against PostgreSQL clock_timestamp at command commit preparation; late expiry rolls back command and dispatch in the same transaction; legacy nullable reservations retain their previously defined behavior",
     "ddl_guard": "Consumer takes ROW EXCLUSIVE NOWAIT source-session table lock before trigger ABI proof; compatible with producer/other Consumer ROW EXCLUSIVE, blocks ALTER TABLE DISABLE TRIGGER DDL (SHARE ROW EXCLUSIVE). Existing runtime cripta INSERT/UPDATE grant from original source SQL is required; no source data UPDATE or new grants from Consumer."
   },
   "account_boundary": {
@@ -55,7 +57,8 @@
     "competing source GAP versus final command in both orders, with ordinary last_accepted_at journal updates and other MarketSource unaffected",
     "R06 checkpoint writer UPDATE cannot invalidate proof after the Consumer takes final FOR SHARE until command commit",
     "two account-scoped Consumers hold SHARED lock concurrently while writer epoch transition blocks; trigger disabling DDL cannot race after Consumer table ACCESS SHARE",
-    "concurrent DISABLE TRIGGER DDL is refused by ROW EXCLUSIVE NOWAIT proof transaction without blocking normal MarketSource last_accepted_at or MAIN/N SUB"
+    "concurrent DISABLE TRIGGER DDL is refused by ROW EXCLUSIVE NOWAIT proof transaction without blocking normal MarketSource last_accepted_at or MAIN/N SUB",
+    "native source_session_id primary-identity UPDATE is denied by installed PG16 guard; database-time reservation expiry blocks final DISPATCHED transition even when run_once now is stale"
   ],
   "release": {
     "source_branch": "core/r07-universal-entry-provenance-20261112",
