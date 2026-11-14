@@ -1040,19 +1040,24 @@ def test_two_account_ack_partial_cancel_and_restart_preserves_independent_ledger
         ).fetchone()[0] == 1
 
 
+@pytest.mark.parametrize("expired_after_snapshot", [False, True])
 def test_synthetic_accepted_request_dispatches_to_trade_command_without_exchange(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, expired_after_snapshot: bool,
 ) -> None:
     """Fast E2E of the exact pre-Exchange path that failed in production."""
     assert DSN is not None
     prefix = "synthetic-dispatch-" + uuid4().hex[:10]
     with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        db_now = connection.execute(
+            "SELECT clock_timestamp() AS checked_at"
+        ).fetchone()["checked_at"]
+        expires_at = db_now + timedelta(seconds=-1 if expired_after_snapshot else 30)
         ids = _seed(
             connection,
             prefix,
             symbol="LTCUSDT",
             reservation_state="RESERVED",
-            expires_at=NOW + timedelta(seconds=30),
+            expires_at=expires_at,
             permission=True,
         )
         _gate(connection, True)
@@ -1105,6 +1110,26 @@ def test_synthetic_accepted_request_dispatches_to_trade_command_without_exchange
             "prepare_runtime_entry_command",
             lambda *_args, **_kwargs: prepared,
         )
+
+        if expired_after_snapshot:
+            # run_once's captured NOW was valid; PostgreSQL clock has already
+            # passed the reservation deadline by the final atomic UPDATE.
+            # No queued command or dispatch may survive its rollback.
+            with pytest.raises(RuntimeError, match="expired at dispatch"):
+                _run_once_for_fixture_account(
+                    connection, ids["trading_account_id"],
+                )
+            connection.rollback()
+            assert connection.execute(
+                "SELECT count(*) AS n FROM runtime.trade_commands WHERE command_id=%s",
+                (ids["command_id"],),
+            ).fetchone()["n"] == 0
+            assert connection.execute(
+                "SELECT count(*) AS n FROM strategy_entry.execution_dispatches "
+                "WHERE execution_request_id=%s",
+                (ids["execution_request_id"],),
+            ).fetchone()["n"] == 0
+            return
 
         result = _run_once_for_fixture_account(
             connection,
