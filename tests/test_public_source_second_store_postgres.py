@@ -7,15 +7,16 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import psycopg
 import pytest
 
+from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
 )
-from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.public_forming_minute_source import (
     persist_forming_minute_fact,
 )
