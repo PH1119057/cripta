@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+import bybit_workbench.mayak.pinned_original_publication_page as pinned
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.mayak.optional_original_event_parity import (
     R11OptionalMayakBatch,
@@ -15,7 +16,6 @@ from bybit_workbench.mayak.pinned_original_publication_page import (
     R11PinnedMayakPublicationUnverified,
     read_r11_pinned_mayak_optional_page,
 )
-import bybit_workbench.mayak.pinned_original_publication_page as pinned
 
 SESSION = "a" * 32
 EPOCH = "b" * 32
@@ -36,7 +36,7 @@ class DB:
     def __init__(self) -> None:
         self.isolation = "repeatable read"
         self.read_only = "on"
-        self.refs: dict[str, object] = {
+        self.refs: dict[str, dict[str, object]] = {
             "SPOT": {
                 "source_session_id": SESSION,
                 "transport_epoch_id": EPOCH,
