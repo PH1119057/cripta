@@ -30,7 +30,7 @@ from bybit_workbench.market_data.public_source_event_codec import (
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 
 Family = Literal["SPOT_TRADE", "ORDERBOOK_50", "TICKER", "LIQUIDATION"]
-_FIVE = frozenset((
+_SEVEN = frozenset((
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
     "BTCUSDT", "ETHUSDT",
 ))
@@ -140,7 +140,7 @@ def make_r11_original_optional_frame(
     first = facts[0]
     _need(
         isinstance(first, PublicSourceFact)
-        and first.symbol in _FIVE
+        and first.symbol in _SEVEN
         and isinstance(product, str)
         and (product, first.kind) in _ALLOWED
         and first.product == product
