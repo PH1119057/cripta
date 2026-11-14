@@ -285,8 +285,9 @@ def replay_r11_seven_candidate_offline(
         and snapshot.get("config_fingerprint")
         == engine.configuration_fingerprint()
         and isinstance(snapshot.get("dispatcher_handoff"), dict)
-        and snapshot["dispatcher_handoff"].get("config_fingerprint")
-        == snapshot["config_fingerprint"]
+        and snapshot["dispatcher_handoff"].get(
+            "provenance", {}
+        ).get("config_fingerprint") == snapshot["config_fingerprint"]
         and all(
             not bool(row.get("connected"))
             for row in engine.transport.values()
