@@ -119,13 +119,16 @@ def _pin(
     ).fetchone()
     if row is None:
         raise ExitPublicationUnavailable("R08_PUBLICATION_MISSING")
-    pid, pub_epoch, pub_commit, as_of, status, closed, c_quality, compact, t_quality = row
+    (
+        pid, pub_epoch, pub_commit, as_of, status,
+        closed, c_quality, compact, t_quality,
+    ) = row
     published = _utc(as_of, "R08_PUBLICATION_CLOCK_INVALID")
     if (
         type(pid) is not int or pid < 1
         or pub_epoch != epoch or pub_commit != commit
         or status != "WATERMARKS_ONLY"
-        or published.second < 0 or published.microsecond
+        or published.microsecond
         or not timedelta(0) <= now - published <= _PUBLICATION_MAX_AGE
         or any(not isinstance(obj, dict) for obj in (
             closed, c_quality, compact, t_quality,
@@ -196,7 +199,9 @@ def read_exit_l53_candles(
             through=close_at, required=_L53_REQUIRED_BARS,
         )
     except (RuntimeError, ValueError) as exc:
-        raise ExitPublicationUnavailable("R08_CLOSED_240_BAR_HISTORY_UNVERIFIED") from exc
+        raise ExitPublicationUnavailable(
+            "R08_CLOSED_240_BAR_HISTORY_UNVERIFIED"
+        ) from exc
     return candles, pin
 
 
