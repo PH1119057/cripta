@@ -195,13 +195,21 @@ def _decode_checkpoint(raw: object) -> R11SevenMayakReplayCheckpoint:
     return decoded
 
 
-def _engine_payload(engine: LiveMayakEngine) -> dict[str, Any]:
+def _engine_payload(
+    engine: LiveMayakEngine, *, verified_transport: bool,
+) -> dict[str, Any]:
     _need(
         isinstance(engine, LiveMayakEngine)
         and engine.symbols == _SEVEN
-        and all(not row.get("connected") for row in engine.transport.values()),
-        "ENGINE_SCOPE_OR_FALSE_CONNECTIVITY",
+        and (
+            verified_transport
+            or all(not row.get("connected")
+                   for row in engine.transport.values())
+        ),
+        "ENGINE_SCOPE_OR_UNVERIFIED_CONNECTIVITY",
     )
+    # Transport continuity is re-proven from the current publication after a
+    # restart.  It is intentionally not serialized with the causal windows.
     return {
         "fingerprint": engine.configuration_fingerprint(),
         "trades": {
@@ -263,7 +271,19 @@ def encode_r11_mayak_state(replay: R11MayakPublicationReplay) -> bytes:
         "first_publication_at": replay.first_publication_at.isoformat(),
         "last_original_event_at": replay.last_original_event_at,
         "observations": replay.observations,
-        "engine": _engine_payload(replay.engine),
+        "engine": _engine_payload(
+            replay.engine,
+            verified_transport=(
+                replay.require_provider_continuity
+                and replay.warmup_proof is not None
+                and len(replay.continuity_starts) == 42
+                and replay.checkpoint is not None
+                and replay.warmup_proof.publication_id
+                == replay.checkpoint.publication_id
+                and replay.warmup_proof.source_session_id
+                == replay.checkpoint.source_session_id
+            ),
+        ),
         "consumer_ready": False,
         "mayak_ws_retirement_allowed": False,
     }

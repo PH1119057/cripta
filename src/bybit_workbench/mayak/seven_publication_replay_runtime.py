@@ -10,6 +10,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from bybit_workbench.mayak.causal_warmup import (
+    ContinuityKey,
+    R11CausalWarmupProof,
+    R11CausalWarmupUnverified,
+    evaluate_r11_causal_warmup,
+    reconcile_r11_engine_continuity,
+)
 from bybit_workbench.mayak.core.live import LiveMayakEngine
 from bybit_workbench.mayak.optional_original_event_parity import (
     R11OptionalMayakReplayUnverified,
@@ -61,6 +68,10 @@ class R11MayakPublicationReplay:
     failed: bool = False
     observations: int = 0
     require_provider_continuity: bool = False
+    continuity_starts: dict[ContinuityKey, datetime] = field(
+        default_factory=dict,
+    )
+    warmup_proof: R11CausalWarmupProof | None = None
 
     def apply(
         self, candidate: R11SevenMayakObservationCandidate, *,
@@ -80,6 +91,7 @@ class R11MayakPublicationReplay:
             R11SevenMayakCollectionUnverified,
             R11MayakRestPublicationUnverified,
             R11OptionalMayakReplayUnverified,
+            R11CausalWarmupUnverified,
             TypeError, ValueError, OverflowError,
         ):
             self.failed = True
@@ -162,6 +174,13 @@ class R11MayakPublicationReplay:
             ),
             "SOURCE_LINEAGE_DRIFT",
         )
+        if self.require_provider_continuity:
+            assert proof is not None
+            self.continuity_starts = reconcile_r11_engine_continuity(
+                self.engine,
+                proof=proof,
+                previous_starts=self.continuity_starts,
+            )
         original_events: list[tuple[float, int, int, Any]] = []
         for index, event in enumerate(candidate.optional_events):
             _need(
@@ -226,6 +245,21 @@ class R11MayakPublicationReplay:
             books_by_product.get(product) == set(_SYMBOLS)
             for product in ("SPOT", "LINEAR")
         )
+        warmup: R11CausalWarmupProof | None = None
+        if self.require_provider_continuity:
+            assert proof is not None
+            warmup = evaluate_r11_causal_warmup(
+                self.engine, provider_proof=proof,
+                snapshot=snapshot, now=now,
+            )
+            self.warmup_proof = warmup
+        minimum_continuity = (
+            min(
+                row.continuous_seconds for row in warmup.scopes
+                if row.required_seconds > 0
+            )
+            if warmup is not None else max(0, elapsed)
+        )
         # Elapsed time and book snapshots are necessary but NOT sufficient:
         # disconnects/transport coverage and persisted restart continuity
         # require an independent current-source proof.
@@ -236,9 +270,26 @@ class R11MayakPublicationReplay:
             "as_of_second": candidate.as_of_second.isoformat(),
             "source_mode": "PG_ORIGINAL_REPLAY",
             "observational_symbols": list(_SYMBOLS),
-            "warmup_seconds_observed": max(0, elapsed),
-            "warmup_time_sufficient": elapsed >= 7200,
-            "book_snapshot_coverage_sufficient": complete_books,
+            "warmup_seconds_observed": minimum_continuity,
+            "warmup_time_sufficient": (
+                warmup.causal_warmup_verified
+                if warmup is not None else elapsed >= 7200
+            ),
+            "book_snapshot_coverage_sufficient": (
+                all(
+                    row.engine_coverage_verified
+                    for row in warmup.scopes
+                    if row.provider_scope.dataset == "ORDERBOOK_50"
+                )
+                if warmup is not None else complete_books
+            ),
+            "causal_warmup_verified": (
+                warmup.causal_warmup_verified
+                if warmup is not None else False
+            ),
+            "warmup_scopes": (
+                warmup.as_status_rows() if warmup is not None else []
+            ),
             "source_transport_continuity_verified": (
                 self.require_provider_continuity
             ),
@@ -258,12 +309,16 @@ class R11MayakPublicationReplay:
         handoff["provenance"]["r11_source_continuity_verified"] = (
             self.require_provider_continuity
         )
+        handoff["provenance"]["r11_causal_warmup_verified"] = (
+            warmup.causal_warmup_verified if warmup is not None else False
+        )
         handoff["provenance"]["r11_consumer_ready"] = False
         _need(
             all(
-                not row.get("connected")
+                bool(row.get("connected"))
+                == self.require_provider_continuity
                 for row in self.engine.transport.values()
             ),
-            "FALSE_TRANSPORT_CONNECTED",
+            "TRANSPORT_PROOF_STATE_DRIFT",
         )
         return snapshot
