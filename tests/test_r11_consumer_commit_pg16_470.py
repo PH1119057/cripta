@@ -11,6 +11,7 @@ from typing import Any
 import psycopg
 import pytest
 
+from operations.monitoring import r11_mayak_pg_observation as pg
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.mayak.native_trade_replay_parity import R11ReplayCursor
 from bybit_workbench.mayak.optional_original_event_parity import (
@@ -102,8 +103,10 @@ def _snapshot(replay: R11MayakPublicationReplay) -> dict[str, Any]:
         "source_session_id": replay.checkpoint.source_session_id,
         "producer_release_commit": replay.checkpoint.release_commit,
         "as_of_second": replay.checkpoint.as_of_second.isoformat(),
+        "source_mode": "PG_ORIGINAL_REPLAY",
         "consumer_ready": False,
         "mayak_ws_retirement_allowed": False,
+        "trading_effect": "NONE",
     }
     value["dispatcher_handoff"]["provenance"].update({
         "r11_market_publication_id": replay.checkpoint.publication_id,
@@ -159,6 +162,97 @@ def db():
         "GRANT SELECT,INSERT,UPDATE ON analytics.native_public_trade_source_sessions TO cripta"
     )
     admin.execute("GRANT SELECT ON analytics.market_publications TO cripta")
+    admin.execute(
+        """CREATE TABLE mayak_v2.snapshots (
+            id bigserial PRIMARY KEY,
+            observed_at timestamptz NOT NULL,
+            state text NOT NULL,
+            confidence double precision NOT NULL,
+            payload jsonb NOT NULL,
+            engine_version text NOT NULL,
+            snapshot_kind text NOT NULL DEFAULT 'LEGACY',
+            regular_minute timestamptz
+        )"""
+    )
+    admin.execute(
+        """CREATE UNIQUE INDEX mayak_v2_one_regular_per_minute
+           ON mayak_v2.snapshots(regular_minute)
+           WHERE snapshot_kind='REGULAR'"""
+    )
+    admin.execute(
+        """CREATE TABLE mayak_v2.state_events (
+            id bigserial PRIMARY KEY,
+            occurred_at timestamptz NOT NULL,
+            state text NOT NULL,
+            previous_state text,
+            confidence double precision NOT NULL,
+            reasons jsonb NOT NULL,
+            snapshot_id bigint REFERENCES mayak_v2.snapshots(id)
+        )"""
+    )
+    admin.execute(
+        """CREATE TABLE mayak_v2.observation_journal (
+            snapshot_id bigint PRIMARY KEY REFERENCES mayak_v2.snapshots(id),
+            observed_at timestamptz NOT NULL,
+            market_state text NOT NULL,
+            confidence double precision NOT NULL,
+            reasons jsonb NOT NULL,
+            price_breadth jsonb NOT NULL,
+            money_breadth jsonb NOT NULL,
+            direction_synchronization jsonb NOT NULL,
+            btc_context jsonb,
+            eth_context jsonb,
+            data_quality jsonb NOT NULL,
+            architecture_version text NOT NULL,
+            engine_version text NOT NULL,
+            feature_version text NOT NULL,
+            config_fingerprint text NOT NULL,
+            dispatcher_handoff jsonb
+        )"""
+    )
+    admin.execute(
+        """CREATE TABLE mayak_v2.coin_market_contexts (
+            coin_context_id text PRIMARY KEY,
+            market_source_id text NOT NULL,
+            spot_instrument_id text NOT NULL,
+            linear_instrument_id text NOT NULL,
+            mayak_snapshot_id bigint NOT NULL REFERENCES mayak_v2.snapshots(id),
+            observed_at timestamptz NOT NULL,
+            symbol text NOT NULL,
+            schema_version text NOT NULL,
+            engine_version text NOT NULL,
+            feature_version text NOT NULL,
+            config_fingerprint text NOT NULL,
+            data_quality text NOT NULL,
+            payload jsonb NOT NULL,
+            provenance jsonb NOT NULL,
+            content_hash text UNIQUE NOT NULL
+        )"""
+    )
+    admin.execute(
+        """CREATE TABLE mayak_v2.shared_market_contexts (
+            market_context_id text PRIMARY KEY,
+            market_source_id text NOT NULL,
+            mayak_snapshot_id bigint NOT NULL REFERENCES mayak_v2.snapshots(id),
+            observed_at timestamptz NOT NULL,
+            mayak_version text NOT NULL,
+            schema_version text NOT NULL,
+            config_fingerprint text NOT NULL,
+            data_quality text NOT NULL,
+            payload jsonb NOT NULL,
+            provenance jsonb NOT NULL,
+            content_hash text UNIQUE NOT NULL
+        )"""
+    )
+    admin.execute(
+        """GRANT SELECT,INSERT ON mayak_v2.snapshots,
+           mayak_v2.state_events,mayak_v2.observation_journal,
+           mayak_v2.coin_market_contexts,mayak_v2.shared_market_contexts
+           TO cripta"""
+    )
+    admin.execute(
+        "GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA mayak_v2 TO cripta"
+    )
     admin.execute(
         "INSERT INTO analytics.native_public_trade_source_sessions "
         "(source_session_id,market_source_id,state,producer_release_commit,subscribed_at) "
@@ -269,6 +363,90 @@ def test_pg16_shared_epoch_fence_blocks_source_transition_until_consumer_commit(
     assert admin.execute(
         "SELECT generation,publication_id FROM mayak_v2.r11_consumer_commit"
     ).fetchone() == (1, 100)
+
+
+def test_pg16_consumer_and_mayak_outputs_share_one_commit(
+    db, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = db
+    replay = _replay()
+    snapshot = _snapshot(replay)
+    monkeypatch.setattr(pg, "compact_market_minute_rows", lambda *_args: ())
+
+    with _runtime() as runtime:
+        with runtime.transaction():
+            committed = commit_r11_mayak_publication(
+                runtime,
+                replay=replay,
+                snapshot=snapshot,
+                expected_generation=0,
+                expected_previous_publication_id=None,
+            )
+            snapshot_id = pg._persist_mayak_dispatcher_outputs(
+                runtime,
+                committed.snapshot,
+                symbols=SEVEN,
+            )
+
+    assert snapshot_id is not None
+    assert admin.execute(
+        "SELECT generation,publication_id FROM mayak_v2.r11_consumer_commit"
+    ).fetchone() == (1, 100)
+    assert admin.execute(
+        "SELECT count(*) FROM mayak_v2.snapshots"
+    ).fetchone() == (1,)
+    assert admin.execute(
+        "SELECT count(*) FROM mayak_v2.coin_market_contexts"
+    ).fetchone() == (7,)
+    assert admin.execute(
+        "SELECT count(*) FROM mayak_v2.shared_market_contexts"
+    ).fetchone() == (1,)
+    assert admin.execute(
+        "SELECT count(*) FROM mayak_v2.observation_journal"
+    ).fetchone() == (1,)
+    assert admin.execute(
+        "SELECT count(*) FROM mayak_v2.state_events"
+    ).fetchone() == (1,)
+    assert admin.execute(
+        """SELECT payload->'r11_market_publication'->>'source_mode',
+                  payload->'r11_market_publication'->>'trading_effect'
+             FROM mayak_v2.snapshots"""
+    ).fetchone() == ("PG_ORIGINAL_REPLAY", "NONE")
+
+
+def test_pg16_output_failure_rolls_back_consumer_cursor(
+    db, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = db
+    replay = _replay()
+    snapshot = _snapshot(replay)
+
+    def fail_rows(*_args):
+        raise RuntimeError("derived output failed")
+
+    monkeypatch.setattr(pg, "compact_market_minute_rows", fail_rows)
+    with pytest.raises(RuntimeError, match="derived output failed"):
+        with _runtime() as runtime:
+            with runtime.transaction():
+                committed = commit_r11_mayak_publication(
+                    runtime,
+                    replay=replay,
+                    snapshot=snapshot,
+                    expected_generation=0,
+                    expected_previous_publication_id=None,
+                )
+                pg._persist_mayak_dispatcher_outputs(
+                    runtime,
+                    committed.snapshot,
+                    symbols=SEVEN,
+                )
+
+    assert admin.execute(
+        "SELECT count(*) FROM mayak_v2.r11_consumer_commit"
+    ).fetchone() == (0,)
+    assert admin.execute(
+        "SELECT count(*) FROM mayak_v2.snapshots"
+    ).fetchone() == (0,)
 
 
 def test_pg16_source_session_reset_replaces_whole_generation(db) -> None:
