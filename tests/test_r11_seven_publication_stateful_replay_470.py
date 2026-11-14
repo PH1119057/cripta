@@ -19,6 +19,18 @@ from bybit_workbench.mayak.optional_original_event_parity import (
 from bybit_workbench.mayak.publication_rest_parity import (
     R11MayakRestCandidate,
 )
+from bybit_workbench.dispatcher_v2.builders import (
+    build_coin_market_context,
+    build_global_market_context,
+)
+from bybit_workbench.mayak.context_records import (
+    coin_market_context_records,
+    shared_market_context_record,
+)
+from bybit_workbench.mayak.seven_publication_engine_checkpoint import (
+    decode_r11_mayak_state,
+    encode_r11_mayak_state,
+)
 from bybit_workbench.mayak.seven_publication_observation_candidate import (
     R11SevenMayakObservationCandidate,
     R11SevenMayakReplayCheckpoint,
@@ -123,6 +135,77 @@ def test_incremental_publication_preserves_prior_engine_trade_window() -> None:
         "r11_market_publication_id"
     ] == 43
     assert not snapshot["r11_market_publication"]["consumer_ready"]
+
+
+
+def test_restart_matches_uninterrupted_seven_symbol_dispatcher_output() -> None:
+    first = candidate(
+        native_trades=(native("BTCUSDT", AT.timestamp() - 2),),
+    )
+    second_at = AT + timedelta(seconds=20)
+
+    uninterrupted = R11MayakPublicationReplay()
+    uninterrupted.apply(first, now=AT + timedelta(seconds=5))
+    second = candidate(
+        publication_id=43,
+        as_of=second_at,
+        previous=first.checkpoint(),
+        native_trades=(native("ETHUSDT", second_at.timestamp() - 2),),
+    )
+    expected = uninterrupted.apply(
+        second, now=second_at + timedelta(seconds=5),
+    )
+
+    before_restart = R11MayakPublicationReplay()
+    before_restart.apply(first, now=AT + timedelta(seconds=5))
+    restored = decode_r11_mayak_state(
+        encode_r11_mayak_state(before_restart),
+        expected_source_session_id=SESSION,
+        expected_release_commit=RELEASE,
+    )
+    resumed_second = candidate(
+        publication_id=43,
+        as_of=second_at,
+        previous=restored.checkpoint,
+        native_trades=(native("ETHUSDT", second_at.timestamp() - 2),),
+    )
+    actual = restored.apply(
+        resumed_second, now=second_at + timedelta(seconds=5),
+    )
+
+    assert actual == expected
+    assert actual["dispatcher_handoff"] == expected["dispatcher_handoff"]
+    assert restored.checkpoint == uninterrupted.checkpoint
+    assert restored.observations == uninterrupted.observations
+
+    expected_shared = shared_market_context_record(7001, expected)
+    actual_shared = shared_market_context_record(7001, actual)
+    expected_global = build_global_market_context(
+        expected_shared, now=second_at + timedelta(seconds=5),
+    )
+    actual_global = build_global_market_context(
+        actual_shared, now=second_at + timedelta(seconds=5),
+    )
+    assert actual_global == expected_global
+
+    expected_coins = coin_market_context_records(7001, expected)
+    actual_coins = coin_market_context_records(7001, actual)
+    assert len(actual_coins) == len(SEVEN)
+    assert actual_coins == expected_coins
+    for expected_coin, actual_coin in zip(
+        expected_coins, actual_coins, strict=True,
+    ):
+        expected_dispatch = build_coin_market_context(
+            expected_coin,
+            global_context_id=expected_global.global_context_id,
+            now=second_at + timedelta(seconds=5),
+        )
+        actual_dispatch = build_coin_market_context(
+            actual_coin,
+            global_context_id=actual_global.global_context_id,
+            now=second_at + timedelta(seconds=5),
+        )
+        assert actual_dispatch == expected_dispatch
 
 
 @pytest.mark.parametrize("corrupt", [
