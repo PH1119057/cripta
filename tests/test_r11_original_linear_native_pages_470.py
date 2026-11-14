@@ -244,7 +244,7 @@ def test_r11_native_page_fails_closed_on_wrong_epoch_or_identity(
 def test_source_is_five_not_seven_and_never_approves_mayak_replacement() -> None:
     for symbol in ("DOGEUSDT",):
         with pytest.raises(
-            R11OriginalNativeUnverified, match="OUTSIDE_FIVE_NATIVE_CAPTURE",
+            R11OriginalNativeUnverified, match="OUTSIDE_MAYAK_SOURCE_SCOPE",
         ):
             read(NativeFakePG(), symbol=symbol)
     db = NativeFakePG()
