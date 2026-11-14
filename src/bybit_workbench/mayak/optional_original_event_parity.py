@@ -410,15 +410,6 @@ def project_r11_optional_mayak_page(
         for index, fact in enumerate(facts):
             _need(len(projected) < _EVENT_LIMIT, "EVENT_PAGE_BUDGET_EXCEEDED")
             when = _utc(fact.source_time).timestamp()
-            common = {
-                "product": frame.product_category,
-                "symbol": fact.symbol,
-                "timestamp": when,
-                "source_frame_number": frame.source_frame_number,
-                "source_fact_index": index,
-                "source_sequence": fact.exchange_sequence,
-                "exec_id": fact.exec_id,
-            }
             if frame.fact_family == "SPOT_TRADE":
                 _need(
                     frame.product_category == "SPOT"
@@ -433,7 +424,10 @@ def project_r11_optional_mayak_page(
                 side = fact.payload.get("side")
                 _need(side in ("Buy", "Sell"), "TRADE_SIDE_INVALID")
                 projected.append(R11OptionalMayakEvent(
-                    event="TRADE", **common,
+                    event="TRADE", product=frame.product_category, symbol=fact.symbol,
+                    timestamp=when, source_frame_number=frame.source_frame_number,
+                    source_fact_index=index,
+                    source_sequence=fact.exchange_sequence, exec_id=fact.exec_id,
                     side=cast(str, side), price=price, quantity=size,
                 ))
             elif frame.fact_family == "ORDERBOOK_50":
@@ -441,7 +435,10 @@ def project_r11_optional_mayak_page(
                 book = _book_next(books.get(fact.symbol), fact=fact)
                 books[fact.symbol] = book
                 projected.append(R11OptionalMayakEvent(
-                    event="BOOK", **common,
+                    event="BOOK", product=frame.product_category, symbol=fact.symbol,
+                    timestamp=when, source_frame_number=frame.source_frame_number,
+                    source_fact_index=index,
+                    source_sequence=fact.exchange_sequence, exec_id=fact.exec_id,
                     bids=book.bids[:50], asks=book.asks[:50],
                 ))
             elif frame.fact_family == "TICKER":
@@ -459,7 +456,11 @@ def project_r11_optional_mayak_page(
                     if source_key in fact.payload
                 )
                 projected.append(R11OptionalMayakEvent(
-                    event="TICKER", **common, ticker_updates=updates,
+                    event="TICKER", product=frame.product_category, symbol=fact.symbol,
+                    timestamp=when, source_frame_number=frame.source_frame_number,
+                    source_fact_index=index,
+                    source_sequence=fact.exchange_sequence, exec_id=fact.exec_id,
+                    ticker_updates=updates,
                 ))
             elif frame.fact_family == "LIQUIDATION":
                 _need(
@@ -473,7 +474,11 @@ def project_r11_optional_mayak_page(
                 side = fact.payload.get("side")
                 _need(side in ("Buy", "Sell"), "LIQ_SIDE_INVALID")
                 projected.append(R11OptionalMayakEvent(
-                    event="LIQUIDATION", **common, side=cast(str, side),
+                    event="LIQUIDATION", product=frame.product_category, symbol=fact.symbol,
+                    timestamp=when, source_frame_number=frame.source_frame_number,
+                    source_fact_index=index,
+                    source_sequence=fact.exchange_sequence, exec_id=fact.exec_id,
+                    side=cast(str, side),
                     price=price, quantity=size,
                 ))
             else:
