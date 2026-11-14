@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.13 · 2026-11-14
+**Версия:** 2.14 · 2026-11-15
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2002,6 +2002,45 @@ Never move running PGDATA, drop unique history, change Strategy/Entry/Exit/analy
 ## 50. Изоляция Git workstreams и границы публикации — OWNER DECISION 2026-10-22
 
 **Authority неизменен:** единственный канонический publisher — GitHub `PH1119057/cripta:main`. Research, docs, code и Dashboard остаются в одном репозитории; это разделение процесса, НЕ перенос capability, source roots или stores. Изолированные ветки/worktrees не дают отдельного authority; публикация в `main` не является deploy, а deploy не является LIVE-arm. Existing worktrees/branches/PRs не удаляются, не переписываются и не сливаются автоматически.
+
+### 50.0 Canonical repository root topology — OWNER DECISION 2026-11-15
+
+Target top-level project layout в GitHub repository:
+
+```text
+.github/     GitHub/system repository infrastructure
+docs/        current canonical/project documentation
+engine/      target root всего активного CORE engine/code/config/tests/operations
+research/    active Research source/methods/tests/tooling
+archive/     historical/retained non-current artifacts
+```
+
+Root files допускаются только как небольшой explicit technical/bootstrap allowlist
+(Git/Python/build entrypoints, `README.md`, `AGENTS.md`). Новый произвольный
+project file или directory в repository root запрещён: он должен иметь owner и
+лежать в одном из canonical roots либо быть явно system-managed.
+
+Это **target topology**, а не утверждение о завершённой миграции. До отдельного
+tested path migration существующие `src/`, `operations/`, `production/`,
+`scripts/`, `tests/`, `config/` остаются transitional physical CORE roots,
+потому что их используют imports/CI/package/release/runtime contracts.
+`research_tools/` является transitional Research-root debt. `patches/` и
+`patch_backups/` требуют dependency/retention classification и после доказанной
+неактивности уходят в `archive/` либо удаляются только отдельным approved
+cleanup changeset. Нельзя переименовать активные roots ради красоты без
+одновременного обновления всех consumers и tests.
+
+Historical Pxx/EO/SE/ENTRY_BOT/PATCH-like directories и иные доказанно
+неактивные legacy artifacts не являются active project roots. После exact
+dependency/reference classification их штатное место — `archive/**`; такой move
+должен сохранять bytes/Git provenance и не превращать archive в executable
+dependency. Scope checker обязан распознавать canonical `archive/**` и exact
+approved legacy-root housekeeping, но остаётся fail-closed для любого иного
+unknown top-level path.
+
+До завершения physical `engine/` migration branch/path scope ниже продолжает
+описывать текущие transitional physical roots; это migration compatibility, а
+не постоянное разрешение разрастаться корню.
 
 Каждая независимая работа начинается от проверенного актуального remote `main`, имеет ровно один task owner, отдельную тематическую ветку и isolated worktree. Перед публикацией проверить новый remote head, разрешить изменения upstream без force push и без перезаписи чужих изменений, явно перечислить изменённые пути, выполнить относящиеся к задаче тесты и сохранить research evidence. При совпадении изменяемых canonical файлов параллельных задач один editorial integration owner последовательно разрешает PR; изоляция веток не устраняет текстовые конфликты в одном файле автоматически.
 

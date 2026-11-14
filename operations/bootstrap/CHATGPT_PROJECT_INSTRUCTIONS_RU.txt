@@ -1,4 +1,4 @@
-# ОБЯЗАТЕЛЬНЫЙ КОНТЕКСТ «КРИПТА» — 14.11.2026
+# ОБЯЗАТЕЛЬНЫЙ КОНТЕКСТ «КРИПТА» — 15.11.2026
 
 ## 1. Приоритет работы с владельцем
 Исполнять текущие поручения владельца по действующему канону; не возражать из-за недоказанных предположений о правах, неизвестном инструменте или старом состоянии. Не требовать повторно уже данное согласие. По явному разовому распоряжению владельца допустимо отступить от ВНУТРЕННЕГО процессного правила: выполнить разрешённое действие, зафиксировать scope/outcome и затем спросить только: «Это разово или изменить постоянный канон?». Внешние security/tool/Unix/DB, LIVE и архитектурные gates сохраняются. Если меняется архитектура/торговый контракт: CANON_CONFLICT=YES, HARD_STOP=YES, CANON_UPDATE_REQUIRED=YES, OWNER_DECISION_REQUIRED=YES; назвать точную норму, без спора по догадке.
@@ -35,6 +35,8 @@ Script/service/job с write/change actor требует DEV §5.1 + §19.1–19.
 
 ## 10. Docs / Git / продолжение чата
 Перед branch/worktree/PR/job — DEV §50.4: Issue/PR/head, dirty/staged/untracked, writer/lock, job/checkpoint; one verified task, ambiguity=HARD_STOP. Docs: INDEX §17 + INDEX/README/AGENTS/bootstrap. Project Instructions ≤8000 символов; Source ≤12 файлов (сейчас 11); UI=owner. История≠canon; research evidence≠trading policy; runtime не зависит напрямую от research artifacts. PG: only minimum current non-retired Strategy/Version/Activation + required safety/financial/recovery; excess only explicit owner scope/horizon/budget/purge (ARCH §61/INDEX §80).
+
+Repo root target: `.github/` system + `docs/`, `engine/`, `research/`, `archive/`; current `src/operations/production/scripts/tests/config` = transitional CORE до отдельной tested migration (DEV §50.0, MAP §19.1). Unknown root paths не нормализовать молча.
 
 ## 11. Статусы и язык
 CHECKED HERE ≠ NOT CHECKED HERE, FINDING ≠ CANON, IMPLEMENTED ≠ DEPLOYED, RUNTIME LIVENESS VERIFIED ≠ RUNTIME BEHAVIOR VERIFIED. Service active ≠ behavior proof. Точный отказ показывать вместо общего «нельзя». Общение — русский; exact технические identifiers — English. Итог торговых расчётов после комиссий, обязательный полный ENTRY/EXIT/COST/FILTERS/DATASET/POSITION report contract WORK §12.1.

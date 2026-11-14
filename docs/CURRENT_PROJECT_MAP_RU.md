@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.46
-**Дата:** 2026-11-14
+**Версия:** 12.47
+**Дата:** 2026-11-15
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -1369,6 +1369,28 @@ CHECKED HERE 2026-09-21:
 repository остаётся отдельным cleanup finding. Их перенос в `archive/**`
 должен быть отдельным exact repository-cleanup changeset после dependency
 classification; текущая документационная синхронизация их не перемещает.
+
+## 19.1 Repository root topology cleanup — CHECKED HERE / OWNER DECISION 2026-11-15
+
+GitHub main на момент решения: `aeec1c1c0f715d811925b3026f0183c1632c7c6d`.
+
+Target repository roots по DEV §50.0: `.github/` (system), `docs/`,
+`engine/`, `research/`, `archive/`. Physical `engine/` ещё НЕ создан как
+завершённая migration: current active CORE остаётся в `src/`, `operations/`,
+`production/`, `scripts/`, `tests/`, `config/` до отдельного consumer/CI/
+package/release path migration. `research_tools/` остаётся transitional.
+`patches/` и `patch_backups/` ещё не классифицированы на active dependency vs
+historical retention.
+
+Для 73 legacy top-level directories выполнена bounded GitHub classification:
+cutoff 2026-09-15; после cutoff они не изменялись, а более новый delta между
+server source snapshot и current GitHub main их не затрагивал. Byte-preserving
+move подготовлен в PR #716 / commit
+`bdb855797fb3d8ae773976ab30fb58a3c1b7f580`, но НЕ MERGED: прежний trusted-main
+scope checker классифицировал legacy root и `archive/**` как UNKNOWN_PATH.
+Owner 2026-11-15 решил исправить постоянный root-topology contract, а не делать
+разовый bypass. До обновления scope implementation PR #716 остаётся evidence,
+не current main state. Runtime/DB/Exchange/LIVE не изменялись.
 
 # 20. Verification results — checkpoint 2026-09-21
 
