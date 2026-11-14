@@ -9,6 +9,7 @@ other features (book deltas, liquidation, ratio) remain outside this contract.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -115,18 +116,10 @@ def project_r11_native_linear_trade_page(
             "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
         )
         and type(page.publication_id) is int and page.publication_id > 0
-        and type(page.read_after) is tuple
-        and type(page.publication_cursor) is tuple
-        and type(page.next_cursor) is tuple
         and all(
-            type(i) is int and i >= 0
+            type(mark) is tuple and len(mark) == 2
+            and all(type(i) is int and i >= 0 for i in mark)
             for mark in (
-                page.read_after, page.publication_cursor, page.next_cursor,
-            )
-            for i in mark
-        )
-        and all(
-            len(mark) == 2 for mark in (
                 page.read_after, page.publication_cursor, page.next_cursor,
             )
         )
@@ -135,8 +128,16 @@ def project_r11_native_linear_trade_page(
         and type(page.last_event_at_publication_cursor) is bool
         and isinstance(page.original_events, tuple)
         and len(page.original_events) <= _MAX_ORIGINAL_EVENTS
-        and len(page.source_session_id) == 32
-        and len(page.producer_release_commit) == 40,
+        and all(
+            isinstance(item, R11OriginalTrade)
+            for item in page.original_events
+        )
+        and isinstance(page.source_session_id, str)
+        and re.fullmatch(r"[0-9a-f]{32}", page.source_session_id) is not None
+        and isinstance(page.producer_release_commit, str)
+        and re.fullmatch(
+            r"[0-9a-f]{40}", page.producer_release_commit,
+        ) is not None,
         "PAGE_SHAPE_OR_SCOPE_INVALID",
     )
     published = _utc(page.publication_as_of)
