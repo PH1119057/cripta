@@ -309,8 +309,7 @@ def _persist_mayak_dispatcher_outputs(
     minute = observed_at.replace(second=0, microsecond=0)
     existing = db.execute(
         """SELECT id FROM mayak_v2.snapshots
-             WHERE snapshot_kind='REGULAR' AND regular_minute=%s
-             FOR UPDATE""",
+             WHERE snapshot_kind='REGULAR' AND regular_minute=%s""",
         (minute,),
     ).fetchone()
     if existing is not None:
