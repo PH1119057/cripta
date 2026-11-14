@@ -254,6 +254,7 @@ def read_r09_native_publication_postfill(
     seen: set[tuple[int, str]] = set()
     previous_point = (a_frame, a_index)
     previous_seq, previous_at = a_seq, fill
+    last_execution: str | None = None
     for item in rows:
         (
             fnum, idx, market, inst, symbol, exchange_seq, execution,
@@ -292,16 +293,11 @@ def read_r09_native_publication_postfill(
         prices.append(original_price)
         refs.append(f"bybit:publicTrade:{position.symbol}:{execution}")
         previous_point, previous_seq, previous_at = point, exchange_seq, event_time
+        last_execution = execution
     _need(
         previous_point == (frame, index)
         and previous_seq == seq
-        and rows[-1][6] == ident if isinstance(rows[-1], (tuple, list)) else (
-            _fields(rows[-1], "frame_number", "frame_index", "market_source_id",
-                    "instrument_id", "external_symbol", "exchange_sequence",
-                    "exec_id", "event_at", "accepted_at", "journal_at",
-                    "price", "quantity", "taker_side", "source_transport",
-                    "producer_release_commit")[6] == ident
-        ),
+        and last_execution == ident,
         "PUBLICATION_LATEST_ORIGINAL_CURSOR_DRIFT",
     )
     entry_price = _positive(position.actual_avg_fill)
