@@ -424,20 +424,23 @@ def test_pg16_output_failure_rolls_back_consumer_cursor(
         raise RuntimeError("derived output failed")
 
     monkeypatch.setattr(pg, "compact_market_minute_rows", fail_rows)
-    with pytest.raises(RuntimeError, match="derived output failed"):
-        with _runtime() as runtime, runtime.transaction():
-            committed = commit_r11_mayak_publication(
-                runtime,
-                replay=replay,
-                snapshot=snapshot,
-                expected_generation=0,
-                expected_previous_publication_id=None,
-            )
-            pg._persist_mayak_dispatcher_outputs(
-                runtime,
-                committed.snapshot,
-                symbols=SEVEN,
-            )
+    with (
+        pytest.raises(RuntimeError, match="derived output failed"),
+        _runtime() as runtime,
+        runtime.transaction(),
+    ):
+        committed = commit_r11_mayak_publication(
+            runtime,
+            replay=replay,
+            snapshot=snapshot,
+            expected_generation=0,
+            expected_previous_publication_id=None,
+        )
+        pg._persist_mayak_dispatcher_outputs(
+            runtime,
+            committed.snapshot,
+            symbols=SEVEN,
+        )
 
     assert admin.execute(
         "SELECT count(*) FROM mayak_v2.r11_consumer_commit"
