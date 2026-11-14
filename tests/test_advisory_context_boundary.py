@@ -77,8 +77,8 @@ def test_missing_or_stale_dispatcher_context_is_observed_not_blocked() -> None:
 def test_dispatcher_or_mayak_cannot_create_trade_commands() -> None:
     forbidden = (
         ROOT / "operations/monitoring/mayak_v2.py",
-        ROOT / "operations/strategy_dispatcher/passive_runtime.py",
-        ROOT / "production/src/bybit_workbench/strategy_dispatcher/service.py",
+        ROOT / "operations/monitoring/dispatcher_v2.py",
+        ROOT / "src/bybit_workbench/dispatcher_v2/builders.py",
     )
     for path in forbidden:
         source = path.read_text(encoding="utf-8")

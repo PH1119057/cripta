@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = ROOT / "production/src/bybit_workbench/dispatcher_v2"
+PACKAGE = ROOT / "src/bybit_workbench/dispatcher_v2"
 RUNTIME = ROOT / "operations/monitoring/dispatcher_v2.py"
 SQL = ROOT / "operations/sql/20260906_dispatcher_v2_contexts.sql"
 UNIT = ROOT / "operations/dispatcher_v2/cripta-dispatcher-v2.service"
@@ -54,6 +54,8 @@ def test_v2_service_is_passive_and_independent() -> None:
     unit = UNIT.read_text(encoding="utf-8")
     assert "User=cripta" in unit
     assert "dispatcher_v2.py --poll-seconds 2" in unit
+    assert "Environment=PYTHONPATH=/srv/cripta/runtime/current/src" in unit
+    assert "production/src" not in unit
     assert "cripta-mayak-v2.service" in unit
     assert "cripta-private-runtime.service" in unit
     assert "strategy-dispatcher" not in unit

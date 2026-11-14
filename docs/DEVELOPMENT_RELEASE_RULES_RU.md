@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.14 · 2026-11-15
+**Версия:** 2.15 · 2026-11-15
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2021,8 +2021,8 @@ project file или directory в repository root запрещён: он долж
 лежать в одном из canonical roots либо быть явно system-managed.
 
 Это **target topology**, а не утверждение о завершённой миграции. До отдельного
-tested path migration существующие `src/`, `operations/`, `production/`,
-`scripts/`, `tests/`, `config/` остаются transitional physical CORE roots,
+tested path migration существующие `src/`, `operations/`, `scripts/`,
+`tests/`, `config/` остаются transitional physical CORE roots,
 потому что их используют imports/CI/package/release/runtime contracts.
 `research_tools/` является transitional Research-root debt. `patches/` и
 `patch_backups/` требуют dependency/retention classification и после доказанной
@@ -2037,6 +2037,8 @@ dependency/reference classification их штатное место — `archive/
 dependency. Scope checker обязан распознавать canonical `archive/**` и exact
 approved legacy-root housekeeping, но остаётся fail-closed для любого иного
 unknown top-level path.
+
+Отдельный repository source root `production/` выведен из target/transitional topology owner-approved consolidation 2026-11-15: его current `dispatcher_v2` Python modules принадлежат единому `src/bybit_workbench/**`; retired profile-based `strategy_dispatcher` source сохраняется только под `archive/legacy_strategy_dispatcher_source/**` и не является active package. Installed runtime может сохранять старый release до отдельного verified deploy; source merge не доказывает runtime cutover.
 
 До завершения physical `engine/` migration branch/path scope ниже продолжает
 описывать текущие transitional physical roots; это migration compatibility, а
