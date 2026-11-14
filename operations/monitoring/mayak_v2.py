@@ -423,6 +423,18 @@ class Collector:
         return result
 
     def run(self) -> None:
+        # #470 R11: source-only opt-in. Never open the legacy socket or
+        # call public Bybit REST when using the common MarketPublication.
+        # Disabled by default until a controlled no-start release.
+        source_mode = os.environ.get("CRIPTA_MAYAK_SOURCE_MODE", "LEGACY_WS")
+        if source_mode == "PG_PUBLICATION":
+            from operations.monitoring.r11_mayak_pg_observation import (
+                run_r11_pg_observation,
+            )
+            run_r11_pg_observation(self)
+            return
+        if source_mode != "LEGACY_WS":
+            raise ValueError("MAYAK_SOURCE_MODE_NOT_APPROVED")
         self.prepare()
         self._refresh_instrument_support()
         threads = [
