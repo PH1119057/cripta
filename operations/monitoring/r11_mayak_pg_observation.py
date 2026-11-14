@@ -10,9 +10,7 @@ NOT certify original provider coverage, turn on trading or retire old sockets.
 """
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import psycopg
