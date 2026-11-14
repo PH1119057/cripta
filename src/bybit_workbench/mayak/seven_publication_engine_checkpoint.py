@@ -168,6 +168,17 @@ def _decode_checkpoint(raw: object) -> R11SevenMayakReplayCheckpoint:
         and len(decoded.release_commit) == 40
         and decoded.provider_continuity_verified is False
         and decoded.mayak_cutover_ready is False
+        and all(
+            row.source_session_id == decoded.source_session_id
+            and row.producer_release_commit == decoded.release_commit
+            for row in decoded.optional_cursors
+        )
+        and all(
+            row.source_session_id == decoded.source_session_id
+            and row.producer_release_commit == decoded.release_commit
+            and row.publication_id <= decoded.publication_id
+            for row in decoded.native_cursors
+        )
         and _encode_checkpoint(decoded) == raw,
         "CHECKPOINT_ROUNDTRIP_DRIFT",
     )
