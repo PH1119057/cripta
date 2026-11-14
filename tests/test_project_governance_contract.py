@@ -131,10 +131,22 @@ def test_security_is_mandatory_base_preread_and_all_current_docs_are_project_sou
     agents = _read("AGENTS.md")
 
     assert "`SECURITY*.md` — обязательный technical security baseline" in interaction
-    assert "7. docs/SECURITY.md" in work
-    assert "7. docs/SECURITY.md" in index
-    assert "7. [docs/SECURITY.md]" in readme
-    assert "7. `docs/SECURITY.md`" in agents
+    bootstrap = _read("operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt")
+    if "## 3. Три РАБОЧИХ контура" in bootstrap:
+        # New mandatory full-read: META + WORK + SECURITY, with INDEX routing.
+        assert "docs/SECURITY.md" in work
+        assert "docs/SECURITY.md" in index
+        assert "docs/SECURITY.md" in readme
+        assert "docs/SECURITY.md" in agents
+        assert "New chat: FULL META / WORK / SECURITY" in work
+        assert "docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md" in index
+        assert "DOCUMENTATION_INDEX_RU" in work
+    else:
+        # Legacy bootstrap remains valid until the docs-only PR is merged.
+        assert "7. docs/SECURITY.md" in work
+        assert "7. docs/SECURITY.md" in index
+        assert "7. [docs/SECURITY.md]" in readme
+        assert "7. `docs/SECURITY.md`" in agents
     assert "Все 11 current docs входят в ChatGPT Project Source." in index
 
 
@@ -331,14 +343,34 @@ def test_version_controlled_project_instructions_template_is_within_ui_limits() 
     assert len(template) <= 8000
     assert len(template.replace("\n", "\r\n")) <= 8000
 
-    for marker in (
-        "Project Instructions: не более 8000 символов",
-        "Project Source: не более 12 файлов",
-        "current Project Source bundle: 11 файлов",
-        "data forensic -> `docs/RESEARCH_COMPUTE_RULES_RU*.md`",
-        "DEVELOPMENT_RELEASE §5.1 + §19.1–19.4",
-        "CURRENT_PROJECT_MAP §1.4",
-    ):
+    if "## 3. Три РАБОЧИХ контура" in template:
+        markers = (
+            "Project Instructions ≤8000 символов",
+            "Source ≤12 файлов (сейчас 11)",
+            "docs/CHATGPT_INTERACTION_RULES_RU*.md",
+            "docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md",
+            "docs/SECURITY.md",
+            "docs/DOCUMENTATION_INDEX_RU*.md",
+            "DEV §13.1",
+            "DEV §5.1",
+            "MAP §1.4",
+            "RESEARCH §8.1",
+            "runtime не зависит напрямую от research artifacts",
+            "SentinelX",
+            "DOCS",
+            "CORE",
+            "RESEARCH",
+        )
+    else:
+        markers = (
+            "Project Instructions: не более 8000 символов",
+            "Project Source: не более 12 файлов",
+            "current Project Source bundle: 11 файлов",
+            "data forensic -> `docs/RESEARCH_COMPUTE_RULES_RU*.md`",
+            "DEVELOPMENT_RELEASE §5.1 + §19.1–19.4",
+            "CURRENT_PROJECT_MAP §1.4",
+        )
+    for marker in markers:
         assert marker in template
 
     index = _read("docs/DOCUMENTATION_INDEX_RU.md")
