@@ -13,11 +13,11 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from bybit_workbench.mayak.core.live import LiveMayakEngine
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
 )
+from bybit_workbench.mayak.core.live import LiveMayakEngine
 
 _SEVEN = frozenset((
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
