@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.48
+**Версия:** 12.49
 **Дата:** 2026-11-15
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1370,26 +1370,39 @@ repository остаётся отдельным cleanup finding. Их перен�
 должен быть отдельным exact repository-cleanup changeset после dependency
 classification; текущая документационная синхронизация их не перемещает.
 
-## 19.1 Repository root topology cleanup — CHECKED HERE / OWNER DECISION 2026-11-15
+## 19.1 Repository root topology cleanup — CHECKED HERE 2026-11-15
 
-GitHub main на момент решения: `aeec1c1c0f715d811925b3026f0183c1632c7c6d`.
+GitHub main after single-source consolidation:
+`3dfd46032b89c0bc128e1f92e725dfd9ea76d054`.
 
 Target repository roots по DEV §50.0: `.github/` (system), `docs/`,
-`engine/`, `research/`, `archive/`. Physical `engine/` ещё НЕ создан как
-завершённая `engine/` migration: current active source CORE остаётся в `src/`, `operations/`,
-`scripts/`, `tests/`, `config/` до отдельного consumer/CI/package/release path migration. `research_tools/` остаётся transitional.
-`patches/` и `patch_backups/` архивированы в repository cleanup 2026-11-15.
-Отдельный source root `production/` retired этим protected source changeset: current `dispatcher_v2` консолидирован в `src/bybit_workbench/**`; retired profile-based `strategy_dispatcher` source вынесен в `archive/legacy_strategy_dispatcher_source/**` и исключён из active tests/package. Installer/unit/tests current Dispatcher переведены на единственный source package root. DEPLOYED=NO; установленный runtime не изменяется самим Git merge.
+`engine/`, `research/`, `archive/`. Physical `engine/` ещё НЕ завершён:
+current source CORE временно остаётся в `src/`, `operations/`, `scripts/`,
+`tests/`, `config/`.
 
-Для 73 legacy top-level directories выполнена bounded GitHub classification:
-cutoff 2026-09-15; после cutoff они не изменялись, а более новый delta между
-server source snapshot и current GitHub main их не затрагивал. Byte-preserving
-move подготовлен в PR #716 / commit
-`bdb855797fb3d8ae773976ab30fb58a3c1b7f580`, но НЕ MERGED: прежний trusted-main
-scope checker классифицировал legacy root и `archive/**` как UNKNOWN_PATH.
-Owner 2026-11-15 решил исправить постоянный root-topology contract, а не делать
-разовый bypass. До обновления scope implementation PR #716 остаётся evidence,
-не current main state. Runtime/DB/Exchange/LIVE не изменялись.
+Completed protected cleanup:
+- PR #721 / `14a7637e25e72c65018ef7eb5cb7b45475c86370`: 73 legacy
+  Pxx/EO/SE/ENTRY/ZS/GUI directories + `patches/`, `patch_backups/`,
+  `research_tools/` moved byte-preserving into `archive/**`; old PR #716
+  closed superseded;
+- PR #722 / `3dfd46032b89c0bc128e1f92e725dfd9ea76d054`: separate
+  `production/` source root retired; current `dispatcher_v2` moved to the
+  single `src/bybit_workbench/**` package root, retired profile-based
+  `strategy_dispatcher` preserved only under
+  `archive/legacy_strategy_dispatcher_source/**`; installer/unit/replay/tests
+  updated and full CI PASS. Git merge did NOT deploy the new source/runtime.
+
+Current root-file active allowlist:
+`.gitattributes`, `.gitignore`, `.python-version`, `README.md`, `AGENTS.md`,
+`pyproject.toml`, `uv.lock`, `bybit_workbench.spec`.
+`bybit_workbench.spec` is retained because current Windows release packaging
+hashes it as an input.
+
+Legacy root files pending the final byte-preserving archive move:
+`APPLY_FULL_PANEL_PATCH_FIXED (1).ps1`, P46/P47 README notes, root `PATCH_*.txt`,
+`START_MICRO_LIVE.cmd`, `START_WORKBENCH.cmd`, `dashboard_server_index.html`.
+They are historical/non-current and must not remain active root entries.
+Runtime/DB/Exchange/LIVE are unchanged by this repository cleanup.
 
 # 20. Verification results — checkpoint 2026-09-21
 

@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.15 · 2026-11-15
+**Версия:** 2.16 · 2026-11-15
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2015,23 +2015,24 @@ research/    active Research source/methods/tests/tooling
 archive/     historical/retained non-current artifacts
 ```
 
-Root files допускаются только как небольшой explicit technical/bootstrap allowlist
-(Git/Python/build entrypoints, `README.md`, `AGENTS.md`). Новый произвольный
-project file или directory в repository root запрещён: он должен иметь owner и
-лежать в одном из canonical roots либо быть явно system-managed.
+Root files имеют точный active allowlist:
+`.gitattributes`, `.gitignore`, `.python-version`, `README.md`, `AGENTS.md`,
+`pyproject.toml`, `uv.lock`, `bybit_workbench.spec`. Последний остаётся
+активным Windows packaging input до отдельной packaging-path migration. Любой
+другой новый project file или directory в repository root запрещён: он должен
+иметь owner и жить в canonical/transitional root либо быть явно system-managed.
 
 Это **target topology**, а не утверждение о завершённой миграции. До отдельного
 tested path migration существующие `src/`, `operations/`, `scripts/`,
 `tests/`, `config/` остаются transitional physical CORE roots,
 потому что их используют imports/CI/package/release/runtime contracts.
-`research_tools/` является transitional Research-root debt. `patches/` и
-`patch_backups/` требуют dependency/retention classification и после доказанной
-неактивности уходят в `archive/` либо удаляются только отдельным approved
-cleanup changeset. Нельзя переименовать активные roots ради красоты без
+`research_tools/`, `patches/`, `patch_backups/` классифицированы как
+inactive legacy и уже перенесены в `archive/` owner-approved cleanup 2026-11-15. Нельзя переименовать активные roots ради красоты без
 одновременного обновления всех consumers и tests.
 
-Historical Pxx/EO/SE/ENTRY_BOT/PATCH-like directories и иные доказанно
-неактивные legacy artifacts не являются active project roots. После exact
+Historical Pxx/EO/SE/ENTRY_BOT/PATCH-like directories, old root patch/readme/
+launcher/dashboard files и иные доказанно неактивные legacy artifacts не
+являются active project roots. После exact
 dependency/reference classification их штатное место — `archive/**`; такой move
 должен сохранять bytes/Git provenance и не превращать archive в executable
 dependency. Scope checker обязан распознавать canonical `archive/**` и exact
@@ -2050,7 +2051,7 @@ unknown top-level path.
 
 - `research/<task>`: только `research/**`, `tests/research/**`, `scripts/research/**`; source snapshot / manifests / large run outputs по RESEARCH_COMPUTE §17 — на data-disk, без vendor datasets и outputs в Git. Исключение: точный `operations/dashboard/instrument_research_catalog.json` допускается только с независимой владельческой регистрацией `owner-approved-ledger-registration`, отдельным QC и контрактом RESEARCH_COMPUTE §23. Это не разрешает менять Dashboard code.
 - `docs/<task>`: только `docs/**`, root `README.md`, `AGENTS.md` и точный derived `operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt`. Изменения по INDEX §17; authoring/верификация канона не равны patch или runtime release. Исследовательский исполнитель не вправе параллельно переписывать эти файлы своей research веткой.
-- `core/<task>`: executable `src/**`, `production/**`, `operations/**` за исключением каталога research JSON и derived Project Instructions, `tests/**` за исключением `tests/research/**`, `scripts/**` за исключением `scripts/research/**`, CI `.github/workflows/**` и `.github/scripts/**`, и явно допускаемые build root configs (`pyproject.toml`, `uv.lock`, `.python-version`, `.gitignore`, `.gitattributes`). Canonical docs и чужие research outputs не менять. Любой опасный trading/control/mutation change сохраняет полные release, rollback и LIVE gates.
+- `core/<task>`: executable `src/**`, `operations/**` за исключением каталога research JSON и derived Project Instructions, `tests/**` за исключением `tests/research/**`, `scripts/**` за исключением `scripts/research/**`, CI `.github/workflows/**` и `.github/scripts/**`, и exact active build root files (`pyproject.toml`, `uv.lock`, `.python-version`, `.gitignore`, `.gitattributes`, `bybit_workbench.spec`). Canonical docs и чужие research outputs не менять. Любой опасный trading/control/mutation change сохраняет полные release, rollback и LIVE gates.
 
 Точный scope checker является **implementation**, а не вторым владельцем архитектуры. Неизвестные пути и переименования проверяются по обоим старым/новым путям и блокируются fail-closed. Смена имени ветки не может заменить approved cross-contour review.
 

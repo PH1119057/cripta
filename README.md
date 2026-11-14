@@ -56,7 +56,8 @@ Target repository layout: system `.github/` плюс project roots `docs/`,
 `scripts/`, `tests/`, `config/` — transitional CORE paths
 до отдельной tested migration в `engine/`; это не разрешение создавать новые
 произвольные root directories. Historical/retained legacy artifacts принадлежат
-`archive/`. Отдельный `production/` source root retired: Dispatcher source консолидирован под `src/bybit_workbench/**`. Exact owner: `DEVELOPMENT_RELEASE §50.0`; current migration state:
+`archive/`. Отдельный `production/` source root retired: Dispatcher source консолидирован под `src/bybit_workbench/**`.
+Active root files: `.gitattributes`, `.gitignore`, `.python-version`, `README.md`, `AGENTS.md`, `pyproject.toml`, `uv.lock`, `bybit_workbench.spec`; другие project root files не допускаются. Exact owner: `DEVELOPMENT_RELEASE §50.0`; current migration state:
 `CURRENT_PROJECT_MAP §19.1`.
 
 ## Source of truth
