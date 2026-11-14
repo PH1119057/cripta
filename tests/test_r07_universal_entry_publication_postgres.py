@@ -642,3 +642,26 @@ def test_pg16_many_accounts_can_hold_shared_source_and_checkpoint_guards(db):
     assert admin.execute(
         "SELECT count(*) FROM strategy_entry.r07_epoch_dispatch_probe"
     ).fetchone()[0] == 2
+
+
+def test_pg16_source_session_primary_identity_is_immutable_under_guard(db):
+    admin, runtime = db
+    _install_epoch_fence_spike(admin)
+    # The primary source-session identity is part of the original event key.
+    # The disposable fixture intentionally has no referencing FK, so only
+    # the checked-in trigger can protect an otherwise possible UPDATE.
+    with pytest.raises(
+        psycopg.errors.RaiseException,
+        match="R07_SOURCE_SESSION_IDENTITY_IMMUTABLE",
+    ):
+        admin.execute(
+            "UPDATE analytics.native_public_trade_source_sessions "
+            "SET source_session_id=%s WHERE source_session_id=%s",
+            ("a" * 32, SESSION),
+        )
+    assert admin.execute(
+        "SELECT source_session_id FROM analytics.native_public_trade_source_sessions "
+        "WHERE source_session_id=%s",
+        (SESSION,),
+    ).fetchone() == (SESSION,)
+    assert require_r07_publication_provenance(runtime, request("ta-main")) == 45
