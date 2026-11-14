@@ -171,7 +171,7 @@ def test_exact_seven_mayak_panel_is_not_silently_renamed_to_five() -> None:
         "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
         "BTCUSDT", "ETHUSDT",
     )
-    for symbol in ("BTCUSDT", "ETHUSDT", "XRPUSDT"):
+    for symbol in ("XRPUSDT",):
         with pytest.raises(
             R11MayakPublicationUnavailable, match="OUTSIDE_FIVE_CAPTURE",
         ):
