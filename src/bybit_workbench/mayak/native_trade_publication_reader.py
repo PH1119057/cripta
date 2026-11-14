@@ -166,7 +166,10 @@ def read_r11_original_linear_page(
         "PUBLICATION_IDENTITY_OR_AGE_INVALID",
     )
     mark = refs.get(symbol)
-    _need(isinstance(mark, dict), "PUBLICATION_NATIVE_CURSOR_MISSING")
+    if not isinstance(mark, dict):
+        raise R11OriginalNativeUnverified(
+            "R11_ORIGINAL_PUBLICATION_NATIVE_CURSOR_MISSING"
+        )
     inst = bybit_instrument_id("linear", symbol)
     frame, index, seq, exec_id = (
         mark.get("frame_number"), mark.get("frame_index"),
