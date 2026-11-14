@@ -72,6 +72,7 @@ def _utc(value: object) -> datetime:
 
 def _asof_str(raw: object) -> datetime:
     _need(isinstance(raw, str), "REFERENCE_TIME_TYPE_INVALID")
+    assert isinstance(raw, str)
     try:
         return _utc(datetime.fromisoformat(raw))
     except ValueError as exc:
@@ -82,6 +83,7 @@ def _asof_str(raw: object) -> datetime:
 
 def _ratio(raw: object) -> float:
     _need(isinstance(raw, str), "RATIO_TYPE_INVALID")
+    assert isinstance(raw, str)
     try:
         value = Decimal(raw)
     except (ValueError, InvalidOperation) as exc:
