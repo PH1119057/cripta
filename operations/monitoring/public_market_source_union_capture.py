@@ -100,6 +100,16 @@ def r11_optional_original_frames_enabled() -> bool:
     return value == "1"
 
 
+def r11_original_optional_kind(product: str, kind: str) -> bool:
+    """No duplicate LINEAR publicTrade or optional cross-product topic."""
+    return (
+        (product == "SPOT" and kind in ("TRADE", "BOOK"))
+        or (product == "LINEAR" and kind in (
+            "BOOK", "TICKER", "LIQUIDATION",
+        ))
+    )
+
+
 def _r11_optional_frame_preflight(
     connection: psycopg.Connection[Any],
 ) -> None:
@@ -1077,13 +1087,11 @@ def run_source_union(
                 # advisory-lock-owned producer, never a new socket/service.
                 # P90 LINEAR publicTrade stays in its original native tape.
                 # The R11 feature is default OFF, no physical migration yet.
-                if r11_original_enabled and events and (
-                    (product == "SPOT"
-                     and events[0].kind in ("TRADE", "BOOK"))
-                    or (product == "LINEAR"
-                        and events[0].kind in (
-                            "BOOK", "TICKER", "LIQUIDATION",
-                        ))
+                if (
+                    r11_original_enabled and events
+                    and r11_original_optional_kind(
+                        product, events[0].kind,
+                    )
                 ):
                     r11_optional_frame_index += 1
                     try:
