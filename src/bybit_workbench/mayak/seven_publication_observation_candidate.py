@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from bybit_workbench.mayak.core.live import LiveMayakEngine
 from bybit_workbench.mayak.native_trade_publication_reader import (
     R11OriginalNativeUnverified,
     read_r11_original_linear_page,
@@ -32,6 +33,7 @@ from bybit_workbench.mayak.pinned_original_publication_page import (
 from bybit_workbench.mayak.publication_rest_parity import (
     R11MayakRestCandidate,
     R11MayakRestPublicationUnverified,
+    apply_r11_mayak_rest_candidates_offline,
     read_r11_mayak_rest_candidate,
 )
 
@@ -218,3 +220,77 @@ def collect_r11_seven_mayak_candidate(
         optional_cursors=tuple(option_states),
         native_cursors=tuple(native_states),
     )
+
+
+def replay_r11_seven_candidate_offline(
+    candidate: R11SevenMayakObservationCandidate, *,
+    now: datetime,
+) -> dict[str, Any]:
+    """Replay into a NEW engine, preserving existing MAYAK/Dispatcher math.
+
+    This is never a live publisher or provider-continuity certificate.
+    Connected transport cannot be inferred from physical PG frame presence.
+    Consequently this snapshot stays source-degraded until separately
+    authenticated transport continuity, WAL restart and WARMUP acceptance.
+    """
+    _need(
+        isinstance(candidate, R11SevenMayakObservationCandidate)
+        and candidate.physical_source_refs_verified
+        and candidate.provider_continuity_verified is False
+        and candidate.durable_cursor_and_warmup_verified is False
+        and candidate.dispatcher_seven_coin_parity_verified is False
+        and candidate.mayak_cutover_ready is False
+        and tuple(row.symbol for row in candidate.rest_facts) == _SEVEN
+        and len(candidate.optional_cursors) == 2
+        and len(candidate.native_cursors) == 7
+        and isinstance(now, datetime)
+        and now.tzinfo is not None
+        and now.utcoffset() == timedelta(0)
+        and now >= candidate.as_of_second
+        and now - candidate.as_of_second <= timedelta(seconds=30),
+        "UNVERIFIED_OFFLINE_PROJECTION",
+    )
+    engine = LiveMayakEngine(_SEVEN)
+    apply_r11_mayak_rest_candidates_offline(engine, candidate.rest_facts)
+    # A PG-backed immutable event page retains native event clocks. Sorting
+    # this bounded replay is deterministic; it is NOT provider order proof
+    # across separate SPOT and LINEAR transport epochs.
+    timed: list[tuple[float, int, int, Any]] = []
+    for index, item in enumerate(candidate.optional_events):
+        _need(
+            item.symbol in _SEVEN
+            and item.product in ("SPOT", "LINEAR"),
+            "OPTIONAL_EVENT_SCOPE_INVALID",
+        )
+        timed.append((item.timestamp, 0, index, item))
+    for index, item in enumerate(candidate.native_linear_trades):
+        _need(
+            item.symbol in _SEVEN and item.market == "linear",
+            "NATIVE_EVENT_SCOPE_INVALID",
+        )
+        timed.append((item.timestamp, 1, index, item))
+    for timestamp, family, _index, item in sorted(timed):
+        _need(
+            timestamp <= candidate.as_of_second.timestamp() + 5,
+            "FUTURE_EVENT_INVALID",
+        )
+        if family == 0:
+            item.apply_offline(engine)
+        else:
+            engine.on_trade(*item.on_trade_args())
+    snapshot = engine.snapshot(now)
+    _need(
+        isinstance(snapshot.get("coins"), dict)
+        and set(snapshot["coins"]) == set(_SEVEN)
+        and snapshot.get("config_fingerprint")
+        == engine.configuration_fingerprint()
+        and isinstance(snapshot.get("dispatcher_handoff"), dict)
+        and snapshot["dispatcher_handoff"].get("config_fingerprint")
+        == snapshot["config_fingerprint"]
+        and all(
+            not bool(row.get("connected"))
+            for row in engine.transport.values()
+        ),
+        "FEATURE_OR_DISPATCHER_PROVENANCE_INVALID",
+    )
+    return snapshot
