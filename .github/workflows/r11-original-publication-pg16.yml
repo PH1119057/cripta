@@ -33,6 +33,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
+      PYTHONPATH: src
       CRIPTA_R11_DISPOSABLE_PG_DSN: "postgresql://postgres:disposable_r11_ci_only@127.0.0.1:5432/r11_publication_ci"
     steps:
       - uses: actions/checkout@v4
