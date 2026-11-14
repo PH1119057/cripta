@@ -11,7 +11,6 @@ from typing import Any
 import psycopg
 import pytest
 
-from operations.monitoring import r11_mayak_pg_observation as pg
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.mayak.native_trade_replay_parity import R11ReplayCursor
 from bybit_workbench.mayak.optional_original_event_parity import (
@@ -27,6 +26,7 @@ from bybit_workbench.mayak.seven_publication_observation_candidate import (
 from bybit_workbench.mayak.seven_publication_replay_runtime import (
     R11MayakPublicationReplay,
 )
+from operations.monitoring import r11_mayak_pg_observation as pg
 
 DSN = os.environ.get("CRIPTA_R11_DISPOSABLE_PG_DSN", "")
 pytestmark = pytest.mark.skipif(
@@ -373,20 +373,19 @@ def test_pg16_consumer_and_mayak_outputs_share_one_commit(
     snapshot = _snapshot(replay)
     monkeypatch.setattr(pg, "compact_market_minute_rows", lambda *_args: ())
 
-    with _runtime() as runtime:
-        with runtime.transaction():
-            committed = commit_r11_mayak_publication(
-                runtime,
-                replay=replay,
-                snapshot=snapshot,
-                expected_generation=0,
-                expected_previous_publication_id=None,
-            )
-            snapshot_id = pg._persist_mayak_dispatcher_outputs(
-                runtime,
-                committed.snapshot,
-                symbols=SEVEN,
-            )
+    with _runtime() as runtime, runtime.transaction():
+        committed = commit_r11_mayak_publication(
+            runtime,
+            replay=replay,
+            snapshot=snapshot,
+            expected_generation=0,
+            expected_previous_publication_id=None,
+        )
+        snapshot_id = pg._persist_mayak_dispatcher_outputs(
+            runtime,
+            committed.snapshot,
+            symbols=SEVEN,
+        )
 
     assert snapshot_id is not None
     assert admin.execute(
@@ -426,20 +425,19 @@ def test_pg16_output_failure_rolls_back_consumer_cursor(
 
     monkeypatch.setattr(pg, "compact_market_minute_rows", fail_rows)
     with pytest.raises(RuntimeError, match="derived output failed"):
-        with _runtime() as runtime:
-            with runtime.transaction():
-                committed = commit_r11_mayak_publication(
-                    runtime,
-                    replay=replay,
-                    snapshot=snapshot,
-                    expected_generation=0,
-                    expected_previous_publication_id=None,
-                )
-                pg._persist_mayak_dispatcher_outputs(
-                    runtime,
-                    committed.snapshot,
-                    symbols=SEVEN,
-                )
+        with _runtime() as runtime, runtime.transaction():
+            committed = commit_r11_mayak_publication(
+                runtime,
+                replay=replay,
+                snapshot=snapshot,
+                expected_generation=0,
+                expected_previous_publication_id=None,
+            )
+            pg._persist_mayak_dispatcher_outputs(
+                runtime,
+                committed.snapshot,
+                symbols=SEVEN,
+            )
 
     assert admin.execute(
         "SELECT count(*) FROM mayak_v2.r11_consumer_commit"
