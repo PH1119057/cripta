@@ -9,10 +9,10 @@ import pytest
 
 import bybit_workbench
 
-PRODUCTION_PACKAGE = (
-    Path(__file__).parents[1] / "production" / "src" / "bybit_workbench"
+SOURCE_PACKAGE = (
+    Path(__file__).parents[1] / "src" / "bybit_workbench"
 )
-production_path = str(PRODUCTION_PACKAGE)
+production_path = str(SOURCE_PACKAGE)
 if production_path not in bybit_workbench.__path__:
     bybit_workbench.__path__.append(production_path)
 dispatcher = importlib.import_module("bybit_workbench.strategy_dispatcher")
@@ -276,7 +276,6 @@ def test_replay_is_offline_and_deterministic(tmp_path: Path) -> None:
 def test_dispatcher_package_has_no_network_database_or_trading_imports() -> None:
     package = (
         Path(__file__).parents[1]
-        / "production"
         / "src"
         / "bybit_workbench"
         / "strategy_dispatcher"

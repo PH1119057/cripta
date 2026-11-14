@@ -9,10 +9,10 @@ import pytest
 
 import bybit_workbench
 
-PRODUCTION_PACKAGE = (
-    Path(__file__).parents[1] / "production" / "src" / "bybit_workbench"
+SOURCE_PACKAGE = (
+    Path(__file__).parents[1] / "src" / "bybit_workbench"
 )
-production_path = str(PRODUCTION_PACKAGE)
+production_path = str(SOURCE_PACKAGE)
 if production_path not in bybit_workbench.__path__:
     bybit_workbench.__path__.append(production_path)
 dispatcher = importlib.import_module("bybit_workbench.strategy_dispatcher")
@@ -207,7 +207,6 @@ def test_profile_cannot_reference_unknown_feature() -> None:
 def test_dispatcher_has_no_execution_risk_position_or_strategy_imports() -> None:
     package = (
         Path(__file__).parents[1]
-        / "production"
         / "src"
         / "bybit_workbench"
         / "strategy_dispatcher"
