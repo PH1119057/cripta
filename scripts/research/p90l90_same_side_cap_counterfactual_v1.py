@@ -515,7 +515,7 @@ def run(period: str, commit: str, mode: str, smoke_minutes: int) -> dict:
                 raise ValueError("source tick candidate coverage drift")
         # Engine reference controls were replayed under original source.
         controls = engine.compare_reference(period, refs)
-        _, original, original_rows = provenance(period)
+        frozen_status, original, original_rows = provenance(period)
         if books["CAP5__ORIGINAL_MAKER_TP"].trades != original_rows:
             raise ValueError("CAP5 exact historical original ledger parity fails")
         finish_ts = (
@@ -549,7 +549,7 @@ def run(period: str, commit: str, mode: str, smoke_minutes: int) -> dict:
             "original_cap5_trade_by_trade_parity": True,
             "original_reference_trade_parity": controls,
             "original_frozen_ledger_sha256": original["ledger_sha256"],
-            "original_frozen_result_sha256": original["result_sha256"],
+            "original_frozen_result_sha256": frozen_status["result_sha256"],
             "last_source_prices": {s: str(v) for s, v in prices.items()},
             "source_events_seen": seen,
             "final_checkpoint_sha256": chain,
