@@ -286,12 +286,12 @@ def replay_r11_seven_candidate_offline(
             "OPTIONAL_EVENT_SCOPE_INVALID",
         )
         timed.append((item.timestamp, 0, index, item))
-    for index, item in enumerate(candidate.native_linear_trades):
+    for index, trade in enumerate(candidate.native_linear_trades):
         _need(
-            item.symbol in _SEVEN and item.market == "linear",
+            trade.symbol in _SEVEN and trade.market == "linear",
             "NATIVE_EVENT_SCOPE_INVALID",
         )
-        timed.append((item.timestamp, 1, index, item))
+        timed.append((trade.timestamp, 1, index, trade))
     for timestamp, family, _index, item in sorted(timed):
         _need(
             timestamp <= candidate.as_of_second.timestamp() + 5,
