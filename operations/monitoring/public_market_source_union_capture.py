@@ -526,10 +526,12 @@ def run_source_union(
 ) -> None:
     """Exact stage-scoped source; all PG writes remain in one native process."""
     r11_original_enabled = r11_optional_original_frames_enabled()
-    r11_anchor_symbols = tuple(sorted({
-        item.symbol for item in union.requirements
-        if item.consumer_id == "MAYAK_REFERENCE"
-    }))
+    r11_anchor_symbols = (
+        () if closed_only else tuple(sorted({
+            item.symbol for item in union.requirements
+            if item.consumer_id == "MAYAK_REFERENCE"
+        }))
+    )
     if r11_anchor_symbols and (
         r11_anchor_symbols != _R11_REFERENCE_ANCHORS
         or not r11_original_enabled or not publish_seconds or closed_only
