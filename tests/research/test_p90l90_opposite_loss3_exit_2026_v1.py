@@ -1,116 +1,21 @@
-"""Research #690: exact negative-three-percent causal new-Entry gate tests."""
-from decimal import Decimal as D
+"""Research #690 independently isolated native Exit test subprocess.
 
-from scripts.research import p90l90_exit_90d_v2 as base
-import importlib.util
+The broad suite imports other test fixtures that may transiently mock the
+legacy scripts.research namespace: isolate causal original modules from it.
+"""
+import subprocess
+import sys
 from pathlib import Path
 
-_SCRIPT = (Path(__file__).resolve().parents[2] / "scripts" / "research"
-           / "p90l90_opposite_loss3_exit_2026_v1.py")
-_SPEC = importlib.util.spec_from_file_location("r690_opposite_2026", _SCRIPT)
-assert _SPEC is not None and _SPEC.loader is not None
-experiment = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(experiment)
+CASES = "from decimal import Decimal as D\nfrom scripts.research import p90l90_exit_90d_v2 as base\nfrom scripts.research import p90l90_opposite_loss3_exit_2026_v1 as experiment\ndef event(side, price, ident):\n    return {\n        \"symbol\": \"LTCUSDT\", \"side\": side, \"price\": str(price),\n        \"ts\": \"100\", \"event_id\": ident, \"trade_id\": ident,\n        \"PREV7D\": True,\n    }\n\n\ndef source_position(side, price):\n    return base.initial_position(\n        event(side, price, \"opp-\" + side), 1, 0, \"PREV7D\", \"TRAIL035\"\n    )\n\n\ndef open_new(side, price, opposite, cap=\"OPP3\"):\n    book = experiment.TimeBook(cap, \"ALL\")\n    book.handle(\n        \"LTCUSDT\", 100, 50, D(str(price)),\n        (event(side, price, \"new-\" + side),),\n        (D(\"90\"), D(\"110\")), opponent=opposite,\n    )\n    assert book.count[\"accepted\"] == 1\n    return book, book.pos[\"LTCUSDT\"]\n\n\ndef test_exact_loss_three_short_opponent_long_new():\n    opposite = source_position(\"SHORT\", \"100\")\n    opposite.stop = D(\"101\")  # tightened live stop must NOT replace original -10%\n    book, pos = open_new(\"LONG\", \"103\", opposite)\n    assert pos._r690_special is True\n    assert pos.tp == D(\"110\")\n    assert pos.tp_live_after_seq == 50\n    assert book.special_entries[0][\"opponent_unrealized_gross_pct\"] == \"-3.00\"\n    assert book.special_entries[0][\"target_price\"] == \"110.0\"\n\n\ndef test_exact_loss_three_long_opponent_short_new():\n    opposite = source_position(\"LONG\", \"100\")\n    opposite.stop = D(\"99\")\n    book, pos = open_new(\"SHORT\", \"97\", opposite)\n    assert pos._r690_special is True\n    assert pos.tp == D(\"90\")\n    assert len(book.special_entries) == 1\n\n\ndef test_loss_2point99_does_not_trigger():\n    for opposite_side, new_side, price in (\n        (\"SHORT\", \"LONG\", \"102.99\"),\n        (\"LONG\", \"SHORT\", \"97.01\"),\n    ):\n        book, pos = open_new(\n            new_side, price, source_position(opposite_side, \"100\")\n        )\n        assert not getattr(pos, \"_r690_special\", False)\n        assert not book.special_entries\n\n\ndef test_no_opponent_no_trigger():\n    book, pos = open_new(\"LONG\", \"103\", None)\n    assert not getattr(pos, \"_r690_special\", False)\n    assert book.special_entries == []\n\n\ndef test_special_trail_activates_only_after_1point2():\n    _, pos = open_new(\"LONG\", \"103\", source_position(\"SHORT\", \"100\"))\n    initial_stop = pos.stop\n    returned, outcome = experiment.special_on_trade(\n        pos, D(\"104.225\"), 51, 0, D(\"200\"), \"TRAIL035\"\n    )\n    assert returned is pos and outcome is None\n    assert pos.stop == initial_stop\n    returned, outcome = experiment.special_on_trade(\n        pos, D(\"104.236\"), 52, 0, D(\"200\"), \"TRAIL035\"\n    )\n    assert returned is pos and outcome is None\n    assert pos.protected and pos.stop == D(\"103.206\")\n    returned, outcome = experiment.special_on_trade(\n        pos, pos.stop, 53, 0, D(\"200\"), \"TRAIL035\"\n    )\n    assert returned is None and outcome[0] == \"PROTECTED_STOP\"\n\n\ndef test_fixed_target_resting_cannot_hit_on_entry_tick():\n    _, pos = open_new(\"LONG\", \"103\", source_position(\"SHORT\", \"100\"))\n    returned, outcome = experiment.special_on_trade(\n        pos, D(\"110\"), 50, 0, D(\"1\"), \"TRAIL035\"\n    )\n    assert returned is pos and outcome is None\n    returned, outcome = experiment.special_on_trade(\n        pos, D(\"110\"), 51, 0, D(\"1\"), \"TRAIL035\"\n    )\n    assert returned is None\n    assert outcome == (\"RESTING_TP\", D(\"110\"), True)\n\n\ndef test_control_remains_unmodified():\n    opposite = source_position(\"SHORT\", \"100\")\n    book, pos = open_new(\"LONG\", \"103\", opposite, cap=None)\n    assert not getattr(pos, \"_r690_special\", False)\n    assert not book.special_entries\n    assert pos.tp == D(\"110\")\n\nif __name__ == \"__main__\":\n    for name, func in sorted(globals().copy().items()):\n        if name.startswith(\"test_\") and callable(func):\n            func()\n            print(\"PASS\", name)\n"
 
 
-def event(side, price, ident):
-    return {
-        "symbol": "LTCUSDT", "side": side, "price": str(price),
-        "ts": "100", "event_id": ident, "trade_id": ident,
-        "PREV7D": True,
-    }
-
-
-def source_position(side, price):
-    return base.initial_position(
-        event(side, price, "opp-" + side), 1, 0, "PREV7D", "TRAIL035"
+def test_exact_opponent_loss3_policy_in_separate_process():
+    repo = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", CASES],
+        cwd=repo, capture_output=True, text=True, timeout=30,
+        check=False,
     )
-
-
-def open_new(side, price, opposite, cap="OPP3"):
-    book = experiment.TimeBook(cap, "ALL")
-    book.handle(
-        "LTCUSDT", 100, 50, D(str(price)),
-        (event(side, price, "new-" + side),),
-        (D("90"), D("110")), opponent=opposite,
-    )
-    assert book.count["accepted"] == 1
-    return book, book.pos["LTCUSDT"]
-
-
-def test_exact_loss_three_short_opponent_long_new():
-    opposite = source_position("SHORT", "100")
-    opposite.stop = D("101")  # tightened live stop must NOT replace original -10%
-    book, pos = open_new("LONG", "103", opposite)
-    assert pos._r690_special is True
-    assert pos.tp == D("110")
-    assert pos.tp_live_after_seq == 50
-    assert book.special_entries[0]["opponent_unrealized_gross_pct"] == "-3.00"
-    assert book.special_entries[0]["target_price"] == "110.0"
-
-
-def test_exact_loss_three_long_opponent_short_new():
-    opposite = source_position("LONG", "100")
-    opposite.stop = D("99")
-    book, pos = open_new("SHORT", "97", opposite)
-    assert pos._r690_special is True
-    assert pos.tp == D("90")
-    assert len(book.special_entries) == 1
-
-
-def test_loss_2point99_does_not_trigger():
-    for opposite_side, new_side, price in (
-        ("SHORT", "LONG", "102.99"),
-        ("LONG", "SHORT", "97.01"),
-    ):
-        book, pos = open_new(
-            new_side, price, source_position(opposite_side, "100")
-        )
-        assert not getattr(pos, "_r690_special", False)
-        assert not book.special_entries
-
-
-def test_no_opponent_no_trigger():
-    book, pos = open_new("LONG", "103", None)
-    assert not getattr(pos, "_r690_special", False)
-    assert book.special_entries == []
-
-
-def test_special_trail_activates_only_after_1point2():
-    _, pos = open_new("LONG", "103", source_position("SHORT", "100"))
-    initial_stop = pos.stop
-    returned, outcome = experiment.special_on_trade(
-        pos, D("104.225"), 51, 0, D("200"), "TRAIL035"
-    )
-    assert returned is pos and outcome is None
-    assert pos.stop == initial_stop
-    returned, outcome = experiment.special_on_trade(
-        pos, D("104.236"), 52, 0, D("200"), "TRAIL035"
-    )
-    assert returned is pos and outcome is None
-    assert pos.protected and pos.stop == D("103.206")
-    returned, outcome = experiment.special_on_trade(
-        pos, pos.stop, 53, 0, D("200"), "TRAIL035"
-    )
-    assert returned is None and outcome[0] == "PROTECTED_STOP"
-
-
-def test_fixed_target_resting_cannot_hit_on_entry_tick():
-    _, pos = open_new("LONG", "103", source_position("SHORT", "100"))
-    returned, outcome = experiment.special_on_trade(
-        pos, D("110"), 50, 0, D("1"), "TRAIL035"
-    )
-    assert returned is pos and outcome is None
-    returned, outcome = experiment.special_on_trade(
-        pos, D("110"), 51, 0, D("1"), "TRAIL035"
-    )
-    assert returned is None
-    assert outcome == ("RESTING_TP", D("110"), True)
-
-
-def test_control_remains_unmodified():
-    opposite = source_position("SHORT", "100")
-    book, pos = open_new("LONG", "103", opposite, cap=None)
-    assert not getattr(pos, "_r690_special", False)
-    assert not book.special_entries
-    assert pos.tp == D("110")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.count("PASS test_") == 7, result.stdout
