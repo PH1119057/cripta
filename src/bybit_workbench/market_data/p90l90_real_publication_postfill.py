@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -23,9 +24,6 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
     VERSION,
 )
-from bybit_workbench.universal_exit.p90l90_real_observation import (
-    P90RealPostfillSourceWindow,
-)
 
 _HASH = re.compile(r"^[0-9a-f]{40}$")
 _SESSION = re.compile(r"^[0-9a-f]{32}$")
@@ -38,6 +36,30 @@ _ANCHOR_LOOKBACK = timedelta(seconds=60)
 
 class P90PGPostfillUnverified(RuntimeError):
     """Insufficient original PG/publication evidence for protected first fill."""
+
+
+@dataclass(frozen=True, slots=True)
+class R09NativePublicationCandidate:
+    """Read-only original facts, NOT certified MFE coverage or Exit readiness.
+
+    Source-row continuity, no-trade coverage, pending Exchange mutation and
+    current signed OPEN/SL/TP need independent proofs before a financial Exit.
+    """
+
+    position_id: str
+    symbol: str
+    source_session_id: str
+    publication_id: int
+    fill_at: datetime
+    covered_through: datetime
+    source_commit: str
+    producer_release_commit: str
+    last_native_price: Decimal
+    observed_favorable_price: Decimal
+    native_event_count: int
+    source_refs: tuple[str, ...]
+    native_continuity_verified: bool = False
+    exit_ready: bool = False
 
 
 def _need(condition: bool, code: str) -> None:
@@ -87,8 +109,8 @@ def read_r09_native_publication_postfill(
     source_commit: str,
     accepted_producer_commits: frozenset[str],
     observed_at: datetime,
-) -> P90RealPostfillSourceWindow:
-    """Prove an actual native-trade first-fill suffix in one immutable PG view.
+) -> R09NativePublicationCandidate:
+    """Read one original-native first-fill suffix in one immutable PG view.
 
     Caller MUST provide a separate REPEATABLE READ READ ONLY connection.
     It MUST separately attest signed OPEN account/position/fill/SL/TP and
@@ -306,15 +328,17 @@ def read_r09_native_publication_postfill(
         if position.direction is TradeDirection.LONG
         else min([entry_price, *prices])
     )
-    return P90RealPostfillSourceWindow(
+    return R09NativePublicationCandidate(
         position_id=position.strategy_position_id,
         symbol=position.symbol,
+        source_session_id=session,
+        publication_id=pid,
         fill_at=fill,
         covered_through=pub_at,
         source_commit=source_commit,
+        producer_release_commit=producer,
         last_native_price=prices[-1],
-        best_favorable_price=best,
+        observed_favorable_price=best,
+        native_event_count=len(prices),
         source_refs=tuple(refs),
-        complete_native_window=True,
-        no_new_native_trade_rest_verified=False,
     )
