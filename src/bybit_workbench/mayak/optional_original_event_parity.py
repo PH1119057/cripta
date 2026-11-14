@@ -17,7 +17,7 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Literal, cast
 
 from bybit_workbench.market_data.public_source_event_codec import (
@@ -155,11 +155,12 @@ def _need(ok: bool, code: str) -> None:
 
 
 def _numeric(value: object, *, zero: bool = False, signed: bool = False) -> float:
-    _need(
-        not isinstance(value, bool)
-        and isinstance(value, (str, int, Decimal, float)),
-        "NUMBER_TYPE_INVALID",
-    )
+    if isinstance(value, bool) or not isinstance(
+        value, (str, int, Decimal, float),
+    ):
+        raise R11OptionalMayakReplayUnverified(
+            "R11_OPTIONAL_MAYAK_NUMBER_TYPE_INVALID"
+        )
     try:
         num = float(value)
     except (ValueError, TypeError, OverflowError) as exc:
@@ -189,7 +190,10 @@ def _levels(
     *,
     allow_zero: bool,
 ) -> tuple[tuple[float, float], ...]:
-    _need(isinstance(value, tuple) and len(value) <= 100, "LEVELS_INVALID")
+    if not isinstance(value, tuple) or len(value) > 100:
+        raise R11OptionalMayakReplayUnverified(
+            "R11_OPTIONAL_MAYAK_LEVELS_INVALID"
+        )
     out: list[tuple[float, float]] = []
     seen: set[float] = set()
     for level in value:
