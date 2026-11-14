@@ -35,7 +35,7 @@ from bybit_workbench.mayak.optional_original_public_frame_reader import (
     R11OriginalFramePage,
 )
 
-_FIVE = frozenset(("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT"))
+_FIVE = frozenset(("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT", "BTCUSDT", "ETHUSDT"))
 _SHA32 = re.compile(r"^[0-9a-f]{32}$")
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA64 = re.compile(r"^[0-9a-f]{64}$")
