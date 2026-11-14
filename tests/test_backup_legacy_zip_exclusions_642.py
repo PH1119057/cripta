@@ -6,12 +6,13 @@ connect to PostgreSQL or change existing backup generations.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
-from pathlib import Path
 
 import pytest
 
