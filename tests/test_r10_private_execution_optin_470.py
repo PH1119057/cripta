@@ -6,10 +6,9 @@ a failed MarketPublication read cannot fall back to Bybit public REST.
 from __future__ import annotations
 
 import ast
-import os
 import sys
 from contextlib import nullcontext
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
