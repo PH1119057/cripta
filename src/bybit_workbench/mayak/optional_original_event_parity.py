@@ -35,7 +35,7 @@ from bybit_workbench.mayak.optional_original_public_frame_reader import (
     R11OriginalFramePage,
 )
 
-_FIVE = frozenset(("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT", "BTCUSDT", "ETHUSDT"))
+_SEVEN = frozenset(("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT", "BTCUSDT", "ETHUSDT"))
 _SHA32 = re.compile(r"^[0-9a-f]{32}$")
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA64 = re.compile(r"^[0-9a-f]{64}$")
@@ -286,7 +286,7 @@ def _canonical_frame(
         and frame.transport_epoch_id == source.transport_epoch_id
         and frame.producer_release_commit == source.producer_release_commit
         and frame.product_category == source.product_category
-        and frame.external_symbol in _FIVE
+        and frame.external_symbol in _SEVEN
         and frame.transport_continuity_verified is False
         and frame.mayak_event_replay_ready is False,
         "FRAME_SOURCE_SCOPE_INVALID",
@@ -386,7 +386,7 @@ def project_r11_optional_mayak_page(
         for item in previous.books:
             _need(
                 isinstance(item, R11MayakBookState)
-                and item.symbol in _FIVE and item.symbol not in books,
+                and item.symbol in _SEVEN and item.symbol not in books,
                 "CHECKPOINT_BOOK_SCOPE_INVALID",
             )
             books[item.symbol] = item
