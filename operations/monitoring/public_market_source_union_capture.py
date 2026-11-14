@@ -11,6 +11,7 @@ No consumer cutover, Strategy, account, Exchange, private API or LIVE right.
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 import time
@@ -53,6 +54,11 @@ from bybit_workbench.market_data.public_source_event_codec import (
     PublicSourceFrameInvalid,
     decode_bybit_public_frame,
 )
+from bybit_workbench.market_data.r11_optional_original_frame_journal import (
+    R11OriginalFrameUnavailable,
+    append_r11_original_optional_frame,
+    make_r11_original_optional_frame,
+)
 from bybit_workbench.market_data.public_source_quality import (
     PublicSourceQualityEvent,
     Quality,
@@ -84,6 +90,45 @@ _REPAIR_PAGES_PER_WINDOW = 20
 _REPAIR_RESCAN_SECONDS = 900
 _REPAIR_PROVIDER_SPACING_SECONDS = 0.30
 _REPAIR_PROVIDER_SETTLE_SECONDS = 10
+
+
+def r11_optional_original_frames_enabled() -> bool:
+    """Explicit code-first R11 flag; source installation never auto-enables."""
+    value = os.environ.get("CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES", "0").strip()
+    if value not in {"0", "1"}:
+        raise SourceManifestInvalid("R11_ORIGINAL_FRAME_FLAG_INVALID")
+    return value == "1"
+
+
+def r11_original_optional_kind(product: str, kind: str) -> bool:
+    """No duplicate LINEAR publicTrade or optional cross-product topic."""
+    return (
+        (product == "SPOT" and kind in ("TRADE", "BOOK"))
+        or (product == "LINEAR" and kind in (
+            "BOOK", "TICKER", "LIQUIDATION",
+        ))
+    )
+
+
+def _r11_optional_frame_preflight(
+    connection: psycopg.Connection[Any],
+) -> None:
+    """Exact migration/SELECT+INSERT but no UPDATE/DELETE, before any WS."""
+    table = "analytics.public_source_original_event_frames"
+    found = connection.execute(
+        "SELECT to_regclass(%s)", (table,),
+    ).fetchone()
+    if found is None or found[0] is None:
+        raise SourceManifestInvalid("R11_ORIGINAL_FRAME_SCHEMA_NOT_INSTALLED")
+    rights = connection.execute(
+        """SELECT has_table_privilege(current_user,%s,'SELECT'),
+                  has_table_privilege(current_user,%s,'INSERT'),
+                  has_table_privilege(current_user,%s,'UPDATE'),
+                  has_table_privilege(current_user,%s,'DELETE')""",
+        (table, table, table, table),
+    ).fetchone()
+    if rights != (True, True, False, False):
+        raise SourceManifestInvalid("R11_ORIGINAL_FRAME_ROLE_GRANTS_INVALID")
 
 
 def parse_explicit_source_manifest(
@@ -438,6 +483,13 @@ def run_source_union(
     should_stop: Callable[[], bool] | None = None,
 ) -> None:
     """Exact stage-scoped source; all PG writes remain in one native process."""
+    r11_original_enabled = r11_optional_original_frames_enabled()
+    if r11_original_enabled:
+        if closed_only:
+            raise SourceManifestInvalid(
+                "R11_ORIGINAL_FRAME_REQUIRES_OPTIONAL_SOURCE_UNION"
+            )
+        _r11_optional_frame_preflight(connection)
     if closed_only and (
         publish_seconds
         or any(
@@ -910,6 +962,7 @@ def run_source_union(
                 )
 
     frame_index = 0
+    r11_optional_frame_index = 0
     last_published_second: datetime | None = None
     repair_index = 0
     next_repair_scan_at = 0.0
@@ -1030,6 +1083,43 @@ def run_source_union(
                         epoch=frame_epoch,
                     )
                     events = ()
+                # R11 raw optional events are attached to the EXISTING
+                # advisory-lock-owned producer, never a new socket/service.
+                # P90 LINEAR publicTrade stays in its original native tape.
+                # The R11 feature is default OFF, no physical migration yet.
+                if (
+                    r11_original_enabled and events
+                    and r11_original_optional_kind(
+                        product, events[0].kind,
+                    )
+                ):
+                    r11_optional_frame_index += 1
+                    try:
+                        original = make_r11_original_optional_frame(
+                            source_session_id=session,
+                            transport_epoch_id=frame_epoch,
+                            producer_release_commit=producer_release_commit,
+                            product=product,
+                            source_frame_number=r11_optional_frame_index,
+                            message=item, facts=events,
+                            received_at=received,
+                        )
+                        append_r11_original_optional_frame(
+                            connection, original,
+                        )
+                    except (
+                        R11OriginalFrameUnavailable, psycopg.Error,
+                    ):
+                        # Explicitly degrade only the affected original
+                        # optional topic. Never falsify continuity or stop
+                        # unrelated mandatory LINEAR native publicTrade.
+                        note_quality(
+                            product=product, topic=topic,
+                            symbol=events[0].symbol,
+                            quality="UNKNOWN",
+                            reason="R11_ORIGINAL_FRAME_APPEND_UNVERIFIED",
+                            epoch=frame_epoch,
+                        )
                 for event in events:
                     if event.kind == "FORMING_KLINE":
                         if (
