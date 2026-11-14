@@ -20,6 +20,7 @@ from bybit_workbench.mayak.publication_consumer_commit import (
     R11ConsumerCommitUnverified,
     commit_r11_mayak_publication,
     load_r11_mayak_consumer_commit,
+    read_r11_mayak_consumer_head,
 )
 from bybit_workbench.mayak.seven_publication_engine_checkpoint import (
     R11MayakStateUnverified,
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
     from operations.monitoring.mayak_v2 import Collector
 
 _MAX_PUBLICATION_LAG_SECONDS = 30
+_MAX_BACKLOG_PUBLICATIONS = 64
 
 
 class R11MayakPGSourceUnavailable(RuntimeError):
@@ -46,6 +48,109 @@ class R11MayakPGSourceUnavailable(RuntimeError):
 def _need(ok: bool, reason: str) -> None:
     if not ok:
         raise R11MayakPGSourceUnavailable("R11_MAYAK_PG_" + reason)
+
+
+def _latest_publication(db: Any) -> tuple[int, datetime, str, str]:
+    row = db.execute(
+        """SELECT p.publication_id,p.as_of_second,p.source_session_id,
+                  p.producer_release_commit
+             FROM analytics.market_publications p
+             JOIN analytics.native_public_trade_source_sessions s
+               ON s.source_session_id=p.source_session_id
+            WHERE p.market_source_id=%s
+              AND s.market_source_id=p.market_source_id
+              AND s.state='ACTIVE'
+              AND p.producer_release_commit=s.producer_release_commit
+              AND p.publication_status='WATERMARKS_ONLY'
+            ORDER BY p.as_of_second DESC,p.publication_id DESC
+            LIMIT 1""",
+        (BYBIT_PUBLIC_MARKET_SOURCE_ID,),
+    ).fetchone()
+    _need(
+        isinstance(row, (tuple, list)) and len(row) == 4
+        and type(row[0]) is int and row[0] > 0
+        and isinstance(row[1], datetime) and row[1].utcoffset() is not None
+        and row[1].utcoffset().total_seconds() == 0
+        and isinstance(row[2], str) and isinstance(row[3], str),
+        "ACTIVE_SOURCE_PUBLICATION_MISSING",
+    )
+    return int(row[0]), row[1], str(row[2]), str(row[3])
+
+
+def _next_publication(
+    db: Any, *,
+    replay: R11MayakPublicationReplay,
+    now: datetime,
+) -> tuple[int, datetime] | None:
+    checkpoint = replay.checkpoint
+    if checkpoint is None:
+        publication_id, as_of, _session, _release = _latest_publication(db)
+        _need(
+            0 <= (now - as_of).total_seconds() <= _MAX_PUBLICATION_LAG_SECONDS,
+            "PUBLICATION_STREAM_STALE",
+        )
+        return publication_id, as_of
+
+    rows = db.execute(
+        """SELECT p.publication_id,p.as_of_second
+             FROM analytics.market_publications p
+             JOIN analytics.native_public_trade_source_sessions s
+               ON s.source_session_id=p.source_session_id
+            WHERE p.market_source_id=%s
+              AND s.market_source_id=p.market_source_id
+              AND s.state='ACTIVE'
+              AND p.source_session_id=%s
+              AND p.producer_release_commit=%s
+              AND p.publication_status='WATERMARKS_ONLY'
+              AND (p.as_of_second,p.publication_id)>(%s,%s)
+            ORDER BY p.as_of_second,p.publication_id
+            LIMIT %s""",
+        (
+            BYBIT_PUBLIC_MARKET_SOURCE_ID,
+            checkpoint.source_session_id,
+            checkpoint.release_commit,
+            checkpoint.as_of_second,
+            checkpoint.publication_id,
+            _MAX_BACKLOG_PUBLICATIONS + 1,
+        ),
+    ).fetchall()
+    _need(isinstance(rows, list), "BACKLOG_QUERY_INVALID")
+    _need(
+        len(rows) <= _MAX_BACKLOG_PUBLICATIONS,
+        "PUBLICATION_BACKLOG_EXCEEDS_BOUND",
+    )
+    if rows:
+        first = rows[0]
+        _need(
+            isinstance(first, (tuple, list)) and len(first) == 2
+            and type(first[0]) is int
+            and first[0] > checkpoint.publication_id
+            and isinstance(first[1], datetime)
+            and first[1].utcoffset() is not None
+            and first[1].utcoffset().total_seconds() == 0
+            and first[1] >= checkpoint.as_of_second
+            and first[1] <= now,
+            "BACKLOG_ORDER_INVALID",
+        )
+        return int(first[0]), first[1]
+
+    latest_id, latest_as_of, latest_session, latest_release = _latest_publication(db)
+    _need(
+        (latest_session, latest_release)
+        == (checkpoint.source_session_id, checkpoint.release_commit),
+        "SOURCE_EPOCH_CHANGED",
+    )
+    _need(
+        latest_id == checkpoint.publication_id
+        and latest_as_of == checkpoint.as_of_second,
+        "DURABLE_CURSOR_NOT_AT_HEAD",
+    )
+    _need(
+        0 <= (now - latest_as_of).total_seconds()
+        <= _MAX_PUBLICATION_LAG_SECONDS,
+        "PUBLICATION_STREAM_STALE",
+    )
+    return None
 
 
 def _read_one(
@@ -67,44 +172,20 @@ def _read_one(
         == ("on",),
         "PG_READ_ONLY_REPEATABLE_READ_REQUIRED",
     )
-    latest = db.execute(
-        """SELECT p.publication_id
-             FROM analytics.market_publications p
-             JOIN analytics.native_public_trade_source_sessions s
-               ON s.source_session_id=p.source_session_id
-            WHERE p.market_source_id=%s
-              AND s.market_source_id=p.market_source_id
-              AND s.state='ACTIVE'
-              AND p.producer_release_commit=s.producer_release_commit
-              AND p.publication_status='WATERMARKS_ONLY'
-            ORDER BY p.as_of_second DESC,p.publication_id DESC
-            LIMIT 1""",
-        (BYBIT_PUBLIC_MARKET_SOURCE_ID,),
-    ).fetchone()
-    _need(
-        isinstance(latest, (tuple, list))
-        and len(latest) == 1
-        and type(latest[0]) is int and latest[0] > 0,
-        "ACTIVE_SOURCE_PUBLICATION_MISSING",
-    )
-    if (
-        replay.checkpoint is not None
-        and latest[0] <= replay.checkpoint.publication_id
-    ):
+    target = _next_publication(db, replay=replay, now=now)
+    if target is None:
         return None
+    publication_id, causal_now = target
     candidate = collect_r11_seven_mayak_candidate(
-        db, publication_id=latest[0], observed_at=now,
+        db, publication_id=publication_id, observed_at=causal_now,
         previous=replay.checkpoint,
         require_provider_continuity=True,
     )
     _need(
-        0 <= (now-candidate.as_of_second).total_seconds()
-        <= _MAX_PUBLICATION_LAG_SECONDS,
-        "PUBLICATION_STALE",
+        candidate.as_of_second == causal_now,
+        "PUBLICATION_CAUSAL_CLOCK_DRIFT",
     )
-    snapshot = replay.apply(candidate, now=now)
-    # Provider continuity is proven per scope, but WARMUP, durable consumer
-    # commit and Dispatcher acceptance remain independent gates.
+    snapshot = replay.apply(candidate, now=causal_now)
     _need(
         snapshot["r11_market_publication"]["consumer_ready"] is False
         and snapshot["r11_market_publication"][
@@ -113,7 +194,6 @@ def _read_one(
         "FALSE_MARKET_SOURCE_READY",
     )
     return snapshot
-
 
 def _source_identity(db: Any) -> tuple[str, str]:
     rows = db.execute(
@@ -132,6 +212,49 @@ def _source_identity(db: Any) -> tuple[str, str]:
     return str(rows[0][0]), str(rows[0][1])
 
 
+def _restore_or_reset_replay(
+    db: Any,
+) -> tuple[
+    R11MayakPublicationReplay, int, int | None, str | None, str | None,
+]:
+    source_session, release = _source_identity(db)
+    head = read_r11_mayak_consumer_head(db)
+    if head is None:
+        return (
+            R11MayakPublicationReplay(require_provider_continuity=True),
+            0, None, None, None,
+        )
+    if (head.source_session_id, head.release_commit) == (source_session, release):
+        restored = load_r11_mayak_consumer_commit(
+            db, expected_source_session_id=source_session,
+            expected_release_commit=release,
+        )
+        _need(restored is not None, "CONSUMER_HEAD_WITHOUT_STATE")
+        assert restored is not None
+        replay = restored.replay
+        replay.require_provider_continuity = True
+        return replay, restored.generation, head.publication_id, None, None
+
+    previous = load_r11_mayak_consumer_commit(
+        db, expected_source_session_id=head.source_session_id,
+        expected_release_commit=head.release_commit,
+    )
+    _need(
+        previous is not None
+        and previous.generation == head.generation
+        and previous.replay.checkpoint is not None
+        and previous.replay.checkpoint.publication_id == head.publication_id,
+        "SOURCE_RESET_PREVIOUS_STATE_UNVERIFIED",
+    )
+    return (
+        R11MayakPublicationReplay(require_provider_continuity=True),
+        head.generation,
+        head.publication_id,
+        head.source_session_id,
+        head.release_commit,
+    )
+
+
 def run_r11_pg_observation(collector: Collector) -> None:
     """PG-only seven-symbol dry-run path; no new market collector sockets.
 
@@ -146,21 +269,10 @@ def run_r11_pg_observation(collector: Collector) -> None:
         db.execute(
             "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
         )
-        source_session, release = _source_identity(db)
-        restored = load_r11_mayak_consumer_commit(
-            db, expected_source_session_id=source_session,
-            expected_release_commit=release,
-        )
-    if restored is None:
-        replay = R11MayakPublicationReplay(require_provider_continuity=True)
-        generation = 0
-        previous_publication_id: int | None = None
-    else:
-        replay = restored.replay
-        replay.require_provider_continuity = True
-        generation = restored.generation
-        assert replay.checkpoint is not None
-        previous_publication_id = replay.checkpoint.publication_id
+        (
+            replay, generation, previous_publication_id,
+            previous_source_session_id, previous_release_commit,
+        ) = _restore_or_reset_replay(db)
     while not collector.stop.wait(1.0):
         now = datetime.now(UTC)
         try:
@@ -170,6 +282,17 @@ def run_r11_pg_observation(collector: Collector) -> None:
                 db.execute(
                     "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
                 )
+                current_source = _source_identity(db)
+                checkpoint = replay.checkpoint
+                if (
+                    checkpoint is not None
+                    and current_source
+                    != (checkpoint.source_session_id, checkpoint.release_commit)
+                ):
+                    (
+                        replay, generation, previous_publication_id,
+                        previous_source_session_id, previous_release_commit,
+                    ) = _restore_or_reset_replay(db)
                 snapshot = _read_one(db, replay=replay, now=now)
             if snapshot is None:
                 continue
@@ -178,8 +301,14 @@ def run_r11_pg_observation(collector: Collector) -> None:
                     writer, replay=replay, snapshot=snapshot,
                     expected_generation=generation,
                     expected_previous_publication_id=previous_publication_id,
+                    expected_previous_source_session_id=(
+                        previous_source_session_id
+                    ),
+                    expected_previous_release_commit=previous_release_commit,
                 )
             generation = committed.generation
+            previous_source_session_id = None
+            previous_release_commit = None
             assert replay.checkpoint is not None
             previous_publication_id = replay.checkpoint.publication_id
             # Diagnostic JSON is derived only after the authoritative DB row.
