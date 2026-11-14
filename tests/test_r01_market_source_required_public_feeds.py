@@ -32,11 +32,16 @@ def _load() -> tuple[RequiredPublicFeed, ...]:
 
 def test_r01_manifest_exact_five_symbol_scope_and_no_unreviewed_defaults() -> None:
     items = _load()
-    assert len(items) == 120
-    assert {item.symbol for item in items} == set(_SYMBOLS)
+    trading_items = [item for item in items if item.symbol in _SYMBOLS]
+    reference_items = [item for item in items if item.consumer_id == 'MAYAK_REFERENCE']
+    assert len(items) == 138 and len(trading_items) == 120
+    assert len(reference_items) == 18
+    assert {item.symbol for item in trading_items} == set(_SYMBOLS)
+    assert {item.symbol for item in reference_items} == {'BTCUSDT', 'ETHUSDT'}
+    assert all(not item.required for item in reference_items)
     assert {item.consumer_id for item in items} == {
         "ENTRY_P90", "EXIT_P90", "EXIT_SHADOW", "EXECUTION_R1",
-        "EXECUTION_P90", "POSITION", "MAYAK",
+        "EXECUTION_P90", "POSITION", "MAYAK", "MAYAK_REFERENCE",
     }
     assert all(
         item.market_source_id == "ms-bybit-mainnet-public-v1"
@@ -63,15 +68,16 @@ def test_r01_manifest_exact_five_symbol_scope_and_no_unreviewed_defaults() -> No
 def test_r01_source_union_is_deduplicated_and_accepted_by_native_parser() -> None:
     union = parse_explicit_source_manifest(
         _MANIFEST.read_text(encoding="utf-8"), native_symbols=_SYMBOLS,
+        mayak_reference_symbols=("BTCUSDT", "ETHUSDT"),
     )
     independently_grouped = union_public_feed_requirements(_load())
     assert union == independently_grouped
-    assert union.consumer_requirements == 120
-    assert len(union.websocket_topics) == 45
-    assert len(union.rest_inputs) == 15
-    assert len(union.websocket_batches("SPOT")) == 1
-    assert sum(len(batch) for batch in union.websocket_batches("SPOT")) == 10
-    assert sum(len(batch) for batch in union.websocket_batches("LINEAR")) == 35
+    assert union.consumer_requirements == 138
+    assert len(union.websocket_topics) == 59
+    assert len(union.rest_inputs) == 19
+    assert len(union.websocket_batches("SPOT")) == 2
+    assert sum(len(batch) for batch in union.websocket_batches("SPOT")) == 14
+    assert sum(len(batch) for batch in union.websocket_batches("LINEAR")) == 45
     assert all(
         sum(
             topic.dataset_topic == f"publicTrade.{symbol}"
