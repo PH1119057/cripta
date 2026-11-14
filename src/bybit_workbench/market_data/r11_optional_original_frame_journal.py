@@ -2,7 +2,7 @@
 
 SOURCE-ONLY capability, not installed or connected to the producer loop.
 Original LINEAR publicTrade already has a separate exact native journal.
-This append-only frame contract is ONLY for approved five-symbol SPOT trades,
+This append-only frame contract is for approved seven-symbol SPOT trades,
 SPOT/LINEAR BOOK snapshot/delta and LINEAR TICKER/LIQUIDATION events.
 
 The original parsed provider JSON frame and EVERY codec-verified fact retain
@@ -32,6 +32,7 @@ from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 Family = Literal["SPOT_TRADE", "ORDERBOOK_50", "TICKER", "LIQUIDATION"]
 _FIVE = frozenset((
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+    "BTCUSDT", "ETHUSDT",
 ))
 _EPOCH = re.compile(r"^[0-9a-f]{32}$")
 _RELEASE = re.compile(r"^[0-9a-f]{40}$")
