@@ -372,28 +372,30 @@ def _r10_pg_publication_enabled() -> bool:
 
 def _r10_execution_quote(symbol: str):
     """Read exact original PG facts; no independent public REST fallback."""
-    with db("private-execution-r10-quote") as source_db:
-        with source_db.transaction():
-            source_db.execute(
-                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-            )
-            return read_r10_execution_quote(
-                source_db, symbol=symbol, observed_at=datetime.now(UTC),
-            )
+    with db("private-execution-r10-quote") as source_db, (
+        source_db.transaction()
+    ):
+        source_db.execute(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        return read_r10_execution_quote(
+            source_db, symbol=symbol, observed_at=datetime.now(UTC),
+        )
 
 
 def _r10_exact_r1_snapshot(symbol: str, *, history_limit: int):
-    with db("private-execution-r10-r1-validity") as source_db:
-        with source_db.transaction():
-            source_db.execute(
-                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-            )
-            return read_r10_exact_r1_causal_snapshot(
-                source_db,
-                symbol=symbol,
-                observed_at=datetime.now(UTC),
-                history_limit=history_limit,
-            )
+    with db("private-execution-r10-r1-validity") as source_db, (
+        source_db.transaction()
+    ):
+        source_db.execute(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        return read_r10_exact_r1_causal_snapshot(
+            source_db,
+            symbol=symbol,
+            observed_at=datetime.now(UTC),
+            history_limit=history_limit,
+        )
 
 
 def executable_close_price(symbol: str, side: str) -> Decimal:
