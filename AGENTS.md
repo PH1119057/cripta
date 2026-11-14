@@ -107,6 +107,14 @@ PREPARED=NO
 
 См. META §15, WORK §4.3, ARCH §13.
 
+## Production PostgreSQL retention invariant
+
+В production PostgreSQL допустим только minimum, доказанно нужный текущим
+non-retired Strategy/Version/Activation и их safety/financial/recovery
+obligations. Любое более долгое/глубокое/широкое хранение требует отдельного
+owner decision с exact scope, horizon/cutoff, storage budget и
+purge/compaction rule. Owner: ARCH §61; route: INDEX §80.
+
 ## Server-side write scripts
 
 Перед написанием/запуском script, который пишет на сервере или переключает
