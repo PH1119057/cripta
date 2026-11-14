@@ -58,6 +58,7 @@ BEGIN
                AND t.tgname='r07_source_epoch_guard_v1'
                AND t.tgenabled='O' AND t.tgisinternal=false AND t.tgtype=31
                AND t.tgfoid='analytics.r07_source_epoch_tx_guard_v1()'::regprocedure
+               AND pg_catalog.pg_get_triggerdef(t.oid) LIKE '%source_session_id%'
         ) THEN
             RAISE EXCEPTION 'R07_SOURCE_EPOCH_TRIGGER_ABI_DRIFT';
         END IF;
