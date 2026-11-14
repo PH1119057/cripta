@@ -78,6 +78,11 @@ from bybit_workbench.account_state_generation import (
     current_complete_account_state_generation,
 )
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines
+from bybit_workbench.market_data.r10_execution_publication import (
+    R10ExecutionPublicationUnavailable,
+    read_r10_execution_quote,
+    read_r10_exact_r1_causal_snapshot,
+)
 from bybit_workbench.exchange.bybit.effective_protection import effective_protection_from_account
 from bybit_workbench.exchange.bybit.protection_intent import (
     initial_protection_surfaces_observed,
@@ -355,8 +360,50 @@ def api_get(
     raise AssertionError("unreachable signed GET retry state")
 
 
+def _r10_pg_publication_enabled() -> bool:
+    """Source-only R10: existing Exchange-facing runtime stays OFF by default."""
+    value = os.environ.get("CRIPTA_R10_EXECUTION_PUBLICATION", "0").strip()
+    if value not in {"0", "1"}:
+        raise R10ExecutionPublicationUnavailable(
+            "R10_EXECUTION_PUBLICATION_FLAG_INVALID"
+        )
+    return value == "1"
+
+
+def _r10_execution_quote(symbol: str):
+    """Read exact original PG facts; no independent public REST fallback."""
+    with db("private-execution-r10-quote") as source_db, (
+        source_db.transaction()
+    ):
+        source_db.execute(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        return read_r10_execution_quote(
+            source_db, symbol=symbol, observed_at=datetime.now(UTC),
+        )
+
+
+def _r10_exact_r1_snapshot(symbol: str, *, history_limit: int):
+    with db("private-execution-r10-r1-validity") as source_db, (
+        source_db.transaction()
+    ):
+        source_db.execute(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        return read_r10_exact_r1_causal_snapshot(
+            source_db,
+            symbol=symbol,
+            observed_at=datetime.now(UTC),
+            history_limit=history_limit,
+        )
+
+
 def executable_close_price(symbol: str, side: str) -> Decimal:
-    """Return the immediately executable exit price, never the mark price."""
+    """Execution-side quote from one PG publication if R10 is enabled."""
+    if _r10_pg_publication_enabled():
+        quote = _r10_execution_quote(symbol)
+        # Preserve the existing side-specific executable-price convention.
+        return quote.bid_price if side == "Buy" else quote.ask_price
     cached = _ticker_cache.get(symbol)
     if not cached or time.monotonic() - cached[0] > 1:
         payload, _ = api_get("/v5/market/tickers", {"category": "linear", "symbol": symbol})
@@ -3461,21 +3508,40 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             # AFTER resolving the immutable causal RAW target, immediately
             # BEFORE the first Exchange mutation. This cannot guarantee the
             # future fill and is not a replacement for the signed readback.
-            current_ticker, _ = api_get(
-                "/v5/market/tickers",
-                {"category": "linear", "symbol": symbol},
-            )
-            try:
-                p90v3.validate_real_v3_attached_protection_at_last_price(
-                    symbol=symbol,
-                    side=side,
-                    instrument_tick=tick,
-                    stop_loss=stop,
-                    take_profit=target,
-                    ticker_response=current_ticker,
+            if _r10_pg_publication_enabled():
+                try:
+                    quote = _r10_execution_quote(symbol)
+                    p90v3.validate_real_v3_attached_protection_at_original_price(
+                        symbol=symbol,
+                        side=side,
+                        instrument_tick=tick,
+                        stop_loss=stop,
+                        take_profit=target,
+                        last_price=quote.last_price,
+                    )
+                except (
+                    R10ExecutionPublicationUnavailable,
+                    psycopg.Error, OSError, ValueError,
+                ) as exc:
+                    raise PreMutationSafetyBlock(
+                        f"R10_P90_ORIGINAL_PUBLICATION_INVALID:{type(exc).__name__}"
+                    ) from exc
+            else:
+                current_ticker, _ = api_get(
+                    "/v5/market/tickers",
+                    {"category": "linear", "symbol": symbol},
                 )
-            except ValueError as exc:
-                raise PreMutationSafetyBlock(str(exc)) from exc
+                try:
+                    p90v3.validate_real_v3_attached_protection_at_last_price(
+                        symbol=symbol,
+                        side=side,
+                        instrument_tick=tick,
+                        stop_loss=stop,
+                        take_profit=target,
+                        ticker_response=current_ticker,
+                    )
+                except ValueError as exc:
+                    raise PreMutationSafetyBlock(str(exc)) from exc
         # Entry submits server-side initial protection atomically with the order.
         # R1 carries catastrophic SL plus exact causal opposite-inner TP.
         order: dict[str, object] = {
@@ -4047,6 +4113,51 @@ def _r1_signal_validity(
         raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY prices are invalid")
     if original_low <= 0 or original_high <= original_low:
         raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY structural bounds are invalid")
+
+    # R10 switch is opt-in and fail-closed. A missing PG fact on an
+    # already-live PostOnly Entry must DEFER, never trigger cancellation
+    # or make an independent Bybit REST/WS request.
+    try:
+        r10_active = _r10_pg_publication_enabled()
+    except R10ExecutionPublicationUnavailable as exc:
+        raise EntryValidityReadUnavailable(
+            "R10 SIGNAL_VALIDITY publication flag invalid"
+        ) from exc
+    if r10_active:
+        raw_limit = validity.get("history_limit")
+        try:
+            history_limit = int(raw_limit)
+        except (TypeError, ValueError) as exc:
+            raise ExchangeMutationBarrier(
+                "R1 validity history_limit is invalid"
+            ) from exc
+        if not 205 <= history_limit <= 240:
+            raise ExchangeMutationBarrier(
+                "R1 validity history_limit outside supported window"
+            )
+        try:
+            snapshot = _r10_exact_r1_snapshot(
+                symbol, history_limit=history_limit,
+            )
+        except (
+            R10ExecutionPublicationUnavailable,
+            psycopg.Error, OSError,
+        ) as exc:
+            raise EntryValidityReadUnavailable(
+                f"R10 SIGNAL_VALIDITY original PG source unavailable:"
+                f"{type(exc).__name__}"
+            ) from exc
+        last = snapshot.quote.last_price
+        if (side == "Buy" and last >= original_target) or (
+            side == "Sell" and last <= original_target
+        ):
+            return False, "R1_OPPOSITE_TARGET_REACHED_BEFORE_FILL"
+        zone = compute_r1_l53_stable_zone(snapshot.closed_5m)
+        if zone is None:
+            return False, "R1_SIGNAL_RULE_INVALIDATED"
+        if zone.range_low != original_low or zone.range_high != original_high:
+            return False, "R1_EXACT_ENTRY_LEVEL_CHANGED"
+        return True, "R1_SIGNAL_STILL_VALID"
 
     try:
         ticker, _ = api_get(
