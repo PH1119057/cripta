@@ -5,11 +5,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.market_data.r11_original_publication_refs import (
     R11PublicationOriginalRefsUnverified,
     collect_r11_original_optional_publication_refs,
 )
+from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 
 S = "a" * 32
 E1 = "b" * 32
