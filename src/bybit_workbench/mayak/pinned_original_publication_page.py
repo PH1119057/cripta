@@ -142,17 +142,29 @@ def read_r11_pinned_mayak_optional_page(
             "R11_PINNED_MAYAK_ORIGINAL_CLOCK_INVALID"
         ) from exc
     _need(_utc(received) < published, "ORIGINAL_AFTER_PUBLICATION")
+    effective_previous = previous
     if previous is not None:
         _need(
             previous.source_session_id == session
-            and previous.transport_epoch_id == epoch
             and previous.product_category == product_category
-            and previous.producer_release_commit == release
-            and previous.next_cursor <= number,
-            "PREVIOUS_CURSOR_OR_EPOCH_DRIFT",
+            and previous.producer_release_commit == release,
+            "PREVIOUS_CURSOR_IDENTITY_DRIFT",
         )
-    after = previous.next_cursor if previous is not None else 0
-    old_digest = previous.next_digest if previous is not None else None
+        if previous.transport_epoch_id != epoch:
+            effective_previous = None
+        else:
+            _need(
+                previous.next_cursor <= number,
+                "PREVIOUS_CURSOR_REGRESSION",
+            )
+    after = (
+        effective_previous.next_cursor
+        if effective_previous is not None else 0
+    )
+    old_digest = (
+        effective_previous.next_digest
+        if effective_previous is not None else None
+    )
     try:
         page = read_r11_optional_original_frame_page(
             connection,
@@ -163,7 +175,7 @@ def read_r11_pinned_mayak_optional_page(
             through_frame=number, max_frames=max_frames,
         )
         batch = project_r11_optional_mayak_page(
-            page, previous=previous,
+            page, previous=effective_previous,
         )
     except (
         R11OriginalFrameReadUnverified, R11OptionalMayakReplayUnverified,
