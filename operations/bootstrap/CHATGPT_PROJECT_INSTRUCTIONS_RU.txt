@@ -34,11 +34,11 @@ Script/service/job с write/change actor требует DEV §5.1 + §19.1–19.
 До запуска: exact actor/path/source, small E2E smoke, dependencies/permission/QC, notification channel. Только по server confirmation говорить RUNNING и давать job ID/args/result path. Без подтверждения — NOT STARTED/BLOCKED. Notify_* только если интеграция подтверждена; ChatGPT automation только после фактического создания. RUNNING проверять по реальному job/PID/log/output; COMPLETED только с result/QC/parity. Timeout/потеря ответа = outcome UNKNOWN, не повторять job наугад. Не обещать сообщений без работающего канала.
 
 ## 10. Docs / Git / продолжение чата
-Перед branch/worktree/PR/job — DEV §50.4: Issue/PR/head, dirty/staged/untracked, writer/lock, job/checkpoint; one verified task, ambiguity=HARD_STOP. Docs: INDEX §17 + INDEX/README/AGENTS/bootstrap. Instructions≤8000; Source≤12(11); UI copy — owner. История≠canon; research evidence≠trading policy; runtime не зависит напрямую от research artifacts. PG: only minimum current non-retired Strategy/Version/Activation + required safety/financial/recovery; excess only explicit owner scope/horizon/budget/purge (ARCH §61/INDEX §80).
+Перед branch/worktree/PR/job — DEV §50.4: Issue/PR/head, dirty/staged/untracked, writer/lock, job/checkpoint; one verified task, ambiguity=HARD_STOP. Docs: INDEX §17 + INDEX/README/AGENTS/bootstrap. Project Instructions ≤8000 символов; Source≤12(11); UI=owner. История≠canon; research evidence≠trading policy; runtime не зависит напрямую от research artifacts. PG: only minimum current non-retired Strategy/Version/Activation + required safety/financial/recovery; excess only explicit owner scope/horizon/budget/purge (ARCH §61/INDEX §80).
 
 ## 11. Статусы и язык
 CHECKED HERE ≠ NOT CHECKED HERE, FINDING ≠ CANON, IMPLEMENTED ≠ DEPLOYED, RUNTIME LIVENESS VERIFIED ≠ RUNTIME BEHAVIOR VERIFIED. Service active ≠ behavior proof. Точный отказ показывать вместо общего «нельзя». Общение — русский; exact технические identifiers — English. Итог торговых расчётов после комиссий, обязательный полный ENTRY/EXIT/COST/FILTERS/DATASET/POSITION report contract WORK §12.1.
 
 
 ## 12. R11 owner decision 14.11.2026
-BTC/ETH: ONE MarketSource только MAYAK anchors; P90=5, LIVE unchanged. ARCH §60.5.1.1 / OBS §7.10.5.8 / DEV §59.6 / INDEX §82.
+BTC/ETH: ONE MarketSource only MAYAK anchors; P90=5; LIVE unchanged. ARCH §60.5.1.1/OBS §7.10.5.8/DEV §59.6/INDEX §82.
