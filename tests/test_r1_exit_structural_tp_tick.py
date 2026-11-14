@@ -17,7 +17,11 @@ def test_shadow_decision_requires_opposite_range_change():
     assert "continue" in source
     assert 'target_inner' in source
     assert '"atr": str(zone.atr)' in source
-    assert '"limit": "240"' in source
+    reader = Path("src/bybit_workbench/market_data/exit_publication_reader.py").read_text()
+    assert "_L53_REQUIRED_BARS = 240" in reader
+    assert "SharedClosedCandleStore(connection, key).history(" in reader
+    assert "PUBLIC_REST" not in source
+    assert "urllib.request" not in source
 
 
 def _tp_helper():

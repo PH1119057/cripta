@@ -4,8 +4,6 @@ import json
 import os
 import signal
 import time
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -15,7 +13,10 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
-from bybit_workbench.exchange.bybit.mappers import map_rest_klines
+from bybit_workbench.market_data.exit_publication_reader import (
+    read_exit_l53_candles,
+    read_exit_ticker_last_price,
+)
 from bybit_workbench.lifecycle_ack import (
     claim_exit_position,
     mark_exit_claims_stale,
@@ -41,7 +42,6 @@ CONSUMER_ID = os.environ.get(
     "universal-exit-shadow-v1",
 ).strip()
 POLL_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_EXIT_SHADOW_POLL_SECONDS", "1.0"))
-PUBLIC_REST = os.environ.get("CRIPTA_U5_PUBLIC_REST", "").rstrip("/")
 STATUS_PATH = Path(
     os.environ.get(
         "CRIPTA_UNIVERSAL_EXIT_SHADOW_STATUS_PATH",
@@ -49,7 +49,6 @@ STATUS_PATH = Path(
     )
 )
 running = True
-_l53_cache: dict[str, tuple[datetime, Any]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,37 +139,21 @@ def claim_cycle(
     return ClaimCycleResult(tuple(claimed), tuple(blocked))
 
 
-def _fetch_l53_observation(position: object, plan: object, *, now: datetime) -> ExitObservation:
-    if not PUBLIC_REST:
-        raise RuntimeError("CRIPTA_U5_PUBLIC_REST is required for L5-3 Exit observation")
+def _fetch_l53_observation(
+    source_connection: psycopg.Connection[Any],
+    position: object,
+    plan: object,
+    *,
+    now: datetime,
+) -> ExitObservation:
+    """Only one source-pinned 240-bar PostgreSQL L5-3 geometry; no REST."""
     symbol = str(position.symbol)
-    cached = _l53_cache.get(symbol)
-    if cached is not None and now < cached[1].observed_at + timedelta(minutes=5, seconds=2):
-        fact_observed_at, zone = cached
-    else:
-        query = urllib.parse.urlencode(
-            {"category": "linear", "symbol": symbol, "interval": "5", "limit": "240"}
-        )
-        with urllib.request.urlopen(
-            f"{PUBLIC_REST}/v5/market/kline?{query}", timeout=10
-        ) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        if str(payload.get("retCode")) != "0":
-            raise RuntimeError(f"Bybit kline failed: {payload.get('retMsg')}")
-        result = payload.get("result")
-        if not isinstance(result, dict) or not isinstance(result.get("list"), list):
-            raise RuntimeError("Bybit kline result.list missing")
-        candles = map_rest_klines(
-            result["list"], symbol=symbol, interval="5", observed_at=now
-        )
-        zone = compute_l53_zone(candles)
-        if zone is None:
-            raise RuntimeError("L5-3 geometry is not mature")
-        if cached is not None and cached[1].observed_at == zone.observed_at:
-            fact_observed_at = cached[0]
-        else:
-            fact_observed_at = now
-        _l53_cache[symbol] = (fact_observed_at, zone)
+    candles, pin = read_exit_l53_candles(
+        source_connection, symbol=symbol, observed_at=now,
+    )
+    zone = compute_l53_zone(candles)
+    if zone is None:
+        raise RuntimeError("R08_L53_240_BAR_GEOMETRY_NOT_MATURE")
     target_inner = (
         zone.resistance_bottom
         if position.direction is TradeDirection.LONG
@@ -194,7 +177,8 @@ def _fetch_l53_observation(position: object, plan: object, *, now: datetime) -> 
             "strategy_position_id": position.strategy_position_id,
             "exit_plan_fingerprint": plan.exit_plan_fingerprint,
             "geometry": geometry,
-            "observed_at": fact_observed_at,
+            "observed_at": pin.as_of_second,
+            "source_ref": pin.evidence_ref("CLOSED_KLINE:5"),
         }
     )[:32]
     return ExitObservation(
@@ -202,42 +186,28 @@ def _fetch_l53_observation(position: object, plan: object, *, now: datetime) -> 
         strategy_position_id=position.strategy_position_id,
         symbol=symbol,
         event_at=zone.observed_at,
-        observed_at=fact_observed_at,
-        received_at=fact_observed_at,
+        observed_at=pin.as_of_second,
+        received_at=now,
         event_kind="GEOMETRY_L5_3",
         attributes=FrozenPolicy.from_mapping({"geometry": {"l5_3": geometry}}),
-        source_refs=(f"bybit:kline:5:{symbol}:{zone.observed_at.isoformat()}",),
+        source_refs=(pin.evidence_ref("CLOSED_KLINE:5"),),
     )
 
 
 def _fetch_owner_diagnostic_observation(
+    source_connection: psycopg.Connection[Any],
     position: object,
     *,
     now: datetime,
 ) -> ExitObservation:
-    if not PUBLIC_REST:
-        raise RuntimeError("CRIPTA_U5_PUBLIC_REST is required for diagnostic Exit")
+    """Owner diagnostic remains decision-only; requires original PG ticker."""
     symbol = str(position.symbol)
     entry = Decimal(str(position.actual_avg_fill))
-    if entry <= 0:
+    if not entry.is_finite() or entry <= 0:
         raise RuntimeError("owner diagnostic actual fill is invalid")
-    query = urllib.parse.urlencode({"category": "linear", "symbol": symbol})
-    with urllib.request.urlopen(
-        f"{PUBLIC_REST}/v5/market/tickers?{query}", timeout=5
-    ) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    if str(payload.get("retCode")) != "0":
-        raise RuntimeError(f"Bybit ticker failed: {payload.get('retMsg')}")
-    result = payload.get("result")
-    rows = result.get("list") if isinstance(result, dict) else None
-    if not isinstance(rows, list) or len(rows) != 1:
-        raise RuntimeError("Bybit ticker result.list invalid")
-    try:
-        mark = Decimal(str(rows[0].get("lastPrice")))
-    except Exception as exc:
-        raise RuntimeError("Bybit diagnostic LastPrice invalid") from exc
-    if not mark.is_finite() or mark <= 0:
-        raise RuntimeError("Bybit diagnostic LastPrice invalid")
+    mark, pin = read_exit_ticker_last_price(
+        source_connection, symbol=symbol, observed_at=now,
+    )
     directional = (
         ((mark - entry) / entry) * Decimal("100")
         if position.direction is TradeDirection.LONG
@@ -248,15 +218,16 @@ def _fetch_owner_diagnostic_observation(
             "strategy_position_id": position.strategy_position_id,
             "event_kind": "OWNER_FULL_CONTOUR_MARK",
             "last_price": str(mark),
-            "observed_at": now,
+            "observed_at": pin.as_of_second,
+            "source_ref": pin.evidence_ref("TICKER:lastPrice"),
         }
     )[:32]
     return ExitObservation(
         observation_id=observation_id,
         strategy_position_id=position.strategy_position_id,
         symbol=symbol,
-        event_at=now,
-        observed_at=now,
+        event_at=pin.as_of_second,
+        observed_at=pin.as_of_second,
         received_at=now,
         event_kind="OWNER_FULL_CONTOUR_MARK",
         attributes=FrozenPolicy.from_mapping(
@@ -266,12 +237,13 @@ def _fetch_owner_diagnostic_observation(
                 "actual_avg_fill": str(entry),
             }
         ),
-        source_refs=(f"bybit:ticker:{symbol}:{now.isoformat()}",),
+        source_refs=(pin.evidence_ref("TICKER:lastPrice"),),
     )
 
 
 def _evaluate_claimed_positions(
     connection: psycopg.Connection[Any],
+    source_connection: psycopg.Connection[Any],
     engine: UniversalExitEngine,
     position_ids: tuple[str, ...],
     *,
@@ -286,11 +258,21 @@ def _evaluate_claimed_positions(
             diagnostic = is_diagnostic_strategy(
                 position.strategy_id, position.strategy_version
             )
-            observation = (
-                _fetch_owner_diagnostic_observation(position, now=now)
-                if diagnostic
-                else _fetch_l53_observation(position, plan, now=now)
-            )
+            # Source evidence is read in ONE immutable, read-only PG view.
+            # It cannot share the claim/Exit-decision write transaction.
+            with source_connection.transaction():
+                source_connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
+                observation = (
+                    _fetch_owner_diagnostic_observation(
+                        source_connection, position, now=now,
+                    )
+                    if diagnostic
+                    else _fetch_l53_observation(
+                        source_connection, position, plan, now=now,
+                    )
+                )
             if not diagnostic:
                 # Existing ATR200 still determines the INNER target at a structural
                 # change, but its movement alone cannot emit another SET_TP.
@@ -351,7 +333,13 @@ def main() -> int:
         row_factory=dict_row,
         options="-c idle_in_transaction_session_timeout=120000",
     )
+    source_connection: psycopg.Connection[Any] | None = None
     try:
+        source_connection = psycopg.connect(
+            DB_DSN,
+            autocommit=True,
+            options="-c idle_in_transaction_session_timeout=120000",
+        )
         while running:
             now = datetime.now(UTC)
             # claim_cycle commits each exact position independently, avoiding
@@ -364,6 +352,7 @@ def main() -> int:
             with connection.transaction():
                 recorded_count, evaluation_blocks = _evaluate_claimed_positions(
                     connection,
+                    source_connection,
                     engine,
                     cycle.claimed_positions,
                     now=now,
@@ -406,6 +395,8 @@ def main() -> int:
                     reason="Universal Exit shadow runtime stopped",
                 )
         finally:
+            if source_connection is not None:
+                source_connection.close()
             connection.close()
     _status(
         {
