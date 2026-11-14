@@ -25,7 +25,7 @@ R11_MAYAK_PANEL = (
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
     "BTCUSDT", "ETHUSDT",
 )
-_R01_R05_CAPTURE = frozenset(R11_MAYAK_PANEL)
+_MAYAK_SEVEN_CAPTURE = frozenset(R11_MAYAK_PANEL)
 _EPOCH = re.compile(r"^[0-9a-f]{32}$")
 _RELEASE = re.compile(r"^[0-9a-f]{40}$")
 _FIELD_TTL = timedelta(seconds=5)
@@ -202,14 +202,14 @@ def read_r11_mayak_feature_candidate(
     symbol: str,
     observed_at: datetime,
 ) -> R11MayakFeatureCandidate:
-    """READ ONLY current five-symbol projection; full seven-symbol cutover BLOCKED.
+    """READ ONLY seven-symbol candidate; full MAYAK cutover remains BLOCKED.
 
     A caller must hold one REPEATABLE READ READ ONLY PostgreSQL transaction.
     Even a valid candidate NEVER feeds LiveMayakEngine.on_trade/on_book, never
     asserts source continuity, and never authorizes removal of public WS.
     """
     now = _utc(observed_at, "NOW_NOT_UTC")
-    _need(symbol in _R01_R05_CAPTURE, "SYMBOL_OUTSIDE_FIVE_CAPTURE")
+    _need(symbol in _MAYAK_SEVEN_CAPTURE, "SYMBOL_OUTSIDE_MAYAK_SOURCE_SCOPE")
     _need(
         connection.execute("SHOW transaction_isolation").fetchone()
         == ("repeatable read",)
