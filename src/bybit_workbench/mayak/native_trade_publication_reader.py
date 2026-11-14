@@ -187,7 +187,7 @@ def read_r11_original_linear_page(
         <= published + timedelta(seconds=5),
         "PUBLICATION_NATIVE_IDENTITY_INVALID",
     )
-    watermark = (frame, index)
+    watermark: tuple[int, int] = (int(frame), int(index))
     _need(read_after <= watermark, "CURSOR_BESIDE_PUBLICATION")
     if read_after != (0, 0):
         anchor = connection.execute(
