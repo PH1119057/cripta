@@ -274,6 +274,7 @@ def read_r09_native_publication_postfill(
     prices: list[Decimal] = []
     refs: list[str] = []
     seen: set[tuple[int, str]] = set()
+    seen_exec_ids: set[str] = set()
     previous_point = (a_frame, a_index)
     previous_seq, previous_at = a_seq, fill
     last_execution: str | None = None
@@ -300,6 +301,7 @@ def read_r09_native_publication_postfill(
             and type(exchange_seq) is int and exchange_seq >= previous_seq
             and isinstance(execution, str) and bool(execution)
             and (exchange_seq, execution) not in seen
+            and execution not in seen_exec_ids
             and fill <= event_time <= pub_at and event_time >= previous_at
             and _utc(accepted_at, "ORIGINAL_RECEIPT_INVALID")
             >= event_time - timedelta(seconds=2)
@@ -312,6 +314,7 @@ def read_r09_native_publication_postfill(
             "ORIGINAL_NATIVE_SEQUENCE_OR_JOURNAL_DRIFT",
         )
         seen.add((exchange_seq, execution))
+        seen_exec_ids.add(execution)
         prices.append(original_price)
         refs.append(f"bybit:publicTrade:{position.symbol}:{execution}")
         previous_point, previous_seq, previous_at = point, exchange_seq, event_time
