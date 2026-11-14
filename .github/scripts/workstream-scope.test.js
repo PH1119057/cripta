@@ -132,11 +132,37 @@ const cases=[
     "unknown path denied",
     "cross/workstream",
     [
-      "archive/new.bin"
+      "outside/new.bin"
     ],
     [
       "owner-approved-cross-contour"
     ],
+    false
+  ],
+  [
+    "cross approved archive housekeeping",
+    "cross/archive-cleanup",
+    [
+      "archive/legacy_script_folders_pre_2026-09-15/P53_1M_ENTRY_DISPLACEMENT_V1/file.py",
+      "P53_1M_ENTRY_DISPLACEMENT_V1/file.py",
+      "archive/patch_backups/old.txt",
+      "patch_backups/old.txt",
+      "archive/research_tools/exact_touch.py",
+      "research_tools/exact_touch.py"
+    ],
+    [
+      "owner-approved-cross-contour"
+    ],
+    true
+  ],
+  [
+    "core blocks archive housekeeping",
+    "core/archive-cleanup",
+    [
+      "archive/patches/old.txt",
+      "patches/old.txt"
+    ],
+    [],
     false
   ],
   [
@@ -179,4 +205,7 @@ for(const [name,ref,paths,labels,expected] of cases){
   test(name,()=>assert.equal(validateScope(ref,paths,labels).ok,expected));
 }
 test("catalogue is special ledger",()=>assert.equal(classifyPath("operations/dashboard/instrument_research_catalog.json"),"ledger"));
+test("archive path is canonical archive scope",()=>assert.equal(classifyPath("archive/legacy/file.py"),"archive"));
+test("legacy Pxx root is archive scope",()=>assert.equal(classifyPath("P53_1M_ENTRY_DISPLACEMENT_V1/file.py"),"archive"));
+test("legacy patch root is archive scope",()=>assert.equal(classifyPath("patch_backups/old/file.py"),"archive"));
 test("unknown path fail closed",()=>assert.equal(classifyPath("outside/new.py"),"unknown"));
