@@ -1,0 +1,39 @@
+name: r11-original-publication-pg16
+
+on:
+  pull_request:
+    paths:
+      - "operations/sql/20261114_r11_optional_*"
+      - "tests/test_r11_optional_publication_pg16_470.py"
+      - ".github/workflows/r11-original-publication-pg16.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  original-frame-and-publication-abi:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_r11_ci_only
+          POSTGRES_DB: r11_publication_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d r11_publication_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      CRIPTA_R11_DISPOSABLE_PG_DSN: "postgresql://postgres:disposable_r11_ci_only@127.0.0.1:5432/r11_publication_ci"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bounded disposable PG16 dependencies
+        run: python -m pip install "psycopg[binary]==3.2.10" "pytest>=8,<10"
+      - name: Verify original frame and publication migration contracts
+        run: python -m pytest -q tests/test_r11_optional_publication_pg16_470.py
