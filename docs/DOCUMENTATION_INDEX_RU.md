@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.59
-**Дата:** 2026-11-14
+**Версия:** 3.60
+**Дата:** 2026-11-15
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -319,6 +319,11 @@ Strategy/Entry/Exit policy и не разрешает real execution.
 ## 17.1 Topology / bootstrap
 
 - current substantive docs живут только в `docs/`;
+- canonical repository root target задаёт DEVELOPMENT_RELEASE §50.0:
+  system `.github/` + project roots `docs/`, `engine/`, `research/`, `archive/`;
+  current `src/operations/production/scripts/tests/config` являются transitional CORE
+  layout до отдельной tested migration, а не дополнительной постоянной topology;
+
 - root Markdown entrypoints — только `README.md` и `AGENTS.md`;
 - все 11 current docs доступны в Project Source;
 - ChatGPT Project Source hard limit = 12 files; current bundle = 11;
@@ -1914,3 +1919,24 @@ No new sixth trading layer, second public writer, Strategy/Exit parameter, sourc
 ## 82. R11 MAYAK BTC/ETH observational anchors — OWNER DECISION 2026-11-14 (#470)
 
 Exact позднейшее разрешение владельца: `BTCUSDT` и `ETHUSDT` могут входить в **один существующий Native MarketSource и общую MarketPublication** только ради R11 MAYAK reference-market аналитики. Это точечное исключение из прежнего запрета на седьмой/шестой native instrument, а **не** увеличение пяти P90 Strategy/Entry/Exit/Execution symbols, не новый writer и не LIVE. Architecture owner — ARCH §60.5.1.1; stream and consumer ownership — OBS §7.10.5.8; migration/permissions/release — DEV §59.6; current acceptance — MAP/Issue #470. Current Source set 11, path/routing/bootstrap unaffected; root entrypoints/derived Instructions synchronize with this decision. До исходных семисимвольных parity/continuity and source-cutover gates старый MAYAK сохраняется. `OWNER_DECISION=YES`; `CANON_UPDATE=THIS_PROTECTED_CHANGESET`; `IMPLEMENTED/DEPLOYED/RUNTIME_VERIFIED=NOT_CLAIMED`.
+
+
+## 83. Repository root topology cleanup — OWNER DECISION 2026-11-15 (Issue #153)
+
+Owner установил постоянную цель: repository root не является складом patch/research
+artifacts. Нормальная верхнеуровневая структура — system `.github/` и четыре
+project roots: `docs/`, target `engine/`, `research/`, `archive/`, плюс
+минимальный explicit root-file allowlist для Git/Python/build/bootstrap.
+
+До отдельной миграции `engine/` текущие физические CORE roots
+`src/`, `operations/`, `production/`, `scripts/`, `tests/`, `config/`
+сохраняются как migration compatibility и не считаются новой целевой topology.
+`research_tools/` должен быть консолидирован в `research/`; `patches/` и
+`patch_backups/` сначала проходят exact dependency/retention classification.
+Доказанно неактивные legacy Pxx/EO/SE/ENTRY_BOT/PATCH-like folders перемещаются
+в `archive/**` с сохранением Git provenance/bytes. Unknown root path остаётся
+fail-closed и не получает права только потому, что уже физически существует.
+
+Canonical process owner: DEVELOPMENT_RELEASE §50.0–§50.3. Current physical
+checkpoint: CURRENT_PROJECT_MAP §19.1. Это решение не меняет торговую Strategy,
+runtime/DB/Exchange/LIVE и не утверждает `engine/` migration IMPLEMENTED.

@@ -49,6 +49,16 @@ Routed documents:
 Exact UI Project Instructions template хранится вне Project Source:
 `operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt`.
 
+## Repository root topology
+
+Target repository layout: system `.github/` плюс project roots `docs/`,
+`engine/`, `research/`, `archive/`. Current `src/`, `operations/`,
+`production/`, `scripts/`, `tests/`, `config/` — transitional CORE paths
+до отдельной tested migration в `engine/`; это не разрешение создавать новые
+произвольные root directories. Historical/retained legacy artifacts принадлежат
+`archive/`. Exact owner: `DEVELOPMENT_RELEASE §50.0`; current migration state:
+`CURRENT_PROJECT_MAP §19.1`.
+
 ## Source of truth
 
 ```text
