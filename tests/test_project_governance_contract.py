@@ -138,7 +138,7 @@ def test_security_is_mandatory_base_preread_and_all_current_docs_are_project_sou
         assert "docs/SECURITY.md" in index
         assert "docs/SECURITY.md" in readme
         assert "docs/SECURITY.md" in agents
-        assert "docs/CHATGPT_INTERACTION_RULES_RU*.md" in work
+        assert "New chat: FULL META / WORK / SECURITY" in work
         assert "docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md" in index
         assert "DOCUMENTATION_INDEX_RU" in work
     else:
