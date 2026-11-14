@@ -10,15 +10,24 @@ Strategy, исполнения, сопровождения позиций и в�
 
 - [docs/DOCUMENTATION_INDEX_RU.md](docs/DOCUMENTATION_INDEX_RU.md)
 
-Базовый pre-read нового чата / исполнителя:
 
-1. [docs/CHATGPT_INTERACTION_RULES_RU.md](docs/CHATGPT_INTERACTION_RULES_RU.md)
-2. [docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md](docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md)
-3. [docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md](docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md)
-4. [docs/DOCUMENTATION_INDEX_RU.md](docs/DOCUMENTATION_INDEX_RU.md)
-5. [docs/CRIPTA_GLOSSARY_RU.md](docs/CRIPTA_GLOSSARY_RU.md)
-6. [docs/CURRENT_PROJECT_MAP_RU.md](docs/CURRENT_PROJECT_MAP_RU.md)
-7. [docs/SECURITY.md](docs/SECURITY.md)
+Current Project Source manifest — **11 current files**, authority for mandatory pre-read is INDEX §5:
+
+- [`docs/CHATGPT_INTERACTION_RULES_RU.md`](docs/CHATGPT_INTERACTION_RULES_RU.md)
+- [`docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`](docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md)
+- [`docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md`](docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md)
+- [`docs/DOCUMENTATION_INDEX_RU.md`](docs/DOCUMENTATION_INDEX_RU.md)
+- [`docs/CRIPTA_GLOSSARY_RU.md`](docs/CRIPTA_GLOSSARY_RU.md)
+- [`docs/CURRENT_PROJECT_MAP_RU.md`](docs/CURRENT_PROJECT_MAP_RU.md)
+- [`docs/TRADING_CONTOUR_RU.md`](docs/TRADING_CONTOUR_RU.md)
+- [`docs/OBSERVATION_ANALYTICS_RU.md`](docs/OBSERVATION_ANALYTICS_RU.md)
+- [`docs/DEVELOPMENT_RELEASE_RULES_RU.md`](docs/DEVELOPMENT_RELEASE_RULES_RU.md)
+- [`docs/RESEARCH_COMPUTE_RULES_RU.md`](docs/RESEARCH_COMPUTE_RULES_RU.md)
+- [`docs/SECURITY.md`](docs/SECURITY.md)
+
+Новый чат: целиком META (CHATGPT_INTERACTION), WORK, SECURITY; INDEX §1–9 для выбора current authority и route, INDEX §17 перед документационными изменениями. Project Source matching main — рабочая копия current docs; память/чаты — owner decisions/continuity, не доказательство live ACL/runtime. ARCH/GLOSSARY/MAP и routed docs читать по затронутым главам. DOCS/CORE/RESEARCH — три рабочих контура по DEV §50, не новые пять уровней ARCH.
+
+Каждый содержательный запрос: GitHub main SHA + актуальный route; перечитывать изменённые релевантные разделы, а не все 11 файлов. До отказа/спора о разрешённой операции — сначала штатный actor по типу операции (DEV §13.1), затем META §17.3, DEV §19.5–19.6, MAP §1.4 и фактические tool/actor/DB/owner gates. Test grants ≠ SQL grants ≠ production ACL; transaction race ≠ дефект прав. Owner one-off process exception — META §4.1; long research job — RESEARCH §8.1 (не долгий SentinelX exec).
 
 Все 11 current docs должны быть доступны в Project Source; mandatory reading
 определяется base pre-read + task route.

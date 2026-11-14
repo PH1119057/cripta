@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 2.6 · 2026-10-26
+**Версия:** 2.7 · 2026-11-14
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -82,6 +82,24 @@ Strategy policy.
 Текущий approved ChatGPT server-management rail — SentinelX. Перед выводом «сервер недоступен» проверить host/capabilities и переподключиться/повторно проверить server state. Потеря канала ответа SentinelX или orphaned tool job сама по себе не означает падение server process: сначала проверить PID/process/output/result manifest на host, затем решать о restart.
 
 SentinelX agent actor не равен автоматически runtime Unix-user. До PostgreSQL/research job фиксировать `effective Unix user -> interpreter -> psycopg -> socket -> dbname -> DB current_user -> SELECT smoke`. Для CRIPTA read/research использовать доказанный runtime actor/role `cripta` либо иной заранее доказанный эквивалентный path. Wrong-user connection failure — preflight defect, не повод менять grants.
+
+## 8.1 Долгие вычисления: автономный server job, SentinelX только control
+
+Research/replay/OOS/long compute НЕ выполняется как одна синхронная
+многочасовая команда SentinelX: tool session может оборваться или
+перезапуститься, agent используют несколько чатов. После preflight и
+малого E2E smoke запускать только через **доказанный approved server-side
+research intake/runner либо supervisor job/service** с независимым
+жизненным циклом. Не делать произвольный `nohup`, `&`, новый systemd
+unit или обход SentinelX policy.
+
+Порядок: exact actor/source SHA/interpreter/data-disk/permissions
+(DEV §5.1, §19, MAP §1.4) → короткий approved submit → подтверждённый
+job ID/PID/service identity, parameters, durable output path/log/manifest,
+checkpoint/heartbeat → отдельный bounded статусный вызов. Потеря связи
+с SentinelX ≠ FAILED: восстановить host-state/PID/job/result/QC.
+RUNNING только после подтверждения на сервере; COMPLETED после QC.
+Не дублировать job при UNKNOWN; не обещать push без интеграции.
 
 ## 9. Большие данные обрабатывать потоково
 

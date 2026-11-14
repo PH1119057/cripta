@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.56
+**Версия:** 3.59
 **Дата:** 2026-11-14
 **Статус:** канонический индекс документации
 
@@ -95,14 +95,15 @@ bundle превысил limit. Добавление 12-го current file тре�
 
 # 5. Mandatory pre-read and routed pre-read
 
-Base new-chat pre-read:
-1. docs/CHATGPT_INTERACTION_RULES_RU*.md
-2. docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
-3. docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md
-4. docs/DOCUMENTATION_INDEX_RU*.md
-5. docs/CRIPTA_GLOSSARY_RU*.md
-6. docs/CURRENT_PROJECT_MAP_RU*.md
-7. docs/SECURITY.md
+Base new-chat reading contract — OWNER DIRECTION 2026-11-14:
+- FULL: META (docs/CHATGPT_INTERACTION_RULES_RU*.md), WORK (docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md), SECURITY (docs/SECURITY.md).
+- INDEX §1–9 mandatory to choose the exact current owner / task route; INDEX §17 additionally before any documentation change.
+- ROUTED TARGET: ARCH (ownership/architecture), GLOSSARY (exact terms/tokens), MAP (actual current actor/path/release/status), TC / OBS (Core subject), DEV (Git/PostgreSQL/server mutation/deploy), RESEARCH_COMPUTE (Research). Read all affected routes for cross-contour work, but do not reread unchanged full documents on every reply.
+- Every substantive turn: check GitHub main SHA; reread modified relevant docs if SHA moved, reuse already-checked sections for unchanged SHA/task. Before refusal / rights objection: **select operation owner first (DEV §13.1)**, then META §17.3 + DEV §19.5–19.6 + MAP §1.4 and live tool/actor/DB/authorization evidence. Test fixture grants, canonical SQL grants, production ACL and transaction-concurrency behavior remain separate facts.
+- Three process workstreams DOCS / CORE / RESEARCH (DEV §50) are not the five product architecture layers (ARCH §1). SECURITY remains one global canon without copying full text.
+- Project Source matching main: working current copy to read/apply, not a conflicting second canon. Memory/old chats retain owner decisions and task continuity, not live runtime/ACL evidence.
+- Owner one-off internal workflow exception: META §4.1; follow execution by the one question whether permanent canon update is required. Actual security, LIVE and architecture gates stay in force.
+- Long research jobs independent of SentinelX tool invocation: RESEARCH_COMPUTE §8.1 / DEV §19.5.1; approved durable server runner/job only.
 
 Then route:
 - Strategy / Entry / Exit / Execution -> docs/TRADING_CONTOUR_RU*.md
@@ -290,7 +291,7 @@ Geometry timeline этой ревизией не фиксируются и ос�
 
 OWNER DECISION:
 - Project Source содержит все 11 current docs из `docs/`;
-- base pre-read содержит семь документов, включая обязательный `docs/SECURITY.md`;
+- historical 2026-09-28 base pre-read включал семь документов; current 2026-11-14 full META + WORK + SECURITY и INDEX §1–9 с routed reading по §5;
 - TRADING_CONTOUR, OBSERVATION_ANALYTICS, DEVELOPMENT_RELEASE и
   RESEARCH_COMPUTE остаются routed reading;
 - process-state terms PREPARED/RUNNING/COMPLETE/FAILED/BLOCKED принадлежат
@@ -464,6 +465,8 @@ Documentation cleanup не имеет права молча превращать
 
 ```text
 CURRENT_GITHUB_MAIN_VERIFIED
+THREE_CONTOUR_READING_AND_REFRESH_GATE
+NO_UNVERIFIED_REFUSAL_GATE
 ROOT_BOOTSTRAP_LINKS
 PROJECT_SOURCE_SET
 BASE_PRE_READ
@@ -1886,7 +1889,6 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   unchanged because document topology unchanged. Implementation needs an
   independently tested Git-first release; this policy commit alone makes
   no PostgreSQL, service, Exchange or LIVE mutation.
-
 
 ## 81. R07 MarketSource epoch/Consumer atomic handoff — OWNER CONTINUATION 2026-11-14 (#470)
 
