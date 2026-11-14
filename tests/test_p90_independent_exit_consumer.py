@@ -9,6 +9,7 @@ import ast
 import sys
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
