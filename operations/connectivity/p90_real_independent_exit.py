@@ -43,6 +43,9 @@ from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
 )
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
 from bybit_workbench.universal_exit.contracts import ExitEvaluationStatus
+from bybit_workbench.universal_exit.p90l90_real_observation import (
+    P90RealPostfillSourceWindow,
+)
 from bybit_workbench.universal_exit.loader import load_exit_binding
 from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
     P90RealExitExecutionPort,
@@ -127,8 +130,12 @@ def require_r09_original_postfill_source_parity(
     accepted_producer_commits: frozenset[str],
     broker_window: Any,
     observed_at: datetime,
-) -> None:
-    """Strict code-first gate: compare two same-MarketSource ports, no rights.
+) -> P90RealPostfillSourceWindow:
+    """Strict code-first gate: PG price + existing MarketSource continuity.
+
+    Original native MFE comes ONLY from pinned PostgreSQL facts. Existing
+    MarketSource broker is solely an additional continuity/identity witness;
+    private signed OPEN/SL/TP and Execution safety gates remain downstream.
 
     Only explicitly enabled AFTER release+R09 acceptance. By default neither
     the existing independent Exit nor its signed Private broker is modified.
@@ -156,6 +163,23 @@ def require_r09_original_postfill_source_parity(
                 )
         require_r09_broker_publication_parity(
             candidate=candidate, broker_window=broker_window,
+        )
+        # A publication alone does not prove continuity. After exact
+        # two-port parity, take the financial Exit's observed prices and
+        # original execIds from PostgreSQL, NOT the independent broker.
+        # Complete coverage is supplied only by the still-required primary
+        # source broker and is never inferred from a WATERMARKS_ONLY row.
+        return P90RealPostfillSourceWindow(
+            position_id=candidate.position_id,
+            symbol=candidate.symbol,
+            fill_at=candidate.fill_at,
+            covered_through=broker_window.covered_through,
+            source_commit=candidate.source_commit,
+            last_native_price=candidate.last_native_price,
+            best_favorable_price=candidate.observed_favorable_price,
+            source_refs=candidate.source_refs,
+            complete_native_window=broker_window.complete_native_window,
+            no_new_native_trade_rest_verified=False,
         )
     except (P90PGPostfillUnverified, R09PublicationParityUnverified,
             psycopg.Error) as exc:
@@ -404,7 +428,7 @@ def run_p90_exit_once(
                 accepted_producer_commits=identity.approved_producers,
             )
             if R09_PARITY_MODE == "REQUIRE":
-                require_r09_original_postfill_source_parity(
+                coverage = require_r09_original_postfill_source_parity(
                     position=position,
                     source_epoch_id=epoch_id,
                     source_commit=identity.origin_commit,
