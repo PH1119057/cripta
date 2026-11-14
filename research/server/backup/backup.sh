@@ -11,7 +11,12 @@ cleanup() { rm -rf -- "$work_dir"; }
 trap cleanup EXIT
 
 sudo -u postgres pg_dump --format=custom cripta > "$work_dir/cripta.pgdump"
+# Exclude only two owner-retired historical report ZIP classes from NEW
+# operational backups. Original Data-SSD reports remain untouched.
+# A full restore-tested report allowlist is a separate release gate.
 tar --create --gzip --file="$work_dir/project.tar.gz" \
+  --exclude='*/cripta_project_trading_3d_202608*.zip' \
+  --exclude='*/аналитика_сигналов_72_часа_202609*.zip' \
   /srv/cripta /srv/cripta-share/reports
 tar --create --gzip --file="$work_dir/configuration.tar.gz" --ignore-failed-read \
   /etc/systemd/system/cripta-dashboard.service \
