@@ -25,7 +25,6 @@ from __future__ import annotations
 import argparse
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal as D
-import fcntl
 import hashlib
 import json
 import os
@@ -47,8 +46,12 @@ PRODUCER_FILE = (
 )
 AUDITOR_FILE = Path(__file__).resolve()
 
-sys.path.insert(0, str(PRODUCER))
-from scripts.research import p90l90_same_side_cap_counterfactual_v1 as prior  # noqa: E402
+def load_original_producer() -> None:
+    """Lazy import: absolute-path CLI --help remains portable in Windows CI."""
+    global prior
+    sys.path.insert(0, str(PRODUCER))
+    from scripts.research import p90l90_same_side_cap_counterfactual_v1
+    prior = p90l90_same_side_cap_counterfactual_v1
 
 
 def file_sha(path: Path) -> str:
@@ -243,6 +246,8 @@ def main() -> None:
         c not in "0123456789abcdef" for c in args.auditor_head
     ):
         raise ValueError("invalid reviewed auditor source SHA")
+    load_original_producer()
+    import fcntl  # unavailable on Windows, valid only for real POSIX actor
     ctx = preflight_identity(args.auditor_head)
     with (DEST / ".writer.lock").open("r") as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
