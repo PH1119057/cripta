@@ -178,6 +178,14 @@ def parse_explicit_source_manifest(
     reference_rows = [
         item for item in required if item.symbol in anchor_set
     ]
+    if any(
+        item.consumer_id == "MAYAK_REFERENCE"
+        and item.symbol not in anchor_set
+        for item in required
+    ):
+        raise SourceManifestInvalid(
+            "R11_MAYAK_REFERENCE_CONSUMER_SCOPE_INVALID"
+        )
     if mayak_reference_symbols:
         if (
             len(reference_rows) != 18
