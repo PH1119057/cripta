@@ -155,7 +155,10 @@ class FakePG:
                 SESSION, SOURCE, INSTRUMENT, SYMBOL, AT, self.pub_at, 257,
             )
             if self.row_style == "tuple":
-                return Cursor([tuple(row[name] for name in FIELDS) for row in self.rows])
+                return Cursor([
+                    tuple(row[name] for name in FIELDS)
+                    for row in self.rows
+                ])
             return Cursor(self.rows)
         raise AssertionError(f"Unexpected R09 statement: {sql}")
 
