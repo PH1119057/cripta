@@ -163,12 +163,48 @@ class R11ConsumerCommit:
     committed_at: datetime | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class R11ConsumerHead:
+    generation: int
+    source_session_id: str
+    release_commit: str
+    publication_id: int
+
+
+def read_r11_mayak_consumer_head(connection: Any) -> R11ConsumerHead | None:
+    """Read only the durable CAS identity; callers still verify state before reset."""
+    row = connection.execute(
+        """SELECT generation,market_source_id,source_session_id,
+                  producer_release_commit,publication_id
+             FROM mayak_v2.r11_consumer_commit
+            WHERE consumer_id=%s""",
+        (_CONSUMER_ID,),
+    ).fetchone()
+    if row is None:
+        return None
+    _need(
+        isinstance(row, (tuple, list)) and len(row) == 5
+        and type(row[0]) is int and row[0] > 0
+        and row[1] == BYBIT_PUBLIC_MARKET_SOURCE_ID
+        and isinstance(row[2], str) and len(row[2]) == 32
+        and isinstance(row[3], str) and len(row[3]) == 40
+        and type(row[4]) is int and row[4] > 0,
+        "HEAD_IDENTITY_INVALID",
+    )
+    return R11ConsumerHead(
+        generation=row[0], source_session_id=row[2],
+        release_commit=row[3], publication_id=row[4],
+    )
+
+
 def commit_r11_mayak_publication(
     connection: Any, *,
     replay: R11MayakPublicationReplay,
     snapshot: dict[str, Any],
     expected_generation: int,
     expected_previous_publication_id: int | None,
+    expected_previous_source_session_id: str | None = None,
+    expected_previous_release_commit: str | None = None,
     fault_injector: FaultInjector | None = None,
 ) -> R11ConsumerCommit:
     """CAS one full generation; every injected pre-commit crash rolls back."""
@@ -182,6 +218,14 @@ def commit_r11_mayak_publication(
             expected_previous_publication_id is None
             or type(expected_previous_publication_id) is int
             and expected_previous_publication_id > 0
+        )
+        and (
+            expected_previous_source_session_id is None
+            and expected_previous_release_commit is None
+            or isinstance(expected_previous_source_session_id, str)
+            and len(expected_previous_source_session_id) == 32
+            and isinstance(expected_previous_release_commit, str)
+            and len(expected_previous_release_commit) == 40
         )
         and _snapshot_matches_replay(replay, snapshot),
         "INPUT_GENERATION_INVALID",
@@ -218,17 +262,40 @@ def commit_r11_mayak_publication(
         if current is None:
             _need(
                 expected_generation == 0
-                and expected_previous_publication_id is None,
+                and expected_previous_publication_id is None
+                and expected_previous_source_session_id is None
+                and expected_previous_release_commit is None,
                 "MISSING_EXPECTED_PREVIOUS_ROW",
             )
         else:
+            previous_session = (
+                expected_previous_source_session_id
+                if expected_previous_source_session_id is not None
+                else checkpoint.source_session_id
+            )
+            previous_release = (
+                expected_previous_release_commit
+                if expected_previous_release_commit is not None
+                else checkpoint.release_commit
+            )
+            source_reset = (
+                expected_previous_source_session_id is not None
+                and expected_previous_release_commit is not None
+            )
             _need(
                 isinstance(current, (tuple, list)) and len(current) == 4
                 and current[0] == expected_generation
                 and current[1] == expected_previous_publication_id
-                and current[2] == checkpoint.source_session_id
-                and current[3] == checkpoint.release_commit
-                and checkpoint.publication_id > current[1],
+                and current[2] == previous_session
+                and current[3] == previous_release
+                and checkpoint.publication_id > current[1]
+                and (
+                    not source_reset
+                    or (
+                        checkpoint.source_session_id,
+                        checkpoint.release_commit,
+                    ) != (current[2], current[3])
+                ),
                 "CAS_OR_PUBLICATION_REGRESSION",
             )
         if fault_injector is not None:
