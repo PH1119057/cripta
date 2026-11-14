@@ -34,6 +34,7 @@ _EPOCH_GUARD_LOCK_PREFIX = "CRIPTA:R07:SOURCE_EPOCH_TRANSITION:V1:"
 _TRIGGER_SQL = """
 SELECT t.tgenabled='O' AND NOT t.tgisinternal AND t.tgtype=31
        AND t.tgfoid='analytics.r07_source_epoch_tx_guard_v1()'::regprocedure
+       AND pg_catalog.pg_get_triggerdef(t.oid) LIKE '%source_session_id%'
        AS guard_valid
   FROM pg_catalog.pg_trigger t
  WHERE t.tgrelid='analytics.native_public_trade_source_sessions'::regclass
