@@ -176,12 +176,15 @@ def test_original_postfill_uses_proven_pinned_epoch_and_mfe(style: str) -> None:
     db = FakePG()
     db.row_style = style
     source = proof(db)
-    assert source.complete_native_window is True
-    assert source.no_new_native_trade_rest_verified is False
+    assert source.native_continuity_verified is False
+    assert source.exit_ready is False
+    assert source.native_event_count == 2
+    assert source.publication_id == 21
+    assert source.source_session_id == SESSION
     assert source.covered_through == PUB_AT
     assert source.source_commit == STRATEGY_COMMIT
     assert source.last_native_price == Decimal("0.1720")
-    assert source.best_favorable_price == Decimal("0.1720")
+    assert source.observed_favorable_price == Decimal("0.1720")
     assert source.source_refs == (
         f"bybit:publicTrade:{SYMBOL}:{FIRST}",
         f"bybit:publicTrade:{SYMBOL}:{LATEST}",
@@ -279,6 +282,8 @@ def test_r09_read_module_makes_no_exchange_request_or_live_mutation() -> None:
     assert "urllib" not in code
     assert "requests." not in code
     assert "read_real_postfill_source_window" not in code
-    assert "complete_native_window=True" in code
-    assert "no_new_native_trade_rest_verified=False" in code
+    assert "class R09NativePublicationCandidate" in code
+    assert "native_continuity_verified: bool = False" in code
+    assert "exit_ready: bool = False" in code
+    assert "P90RealPostfillSourceWindow" not in code
     assert "SHOW transaction_read_only" in code
