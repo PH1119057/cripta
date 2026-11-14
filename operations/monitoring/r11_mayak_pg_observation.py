@@ -16,11 +16,13 @@ from typing import TYPE_CHECKING, Any
 import psycopg
 
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
+from bybit_workbench.mayak.publication_consumer_commit import (
+    R11ConsumerCommitUnverified,
+    commit_r11_mayak_publication,
+    load_r11_mayak_consumer_commit,
+)
 from bybit_workbench.mayak.seven_publication_engine_checkpoint import (
     R11MayakStateUnverified,
-    atomic_write_r11_mayak_state,
-    decode_r11_mayak_state,
-    encode_r11_mayak_state,
 )
 from bybit_workbench.mayak.seven_publication_observation_candidate import (
     R11SevenMayakCollectionUnverified,
@@ -35,7 +37,6 @@ if TYPE_CHECKING:
     from operations.monitoring.mayak_v2 import Collector
 
 _MAX_PUBLICATION_LAG_SECONDS = 30
-_DEFAULT_CHECKPOINT_NAME = "r11_market_publication_checkpoint.bin"
 
 
 class R11MayakPGSourceUnavailable(RuntimeError):
@@ -52,7 +53,7 @@ def _read_one(
     *,
     replay: R11MayakPublicationReplay,
     now: datetime,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     _need(
         isinstance(now, datetime)
         and now.utcoffset() is not None
@@ -86,6 +87,11 @@ def _read_one(
         and type(latest[0]) is int and latest[0] > 0,
         "ACTIVE_SOURCE_PUBLICATION_MISSING",
     )
+    if (
+        replay.checkpoint is not None
+        and latest[0] <= replay.checkpoint.publication_id
+    ):
+        return None
     candidate = collect_r11_seven_mayak_candidate(
         db, publication_id=latest[0], observed_at=now,
         previous=replay.checkpoint,
@@ -129,38 +135,32 @@ def _source_identity(db: Any) -> tuple[str, str]:
 def run_r11_pg_observation(collector: Collector) -> None:
     """PG-only seven-symbol dry-run path; no new market collector sockets.
 
-    File writes are bounded and atomic. Source cursor is checkpointed only
-    together with the exact replay engine; no fabricated persisted
-    coin-context/Dispatcher acceptance is emitted on an unverified source.
+    PostgreSQL stores one bounded latest-state row. Source cursor, exact replay
+    engine, snapshot and Dispatcher handoff commit in one CAS transaction.
     """
-    from operations.monitoring.mayak_v2 import DSN, STATE_PATH
+    from operations.monitoring.mayak_v2 import DSN
 
-    _need(
-        STATE_PATH.is_absolute() and STATE_PATH.parent.is_dir(),
-        "OPERATOR_STATE_PARENT_NOT_PREPARED",
-    )
-    saved = STATE_PATH.with_name(_DEFAULT_CHECKPOINT_NAME)
-    _need(
-        saved.parent == STATE_PATH.parent
-        and not saved.is_symlink(),
-        "STATE_CHECKPOINT_PATH_INVALID",
-    )
-    replay = R11MayakPublicationReplay(require_provider_continuity=True)
-    if saved.exists():
-        binary = saved.read_bytes()
-        with psycopg.connect(
-            DSN, options="-cdefault_transaction_read_only=on",
-        ) as db:
-            db.execute(
-                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-            )
-            source_session, release = _source_identity(db)
-            replay = decode_r11_mayak_state(
-                binary, expected_source_session_id=source_session,
-                expected_release_commit=release,
-            )
-            replay.require_provider_continuity = True
-    last_saved_minute: datetime | None = None
+    with psycopg.connect(
+        DSN, options="-cdefault_transaction_read_only=on",
+    ) as db:
+        db.execute(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        source_session, release = _source_identity(db)
+        restored = load_r11_mayak_consumer_commit(
+            db, expected_source_session_id=source_session,
+            expected_release_commit=release,
+        )
+    if restored is None:
+        replay = R11MayakPublicationReplay(require_provider_continuity=True)
+        generation = 0
+        previous_publication_id: int | None = None
+    else:
+        replay = restored.replay
+        replay.require_provider_continuity = True
+        generation = restored.generation
+        assert replay.checkpoint is not None
+        previous_publication_id = replay.checkpoint.publication_id
     while not collector.stop.wait(1.0):
         now = datetime.now(UTC)
         try:
@@ -171,21 +171,26 @@ def run_r11_pg_observation(collector: Collector) -> None:
                     "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
                 )
                 snapshot = _read_one(db, replay=replay, now=now)
-            minute = now.replace(second=0, microsecond=0)
-            if last_saved_minute is None or minute > last_saved_minute:
-                atomic_write_r11_mayak_state(
-                    saved, encode_r11_mayak_state(replay),
+            if snapshot is None:
+                continue
+            with psycopg.connect(DSN) as writer:
+                committed = commit_r11_mayak_publication(
+                    writer, replay=replay, snapshot=snapshot,
+                    expected_generation=generation,
+                    expected_previous_publication_id=previous_publication_id,
                 )
-                last_saved_minute = minute
-            # NO write to mayak_v2/dispatcher_v2 until source continuity,
-            # WARMUP, actual PG/WS BEFORE-AFTER parity and rollback prove it.
-            collector.last_snapshot = snapshot
-            collector._write_state(snapshot)
+            generation = committed.generation
+            assert replay.checkpoint is not None
+            previous_publication_id = replay.checkpoint.publication_id
+            # Diagnostic JSON is derived only after the authoritative DB row.
+            collector.last_snapshot = committed.snapshot
+            collector._write_state(committed.snapshot)
         except (
             R11MayakPGSourceUnavailable,
             R11SevenMayakCollectionUnverified,
             R11MayakReplayNotReady,
             R11MayakStateUnverified,
+            R11ConsumerCommitUnverified,
             psycopg.Error,
         ) as exc:
             collector._write_error("PG_PUBLICATION", exc)
