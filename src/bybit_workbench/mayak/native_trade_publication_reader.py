@@ -18,7 +18,7 @@ from bybit_workbench.market_identity import (
     bybit_instrument_id,
 )
 
-_OWNED_FIVE = frozenset((
+_MAYAK_SEVEN = frozenset((
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
     "BTCUSDT", "ETHUSDT",
 ))
@@ -113,7 +113,7 @@ def read_r11_original_linear_page(
     symbol/source epoch. No caller-supplied "coverage complete" flag.
     """
     now = _utc(observed_at, "NOW_NOT_UTC")
-    _need(symbol in _OWNED_FIVE, "SYMBOL_OUTSIDE_FIVE_NATIVE_CAPTURE")
+    _need(symbol in _MAYAK_SEVEN, "SYMBOL_OUTSIDE_MAYAK_SOURCE_SCOPE")
     _need(
         type(max_events) is int and 1 <= max_events <= _MAX_PAGE
         and type(read_after) is tuple and len(read_after) == 2
