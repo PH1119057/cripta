@@ -1,6 +1,7 @@
 """#470 R11: original MarketPublication REST feature parity for MAYAK."""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -9,8 +10,11 @@ from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
 )
+from bybit_workbench.mayak.core.live import LiveMayakEngine
 from bybit_workbench.mayak.publication_rest_parity import (
+    R11MayakRestCandidate,
     R11MayakRestPublicationUnverified,
+    apply_r11_mayak_rest_candidates_offline,
     read_r11_mayak_rest_candidate,
 )
 
@@ -148,4 +152,63 @@ def test_outside_seven_never_enters_mayak_observation_path() -> None:
     with pytest.raises(R11MayakRestPublicationUnverified):
         read_r11_mayak_rest_candidate(
             DB(), publication_id=13, symbol="XRPUSDT",
+        )
+
+
+_SEVEN = (
+    "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+    "BTCUSDT", "ETHUSDT",
+)
+
+
+def _candidate(symbol: str) -> R11MayakRestCandidate:
+    return R11MayakRestCandidate(
+        symbol=symbol, publication_id=13, source_session_id=SESSION,
+        release_commit=RELEASE, as_of=NOW,
+        ratio_sample_at=NOW - timedelta(seconds=3),
+        long_ratio=0.55, short_ratio=0.45,
+        spot_supported=symbol != "ETHUSDT",
+        linear_supported=True,
+    )
+
+
+def test_seven_rest_projection_matches_existing_engine_callbacks() -> None:
+    expected = LiveMayakEngine(_SEVEN)
+    original = tuple(_candidate(symbol) for symbol in _SEVEN)
+    expected.set_instrument_support(
+        "spot", {item.symbol for item in original if item.spot_supported},
+    )
+    expected.set_instrument_support("linear", set(_SEVEN))
+    for item in original:
+        expected.on_ticker(
+            item.symbol, item.ratio_sample_at.timestamp(),
+            long_ratio=item.long_ratio, short_ratio=item.short_ratio,
+        )
+    replay = LiveMayakEngine(_SEVEN)
+    apply_r11_mayak_rest_candidates_offline(replay, original)
+    assert replay.snapshot(NOW)["coins"] == expected.snapshot(NOW)["coins"]
+
+
+@pytest.mark.parametrize("variant", ["missing", "duplicate", "false_ready",
+                                     "mixed_publication", "ratio_drift"])
+def test_rest_incomplete_or_mixed_seven_panel_never_applies(
+    variant: str,
+) -> None:
+    original = tuple(_candidate(symbol) for symbol in _SEVEN)
+    if variant == "missing":
+        original = original[:-1]
+    elif variant == "duplicate":
+        original = (*original[:-1], original[0])
+    elif variant == "false_ready":
+        original = (replace(original[0], mayak_cutover_ready=True),
+                    *original[1:])
+    elif variant == "mixed_publication":
+        original = (replace(original[0], publication_id=14),
+                    *original[1:])
+    elif variant == "ratio_drift":
+        original = (replace(original[0], long_ratio=2.0),
+                    *original[1:])
+    with pytest.raises(R11MayakRestPublicationUnverified):
+        apply_r11_mayak_rest_candidates_offline(
+            LiveMayakEngine(_SEVEN), original,
         )
