@@ -211,9 +211,12 @@ def make_r11_original_optional_frame(
             "payload": dict(fact.payload),
         }, "CODEC_JSON_INVALID"))
     native_ts = message.get("ts")
+    if type(native_ts) is not int:
+        raise R11OriginalFrameUnavailable(
+            "R11_ORIGINAL_FRAME_PROVIDER_FRAME_TIME_INVALID"
+        )
     _need(
-        type(native_ts) is int
-        and 946684800000 <= native_ts < 4102444800000,
+        946684800000 <= native_ts < 4102444800000,
         "PROVIDER_FRAME_TIME_INVALID",
     )
     provider_at = datetime.fromtimestamp(native_ts / 1000, UTC)
