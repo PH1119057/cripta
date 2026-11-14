@@ -159,6 +159,32 @@ def _physical(
     key = "ticker" if dataset == "TICKER" else "book"
     selected = features.get(key)
     _need(isinstance(selected, dict), "PHYSICAL_FEATURE_MISSING")
+    if dataset == "TICKER":
+        times = features.get("ticker_field_times")
+        statuses = q.get("fields")
+        _need(
+            isinstance(times, dict) and isinstance(statuses, dict)
+            and all(statuses.get(name) == "FRESH" for name in _TICKER),
+            "TICKER_FIELDS_NOT_FRESH",
+        )
+        for name in _TICKER:
+            tick_time = _utc(
+                times.get(name), "TICKER_FIELD_CLOCK_INVALID",
+            )
+            _need(
+                timedelta(0) <= published - tick_time <= _FIELD_TTL,
+                "TICKER_FIELD_EXPIRED",
+            )
+    else:
+        book_time = _utc(
+            selected.get("source_time"), "BOOK_EVENT_TIME_INVALID",
+        )
+        _need(
+            timedelta(0) <= published - book_time <= _FIELD_TTL
+            and type(selected.get("source_sequence")) is int
+            and selected["source_sequence"] >= 0,
+            "BOOK_EVENT_IDENTITY_OR_AGE_INVALID",
+        )
     return selected
 
 
