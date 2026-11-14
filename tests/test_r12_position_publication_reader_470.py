@@ -54,11 +54,6 @@ class FakePG:
         if "FROM analytics.native_public_trade_source_sessions" in sql:
             return Rows([(SESSION, RELEASE)])
         if "FROM analytics.market_publications" in sql:
-            field_at = (
-                TICKER_SECOND
-                if self.ticker_fields_fresh
-                else TICKER_SECOND - timedelta(seconds=10)
-            )
             forming_refs = {
                 INSTRUMENT: {
                     "FORMING_KLINE": {
@@ -218,7 +213,7 @@ class FakePG:
         raise AssertionError(f"unexpected SQL: {sql}")
 
 
-def read(db: FakePG = None):
+def read(db: FakePG | None = None):
     return read_r12_position_market_snapshot(
         db or FakePG(), symbol=SYMBOL, observed_at=NOW,
     )
