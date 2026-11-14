@@ -32,7 +32,7 @@ from bybit_workbench.market_identity import (
 _SESSION = re.compile(r"^[0-9a-f]{32}$")
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA64 = re.compile(r"^[0-9a-f]{64}$")
-_FIVE = frozenset((
+_SEVEN = frozenset((
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
     "BTCUSDT", "ETHUSDT",
 ))
@@ -187,7 +187,7 @@ def read_r11_optional_original_frame_page(
             and row_source == BYBIT_PUBLIC_MARKET_SOURCE_ID
             and venue == "venue-bybit"
             and product == product_category
-            and symbol in _FIVE
+            and symbol in _SEVEN
             and instrument == bybit_instrument_id(
                 product_category.lower(), symbol,
             )
