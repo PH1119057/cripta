@@ -75,6 +75,7 @@ def _finite(raw: object) -> float:
 
 def _history(raw: object, *, width: int, limit: int) -> deque[Any]:
     _need(isinstance(raw, list) and len(raw) <= limit, "WINDOW_UNBOUNDED")
+    raw = cast(list[Any], raw)
     out: deque[Any] = deque()
     for row in raw:
         _need(isinstance(row, list) and len(row) == width,
@@ -128,8 +129,14 @@ def _decode_checkpoint(raw: object) -> R11SevenMayakReplayCheckpoint:
             symbol=b["symbol"],
             source_sequence=b["source_sequence"],
             update_id=b["update_id"],
-            bids=tuple(tuple(_finite(x) for x in pair) for pair in b["bids"]),
-            asks=tuple(tuple(_finite(x) for x in pair) for pair in b["asks"]),
+            bids=tuple(
+                (_finite(pair[0]), _finite(pair[1]))
+                for pair in b["bids"]
+            ),
+            asks=tuple(
+                (_finite(pair[0]), _finite(pair[1]))
+                for pair in b["asks"]
+            ),
         ) for b in item["books"])
         opt.append(R11OptionalMayakCursor(
             source_session_id=item["source_session_id"],
