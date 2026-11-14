@@ -98,7 +98,7 @@ def _encode_checkpoint(
         and tuple(x.symbol for x in checkpoint.native_cursors) == _SEVEN,
         "CHECKPOINT_NOT_DEGRADED_OR_COMPLETE",
     )
-    return {
+    object_value = {
         "publication_id": checkpoint.publication_id,
         "source_session_id": checkpoint.source_session_id,
         "release_commit": checkpoint.release_commit,
@@ -113,6 +113,8 @@ def _encode_checkpoint(
             for item in checkpoint.native_cursors
         ],
     }
+    # The source wire representation is JSON arrays, never Python tuples.
+    return json.loads(json.dumps(object_value, allow_nan=False))
 
 
 def _decode_checkpoint(raw: object) -> R11SevenMayakReplayCheckpoint:
