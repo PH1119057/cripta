@@ -3,8 +3,9 @@
 This is a *pure* projection for disposable shadow/replay tests, not a runtime
 source activation. It preserves each original same-seq execId, enforces one
 ordered publication/epoch/cursor chain and never fabricates trade aggregates.
-The five-symbol native producer still lacks MAYAK's SPOT and BTC/ETH scope;
-other features (book deltas, liquidation, ratio) remain outside this contract.
+The owner-approved seven-symbol native observation source contains BTC/ETH
+as MAYAK-only reference anchors. SPOT, BOOK, liquidation, REST and full
+provider continuity remain separate proof gates, not trade-page claims.
 """
 from __future__ import annotations
 
@@ -119,6 +120,7 @@ def project_r11_native_linear_trade_page(
         isinstance(page, R11OriginalNativePage)
         and page.symbol in (
             "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+            "BTCUSDT", "ETHUSDT",
         )
         and type(page.publication_id) is int and page.publication_id > 0
         and all(
