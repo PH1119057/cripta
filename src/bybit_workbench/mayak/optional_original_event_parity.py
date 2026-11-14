@@ -99,11 +99,13 @@ class R11OptionalMayakEvent:
         """Call actual MAYAK formulas in disposable parity/replay tests only."""
         market = self.product.lower()
         if self.event == "TRADE":
-            _need(
-                self.side in ("Buy", "Sell")
-                and self.price is not None and self.quantity is not None,
-                "TRADE_ARGUMENTS_INVALID",
-            )
+            if (
+                self.side not in ("Buy", "Sell")
+                or self.price is None or self.quantity is None
+            ):
+                raise R11OptionalMayakReplayUnverified(
+                    "R11_OPTIONAL_MAYAK_TRADE_ARGUMENTS_INVALID"
+                )
             engine.on_trade(
                 market, self.symbol, self.timestamp, self.side,
                 self.price, self.quantity,
@@ -120,13 +122,15 @@ class R11OptionalMayakEvent:
                 self.symbol, self.timestamp, **dict(self.ticker_updates),
             )
         else:
-            _need(
-                self.event == "LIQUIDATION"
-                and self.product == "LINEAR"
-                and self.side in ("Buy", "Sell")
-                and self.price is not None and self.quantity is not None,
-                "LIQUIDATION_ARGUMENTS_INVALID",
-            )
+            if (
+                self.event != "LIQUIDATION"
+                or self.product != "LINEAR"
+                or self.side not in ("Buy", "Sell")
+                or self.price is None or self.quantity is None
+            ):
+                raise R11OptionalMayakReplayUnverified(
+                    "R11_OPTIONAL_MAYAK_LIQUIDATION_ARGUMENTS_INVALID"
+                )
             engine.on_liquidation(
                 self.symbol, self.timestamp, self.side,
                 self.price, self.quantity,
@@ -164,7 +168,7 @@ def _numeric(value: object, *, zero: bool = False, signed: bool = False) -> floa
         ) from exc
     _need(
         math.isfinite(num)
-        and (num >= 0 if zero else (True if signed else num > 0)),
+        and (True if signed else (num >= 0 if zero else num > 0)),
         "NUMBER_NONFINITE_OR_SIGN_INVALID",
     )
     return num
@@ -218,16 +222,31 @@ def _book_next(
     )
     update = fact.payload.get("update_id")
     _need(type(update) is int and update >= 0, "BOOK_UPDATE_INVALID")
+    if type(update) is not int:
+        raise R11OptionalMayakReplayUnverified(
+            "R11_OPTIONAL_MAYAK_BOOK_UPDATE_INVALID"
+        )
+    if type(fact.exchange_sequence) is not int:
+        raise R11OptionalMayakReplayUnverified(
+            "R11_OPTIONAL_MAYAK_BOOK_FRAME_INVALID"
+        )
     if not snapshot:
-        _need(previous is not None, "BOOK_DELTA_WITHOUT_SNAPSHOT")
+        if previous is None:
+            raise R11OptionalMayakReplayUnverified(
+                "R11_OPTIONAL_MAYAK_BOOK_DELTA_WITHOUT_SNAPSHOT"
+            )
         _need(
             update != 1
             and fact.exchange_sequence > previous.source_sequence
             and update > previous.update_id,
             "BOOK_SEQ_OR_RESET_UNVERIFIED",
         )
-    current_bid = {} if snapshot else dict(previous.bids)
-    current_ask = {} if snapshot else dict(previous.asks)
+    current_bid = (
+        {} if snapshot or previous is None else dict(previous.bids)
+    )
+    current_ask = (
+        {} if snapshot or previous is None else dict(previous.asks)
+    )
     bids = _levels(fact.payload.get("bids"), allow_zero=not snapshot)
     asks = _levels(fact.payload.get("asks"), allow_zero=not snapshot)
     for original, changes in ((current_bid, bids), (current_ask, asks)):
@@ -348,7 +367,14 @@ def project_r11_optional_mayak_page(
             and page.product_category == previous.product_category
             and page.producer_release_commit == previous.producer_release_commit
             and page.requested_after == previous.next_cursor
-            and previous.next_digest is not None,
+            and (
+                (previous.next_cursor == 0 and previous.next_digest is None)
+                or (
+                    previous.next_cursor > 0
+                    and isinstance(previous.next_digest, str)
+                    and _SHA64.fullmatch(previous.next_digest) is not None
+                )
+            ),
             "CURSOR_OR_TRANSPORT_EPOCH_CHANGED",
         )
         expected_digest = previous.next_digest
@@ -361,8 +387,11 @@ def project_r11_optional_mayak_page(
             )
             books[item.symbol] = item
     _need(
-        (page.requested_after == 0 and previous is None) or
-        (page.requested_after > 0 and previous is not None),
+        (page.requested_after == 0 and (
+            previous is None or previous.next_cursor == 0
+        )) or (
+            page.requested_after > 0 and previous is not None
+        ),
         "RESUME_CURSOR_MISMATCH",
     )
     projected: list[R11OptionalMayakEvent] = []
