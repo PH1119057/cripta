@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 from contextlib import AbstractContextManager
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -96,11 +95,18 @@ def snapshot(replay: R11MayakPublicationReplay) -> dict[str, Any]:
 
 
 class Rows:
-    def __init__(self, row: tuple[Any, ...] | None) -> None:
+    def __init__(
+        self, row: tuple[Any, ...] | None = None,
+        rows: list[tuple[Any, ...]] | None = None,
+    ) -> None:
         self.row = row
+        self.rows = [] if rows is None else rows
 
     def fetchone(self):
         return self.row
+
+    def fetchall(self):
+        return self.rows
 
 
 class Transaction(AbstractContextManager[None]):
@@ -121,11 +127,31 @@ class AtomicDB:
     def __init__(self) -> None:
         self.committed: tuple[Any, ...] | None = None
         self.staging: tuple[Any, ...] | None = None
+        self.guard_valid = True
+        self.shared_lock = True
+        self.active_source = (SESSION, RELEASE)
+        self.publication_override: tuple[Any, ...] | None = None
 
     def transaction(self) -> Transaction:
         return Transaction(self)
 
-    def execute(self, sql: str, params: tuple[Any, ...]) -> Rows:
+    def execute(
+        self, sql: str, params: tuple[Any, ...] = (),
+    ) -> Rows:
+        if sql.startswith("LOCK TABLE"):
+            return Rows()
+        if "FROM pg_catalog.pg_trigger" in sql:
+            return Rows((self.guard_valid,))
+        if "pg_try_advisory_xact_lock_shared" in sql:
+            return Rows((self.shared_lock,))
+        if "FROM analytics.native_public_trade_source_sessions" in sql:
+            return Rows(rows=[self.active_source])
+        if "FROM analytics.market_publications" in sql:
+            if self.publication_override is not None:
+                return Rows(self.publication_override)
+            publication_id = int(params[0])
+            at = AT + timedelta(seconds=publication_id - 100)
+            return Rows((SESSION, RELEASE, at, "WATERMARKS_ONLY"))
         if "FOR UPDATE" in sql:
             row = self.staging
             return Rows(
@@ -145,7 +171,9 @@ class AtomicDB:
 
 
 @pytest.mark.parametrize(
-    "crash_point", ("AFTER_ENCODE", "AFTER_LOCK", "AFTER_WRITE"),
+    "crash_point", (
+        "AFTER_ENCODE", "AFTER_SOURCE_FENCE", "AFTER_LOCK", "AFTER_WRITE",
+    ),
 )
 def test_every_precommit_crash_leaves_no_partial_generation(
     crash_point: str,
@@ -279,6 +307,55 @@ def test_corrupt_state_or_snapshot_digest_fails_closed(index: int) -> None:
         )
 
 
+
+@pytest.mark.parametrize(
+    ("failure", "reason"),
+    (
+        ("guard", "SOURCE_EPOCH_GUARD"),
+        ("lock", "SOURCE_EPOCH_LOCK"),
+        ("source", "SOURCE_EPOCH_DRIFT"),
+        ("publication", "PHYSICAL_PUBLICATION_DRIFT"),
+    ),
+)
+def test_source_epoch_or_publication_drift_blocks_before_consumer_write(
+    failure: str, reason: str,
+) -> None:
+    db = AtomicDB()
+    replay = replay_state()
+    if failure == "guard":
+        db.guard_valid = False
+    elif failure == "lock":
+        db.shared_lock = False
+    elif failure == "source":
+        db.active_source = ("f" * 32, RELEASE)
+    elif failure == "publication":
+        db.publication_override = (
+            SESSION, RELEASE, AT + timedelta(seconds=1), "WATERMARKS_ONLY",
+        )
+
+    with pytest.raises(R11ConsumerCommitUnverified, match=reason):
+        commit_r11_mayak_publication(
+            db, replay=replay, snapshot=snapshot(replay),
+            expected_generation=0, expected_previous_publication_id=None,
+        )
+    assert db.committed is None
+
+
+def test_source_epoch_fence_uses_current_r07_lock_abi() -> None:
+    source = Path(
+        "src/bybit_workbench/mayak/publication_consumer_commit.py"
+    ).read_text(encoding="utf-8")
+    migration = Path(
+        "operations/sql/20261114_r07_source_epoch_transaction_guard.sql"
+    ).read_text(encoding="utf-8")
+
+    prefix = "CRIPTA:R07:SOURCE_EPOCH_TRANSITION:V1:"
+    assert prefix in source
+    assert prefix in migration
+    assert "r07_source_epoch_guard_v1" in source
+    assert "r07_source_epoch_guard_v1" in migration
+    assert "pg_try_advisory_xact_lock_shared" in source
+
 def test_migration_is_one_bounded_latest_row_with_runtime_actor_guard() -> None:
     sql = Path(
         "operations/sql/20261115_r11_mayak_consumer_commit.sql"
@@ -290,4 +367,4 @@ def test_migration_is_one_bounded_latest_row_with_runtime_actor_guard() -> None:
     assert "GRANT SELECT,INSERT,UPDATE" in sql
     assert "REVOKE DELETE,TRUNCATE" in sql
     assert "CREATE TABLE IF NOT EXISTS mayak_v2.r11_consumer_commit" in sql
-    assert "history" not in sql.lower()
+    assert "CREATE TABLE IF NOT EXISTS mayak_v2.r11_consumer_history" not in sql

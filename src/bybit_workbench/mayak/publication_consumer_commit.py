@@ -29,6 +29,20 @@ _SEVEN = frozenset((
     "BTCUSDT", "ETHUSDT",
 ))
 _MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024
+_EPOCH_GUARD_LOCK_PREFIX = "CRIPTA:R07:SOURCE_EPOCH_TRANSITION:V1:"
+_SOURCE_EPOCH_TRIGGER_SQL = """
+SELECT EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_trigger t
+     WHERE t.tgrelid='analytics.native_public_trade_source_sessions'::regclass
+       AND t.tgname='r07_source_epoch_guard_v1'
+       AND t.tgenabled='O'
+       AND NOT t.tgisinternal
+       AND t.tgtype=31
+       AND t.tgfoid='analytics.r07_source_epoch_tx_guard_v1()'::regprocedure
+       AND pg_catalog.pg_get_triggerdef(t.oid) LIKE '%source_session_id%'
+)
+"""
 FaultInjector = Callable[[str], None]
 
 
@@ -39,6 +53,50 @@ class R11ConsumerCommitUnverified(RuntimeError):
 def _need(ok: bool, reason: str) -> None:
     if not ok:
         raise R11ConsumerCommitUnverified("R11_CONSUMER_COMMIT_" + reason)
+
+
+def _fence_source_epoch(
+    connection: Any, *, source_session_id: str, release_commit: str,
+    publication_id: int, publication_as_of: datetime,
+) -> None:
+    """Hold the R07 shared epoch fence through this consumer transaction."""
+    connection.execute(
+        "LOCK TABLE analytics.native_public_trade_source_sessions "
+        "IN ROW EXCLUSIVE MODE NOWAIT"
+    )
+    guard = connection.execute(_SOURCE_EPOCH_TRIGGER_SQL).fetchone()
+    _need(guard == (True,), "SOURCE_EPOCH_GUARD_MISSING_OR_DISABLED")
+    lock = connection.execute(
+        "SELECT pg_catalog.pg_try_advisory_xact_lock_shared("
+        "pg_catalog.hashtextextended(%s,0))",
+        (_EPOCH_GUARD_LOCK_PREFIX + BYBIT_PUBLIC_MARKET_SOURCE_ID,),
+    ).fetchone()
+    _need(lock == (True,), "SOURCE_EPOCH_LOCK_UNAVAILABLE")
+    active = connection.execute(
+        """SELECT source_session_id,producer_release_commit
+             FROM analytics.native_public_trade_source_sessions
+            WHERE market_source_id=%s AND state='ACTIVE'
+            ORDER BY source_session_id""",
+        (BYBIT_PUBLIC_MARKET_SOURCE_ID,),
+    ).fetchall()
+    _need(
+        active == [(source_session_id, release_commit)],
+        "SOURCE_EPOCH_DRIFT",
+    )
+    publication = connection.execute(
+        """SELECT source_session_id,producer_release_commit,as_of_second,
+                  publication_status
+             FROM analytics.market_publications
+            WHERE publication_id=%s AND market_source_id=%s""",
+        (publication_id, BYBIT_PUBLIC_MARKET_SOURCE_ID),
+    ).fetchone()
+    _need(
+        publication == (
+            source_session_id, release_commit, publication_as_of,
+            "WATERMARKS_ONLY",
+        ),
+        "PHYSICAL_PUBLICATION_DRIFT",
+    )
 
 
 def _canonical_snapshot(snapshot: dict[str, Any]) -> bytes:
@@ -141,6 +199,15 @@ def commit_r11_mayak_publication(
 
     generation = expected_generation + 1
     with connection.transaction():
+        _fence_source_epoch(
+            connection,
+            source_session_id=checkpoint.source_session_id,
+            release_commit=checkpoint.release_commit,
+            publication_id=checkpoint.publication_id,
+            publication_as_of=checkpoint.as_of_second,
+        )
+        if fault_injector is not None:
+            fault_injector("AFTER_SOURCE_FENCE")
         current = connection.execute(
             """SELECT generation,publication_id,source_session_id,
                       producer_release_commit

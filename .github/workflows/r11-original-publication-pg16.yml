@@ -4,6 +4,12 @@ on:
   pull_request:
     paths:
       - "operations/sql/20261114_r11_optional_*"
+      - "operations/sql/20261114_r07_source_epoch_transaction_guard.sql"
+      - "operations/sql/20261115_r11_mayak_consumer_commit.sql"
+      - "src/bybit_workbench/mayak/publication_consumer_commit.py"
+      - "operations/monitoring/r11_mayak_pg_observation.py"
+      - "tests/test_r11_publication_consumer_commit_470.py"
+      - "tests/test_r11_consumer_commit_pg16_470.py"
       - "tests/test_r11_optional_publication_pg16_470.py"
       - ".github/workflows/r11-original-publication-pg16.yml"
 
@@ -35,5 +41,8 @@ jobs:
           python-version: "3.12"
       - name: Install bounded disposable PG16 dependencies
         run: python -m pip install "psycopg[binary]==3.2.10" "pytest>=8,<10"
-      - name: Verify original frame and publication migration contracts
-        run: python -m pytest -q tests/test_r11_optional_publication_pg16_470.py
+      - name: Verify original frame, publication and atomic consumer contracts
+        run: >-
+          python -m pytest -q
+          tests/test_r11_optional_publication_pg16_470.py
+          tests/test_r11_consumer_commit_pg16_470.py
