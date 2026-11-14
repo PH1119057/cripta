@@ -48,7 +48,7 @@ class _IdentityCursor:
         self.queries: list[str] = []
         self.rows_read = 0
 
-    def __enter__(self) -> "_IdentityCursor":
+    def __enter__(self) -> _IdentityCursor:
         return self
 
     def __exit__(self, *_args: Any) -> None:
