@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, cast
 
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
@@ -118,10 +118,10 @@ def _physical(
 ) -> dict[str, Any]:
     candidates = refs.get(instrument)
     conditions = quality.get(instrument)
-    _need(
-        isinstance(candidates, dict) and isinstance(conditions, dict),
-        "FEATURE_PUBLICATION_IDENTITY_MISSING",
-    )
+    if not isinstance(candidates, dict) or not isinstance(conditions, dict):
+        raise R11MayakPublicationUnavailable(
+            "R11_FEATURE_PUBLICATION_IDENTITY_MISSING"
+        )
     ref, q = candidates.get(dataset), conditions.get(dataset)
     _need(
         isinstance(ref, dict) and isinstance(q, dict)
@@ -188,7 +188,7 @@ def _physical(
             and selected["source_sequence"] >= 0,
             "BOOK_EVENT_IDENTITY_OR_AGE_INVALID",
         )
-    return selected
+    return cast(dict[str, Any], selected)
 
 
 def read_r11_mayak_feature_candidate(
