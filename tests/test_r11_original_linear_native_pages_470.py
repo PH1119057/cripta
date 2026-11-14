@@ -215,7 +215,7 @@ def test_read_after_must_be_real_exact_epoch_cursor_to_page() -> None:
         ), "ORIGINAL_SEQUENCE"),
         (lambda db: db.rows.__setitem__(
             1, event(5, 1, "other-execution", Decimal("101"),
-                     EVENT2 + timedelta(seconds=1)),
+                     AS_OF + timedelta(seconds=1)),
         ), "ORIGINAL_SEQUENCE"),
         (lambda db: db.rows.__setitem__(
             0, (*db.rows[0][0:13], "BYBIT_REST_KLINE", COMMIT),
