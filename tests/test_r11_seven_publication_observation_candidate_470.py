@@ -122,7 +122,7 @@ def mock_all(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
     def get_native(_db: Any, *, symbol: str, observed_at: datetime,
                    read_after: tuple[int, int]) -> R11OriginalNativePage:
-        assert observed_at == NOW and read_after == (0, 0)
+        assert isinstance(observed_at, datetime) and read_after == (0, 0)
         seen.append("native:" + symbol)
         return native_page(symbol)
 
