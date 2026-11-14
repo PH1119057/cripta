@@ -319,6 +319,45 @@ def validate_real_v3_attached_protection_at_last_price(
     return last
 
 
+
+def validate_real_v3_attached_protection_at_original_price(
+    *,
+    symbol: str,
+    side: str,
+    instrument_tick: Decimal,
+    stop_loss: Decimal,
+    take_profit: Decimal | None,
+    last_price: Decimal,
+) -> Decimal:
+    """R10 pure attached-protection bound check using a *verified* PG price.
+
+    Caller must first prove one current LINEAR original MarketPublication
+    with instrument, field-level timestamps and source epoch; this function
+    NEVER certifies the origin, exchange fill or signed account state.
+    It does not construct/fake a Bybit ticker payload.
+    """
+    if (
+        symbol not in ALLOWED_SYMBOLS[MAIN_ID] | ALLOWED_SYMBOLS[SUB_ID]
+        or side not in {"Buy", "Sell"}
+        or take_profit is None
+        or not all(
+            isinstance(value, Decimal) and value.is_finite() and value > 0
+            for value in (
+                instrument_tick, stop_loss, take_profit, last_price,
+            )
+        )
+        or stop_loss % instrument_tick != 0
+        or take_profit % instrument_tick != 0
+    ):
+        raise ValueError("P90_REAL_ATTACHED_PROTECTION_PREFLIGHT_INVALID")
+    if not (
+        stop_loss < last_price < take_profit
+        if side == "Buy" else take_profit < last_price < stop_loss
+    ):
+        raise ValueError("P90_REAL_ATTACHED_TP_SL_ALREADY_CROSSED")
+    return last_price
+
+
 def validate_real_v3_instrument_lot(
     *, symbol: str, instrument: Mapping[str, object],
     quantity: Decimal, signal_price: Decimal,
