@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +110,13 @@ def test_inspect_is_explicitly_not_deletion_authorization(
         "_publication_pins",
         lambda _cursor: {"pinned_publication_ids": [45018, 94424]},
     )
+    monkeypatch.setattr(
+        MODULE,
+        "_possible_retention_plan",
+        lambda _cursor, _pins, _tables: {
+            "candidate_status": "PRELIMINARY_ONLY_NO_DELETE_APPROVAL",
+        },
+    )
     con = _Connection(("cripta", "cripta", False, "on"))
     result = MODULE.inspect(con)
 
@@ -126,3 +134,72 @@ def test_inspect_is_explicitly_not_deletion_authorization(
         query.lstrip().upper().startswith("SELECT")
         for query in con.cursor_instance.queries
     )
+
+class _PlanCursor:
+    def __init__(self, replies: list[tuple[object, ...]]) -> None:
+        self.replies = iter(replies)
+        self.queries: list[str] = []
+
+    def execute(self, query: str, _params: object = None) -> None:
+        self.queries.append(query)
+
+    def fetchone(self) -> tuple[object, ...]:
+        return next(self.replies)
+
+
+def _plan_table_rows() -> list[dict[str, object]]:
+    return [
+        {
+            "table": "analytics.public_market_source_seconds",
+            "older_than_cutoff_rows": 1_199_020,
+        },
+        {
+            "table": "analytics.public_forming_minute_observations",
+            "older_than_cutoff_rows": 188_683,
+        },
+    ]
+
+
+def test_provisional_retention_uses_all_retained_publication_json_pins() -> None:
+    cursor = _PlanCursor([
+        (datetime(2026, 11, 14, 4, 50, tzinfo=UTC),),
+        (102_501,),
+        (459_682, 0, 134),
+        (77_622, 0, 20),
+    ])
+    out = MODULE._possible_retention_plan(
+        cursor,
+        {"pinned_publication_ids": [45018, 94424]},
+        _plan_table_rows(),
+    )
+    assert out["old_unpinned_publication_candidates"] == 102_501
+    assert out["old_unreferenced_second_candidates"] == 1_198_886
+    assert out["old_unreferenced_forming_candidates"] == 188_663
+    assert out["actual_reclaim_bytes"] is None
+    assert out["capacity_financial_retention_gate"] == "NOT_PROVEN"
+    assert out["candidate_status"] == "PRELIMINARY_ONLY_NO_DELETE_APPROVAL"
+    assert all("DELETE FROM" not in q.upper() for q in cursor.queries)
+    assert any("jsonb_each(p.compact_second_refs)" in q for q in cursor.queries)
+    assert any("jsonb_each(p.forming_minute_refs)" in q for q in cursor.queries)
+
+
+@pytest.mark.parametrize(
+    "compact_missing,forming_missing",
+    [(1, 0), (0, 1)],
+)
+def test_no_retention_candidate_when_kept_publication_has_dangling_refs(
+    compact_missing: int,
+    forming_missing: int,
+) -> None:
+    cursor = _PlanCursor([
+        (datetime(2026, 11, 14, 4, 50, tzinfo=UTC),),
+        (102_501,),
+        (459_682, compact_missing, 134),
+        (77_622, forming_missing, 20),
+    ])
+    with pytest.raises(RuntimeError, match="DANGLING_REF"):
+        MODULE._possible_retention_plan(
+            cursor,
+            {"pinned_publication_ids": [45018]},
+            _plan_table_rows(),
+        )
