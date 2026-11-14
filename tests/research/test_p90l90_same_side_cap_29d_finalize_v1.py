@@ -35,6 +35,20 @@ def test_strict_original_qc_status_schema_not_result():
         except ValueError:pass
         else:raise AssertionError("invalid original result/schema was accepted")
 
+def test_checkpoint_json_sorted_map_restores_original_physical_order():
+    from types import SimpleNamespace
+    ltc=object()
+    arb=object()
+    book=SimpleNamespace(pos={"ARBUSDT":arb,"LTCUSDT":ltc})
+    m.restore_native_symbol_iteration_order(book,("LTCUSDT","ARBUSDT"))
+    assert list(book.pos)==["LTCUSDT","ARBUSDT"]
+    assert book.pos["LTCUSDT"] is ltc and book.pos["ARBUSDT"] is arb
+    try:
+        m.restore_native_symbol_iteration_order(book,("LTCUSDT","DOTUSDT"))
+    except ValueError:pass
+    else:raise AssertionError("missing physical symbol was accepted")
+
+
 def test_no_write_or_tick_replay_and_exact_target():
     assert m.PERIOD=="29d"
     assert m.ORIGINAL_HEAD=="8c45213038b922272cfcd067f51dd6245ba96977"

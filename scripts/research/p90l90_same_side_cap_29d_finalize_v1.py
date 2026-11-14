@@ -74,6 +74,19 @@ def head(root: Path) -> str:
     return p.stdout.strip()
 
 
+def restore_native_symbol_iteration_order(book, symbols: tuple[str, ...]) -> None:
+    """Undo checkpoint JSON sort_keys ordering without modifying any position.
+
+    Original Book.pos dict is inserted in the frozen physical SYMBOLS order;
+    checkpoint serialization is canonical alphabetic keys. This affects
+    list ordering of open_censored, not position content or wallet economics.
+    Retain exact native order and KEEP strict original list equality in QC.
+    """
+    if len(symbols) != len(set(symbols)) or set(book.pos) != set(symbols):
+        raise ValueError("restored book physical coin set/order mismatch")
+    book.pos = {symbol: book.pos[symbol] for symbol in symbols}
+
+
 def frozen_result_sha(status: dict, result: dict) -> str:
     expected = status.get("result_sha256")
     if (not isinstance(expected, str) or len(expected) != 64
@@ -133,6 +146,7 @@ def recover(context: dict) -> dict:
     books, refs = prior.make_books(PERIOD)
     for name, value in snap["books"].items():
         prior.restore(books[name], value)
+        restore_native_symbol_iteration_order(books[name], tuple(prior.engine.SYMBOLS))
     for name, value in snap["reference_books"].items():
         prior.engine.prev.restore_book(refs[name], value)
     source_status, source_result, reference_ledger = prior.provenance(PERIOD)
