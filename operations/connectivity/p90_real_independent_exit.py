@@ -19,8 +19,20 @@ from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from typing import Any
 
+import psycopg
 from psycopg.rows import tuple_row
 
+from bybit_workbench.market_data.p90l90_real_publication_parity import (
+    R09PublicationParityUnverified,
+    require_r09_broker_publication_parity,
+)
+from bybit_workbench.market_data.p90l90_real_publication_postfill import (
+    P90PGPostfillUnverified,
+    read_r09_native_publication_postfill,
+)
+from bybit_workbench.universal_entry.r07_publication_provenance import (
+    require_r07_dispatch_epoch_guard,
+)
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_account_routes import (
     read_p90_real_account_routes,
@@ -31,6 +43,9 @@ from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
 )
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
 from bybit_workbench.universal_exit.contracts import ExitEvaluationStatus
+from bybit_workbench.universal_exit.p90l90_real_observation import (
+    P90RealPostfillSourceWindow,
+)
 from bybit_workbench.universal_exit.loader import load_exit_binding
 from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
     P90RealExitExecutionPort,
@@ -59,6 +74,9 @@ P90RealPostfillSourceClientUnverified = (
 # A first-fill arm is intentionally not a historical repair operation.
 # Source broker has its own stricter protection/clock/coverage deadlines.
 _FIRST_FILL_WINDOW = timedelta(seconds=15)
+R09_PARITY_MODE = os.environ.get(
+    "CRIPTA_R09_NATIVE_PUBLICATION_PARITY", "DISABLED",
+).strip().upper()
 
 
 class P90IndependentExitBlocked(RuntimeError):
@@ -87,6 +105,11 @@ def read_firstfill_source_with_independent_market_fallback(
     except P90RealPostfillSourceClientUnverified as exc:
         if str(exc) != "P90_REAL_POSTFILL_SOURCE_TRANSPORT_UNAVAILABLE":
             raise
+        if R09_PARITY_MODE == "REQUIRE":
+            # R09 may not escape the one MarketSource into consumer public REST.
+            raise P90IndependentExitBlocked(
+                "R09_ORIGINAL_NATIVE_BROKER_UNAVAILABLE"
+            ) from exc
     from bybit_workbench.market_data.p90l90_real_durable_postfill_source import (
         read_independent_durable_postfill_window,
     )
@@ -97,6 +120,72 @@ def read_firstfill_source_with_independent_market_fallback(
         accepted_producer_commits=accepted_producer_commits,
         observed_at=datetime.now(UTC),
     )
+
+
+def require_r09_original_postfill_source_parity(
+    *,
+    position: Any,
+    source_epoch_id: str,
+    source_commit: str,
+    accepted_producer_commits: frozenset[str],
+    broker_window: Any,
+    observed_at: datetime,
+) -> P90RealPostfillSourceWindow:
+    """Strict code-first gate: PG price + existing MarketSource continuity.
+
+    Original native MFE comes ONLY from pinned PostgreSQL facts. Existing
+    MarketSource broker is solely an additional continuity/identity witness;
+    private signed OPEN/SL/TP and Execution safety gates remain downstream.
+
+    Only explicitly enabled AFTER release+R09 acceptance. By default neither
+    the existing independent Exit nor its signed Private broker is modified.
+    A shared source epoch fence is separately acquired by the caller before
+    this read and kept through the Exit transaction commit.
+    """
+    dsn = os.environ.get(
+        "CRIPTA_DATABASE_DSN",
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        "application_name=r09-native-publication-parity",
+    )
+    try:
+        with psycopg.connect(dsn, autocommit=True) as source_connection:
+            with source_connection.transaction():
+                source_connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
+                candidate = read_r09_native_publication_postfill(
+                    source_connection,
+                    position=position,
+                    source_epoch_id=source_epoch_id,
+                    source_commit=source_commit,
+                    accepted_producer_commits=accepted_producer_commits,
+                    observed_at=observed_at,
+                )
+        require_r09_broker_publication_parity(
+            candidate=candidate, broker_window=broker_window,
+        )
+        # A publication alone does not prove continuity. After exact
+        # two-port parity, take the financial Exit's observed prices and
+        # original execIds from PostgreSQL, NOT the independent broker.
+        # Complete coverage is supplied only by the still-required primary
+        # source broker and is never inferred from a WATERMARKS_ONLY row.
+        return P90RealPostfillSourceWindow(
+            position_id=candidate.position_id,
+            symbol=candidate.symbol,
+            fill_at=candidate.fill_at,
+            covered_through=broker_window.covered_through,
+            source_commit=candidate.source_commit,
+            last_native_price=candidate.last_native_price,
+            best_favorable_price=candidate.observed_favorable_price,
+            source_refs=candidate.source_refs,
+            complete_native_window=broker_window.complete_native_window,
+            no_new_native_trade_rest_verified=False,
+        )
+    except (P90PGPostfillUnverified, R09PublicationParityUnverified,
+            psycopg.Error) as exc:
+        raise P90IndependentExitBlocked(
+            "R09_ORIGINAL_PUBLICATION_BROKER_PARITY_UNVERIFIED"
+        ) from exc
 
 
 def _candidate(connection: Any) -> dict[str, object] | None:
@@ -223,6 +312,8 @@ def run_p90_exit_once(
     connection: Any, *, now: datetime | None = None,
 ) -> str:
     """Bounded independent Exit cycle; no new Entry, credentials or REST POST."""
+    if R09_PARITY_MODE not in ("DISABLED", "REQUIRE"):
+        return "R09_NATIVE_PUBLICATION_MODE_INVALID"
     started = (now or datetime.now(UTC)).astimezone(UTC)
     candidate = _candidate(connection)
     if candidate is None:
@@ -293,6 +384,12 @@ def run_p90_exit_once(
                     evidence_db, epoch_id=epoch_id,
                     loaded_commit=loaded_commit, bundles=bundles,
                 )
+            if R09_PARITY_MODE == "REQUIRE":
+                # Lock transition trigger/epoch until the same Exit transaction
+                # commits, not just until an independent source SELECT ends.
+                require_r07_dispatch_epoch_guard(
+                    connection, {"strategy_id": position.strategy_id},
+                )
             evidence = connection.execute(
                 """SELECT initial_protection_evidence
                      FROM runtime.position_ownership
@@ -330,6 +427,15 @@ def run_p90_exit_once(
                 source_commit=identity.origin_commit,
                 accepted_producer_commits=identity.approved_producers,
             )
+            if R09_PARITY_MODE == "REQUIRE":
+                coverage = require_r09_original_postfill_source_parity(
+                    position=position,
+                    source_epoch_id=epoch_id,
+                    source_commit=identity.origin_commit,
+                    accepted_producer_commits=identity.approved_producers,
+                    broker_window=coverage,
+                    observed_at=datetime.now(UTC),
+                )
             private_client = P90PrivateProofClient(
                 account=route.trading_account_id,
                 connector=route.account_connector_id,
