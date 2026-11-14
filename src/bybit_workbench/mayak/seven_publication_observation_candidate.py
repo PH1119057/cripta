@@ -49,6 +49,24 @@ class R11SevenMayakCollectionUnverified(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class R11SevenMayakReplayCheckpoint:
+    """Verified physical positions only: never a consumer READY certificate.
+
+    Callers must persist these source-epoch cursors atomically with the
+    corresponding downstream MAYAK snapshot; a detached cursor loses events.
+    """
+
+    publication_id: int
+    source_session_id: str
+    release_commit: str
+    as_of_second: datetime
+    optional_cursors: tuple[R11OptionalMayakCursor, ...]
+    native_cursors: tuple[R11ReplayCursor, ...]
+    provider_continuity_verified: bool = False
+    mayak_cutover_ready: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class R11SevenMayakObservationCandidate:
     publication_id: int
     source_session_id: str
@@ -59,6 +77,7 @@ class R11SevenMayakObservationCandidate:
     rest_facts: tuple[R11MayakRestCandidate, ...]
     optional_cursors: tuple[R11OptionalMayakCursor, ...]
     native_cursors: tuple[R11ReplayCursor, ...]
+    has_more_source_pages: bool = False
     # Every event is physically publication-pinned; no REST fallback.
     physical_source_refs_verified: bool = True
     # Missing provider continuity/durable replay/restart/Dispatcher acceptance.
@@ -66,6 +85,17 @@ class R11SevenMayakObservationCandidate:
     durable_cursor_and_warmup_verified: bool = False
     dispatcher_seven_coin_parity_verified: bool = False
     mayak_cutover_ready: bool = False
+
+    def checkpoint(self) -> R11SevenMayakReplayCheckpoint:
+        """Carry only exact source positions; does not certify WARMUP."""
+        return R11SevenMayakReplayCheckpoint(
+            publication_id=self.publication_id,
+            source_session_id=self.source_session_id,
+            release_commit=self.release_commit,
+            as_of_second=self.as_of_second,
+            optional_cursors=self.optional_cursors,
+            native_cursors=self.native_cursors,
+        )
 
 
 def _need(ok: bool, reason: str) -> None:
@@ -79,6 +109,7 @@ def collect_r11_seven_mayak_candidate(
     connection: Any, *,
     publication_id: int,
     observed_at: datetime,
+    previous: R11SevenMayakReplayCheckpoint | None = None,
 ) -> R11SevenMayakObservationCandidate:
     """Bounded full source transaction; caller owns RR READ ONLY.
 
@@ -94,6 +125,32 @@ def collect_r11_seven_mayak_candidate(
         "ARGUMENT_INVALID",
     )
     _need(
+        previous is None or (
+            isinstance(previous, R11SevenMayakReplayCheckpoint)
+            and not previous.provider_continuity_verified
+            and not previous.mayak_cutover_ready
+            and previous.publication_id <= publication_id
+            and previous.as_of_second <= observed_at
+            and len(previous.optional_cursors) == 2
+            and {row.product_category for row in previous.optional_cursors}
+            == {"SPOT", "LINEAR"}
+            and len(previous.native_cursors) == 7
+            and {row.symbol for row in previous.native_cursors} == set(_SEVEN)
+            and all(
+                row.source_session_id == previous.source_session_id
+                and row.producer_release_commit == previous.release_commit
+                for row in previous.optional_cursors
+            )
+            and all(
+                row.source_session_id == previous.source_session_id
+                and row.producer_release_commit == previous.release_commit
+                and row.publication_id <= previous.publication_id
+                for row in previous.native_cursors
+            )
+        ),
+        "RESUME_CHECKPOINT_SCOPE_INVALID",
+    )
+    _need(
         connection.execute("SHOW transaction_isolation").fetchone()
         == ("repeatable read",)
         and connection.execute("SHOW transaction_read_only").fetchone()
@@ -106,9 +163,18 @@ def collect_r11_seven_mayak_candidate(
     release: str | None = None
     published: datetime | None = None
     epochs: dict[str, str] = {}
+    source_backlog = False
+    previous_optional = (
+        {row.product_category: row for row in previous.optional_cursors}
+        if previous is not None else {}
+    )
+    previous_native = (
+        {row.symbol: row for row in previous.native_cursors}
+        if previous is not None else {}
+    )
     try:
         for product in ("SPOT", "LINEAR"):
-            state: R11OptionalMayakCursor | None = None
+            state: R11OptionalMayakCursor | None = previous_optional.get(product)
             for _ in range(_MAX_PAGES):
                 result = read_r11_pinned_mayak_optional_page(
                     connection, publication_id=publication_id,
@@ -122,7 +188,12 @@ def collect_r11_seven_mayak_candidate(
                     and result.publication_as_of == published
                     and result.publication_id == publication_id
                     and result.physical_published_cursor_verified
-                    and not result.mayak_ws_retirement_allowed,
+                    and not result.mayak_ws_retirement_allowed
+                    and (previous is None or (
+                        result.source_session_id == previous.source_session_id
+                        and result.batch.cursor.producer_release_commit
+                        == previous.release_commit
+                    )),
                     "CROSS_PRODUCT_PUBLICATION_DRIFT",
                 )
                 if release is None:
@@ -151,8 +222,8 @@ def collect_r11_seven_mayak_candidate(
         native: list[R11MayakTradeInput] = []
         native_states: list[R11ReplayCursor] = []
         for symbol in _SEVEN:
-            previous: R11ReplayCursor | None = None
-            after = (0, 0)
+            native_before: R11ReplayCursor | None = previous_native.get(symbol)
+            after = native_before.cursor if native_before is not None else (0, 0)
             for _ in range(_MAX_PAGES):
                 page = read_r11_original_linear_page(
                     connection, symbol=symbol, observed_at=observed_at,
@@ -167,10 +238,10 @@ def collect_r11_seven_mayak_candidate(
                     "NATIVE_TRADE_PUBLICATION_DRIFT",
                 )
                 batch = project_r11_native_linear_trade_page(
-                    page, previous=previous,
+                    page, previous=native_before,
                 )
                 native.extend(batch.events)
-                previous = batch.cursor
+                native_before = batch.cursor
                 after = batch.cursor.cursor
                 if not batch.has_more_pages:
                     native_states.append(batch.cursor)
@@ -219,6 +290,7 @@ def collect_r11_seven_mayak_candidate(
         rest_facts=rest,
         optional_cursors=tuple(option_states),
         native_cursors=tuple(native_states),
+        has_more_source_pages=source_backlog,
     )
 
 
