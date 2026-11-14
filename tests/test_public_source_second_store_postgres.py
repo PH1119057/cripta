@@ -364,7 +364,8 @@ def test_r12_pg16_position_reader_uses_one_publication_and_exact_top25(
     with _db() as admin:
         admin.execute(
             """UPDATE analytics.native_public_trade_source_sessions
-                  SET state='GAP', gap_reason='R12_DISPOSABLE_TEST'
+                  SET state='GAP', reason='R12_DISPOSABLE_TEST',
+                      ended_at=clock_timestamp()
                 WHERE state='ACTIVE'"""
         )
         admin.execute(
