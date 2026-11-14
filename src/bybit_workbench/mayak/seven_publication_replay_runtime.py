@@ -11,6 +11,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from bybit_workbench.mayak.core.live import LiveMayakEngine
+from bybit_workbench.mayak.optional_original_event_parity import (
+    R11OptionalMayakReplayUnverified,
+)
 from bybit_workbench.mayak.publication_rest_parity import (
     R11MayakRestPublicationUnverified,
     apply_r11_mayak_rest_candidates_offline,
@@ -72,6 +75,7 @@ class R11MayakPublicationReplay:
             R11MayakReplayNotReady,
             R11SevenMayakCollectionUnverified,
             R11MayakRestPublicationUnverified,
+            R11OptionalMayakReplayUnverified,
             TypeError, ValueError, OverflowError,
         ):
             self.failed = True
