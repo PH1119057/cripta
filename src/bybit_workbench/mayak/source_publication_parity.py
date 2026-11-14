@@ -123,9 +123,10 @@ def _physical(
             "R11_FEATURE_PUBLICATION_IDENTITY_MISSING"
         )
     ref, q = candidates.get(dataset), conditions.get(dataset)
+    if not isinstance(ref, dict) or not isinstance(q, dict):
+        raise R11MayakPublicationUnavailable("R11_FEATURE_REF_OR_QUALITY_INVALID")
     _need(
-        isinstance(ref, dict) and isinstance(q, dict)
-        and ref.get("source_session_id") == epoch
+        ref.get("source_session_id") == epoch
         and ref.get("instrument_id") == instrument
         and ref.get("product_category") == product
         and ref.get("external_symbol") == symbol
@@ -161,13 +162,17 @@ def _physical(
     )
     key = "ticker" if dataset == "TICKER" else "book"
     selected = features.get(key)
-    _need(isinstance(selected, dict), "PHYSICAL_FEATURE_MISSING")
+    if not isinstance(selected, dict):
+        raise R11MayakPublicationUnavailable("R11_PHYSICAL_FEATURE_MISSING")
     if dataset == "TICKER":
         times = features.get("ticker_field_times")
         statuses = q.get("fields")
+        if not isinstance(times, dict) or not isinstance(statuses, dict):
+            raise R11MayakPublicationUnavailable(
+                "R11_TICKER_FIELDS_NOT_FRESH"
+            )
         _need(
-            isinstance(times, dict) and isinstance(statuses, dict)
-            and all(statuses.get(name) == "FRESH" for name in _TICKER),
+            all(statuses.get(name) == "FRESH" for name in _TICKER),
             "TICKER_FIELDS_NOT_FRESH",
         )
         for name in _TICKER:
