@@ -125,6 +125,15 @@ capability вместе с неправильным owner. Если replacement 
 implementation не доказаны, действует ARCHITECTURE_CAPABILITY_GAP=YES +
 HARD_STOP=YES. Exact contract: META §15, WORK §4.3, ARCH §13.
 
+## Production PostgreSQL retention invariant
+
+Production PostgreSQL хранит только минимальный объём, доказанно нужный
+текущим non-retired Strategy/Version/Activation и их текущим
+safety/financial/recovery obligations. Любое более долгое, глубокое или
+широкое хранение требует отдельного owner decision с exact scope,
+horizon/cutoff, storage budget и purge/compaction rule. Канон: ARCH §61;
+маршрут: INDEX §80.
+
 ## Routine restart recovery
 
 The canonical recovery requirements are defined in ARCH, TRADING_CONTOUR, GLOSSARY, DEVELOPMENT_RELEASE and DOCUMENTATION_INDEX. Exchange snapshots are authoritative for current positions, while durable local history must be preserved. A canonical decision is not deployed implementation.
