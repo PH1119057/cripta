@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, cast
 
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
@@ -187,7 +187,7 @@ def read_r11_original_linear_page(
         <= published + timedelta(seconds=5),
         "PUBLICATION_NATIVE_IDENTITY_INVALID",
     )
-    watermark: tuple[int, int] = (int(frame), int(index))
+    watermark: tuple[int, int] = (cast(int, frame), cast(int, index))
     _need(read_after <= watermark, "CURSOR_BESIDE_PUBLICATION")
     if read_after != (0, 0):
         anchor = connection.execute(
