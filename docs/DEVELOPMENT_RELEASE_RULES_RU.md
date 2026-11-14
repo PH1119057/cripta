@@ -2595,3 +2595,10 @@ Consumer также берёт source table `ROW EXCLUSIVE NOWAIT` в command tr
 
 Full R07 `C/M/I/T/D/R=PASS` needs both source/canonical and physical release proofs; an offline R07 CI green never closes D/R, never advances R08 and never arms Exchange. R06 source-only remains NO-ORDER until separately approved financial producer and Exit protection.
 
+
+
+### 59.6 R11 seven-symbol MAYAK observational capture/consumer release — OWNER DECISION 2026-11-14 (#470)
+
+ARCH §60.5.1.1 и OBS §7.10.5.8 разрешают ровно BTCUSDT/ETHUSDT только как R11 MAYAK observational anchors в **существующем single-owner** MarketSource, в дополнение к пяти P90 instruments. Ни P90 native trading journal/Entry/Exit/Execution Strategy universe, ни signed Bybit private truth, ни LIVE-arm не расширяются. Одна проверенная source configuration объединяет exact five trading requirements и отдельные BTC/ETH MAYAK-only requirements; запрещено выдавать BTC/ETH trading consumer requirements или включать без exact manifest/fingerprint.
+
+Gate: (1) full #470 PR/worktree/writer/job continuity, (2) isolated additive source-only manifest/parser/event/PG16 schema and original publication tests, provider sequence/epoch reset/GAP/REST failures, (3) readonly DB preflight and no-start migration only authorized `postgres`, native effective Unix `cripta` write permissions, backup, capacity and rollback, (4) controlled SINGLE native producer ABI/source epoch transition with five trading cursors intact, (5) MAYAK & Dispatcher seven-coin feature equivalence against original feeds; BTC/ETH anchoring, 5–900s causal features, WARMUP and config_fingerprint, source/no-source negative and restart/lag tests, (6) only then controlled MAYAK public WS retirement with safe rollback, same source/installed/loaded identities and signed independent OPEN protection. Trade and financial-arm changes require **another** owner decision. No silent release or DDL from GitHub docs PR. R11 CLOSED only with C/M/I/T/D/R proven; separate R14 final consolidation not implied.
