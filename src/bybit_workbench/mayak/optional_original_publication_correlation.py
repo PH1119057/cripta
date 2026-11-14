@@ -144,6 +144,7 @@ def correlate_r11_original_page_with_publication(
         ),
         "ORIGINAL_EVENT_OUT_OF_CURSOR_SCOPE",
     )
+    assert isinstance(cursor.next_digest, str)
     return R11OriginalPublicationCorrelation(
         publication_id=publication_id,
         source_session_id=session,
