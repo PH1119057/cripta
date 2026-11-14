@@ -157,3 +157,7 @@ GitHub PR scope checker проверяет изменённые пути, а з�
 
 ## REAL readiness preparation — OWNER DECISION 2026-11-02
 Обычная остановленная служба будущего REAL-контура должна восстанавливаться через generic bounded preparation, а не ручное администрирование владельцем. `REAL Readiness Coordinator` и узкий `Service Start Broker` не заменяют OWNER ARM и не получают торговые права. Канон: ARCH §52, DEVELOPMENT_RELEASE §51, GLOSSARY §40; status: MAP / Issue #343.
+
+## R11 BTC/ETH observational source decision — 2026-11-14
+
+Для MAYAK разрешены BTCUSDT/ETHUSDT только как reference-аналитика внутри единого Native MarketSource/MarketPublication; пять P90 trading symbols, LIVE и старые MAYAK WS до parity не меняются. Канон: ARCH §60.5.1.1, OBS §7.10.5.8, DEV §59.6, INDEX §82 / Issue #470.

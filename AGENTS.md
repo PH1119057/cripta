@@ -175,3 +175,7 @@ resume existing branch/worktree, не reset/overwrite; ambiguity -> HARD_STOP
 
 ## Generic REAL readiness control
 Для owner-initiated REAL preparation не встраивать `sudo/systemctl` в Dashboard/runtime. Использовать ARCH §52 + DEV §51: unprivileged durable coordinator, exact allowlisted Service Start Broker, behavior verification, visible BLOCKED, separate explicit OWNER ARM and always-available DISARM. Перед broker/service mutation обязательны DEV §§5.1,19.1–19.4 + MAP §1.4.
+
+## R11 scoped observation anchors — OWNER APPROVED 2026-11-14
+
+BTCUSDT/ETHUSDT authorized only as MAYAK observational inputs to the ONE native MarketSource/MarketPublication (ARCH §60.5.1.1, OBS §7.10.5.8, DEV §59.6, INDEX §82). P90 five trading symbols, private signed safety, old MAYAK WS pending full parity and LIVE unchanged. Canon merge != installed/loaded/runtime acceptance.

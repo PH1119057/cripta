@@ -1896,3 +1896,8 @@ Owner directed completion of the safety gaps identified in R07, with no repeated
 
 No new sixth trading layer, second public writer, Strategy/Exit parameter, source-only→financial bridge, credential, historical rewrite or LIVE-arm. No change to current canonical document set (11), routes, source paths, README/AGENTS or derived Project Instructions/bootstrap. Before any deployed DDL verify effective Unix/DB `postgres` actor separately from application `cripta`, actual rights and permissions; never grant blanket admin privilege to `cripta` to mask an operator error. Source sync != migration != deploy != loaded behavior.
 
+
+
+## 82. R11 MAYAK BTC/ETH observational anchors — OWNER DECISION 2026-11-14 (#470)
+
+Exact позднейшее разрешение владельца: `BTCUSDT` и `ETHUSDT` могут входить в **один существующий Native MarketSource и общую MarketPublication** только ради R11 MAYAK reference-market аналитики. Это точечное исключение из прежнего запрета на седьмой/шестой native instrument, а **не** увеличение пяти P90 Strategy/Entry/Exit/Execution symbols, не новый writer и не LIVE. Architecture owner — ARCH §60.5.1.1; stream and consumer ownership — OBS §7.10.5.8; migration/permissions/release — DEV §59.6; current acceptance — MAP/Issue #470. Current Source set 11, path/routing/bootstrap unaffected; root entrypoints/derived Instructions synchronize with this decision. До исходных семисимвольных parity/continuity and source-cutover gates старый MAYAK сохраняется. `OWNER_DECISION=YES`; `CANON_UPDATE=THIS_PROTECTED_CHANGESET`; `IMPLEMENTED/DEPLOYED/RUNTIME_VERIFIED=NOT_CLAIMED`.
