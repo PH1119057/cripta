@@ -246,18 +246,6 @@ def provenance(period: str) -> tuple[dict, dict, list[dict]]:
     return status, result, rows[NATIVE_CASE]
 
 
-def compare_native_baseline(period: str, books: dict) -> dict:
-    status, result, rows = provenance(period)
-    book = books["CAP5__ORIGINAL_MAKER_TP"]
-    if book.trades != rows:
-        raise ValueError("CAP5 maker original trade-by-trade parity fails")
-    fresh = book.finish_unified_reference
-    return {"baseline_original_ledger_sha256": status["ledger_sha256"],
-            "baseline_original_producer": status["source_head"],
-            "original_closed": len(rows),
-            "baseline_cap5_exact_trade_parity": True}
-
-
 def write_json_immutable(path: Path, value: dict) -> None:
     data = json.dumps(value, sort_keys=True, ensure_ascii=False,
                       indent=2, allow_nan=False) + "\n"
@@ -265,90 +253,6 @@ def write_json_immutable(path: Path, value: dict) -> None:
         f.write(data)
         f.flush()
         os.fsync(f.fileno())
-
-
-def publish_native(period: str, commit: str, pins: dict,
-                   seen: dict, last_prices: dict,
-                   prevsha: str, books: dict, refs: dict,
-                   root: Path) -> dict:
-    if set(last_prices) != set(engine.SYMBOLS):
-        raise ValueError("last source-native price missing")
-    for sym in engine.SYMBOLS:
-        expected = sum(map(len, data_seen[sym]["events"].values()))
-        if seen[sym] != expected:
-            raise ValueError("native event universe not fully consumed")
-    references = engine.compare_reference(period, refs)
-    _, frozen, old_rows = provenance(period)
-    baseline = books["CAP5__ORIGINAL_MAKER_TP"]
-    if baseline.trades != old_rows:
-        raise ValueError("cap5 original-fee trading path not identical")
-    original_case = frozen["cases"][NATIVE_CASE]
-    finished = {}
-    final_timestamp = (
-        datetime.fromisoformat(engine.WINDOW[period]["start"]).replace(tzinfo=UTC)
-        + timedelta(days=engine.WINDOW[period]["days"])
-    ).timestamp()
-    for name, book in books.items():
-        if engine.old.MAKER != ORIGINAL_MAKER:
-            raise ValueError("model fee leaked between books")
-        item = book.finish_unified(last_prices, final_timestamp)
-        if name == "CAP5__ORIGINAL_MAKER_TP":
-            for field in ("wallet_usdt", "wallet_net_usdt",
-                          "equity_with_open_unrealized_gross_usdt",
-                          "reserved_margin_usdt", "open_censored", "money",
-                          "hardstop_count", "max_simultaneous_slots"):
-                if item[field] != original_case[field]:
-                    raise ValueError("CAP5 frozen original result mismatch " + field)
-        finished[name] = item
-    ledger_path = root / "trade_ledger.jsonl"
-    with ledger_path.open("x") as f:
-        for name in CASES:
-            for row in books[name].trades:
-                f.write(json.dumps(
-                    {**row, "research_case": name},
-                    sort_keys=True, allow_nan=False
-                ) + "\n")
-        f.flush()
-        os.fsync(f.fileno())
-    result = {
-        "status": "COMPLETE_PENDING_INDEPENDENT_QC",
-        "research": RESEARCH, "period": period, "source_head": commit,
-        "source_pins": pins, "cases": finished,
-        "case_count": len(CASES),
-        "original_native_reference_parity": references,
-        "original_cap5_trade_by_trade_parity": True,
-        "original_cap5_producer_sha": provenance(period)[0]["source_head"],
-        "original_frozen_result_sha256": provenance(period)[0]["result_sha256"],
-        "native_source_events_seen": dict(seen),
-        "last_native_prices": {s: str(p) for s, p in last_prices.items()},
-        "final_checkpoint_sha256": prevsha,
-        "ledger_sha256": digest(ledger_path),
-        "per_case_common_wallet_usdt": "1000",
-        "per_entry_fixed_margin_usdt": "200",
-        "leverage": "5", "depth": "ORIGINAL_0TO15",
-        "pause": "SECOND48", "one_slot_per_coin": True,
-        "same_side_caps": list(CAPS),
-        "fee_modes": list(FEES), "taker": str(TAKER),
-        "original_eligible_tp_maker": str(ORIGINAL_MAKER),
-        "cost_baseline": "TAKER_TAKER", "sensitivity": "ORIGINAL_MAKER_TP",
-        "model_exclusions": [
-            "spread", "slippage", "funding", "latency", "actual_exchange_fills",
-            "future_exit_fees_on_open_terminal_positions",
-        ],
-        "research_only": True,
-        "not_blinded_oos": True,
-    }
-    path = root / "result.json"
-    write_json_immutable(path, result)
-    engine.prev.atomic_status(root, {
-        "stage": "COMPLETE_PENDING_INDEPENDENT_QC",
-        "source_head": commit, "period": period,
-        "days_done": engine.WINDOW[period]["days"],
-        "days_total": engine.WINDOW[period]["days"],
-        "result_sha256": digest(path),
-        "ledger_sha256": digest(ledger_path),
-    })
-    return result
 
 
 def qc_main(period: str, commit: str) -> dict:
