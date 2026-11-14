@@ -17,6 +17,10 @@ DECLARE
     source_id text;
 BEGIN
     IF TG_OP = 'UPDATE'
+       AND OLD.source_session_id IS DISTINCT FROM NEW.source_session_id THEN
+        RAISE EXCEPTION 'R07_SOURCE_SESSION_IDENTITY_IMMUTABLE';
+    END IF;
+    IF TG_OP = 'UPDATE'
        AND OLD.market_source_id IS DISTINCT FROM NEW.market_source_id THEN
         RAISE EXCEPTION 'R07_SOURCE_MARKET_IDENTITY_IMMUTABLE';
     END IF;
@@ -54,13 +58,14 @@ BEGIN
                AND t.tgname='r07_source_epoch_guard_v1'
                AND t.tgenabled='O' AND t.tgisinternal=false AND t.tgtype=31
                AND t.tgfoid='analytics.r07_source_epoch_tx_guard_v1()'::regprocedure
+               AND pg_catalog.pg_get_triggerdef(t.oid) LIKE '%source_session_id%'
         ) THEN
             RAISE EXCEPTION 'R07_SOURCE_EPOCH_TRIGGER_ABI_DRIFT';
         END IF;
     ELSE
         EXECUTE 'CREATE TRIGGER r07_source_epoch_guard_v1
-                 BEFORE INSERT OR UPDATE OF state, market_source_id,
-                   producer_release_commit OR DELETE
+                 BEFORE INSERT OR UPDATE OF source_session_id, state,
+                   market_source_id, producer_release_commit OR DELETE
                  ON analytics.native_public_trade_source_sessions
                  FOR EACH ROW EXECUTE FUNCTION analytics.r07_source_epoch_tx_guard_v1()';
     END IF;

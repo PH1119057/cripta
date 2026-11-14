@@ -642,3 +642,64 @@ def test_pg16_many_accounts_can_hold_shared_source_and_checkpoint_guards(db):
     assert admin.execute(
         "SELECT count(*) FROM strategy_entry.r07_epoch_dispatch_probe"
     ).fetchone()[0] == 2
+
+
+def test_pg16_source_session_primary_identity_is_immutable_under_guard(db):
+    admin, runtime = db
+    _install_epoch_fence_spike(admin)
+    # The primary source-session identity is part of the original event key.
+    # The disposable fixture intentionally has no referencing FK, so only
+    # the checked-in trigger can protect an otherwise possible UPDATE.
+    with pytest.raises(
+        psycopg.errors.RaiseException,
+        match="R07_SOURCE_SESSION_IDENTITY_IMMUTABLE",
+    ):
+        admin.execute(
+            "UPDATE analytics.native_public_trade_source_sessions "
+            "SET source_session_id=%s WHERE source_session_id=%s",
+            ("a" * 32, SESSION),
+        )
+    assert admin.execute(
+        "SELECT source_session_id FROM analytics.native_public_trade_source_sessions "
+        "WHERE source_session_id=%s",
+        (SESSION,),
+    ).fetchone() == (SESSION,)
+    assert require_r07_publication_provenance(runtime, request("ta-main")) == 45
+
+
+def test_pg16_guard_refuses_legacy_trigger_column_abi_without_session_id(db):
+    admin, _runtime = db
+    _install_epoch_fence_spike(admin)
+    # Simulate an earlier valid-v1 function OID and enabled tgtype but with
+    # the old UPDATE OF column list. Both runtime and migration must fail
+    # closed instead of treating this as a fully protected source identity.
+    admin.execute(
+        "DROP TRIGGER r07_source_epoch_guard_v1 "
+        "ON analytics.native_public_trade_source_sessions"
+    )
+    admin.execute("""
+        CREATE TRIGGER r07_source_epoch_guard_v1
+        BEFORE INSERT OR UPDATE OF state,market_source_id,
+              producer_release_commit OR DELETE
+        ON analytics.native_public_trade_source_sessions
+        FOR EACH ROW EXECUTE FUNCTION analytics.r07_source_epoch_tx_guard_v1()
+    """)
+    with (
+        _spike_consumer() as consumer,
+        consumer.transaction(),
+        pytest.raises(
+            R07PublicationProvenanceUnavailable,
+            match="R07_SOURCE_EPOCH_GUARD_MISSING_OR_DISABLED",
+        ),
+    ):
+        require_r07_dispatch_epoch_guard(consumer, request("ta-main"))
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "operations/sql/20261114_r07_source_epoch_transaction_guard.sql"
+    )
+    with pytest.raises(
+        psycopg.errors.RaiseException,
+        match="R07_SOURCE_EPOCH_TRIGGER_ABI_DRIFT",
+    ):
+        admin.execute(migration.read_text(encoding="utf-8"))
+    admin.rollback()

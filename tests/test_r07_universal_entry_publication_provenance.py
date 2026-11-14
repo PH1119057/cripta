@@ -499,3 +499,57 @@ def test_r07_final_checkpoint_proof_requires_row_share_only_at_dispatch():
     earlier = Query([evidence()])
     require_r07_publication_provenance(earlier, request())
     assert "FOR SHARE OF cp" not in earlier.calls[0][0]
+
+
+
+def test_final_dispatch_never_marks_an_expired_reservation_dispatched():
+    """Use database clock at the atomic reservation state transition.
+
+    run_once's captured now may be stale after source/checkpoint contention;
+    a final UPDATE must not queue a command whose reservation has expired.
+    The actual transaction owner rolls back earlier inserts if this fails.
+    """
+
+    class Result:
+        def __init__(self, row=None, rowcount=1):
+            self.row = row
+            self.rowcount = rowcount
+
+        def fetchone(self):
+            return self.row
+
+    class Capture:
+        def __init__(self):
+            self.statements = []
+
+        def execute(self, sql, _args=None):
+            self.statements.append(sql)
+            if "INSERT INTO runtime.trade_commands" in sql:
+                return Result({"command_id": "cmd-1"})
+            if "UPDATE runtime.capital_reservations" in sql:
+                return Result(rowcount=0)  # expired by DB clock
+            return Result()
+
+    prepared = SimpleNamespace(
+        payload={"safe": True},
+        command_id="cmd-1", symbol="LTCUSDT",
+        strategy_execution_binding_id="binding",
+        execution_leg="ENTRY", trading_account_id="ta-main",
+        execution_request_id="req-1", strategy_attempt_id="attempt-1",
+        entry_decision_id="decision-1", signal_id="signal-1",
+        strategy_id=MAIN_ID, strategy_version=VERSION,
+        strategy_config_fingerprint="a" * 64,
+        entry_plan_fingerprint="b" * 64,
+        exit_plan_fingerprint="c" * 64,
+        capital_reservation_id="capital-1",
+        exchange_position_slot_claim_id="slot-1",
+        position_mode_state_ref="mode-1",
+    )
+    db = Capture()
+    with pytest.raises(RuntimeError, match="expired at dispatch"):
+        consumer._publish_command(db, prepared, now=AT)
+    q = next(s for s in db.statements if "UPDATE runtime.capital_reservations" in s)
+    assert "pre_dispatch_expires_at > clock_timestamp()" in q
+    # Historical nullable reservation rows retain their explicit old contract.
+    assert "pre_dispatch_expires_at IS NULL" in q
+    assert not any("execution_request_state_events" in s for s in db.statements)
