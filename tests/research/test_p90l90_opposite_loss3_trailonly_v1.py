@@ -162,7 +162,7 @@ def _verify(cases: str, count: int) -> None:
 
 
 def test_trail_only_2026_exact_contract() -> None:
-    _verify(CASES_2026, 8)
+    _verify(CASES_2026, 9)
 
 
 def test_trail_only_2025_paired_and_checkpoint_contract() -> None:
