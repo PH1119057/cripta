@@ -173,7 +173,7 @@ def test_exact_seven_mayak_panel_is_not_silently_renamed_to_five() -> None:
     )
     for symbol in ("XRPUSDT",):
         with pytest.raises(
-            R11MayakPublicationUnavailable, match="OUTSIDE_FIVE_CAPTURE",
+            R11MayakPublicationUnavailable, match="OUTSIDE_MAYAK_SOURCE_SCOPE",
         ):
             read(FakePG(), symbol=symbol)
 
