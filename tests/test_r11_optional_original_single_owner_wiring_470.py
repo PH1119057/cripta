@@ -90,8 +90,9 @@ def test_exact_source_schema_and_narrow_privileges_are_read_only_preflight() -> 
     db = FakeSchemaConnection()
     _r11_optional_frame_preflight(db)
     assert len(db.queries) == 2
+    # Privilege names in a SELECT are not DML statements.
     assert all(
-        "INSERT" not in statement and "UPDATE " not in statement
+        statement.lstrip().upper().startswith("SELECT")
         for statement in db.queries
     )
 
