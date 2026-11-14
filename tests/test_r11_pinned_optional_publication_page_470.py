@@ -136,15 +136,36 @@ def test_bad_publication_or_transport_never_enters_mayak(
         )
 
 
-def test_transport_epoch_restart_rejects_old_checkpoint() -> None:
+def test_transport_epoch_restart_replays_new_epoch_from_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     db = DB()
     old = replace(cursor(), transport_epoch_id="e" * 32)
-    with pytest.raises(R11PinnedMayakPublicationUnverified,
-                       match="PREVIOUS_CURSOR_OR_EPOCH_DRIFT"):
-        read_r11_pinned_mayak_optional_page(
-            db, publication_id=7, product_category="SPOT",
-            previous=old,
+    calls: list[dict[str, object]] = []
+    projected_previous: list[R11OptionalMayakCursor | None] = []
+
+    def read(_db: object, **kwargs: object) -> object:
+        calls.append(kwargs)
+        return object()
+
+    def project(
+        _page: object, *, previous: R11OptionalMayakCursor | None,
+    ) -> R11OptionalMayakBatch:
+        projected_previous.append(previous)
+        return R11OptionalMayakBatch(
+            cursor=cursor(), events=(), has_more_pages=False,
         )
+
+    monkeypatch.setattr(pinned, "read_r11_optional_original_frame_page", read)
+    monkeypatch.setattr(pinned, "project_r11_optional_mayak_page", project)
+    page = read_r11_pinned_mayak_optional_page(
+        db, publication_id=7, product_category="SPOT",
+        previous=old,
+    )
+    assert page.transport_epoch_id == EPOCH
+    assert calls[0]["after_frame"] == 0
+    assert calls[0]["after_digest"] is None
+    assert projected_previous == [None]
 
 
 def test_incomplete_page_cannot_be_falsely_read_as_pinned_completion(

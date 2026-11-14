@@ -35,6 +35,8 @@ pytestmark = pytest.mark.skipif(
 SOURCE = BYBIT_PUBLIC_MARKET_SOURCE_ID
 SESSION = "a" * 32
 PRODUCER = "b" * 40
+NEW_SESSION = "e" * 32
+NEW_PRODUCER = "f" * 40
 AT = datetime(2026, 11, 15, 20, 0, tzinfo=UTC)
 SEVEN = (
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
@@ -42,18 +44,23 @@ SEVEN = (
 )
 
 
-def _replay(publication_id: int = 100) -> R11MayakPublicationReplay:
+def _replay(
+    publication_id: int = 100, *,
+    session: str = SESSION,
+    producer: str = PRODUCER,
+    at: datetime = AT,
+) -> R11MayakPublicationReplay:
     checkpoint = R11SevenMayakReplayCheckpoint(
         publication_id=publication_id,
-        source_session_id=SESSION,
-        release_commit=PRODUCER,
-        as_of_second=AT,
+        source_session_id=session,
+        release_commit=producer,
+        as_of_second=at,
         optional_cursors=tuple(
             R11OptionalMayakCursor(
-                source_session_id=SESSION,
-                transport_epoch_id=("c" * 32 if product == "SPOT" else SESSION),
+                source_session_id=session,
+                transport_epoch_id=("c" * 32 if product == "SPOT" else session),
                 product_category=product,
-                producer_release_commit=PRODUCER,
+                producer_release_commit=producer,
                 next_cursor=publication_id,
                 next_digest="d" * 64,
                 books=(),
@@ -63,14 +70,14 @@ def _replay(publication_id: int = 100) -> R11MayakPublicationReplay:
         native_cursors=tuple(
             R11ReplayCursor(
                 symbol=symbol,
-                source_session_id=SESSION,
-                producer_release_commit=PRODUCER,
+                source_session_id=session,
+                producer_release_commit=producer,
                 publication_id=publication_id,
-                publication_as_of=AT,
+                publication_as_of=at,
                 publication_watermark=(1, 0),
                 cursor=(1, 0),
                 last_seq=1,
-                last_event_at=AT - timedelta(seconds=1),
+                last_event_at=at - timedelta(seconds=1),
                 recent_exec_ids=(),
             )
             for symbol in SEVEN
@@ -78,8 +85,8 @@ def _replay(publication_id: int = 100) -> R11MayakPublicationReplay:
     )
     replay = R11MayakPublicationReplay(
         checkpoint=checkpoint,
-        first_publication_at=AT - timedelta(minutes=1),
-        last_original_event_at=AT.timestamp() - 1,
+        first_publication_at=at - timedelta(minutes=1),
+        last_original_event_at=at.timestamp() - 1,
         observations=1,
     )
     replay.engine.set_instrument_support("spot", set(SEVEN))
@@ -262,3 +269,70 @@ def test_pg16_shared_epoch_fence_blocks_source_transition_until_consumer_commit(
     assert admin.execute(
         "SELECT generation,publication_id FROM mayak_v2.r11_consumer_commit"
     ).fetchone() == (1, 100)
+
+
+def test_pg16_source_session_reset_replaces_whole_generation(db) -> None:
+    admin = db
+    first = _replay()
+    with _runtime() as runtime:
+        committed = commit_r11_mayak_publication(
+            runtime,
+            replay=first,
+            snapshot=_snapshot(first),
+            expected_generation=0,
+            expected_previous_publication_id=None,
+        )
+    assert committed.generation == 1
+
+    admin.execute(
+        "UPDATE analytics.native_public_trade_source_sessions "
+        "SET state='GAP' WHERE source_session_id=%s",
+        (SESSION,),
+    )
+    admin.execute(
+        "INSERT INTO analytics.native_public_trade_source_sessions "
+        "(source_session_id,market_source_id,state,producer_release_commit,subscribed_at) "
+        "VALUES (%s,%s,'ACTIVE',%s,%s)",
+        (NEW_SESSION, SOURCE, NEW_PRODUCER, AT + timedelta(seconds=1)),
+    )
+    admin.execute(
+        "INSERT INTO analytics.market_publications "
+        "(publication_id,source_session_id,market_source_id,producer_release_commit,"
+        "as_of_second,publication_status) "
+        "VALUES (200,%s,%s,%s,%s,'WATERMARKS_ONLY')",
+        (NEW_SESSION, SOURCE, NEW_PRODUCER, AT + timedelta(seconds=2)),
+    )
+
+    second = _replay(
+        200,
+        session=NEW_SESSION,
+        producer=NEW_PRODUCER,
+        at=AT + timedelta(seconds=2),
+    )
+    with _runtime() as runtime:
+        reset = commit_r11_mayak_publication(
+            runtime,
+            replay=second,
+            snapshot=_snapshot(second),
+            expected_generation=1,
+            expected_previous_publication_id=100,
+            expected_previous_source_session_id=SESSION,
+            expected_previous_release_commit=PRODUCER,
+        )
+        restored = load_r11_mayak_consumer_commit(
+            runtime,
+            expected_source_session_id=NEW_SESSION,
+            expected_release_commit=NEW_PRODUCER,
+        )
+
+    assert reset.generation == 2
+    assert restored is not None
+    assert restored.generation == 2
+    assert restored.replay.observations == 1
+    assert restored.replay.checkpoint is not None
+    assert restored.replay.checkpoint.source_session_id == NEW_SESSION
+    assert restored.replay.checkpoint.publication_id == 200
+    assert all(
+        cursor.source_session_id == NEW_SESSION
+        for cursor in restored.replay.checkpoint.native_cursors
+    )
