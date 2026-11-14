@@ -50,6 +50,9 @@ class R11MayakRestCandidate:
     physical_rest_proven: bool = True
     # Still not full seven-source continuity or MAYAK/Dispatcher parity.
     mayak_cutover_ready: bool = False
+    ratio_received_at: datetime | None = None
+    spot_instrument_received_at: datetime | None = None
+    linear_instrument_received_at: datetime | None = None
 
 
 def _need(ok: bool, reason: str) -> None:
@@ -141,6 +144,7 @@ def read_r11_mayak_rest_candidate(
         "PUBLICATION_IDENTITY_INVALID",
     )
     values: dict[tuple[str, str], dict[str, object]] = {}
+    received_times: dict[tuple[str, str], datetime] = {}
     sample: datetime | None = None
     for product, dataset in _DATASETS:
         instrument = bybit_instrument_id(product.lower(), symbol)
@@ -204,6 +208,7 @@ def read_r11_mayak_rest_candidate(
             "PHYSICAL_ORIGIN_DRIFT",
         )
         values[product, dataset] = payload
+        received_times[product, dataset] = received_at
         if dataset == "ACCOUNT_RATIO":
             sample = source_at
     ratio = values["LINEAR", "ACCOUNT_RATIO"]
@@ -227,6 +232,11 @@ def read_r11_mayak_rest_candidate(
         long_ratio=long, short_ratio=short,
         spot_supported=spot == "Trading",
         linear_supported=linear == "Trading",
+        ratio_received_at=received_times["LINEAR", "ACCOUNT_RATIO"],
+        spot_instrument_received_at=received_times["SPOT", "INSTRUMENT_INFO"],
+        linear_instrument_received_at=received_times[
+            "LINEAR", "INSTRUMENT_INFO"
+        ],
     )
 
 

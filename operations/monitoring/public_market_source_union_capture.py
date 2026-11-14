@@ -687,6 +687,15 @@ def run_source_union(
             # status or unrelated LINEAR transport GAP.
             optional_audit_overflow.set()
 
+    # _connect_subscribe() returned only after every declared topic batch was
+    # ACKed by the provider.  Persist that exact epoch boundary as RECOVERING,
+    # never READY: a later physical frame is still required before a consumer
+    # may prove current transport continuity.
+    note_quality(
+        product="LINEAR", topic="*", quality="RECOVERING",
+        reason="PUBLIC_LINEAR_SUBSCRIPTIONS_ACKED",
+    )
+
     pipe: queue.Queue[
         tuple[str, str, dict[str, object], datetime]
     ] = queue.Queue(maxsize=_MAX_QUEUE)
@@ -745,7 +754,7 @@ def run_source_union(
                     if product == "SPOT":
                         note_quality(
                             product=product, topic="*", quality="RECOVERING",
-                            reason="PUBLIC_SPOT_CONNECTED_NOT_CONTINUOUS",
+                            reason="PUBLIC_SPOT_SUBSCRIPTIONS_ACKED",
                         )
                 # Do not stop/reconnect the native LINEAR reader when a
                 # derived book loses a snapshot: resubscribe ONLY its topic.

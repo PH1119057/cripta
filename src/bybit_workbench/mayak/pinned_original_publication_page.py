@@ -42,6 +42,7 @@ class R11PinnedMayakPublicationPage:
     pinned_frame_number: int
     pinned_frame_sha256: str
     batch: R11OptionalMayakBatch
+    pinned_frame_received_at: datetime | None = None
     # Physical publication cursor is proven; original WS completeness is NOT.
     physical_published_cursor_verified: bool = True
     provider_transport_continuity_verified: bool = False
@@ -187,4 +188,5 @@ def read_r11_pinned_mayak_optional_page(
         pinned_frame_number=number,
         pinned_frame_sha256=digest,
         batch=batch,
+        pinned_frame_received_at=received,
     )
