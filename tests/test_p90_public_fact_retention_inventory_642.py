@@ -40,6 +40,9 @@ def test_script_has_no_apply_mode_or_destructive_sql() -> None:
     assert 'required=True' in source
     assert "connection.read_only = True" in source
     assert "default_transaction_read_only=on" in source
+    assert "P90_PUBLICATION_JSON_REF_MISSING" in source
+    assert "forming_minute_refs" in source
+    assert "rest_observation_refs" in source
 
 
 class _IdentityCursor:
