@@ -280,3 +280,87 @@ def test_offline_projection_rejects_forged_readiness_and_incomplete_panel(
         at = NOW + timedelta(seconds=31)
     with pytest.raises(stage.R11SevenMayakCollectionUnverified):
         stage.replay_r11_seven_candidate_offline(candidate, now=at)
+
+
+def test_checkpoint_continues_exact_source_positions_after_page_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second PG read starts at the *physically proven* previous cursor."""
+    mock_all(monkeypatch)
+    initial = stage.collect_r11_seven_mayak_candidate(
+        ReadOnlyPG(), publication_id=42, observed_at=NOW,
+    )
+    checkpoint = initial.checkpoint()
+    assert checkpoint.publication_id == 42
+    assert not checkpoint.provider_continuity_verified
+    assert not checkpoint.mayak_cutover_ready
+    assert len(checkpoint.optional_cursors) == 2
+    assert len(checkpoint.native_cursors) == 7
+
+    resumed: list[str] = []
+
+    def get_optional(_db: Any, *, publication_id: int,
+                     product_category: str, previous: Any = None
+                     ) -> R11PinnedMayakPublicationPage:
+        assert publication_id == 42
+        assert previous is not None and previous.next_cursor == 1
+        resumed.append("optional:" + product_category)
+        return optional(product_category)
+
+    def get_native(_db: Any, *, symbol: str, observed_at: datetime,
+                   read_after: tuple[int, int]) -> R11OriginalNativePage:
+        assert observed_at == NOW and read_after == (1, 0)
+        resumed.append("native:" + symbol)
+        return native_page(symbol)
+
+    monkeypatch.setattr(stage, "read_r11_pinned_mayak_optional_page",
+                        get_optional)
+    monkeypatch.setattr(stage, "read_r11_original_linear_page", get_native)
+    next_batch = stage.collect_r11_seven_mayak_candidate(
+        ReadOnlyPG(), publication_id=42, observed_at=NOW,
+        previous=checkpoint,
+    )
+    assert not next_batch.has_more_source_pages
+    assert resumed == (
+        ["optional:SPOT", "optional:LINEAR"]
+        + ["native:" + symbol for symbol in SEVEN]
+    )
+    assert next_batch.checkpoint() == checkpoint
+
+
+@pytest.mark.parametrize("fault", [
+    "false_ready", "missing_native", "mixed_epoch", "future_checkpoint",
+])
+def test_forged_checkpoint_rejected_before_original_page_reads(
+    monkeypatch: pytest.MonkeyPatch, fault: str,
+) -> None:
+    seen = mock_all(monkeypatch)
+    candidate = stage.collect_r11_seven_mayak_candidate(
+        ReadOnlyPG(), publication_id=42, observed_at=NOW,
+    )
+    checkpoint = candidate.checkpoint()
+    before = len(seen)
+    if fault == "false_ready":
+        checkpoint = replace(checkpoint, mayak_cutover_ready=True)
+    elif fault == "missing_native":
+        checkpoint = replace(
+            checkpoint, native_cursors=checkpoint.native_cursors[:-1],
+        )
+    elif fault == "mixed_epoch":
+        checkpoint = replace(
+            checkpoint, optional_cursors=(
+                replace(checkpoint.optional_cursors[0],
+                        source_session_id="f" * 32),
+                checkpoint.optional_cursors[1],
+            ),
+        )
+    elif fault == "future_checkpoint":
+        checkpoint = replace(
+            checkpoint, as_of_second=NOW + timedelta(seconds=1),
+        )
+    with pytest.raises(stage.R11SevenMayakCollectionUnverified):
+        stage.collect_r11_seven_mayak_candidate(
+            ReadOnlyPG(), publication_id=42,
+            observed_at=NOW, previous=checkpoint,
+        )
+    assert len(seen) == before
