@@ -434,3 +434,108 @@ def test_fresh_p90_exit_request_is_prioritized_without_duplicate_dispatch(
         "P90_EXIT_TRAIL035_REQUEST_PUBLISHED"
     )
     assert calls == ["p90", "audit"]
+
+
+def test_r09_strict_pg_firstfill_source_preserves_signed_exit_and_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    private = _live_proofs(monkeypatch)
+    monkeypatch.setattr(subject, "R09_PARITY_MODE", "REQUIRE")
+    monkeypatch.setenv("CRIPTA_RELEASE_COMMIT", "e" * 40)
+    calls: list[str] = []
+    pg_coverage = SimpleNamespace(
+        covered_through=AT,
+        source_refs=("bybit:publicTrade:LTCUSDT:pg-native",),
+        last_native_price=Decimal("0.1720"),
+        best_favorable_price=Decimal("0.1720"),
+    )
+    monkeypatch.setattr(
+        subject, "require_r07_dispatch_epoch_guard",
+        lambda *_a, **_kw: calls.append("epoch-lock"),
+    )
+    monkeypatch.setattr(
+        subject, "read_real_postfill_source_window",
+        lambda **_kw: calls.append("broker") or
+        SimpleNamespace(covered_through=AT),
+    )
+    monkeypatch.setattr(
+        subject, "require_r09_original_postfill_source_parity",
+        lambda **_kw: calls.append("pg-parity") or pg_coverage,
+    )
+    monkeypatch.setattr(
+        subject, "P90PrivateProofClient",
+        lambda **_kw: SimpleNamespace(
+            for_closed_boundary=lambda *_a:
+            calls.append("signed-private") or private,
+        ),
+    )
+
+    def exit_port(*_args, **_kwargs):
+        def evaluate(**kwargs):
+            calls.append("exit")
+            assert kwargs["coverage"] is pg_coverage
+            assert kwargs["coverage"].source_refs == (
+                "bybit:publicTrade:LTCUSDT:pg-native",
+            )
+            return SimpleNamespace(
+                status=subject.ExitEvaluationStatus.DECISION_CREATED,
+            )
+        return evaluate
+
+    monkeypatch.setattr(subject, "P90RealPostfillExitPort", exit_port)
+    db = ExitConnection()
+    assert subject.run_p90_exit_once(
+        db, now=AT,
+    ) == "P90_EXIT_TRAIL035_REQUEST_PUBLISHED"
+    assert calls == [
+        "epoch-lock", "broker", "pg-parity", "signed-private", "exit",
+    ]
+    assert all("/v5/" not in query for query in db.sql)
+
+
+def test_r09_strict_source_mismatch_blocks_before_signed_private_or_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _live_proofs(monkeypatch)
+    monkeypatch.setattr(subject, "R09_PARITY_MODE", "REQUIRE")
+    monkeypatch.setenv("CRIPTA_RELEASE_COMMIT", "e" * 40)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        subject, "require_r07_dispatch_epoch_guard",
+        lambda *_a, **_kw: calls.append("epoch-lock"),
+    )
+
+    def blocked(**_kwargs):
+        calls.append("pg-blocked")
+        raise subject.P90IndependentExitBlocked(
+            "R09_ORIGINAL_PUBLICATION_BROKER_PARITY_UNVERIFIED"
+        )
+
+    monkeypatch.setattr(
+        subject, "require_r09_original_postfill_source_parity", blocked,
+    )
+    monkeypatch.setattr(
+        subject, "P90PrivateProofClient",
+        lambda *_a, **_kw: pytest.fail(
+            "signed Exchange proof must not be called on invalid source",
+        ),
+    )
+    monkeypatch.setattr(
+        subject, "P90RealPostfillExitPort",
+        lambda *_a, **_kw: pytest.fail(
+            "no new Exit command on R09 original-source mismatch",
+        ),
+    )
+    assert subject.run_p90_exit_once(
+        ExitConnection(), now=AT,
+    ) == "R09_ORIGINAL_PUBLICATION_BROKER_PARITY_UNVERIFIED"
+    assert calls == ["epoch-lock", "pg-blocked"]
+
+
+def test_r09_invalid_mode_fails_before_any_account_or_exchange_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(subject, "R09_PARITY_MODE", "UNKNOWN")
+    assert subject.run_p90_exit_once(
+        object(), now=AT,
+    ) == "R09_NATIVE_PUBLICATION_MODE_INVALID"
