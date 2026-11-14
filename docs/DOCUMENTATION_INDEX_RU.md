@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.62
+**Версия:** 3.63
 **Дата:** 2026-11-15
 **Статус:** канонический индекс документации
 
@@ -1935,8 +1935,9 @@ exact root-file allowlist: `.gitattributes`, `.gitignore`, `.python-version`,
 сохраняются как migration compatibility и не считаются новой целевой topology. Отдельный `production/` source root retired 2026-11-15: current `dispatcher_v2` консолидирован под `src/bybit_workbench/**`, а retired profile-based `strategy_dispatcher` source сохранён только в `archive/legacy_strategy_dispatcher_source/**`; runtime cutover остаётся отдельным release/deploy действием.
 `research_tools/`, `patches/`, `patch_backups/` уже классифицированы как
 inactive legacy и архивированы 2026-11-15. Доказанно неактивные legacy
-Pxx/EO/SE/ENTRY_BOT/PATCH-like folders и old root patch/readme/launcher/dashboard
-files перемещаются в `archive/**` с сохранением Git provenance/bytes. Unknown root path остаётся
+Pxx/EO/SE/ENTRY_BOT/PATCH-like folders уже архивированы; final 2026-11-15 root-file cleanup
+переносит old patch/readme/launcher/dashboard files в `archive/legacy_root_files_pre_2026-09-15/**`
+с сохранением Git provenance/bytes. После этого tracked repository root содержит только exact allowlist. Unknown root path остаётся
 fail-closed и не получает права только потому, что уже физически существует.
 
 Canonical process owner: DEVELOPMENT_RELEASE §50.0–§50.3. Current physical

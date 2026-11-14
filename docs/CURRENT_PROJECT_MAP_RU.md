@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.49
+**Версия:** 12.50
 **Дата:** 2026-11-15
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1398,10 +1398,15 @@ Current root-file active allowlist:
 `bybit_workbench.spec` is retained because current Windows release packaging
 hashes it as an input.
 
-Legacy root files pending the final byte-preserving archive move:
-`APPLY_FULL_PANEL_PATCH_FIXED (1).ps1`, P46/P47 README notes, root `PATCH_*.txt`,
-`START_MICRO_LIVE.cmd`, `START_WORKBENCH.cmd`, `dashboard_server_index.html`.
-They are historical/non-current and must not remain active root entries.
+Final root-file cleanup completed in the protected 2026-11-15 repository cleanup:
+17 historical root files — old patch/readme notes, patch PowerShell, two Windows
+launchers and standalone dashboard HTML — moved byte-preserving to
+`archive/legacy_root_files_pre_2026-09-15/**`.
+
+Tracked root files now equal the exact active allowlist:
+`.gitattributes`, `.gitignore`, `.python-version`, `README.md`, `AGENTS.md`,
+`pyproject.toml`, `uv.lock`, `bybit_workbench.spec`.
+A regression test checks both exact tracked root directories and files.
 Runtime/DB/Exchange/LIVE are unchanged by this repository cleanup.
 
 # 20. Verification results — checkpoint 2026-09-21
