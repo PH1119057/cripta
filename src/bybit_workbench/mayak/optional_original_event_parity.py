@@ -474,7 +474,8 @@ def project_r11_optional_mayak_page(
                 side = fact.payload.get("side")
                 _need(side in ("Buy", "Sell"), "LIQ_SIDE_INVALID")
                 projected.append(R11OptionalMayakEvent(
-                    event="LIQUIDATION", product=frame.product_category, symbol=fact.symbol,
+                    event="LIQUIDATION", product=frame.product_category,
+                    symbol=fact.symbol,
                     timestamp=when, source_frame_number=frame.source_frame_number,
                     source_fact_index=index,
                     source_sequence=fact.exchange_sequence, exec_id=fact.exec_id,
