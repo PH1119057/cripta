@@ -73,11 +73,11 @@ def test_r01_source_union_is_deduplicated_and_accepted_by_native_parser() -> Non
     independently_grouped = union_public_feed_requirements(_load())
     assert union == independently_grouped
     assert union.consumer_requirements == 138
-    assert len(union.websocket_topics) == 59
-    assert len(union.rest_inputs) == 19
+    assert len(union.websocket_topics) == 57
+    assert len(union.rest_inputs) == 21
     assert len(union.websocket_batches("SPOT")) == 2
     assert sum(len(batch) for batch in union.websocket_batches("SPOT")) == 14
-    assert sum(len(batch) for batch in union.websocket_batches("LINEAR")) == 45
+    assert sum(len(batch) for batch in union.websocket_batches("LINEAR")) == 43
     assert all(
         sum(
             topic.dataset_topic == f"publicTrade.{symbol}"
