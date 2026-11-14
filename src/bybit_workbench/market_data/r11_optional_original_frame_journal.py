@@ -17,9 +17,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, Mapping, cast
+from typing import Any, Literal, cast
 
 from bybit_workbench.market_data.public_source_event_codec import (
     PublicSourceFact,
