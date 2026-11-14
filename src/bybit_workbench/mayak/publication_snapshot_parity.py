@@ -82,12 +82,14 @@ def _need(ok: bool, code: str) -> None:
 
 
 def _as_float(value: object, code: str) -> float:
-    _need(
-        isinstance(value, (Decimal, float, int))
-        and not isinstance(value, bool),
-        code,
-    )
-    amount = float(value)
+    if isinstance(value, bool) or not isinstance(
+        value, (Decimal, float, int),
+    ):
+        raise R11SnapshotParityUnverified("R11_SNAPSHOT_" + code)
+    try:
+        amount = float(value)
+    except (OverflowError, ValueError) as exc:
+        raise R11SnapshotParityUnverified("R11_SNAPSHOT_" + code) from exc
     _need(math.isfinite(amount), code)
     return amount
 
@@ -140,10 +142,8 @@ def project_r11_ticker_sample(
         value = candidate.linear_ticker.get(source_key)
         _need(isinstance(value, Decimal), "TICKER_ORIGINAL_VALUE_NOT_DECIMAL")
         numeric = _as_float(value, "TICKER_NONFINITE")
-        _need(
-            numeric >= 0 if source_key == "fundingRate" else numeric > 0,
-            "TICKER_SIGN_INVALID",
-        ) if source_key != "fundingRate" else None
+        if source_key != "fundingRate":
+            _need(numeric > 0, "TICKER_SIGN_INVALID")
         fields.append((legacy_key, numeric))
     return R11MayakTickerSample(
         symbol=candidate.symbol,
