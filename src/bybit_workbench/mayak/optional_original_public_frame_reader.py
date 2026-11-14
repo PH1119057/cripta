@@ -34,6 +34,7 @@ _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA64 = re.compile(r"^[0-9a-f]{64}$")
 _FIVE = frozenset((
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+    "BTCUSDT", "ETHUSDT",
 ))
 _PAGE_LIMIT = 128
 
