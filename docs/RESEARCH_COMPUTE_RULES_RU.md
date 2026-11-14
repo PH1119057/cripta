@@ -83,6 +83,24 @@ Strategy policy.
 
 SentinelX agent actor не равен автоматически runtime Unix-user. До PostgreSQL/research job фиксировать `effective Unix user -> interpreter -> psycopg -> socket -> dbname -> DB current_user -> SELECT smoke`. Для CRIPTA read/research использовать доказанный runtime actor/role `cripta` либо иной заранее доказанный эквивалентный path. Wrong-user connection failure — preflight defect, не повод менять grants.
 
+## 8.1 Долгие вычисления: автономный server job, SentinelX только control
+
+Research/replay/OOS/long compute НЕ выполняется как одна синхронная
+многочасовая команда SentinelX: tool session может оборваться или
+перезапуститься, agent используют несколько чатов. После preflight и
+малого E2E smoke запускать только через **доказанный approved server-side
+research intake/runner либо supervisor job/service** с независимым
+жизненным циклом. Не делать произвольный `nohup`, `&`, новый systemd
+unit или обход SentinelX policy.
+
+Порядок: exact actor/source SHA/interpreter/data-disk/permissions
+(DEV §5.1, §19, MAP §1.4) → короткий approved submit → подтверждённый
+job ID/PID/service identity, parameters, durable output path/log/manifest,
+checkpoint/heartbeat → отдельный bounded статусный вызов. Потеря связи
+с SentinelX ≠ FAILED: восстановить host-state/PID/job/result/QC.
+RUNNING только после подтверждения на сервере; COMPLETED после QC.
+Не дублировать job при UNKNOWN; не обещать push без интеграции.
+
 ## 9. Большие данные обрабатывать потоково
 
 Raw trades, orderbook tapes и большие market archives по умолчанию обрабатывать streaming/chunk/bucket способом с bounded cache. Полный период нельзя складывать в RAM, если это не доказано безопасным и необходимым.
