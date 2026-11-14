@@ -637,11 +637,13 @@ def _publish_command(
     updated = connection.execute(
         """UPDATE runtime.capital_reservations
               SET state='DISPATCHED',state_reason='DISPATCHED_TO_EXECUTION'
-            WHERE reservation_id=%s AND state='RESERVED'""",
+            WHERE reservation_id=%s AND state='RESERVED'
+              AND (pre_dispatch_expires_at IS NULL
+                   OR pre_dispatch_expires_at > clock_timestamp())""",
         (prepared.capital_reservation_id,),
     )
     if updated.rowcount != 1:
-        raise RuntimeError("atomic capital reservation is not RESERVED at dispatch")
+        raise RuntimeError("atomic capital reservation is not RESERVED or expired at dispatch")
     request = ExecutionRequest(
         execution_request_id=prepared.execution_request_id,
         strategy_attempt_id=prepared.strategy_attempt_id,
