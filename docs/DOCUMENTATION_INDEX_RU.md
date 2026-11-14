@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.58
+**Версия:** 3.59
 **Дата:** 2026-11-14
 **Статус:** канонический индекс документации
 
@@ -291,7 +291,7 @@ Geometry timeline этой ревизией не фиксируются и ос�
 
 OWNER DECISION:
 - Project Source содержит все 11 current docs из `docs/`;
-- base pre-read содержит семь документов, включая обязательный `docs/SECURITY.md`;
+- historical 2026-09-28 base pre-read включал семь документов; current 2026-11-14 full META + WORK + SECURITY и INDEX §1–9 с routed reading по §5;
 - TRADING_CONTOUR, OBSERVATION_ANALYTICS, DEVELOPMENT_RELEASE и
   RESEARCH_COMPUTE остаются routed reading;
 - process-state terms PREPARED/RUNNING/COMPLETE/FAILED/BLOCKED принадлежат
@@ -1873,8 +1873,26 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   This does NOT broaden §61.4, permit any protected/native/financial
   data deletion, satisfy full-cluster recovery for other changes or
   authorize Strategy/LIVE/producer restart. Execution facts: Issue #642.
+- **2026-11-14 — physical-only MAYAK snapshot R12, continuing owner cleanup:**
+  ARCH §61.6 authorizes exactly one independently guarded physical
+  `VACUUM FULL` of `mayak_v2.snapshots`, preserving all 7,883 current
+  rows (including all 450 FK-pinned snapshot IDs) and every FK/index.
+  Nine inbound FK classes; four reference classes each pin 450 IDs.
+  Current logical unpinned JSON is tiny, while physical TOAST is bloated:
+  no claim that a logical DELETE alone frees ~988MB. Exact isolated
+  PostgreSQL16 complete table restore with SHA256/content/PK/links/restart,
+  root>=2GiB, WAL check, Unix+DB postgres exact allowlist, bounded lock,
+  independent post-SQL/df reclaim QC. No new trading permission or
+  authorization for unrelated native/financial data deletion.
 - Existing Project Source set remains 11; no current-doc rename/path, mandatory
   pre-read, routing or Instructions/bootstrap changes. Root README/AGENTS
   unchanged because document topology unchanged. Implementation needs an
   independently tested Git-first release; this policy commit alone makes
   no PostgreSQL, service, Exchange or LIVE mutation.
+
+## 81. R07 MarketSource epoch/Consumer atomic handoff — OWNER CONTINUATION 2026-11-14 (#470)
+
+Owner directed completion of the safety gaps identified in R07, with no repeated privilege-role discussions. ARCH §60.5.2 is the sole owner/consumer and separate transaction lock contract; TC §4.19.1 retains actual financial request and independent Exit gates; OBS §7.10.5.7 owns MarketSource writer behavior; DEV §59.5 owns postgres DDL/runtime release sequence, actor/ACL and rollback; GLOSSARY §45 defines Source Epoch Transaction Fence; MAP records dated source/CI/deploy/runtime status; Issue #470 is the single operational checkpoint. The disposable PG16 evidence in PRs #659/#666 does not prove migration has been installed.
+
+No new sixth trading layer, second public writer, Strategy/Exit parameter, source-only→financial bridge, credential, historical rewrite or LIVE-arm. No change to current canonical document set (11), routes, source paths, README/AGENTS or derived Project Instructions/bootstrap. Before any deployed DDL verify effective Unix/DB `postgres` actor separately from application `cripta`, actual rights and permissions; never grant blanket admin privilege to `cripta` to mask an operator error. Source sync != migration != deploy != loaded behavior.
+

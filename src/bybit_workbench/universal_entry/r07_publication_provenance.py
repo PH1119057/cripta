@@ -29,6 +29,63 @@ class R07PublicationProvenanceUnavailable(RuntimeError):
     """Published original source/decision checkpoint is missing or inconsistent."""
 
 
+_EPOCH_GUARD_LOCK_PREFIX = "CRIPTA:R07:SOURCE_EPOCH_TRANSITION:V1:"
+# Exact PostgreSQL trigger ABI from operations/sql/20261114_r07_source_epoch_transaction_guard.sql.
+_TRIGGER_SQL = """
+SELECT t.tgenabled='O' AND NOT t.tgisinternal AND t.tgtype=31
+       AND t.tgfoid='analytics.r07_source_epoch_tx_guard_v1()'::regprocedure
+       AS guard_valid
+  FROM pg_catalog.pg_trigger t
+ WHERE t.tgrelid='analytics.native_public_trade_source_sessions'::regclass
+   AND t.tgname='r07_source_epoch_guard_v1'
+"""
+
+
+def require_r07_dispatch_epoch_guard(
+    connection: Any,
+    request: Mapping[str, object],
+) -> None:
+    """Fence exact source epoch until the *same* command transaction commits.
+
+    Only applicable to the P90 R07 source path; other strategies retain their
+    independent contracts. No financial EntryDecision/Request is synthesized.
+    ROW EXCLUSIVE (self-compatible with other Consumers and MarketSource DML)
+    prevents a concurrent DISABLE TRIGGER DDL from
+    racing after ABI preflight. This lock is independent of the lifetime
+    source-writer single-producer advisory lock.
+    """
+    if str(request.get("strategy_id") or "") not in ALLOWED_SYMBOLS:
+        return
+    try:
+        connection.execute(
+            "LOCK TABLE analytics.native_public_trade_source_sessions "
+            "IN ROW EXCLUSIVE MODE NOWAIT"
+        )
+        trigger = connection.execute(_TRIGGER_SQL).fetchone()
+        if (
+            not isinstance(trigger, Mapping)
+            or trigger.get("guard_valid") is not True
+        ):
+            raise R07PublicationProvenanceUnavailable(
+                "R07_SOURCE_EPOCH_GUARD_MISSING_OR_DISABLED"
+            )
+        acquired = connection.execute(
+            "SELECT pg_catalog.pg_try_advisory_xact_lock_shared("
+            "pg_catalog.hashtextextended(%s,0)) AS locked",
+            (_EPOCH_GUARD_LOCK_PREFIX + BYBIT_PUBLIC_MARKET_SOURCE_ID,),
+        ).fetchone()
+        if not isinstance(acquired, Mapping) or acquired.get("locked") is not True:
+            raise R07PublicationProvenanceUnavailable(
+                "R07_SOURCE_EPOCH_LOCK_UNAVAILABLE"
+            )
+    except R07PublicationProvenanceUnavailable:
+        raise
+    except Exception as exc:
+        raise R07PublicationProvenanceUnavailable(
+            "R07_SOURCE_EPOCH_GUARD_SQL_UNAVAILABLE"
+        ) from exc
+
+
 _SQL = """
 SELECT o.publication_id, o.source_session_id, o.frame_number, o.frame_index,
        o.native_exec_id, o.event_at, o.symbol, o.direction,
@@ -78,6 +135,8 @@ SELECT o.publication_id, o.source_session_id, o.frame_number, o.frame_index,
 def require_r07_publication_provenance(
     connection: Any,
     request: Mapping[str, object],
+    *,
+    lock_checkpoint_for_dispatch: bool = False,
 ) -> int | None:
     """Return exact immutable publication ID, or block before command creation.
 
@@ -116,9 +175,21 @@ def require_r07_publication_provenance(
     ):
         raise R07PublicationProvenanceUnavailable("R07_REQUEST_PLAN_IDENTITY_INVALID")
 
-    observations = connection.execute(
-        _SQL, (strategy_id, version, signal_id, symbol, direction)
-    ).fetchall()
+    # For final dispatch only: R06 writer updates this mutable Strategy
+    # checkpoint under FOR UPDATE. SHARE prevents its changes between our
+    # final proof and command COMMIT; existing cp UPDATE grant is required,
+    # never an UPDATE grant on native MarketSource originals.
+    statement = _SQL + (" FOR SHARE OF cp" if lock_checkpoint_for_dispatch else "")
+    try:
+        observations = connection.execute(
+            statement, (strategy_id, version, signal_id, symbol, direction)
+        ).fetchall()
+    except Exception as exc:
+        if not lock_checkpoint_for_dispatch:
+            raise
+        raise R07PublicationProvenanceUnavailable(
+            "R07_CHECKPOINT_LOCK_OR_SOURCE_PROOF_UNAVAILABLE"
+        ) from exc
     if len(observations) != 1:
         raise R07PublicationProvenanceUnavailable("R07_SOURCE_SIGNAL_MISSING_OR_AMBIGUOUS")
     proof = observations[0]

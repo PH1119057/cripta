@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.12
-**Дата:** 2026-11-11
+**Версия:** 3.13
+**Дата:** 2026-11-14
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -1797,6 +1797,18 @@ replacement; documentation alone does not repair Observer or clear SUB latch.
 Прямое последующее решение владельца разрешает сократить прежний **20-symbol MAYAK collector** до **7-symbol observational panel**: APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT, BTCUSDT, ETHUSDT, при сохранении существующих аналитических возможностей на выбранных инструментах и истории прежнего 20-symbol BEFORE. Это точное owner-approved исключение из исторического preservation gate §60.5; оно **не** является семисимвольным расширением native MarketSource R01–R05 (там ровно пять), не переносит MarketSource ownership в MAYAK, не разрешает удалить другие producers/consumers и не даёт права автоматически включать LIVE.
 
 Physical MAYAK source/consumer scope, качество BTC/ETH reference anchors, изменения cross-coin breadth и startup WARMUP — OBS §7.10.5.3; actor/retention/release/rollback — DEV §59 и ARCH §48; конкретный BEFORE→AFTER и статус — MAP/Issue #470. Не считать урезанную 7-symbol ширину статистически эквивалентной старой 20-symbol; все остальные требуемые trading/safety feed capabilities сохраняются независимо. `OWNER_DECISION=YES`; `CANON_AFTER_MERGE=YES`; `PHYSICAL_CUTOVER=NOT_VERIFIED`.
+### 60.5.2 R07 — transaction-scoped MarketSource epoch fence for command commit — OWNER DECISION 2026-11-14 (#470)
+
+**Scope of owner continuation:** устранить подтверждённую #659 source-epoch time-of-check/time-of-use гонку в действующем R07 account-scoped Universal Entry Consumer. Один общий producer владеет native publicTrade и переводом source session ACTIVE/GAP; Consumer по-прежнему только читает общий MarketPublication/оригиналы и формирует финансовую команду исключительно из уже принятого EntryExecutionRequest. Ни новый источник финансовых запросов из R06, ни LIVE-arm, ни изменение Strategy/Exit policy этим решением **не** утверждаются.
+
+**BEFORE:** Consumer в одной транзакции повторно доказывает подлинность source epoch, но отдельная транзакция MarketSource может зафиксировать GAP сразу после SELECT и до commit новой команды. **AFTER / target:** отдельный от долгоживущего producer-exclusivity lock, versioned advisory *transaction lock* на exact `market_source_id`: при изменении критичных полей source-session epoch или создании/удалении сессии DB-side guard берёт **EXCLUSIVE** и удерживает до producer transaction commit; перед последней R07-проверкой Consumer в **той же** транзакции, что command/dispatch, берёт **SHARED** и удерживает до собственного commit. Смена epoch и регистрация команды сериализованы. Один общий MarketSource lock допускает одновременных MAIN и произвольное конечное число SUB Consumer shared owners; разные MarketSource не блокируют друг друга. Обычная запись оригинального журнала/last_accepted_at не должна ждать epoch lock. Текущий session-long producer lock сохраняется и **никогда** не используется как Consumer lock.
+
+**Source/role invariants:** Перед catalog/trigger ABI proof Consumer берёт `LOCK TABLE analytics.native_public_trade_source_sessions IN ROW EXCLUSIVE MODE NOWAIT` до конца command transaction: PostgreSQL ROW EXCLUSIVE совместим с собственным ROW EXCLUSIVE и ordinary MarketSource DML, но конфликтует с `ALTER TABLE DISABLE TRIGGER` (SHARE ROW EXCLUSIVE) и блокирует admin DDL-race. Эта table lock требует уже существующего у runtime `cripta` права INSERT/UPDATE, однако **сама ничего не записывает**, не создаёт нового source owner и не требует новых GRANT; при недоступности — fail-closed. **Source/role invariants:** DB trigger, созданный уполномоченным **PostgreSQL migration actor `postgres`**, защищает таблицу сессий независимо от конкретного Python producer path. Source writer остаётся физическим owner; runtime `cripta` работает по уже выданным DB grants, Consumer не получает новых прав UPDATE/DDL на оригинальные данные. Эффективная роль SQL-миграции, unix writer и SentinelX rail — разные identities; реальные ACL проверяются перед применением. Existing R06 strategy checkpoint является отдельной *mutable* зависимостью: в том же Consumer dispatch transaction нужна row-level shared защита exact checkpoint до последней проверки, чтобы R06 writer не изменил его до фиксации команды. Immutable original native event/MarketPublication и observation identity сохраняются; не вводится второй writer.
+
+**Fail closed / release:** отсутствующий/выключенный/неверной версии trigger, невозможность DB schema/read lock, отклонённый transaction advisory shared lock, неизвестный или GAP source, конфликт checkpoint, timeout/deadlock/неизвестный commit outcome запрещают новую команду до repair/reconciliation; никакого implicit retry с повторной биржевой мутацией. Trigger installation и rollback — отдельная проверенная DDL-операция `postgres` после baseline/backup/ACL/dependency/lock ordering review, producer compatibility и signed safety. Deploy consumer binary только на exact source/installed/loaded release, без авто-arm. Independent real OPEN Exit/SL/TP и source-gap recovery сохраняются; отсутствие нового Entry не блокирует сопровождение открытой позиции. После update необходимы disposable PostgreSQL16 конкурирующие транзакции в обоих порядках, source restart/GAP, shared MAIN/N SUB, checkpoint mutation, trigger-disabled/DDL, lock timeout, rollback, original-data parity и runtime evidence.
+
+**Status:** technical contract CANON on merged source only; source/SQL implementation, installed migration, runtime behavior и financial Entry readiness получают отдельные доказательства. R06 `SOURCE_ONLY/NO-ORDER` сохраняется; владелец производства финансовых EntryDecision/EntryExecutionRequest и независимая signed R09 Exit-приёмка остаются следующими отдельными gates. No LIVE change.
+
 ## 61. P90L90-only minimum production storage — OWNER DECISION 2026-11-13 (Issue #642)
 
 **Decision and scope.** Owner approved retirement of all eight obsolete-data
@@ -2037,3 +2049,56 @@ All other full-system backup, independently tested cluster rollback, actor,
 consumer, signed Bybit and LIVE gates remain unchanged. This physical-only
 permission does not authorize another trading Strategy, producer restart,
 LIVE ARM or general PostgreSQL retention change.
+
+### 61.6 Single-table `mayak_v2.snapshots` physical-only R12 — OWNER CONTINUATION #642
+
+Following §61.4 and §61.5 owner-directed storage maintenance, a new,
+independently bounded physical-only `VACUUM (FULL, ANALYZE)` is permitted
+for the exact relation `mayak_v2.snapshots` **without any logical DELETE**,
+DROP, CASCADE, index removal or change to linked research/real evidence.
+Current production evidence: 7,883 rows, approximately 990,740,480 bytes
+total (including approximately 987,824,128 TOAST bytes). Of these, 450
+snapshot IDs are retained FK references from the four current MAYAK/
+Dispatcher coin/global/shared context tables; 7,433 others are not FK-linked
+at this checkpoint. The current unpinned JSON payload is small, so the
+large physical TOAST size is evidence of bloat, **not** proof that simply
+deleting the 7,433 rows will free nearly a gigabyte.
+
+Guard rails for this **new single-relation scope**:
+
+1. Preserve **all 7,883** source rows exactly, including all original
+   `id/observed_at/state/confidence/payload/engine_version/
+   snapshot_kind/regular_minute` values, the primary key/index definitions,
+   and every present outbound/inbound FK. Do not apply an advisory TTL DELETE
+   here. Before and after, verify the complete row set via streamed SHA256
+   over PK-ordered full rows and exact source row count. Any source drift
+   blocks execution.
+2. Independently restore a fresh complete scoped custom-format `pg_dump`
+   into an isolated PostgreSQL 16 instance on the separate Data SSD;
+   validate all 7,883 rows, table constraints, PK and indexes, complete-row
+   SHA256, exact referenced IDs in the **four** 450-row context tables,
+   and stable identity of all nine inbound snapshot-reference FK classes.
+   Stop/restart the scratch cluster, revalidate, then stop it and retain
+   SHA256-verified archives plus a root-owned read-only manifest. This is
+   scoped restore evidence, not full production cluster recovery.
+3. Trading Entry/Exit/MarketSource/Exchange-mutating services must remain
+   stopped, with no active competing PostgreSQL producer/DDL/migration or
+   conflicting table lock. Independent research jobs are not implicitly
+   stopped; verify they do not write this table. No LIVE arm.
+4. Execute only byte-identical CI-tested GitHub-main code, installed
+   root:root 0644, as **actual Unix+DB `postgres`** using a single
+   exact command in the SentinelX allowlist, after root filesystem
+   free >= **2.0 GiB**, WAL <=768MiB and independent source/manifest
+   preflight PASS. Lock timeout <=3s, statement timeout bounded,
+   PostgreSQL CHECKPOINT, no index DROP/other PostgreSQL config change.
+   If insufficient space, evidence or host permissions, stop before write.
+5. Independently verify post-rewrite exactly the same 7,883 complete rows
+   and full SHA256, all original indexes and all inbound FK references,
+   original 450 context-linked IDs, actual SQL relation size and ext4
+   free-space delta. A lost SentinelX result requires host-state proof
+   before retry. Do not re-run a completed physical rewrite.
+6. This single physical-only carveout is **not** consent to delete pinned
+   snapshots, old financial/private accounts, P90 causal rows or native
+   publicTrade source tapes, nor permission for wider PGDATA/cluster changes
+   or LIVE/trading-service restart. All ordinary scoped and full-cluster
+   gates continue outside this one exact table.
