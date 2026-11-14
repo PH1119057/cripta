@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.60
+**Версия:** 3.61
 **Дата:** 2026-11-15
 **Статус:** канонический индекс документации
 
@@ -1929,8 +1929,8 @@ project roots: `docs/`, target `engine/`, `research/`, `archive/`, плюс
 минимальный explicit root-file allowlist для Git/Python/build/bootstrap.
 
 До отдельной миграции `engine/` текущие физические CORE roots
-`src/`, `operations/`, `production/`, `scripts/`, `tests/`, `config/`
-сохраняются как migration compatibility и не считаются новой целевой topology.
+`src/`, `operations/`, `scripts/`, `tests/`, `config/`
+сохраняются как migration compatibility и не считаются новой целевой topology. Отдельный `production/` source root retired 2026-11-15: его Dispatcher modules консолидированы под `src/bybit_workbench/**`; runtime cutover остаётся отдельным release/deploy действием.
 `research_tools/` должен быть консолидирован в `research/`; `patches/` и
 `patch_backups/` сначала проходят exact dependency/retention classification.
 Доказанно неактивные legacy Pxx/EO/SE/ENTRY_BOT/PATCH-like folders перемещаются

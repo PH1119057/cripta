@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.47
+**Версия:** 12.48
 **Дата:** 2026-11-15
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1376,11 +1376,10 @@ GitHub main на момент решения: `aeec1c1c0f715d811925b3026f0183c16
 
 Target repository roots по DEV §50.0: `.github/` (system), `docs/`,
 `engine/`, `research/`, `archive/`. Physical `engine/` ещё НЕ создан как
-завершённая migration: current active CORE остаётся в `src/`, `operations/`,
-`production/`, `scripts/`, `tests/`, `config/` до отдельного consumer/CI/
-package/release path migration. `research_tools/` остаётся transitional.
-`patches/` и `patch_backups/` ещё не классифицированы на active dependency vs
-historical retention.
+завершённая `engine/` migration: current active source CORE остаётся в `src/`, `operations/`,
+`scripts/`, `tests/`, `config/` до отдельного consumer/CI/package/release path migration. `research_tools/` остаётся transitional.
+`patches/` и `patch_backups/` архивированы в repository cleanup 2026-11-15.
+Отдельный source root `production/` retired этим protected source changeset: `dispatcher_v2` и retained legacy `strategy_dispatcher` Python modules консолидированы в `src/bybit_workbench/**`; installer/unit/tests переведены на единственный source package root. DEPLOYED=NO; установленный runtime не изменяется самим Git merge.
 
 Для 73 legacy top-level directories выполнена bounded GitHub classification:
 cutoff 2026-09-15; после cutoff они не изменялись, а более новый delta между

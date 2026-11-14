@@ -53,10 +53,10 @@ Exact UI Project Instructions template хранится вне Project Source:
 
 Target repository layout: system `.github/` плюс project roots `docs/`,
 `engine/`, `research/`, `archive/`. Current `src/`, `operations/`,
-`production/`, `scripts/`, `tests/`, `config/` — transitional CORE paths
+`scripts/`, `tests/`, `config/` — transitional CORE paths
 до отдельной tested migration в `engine/`; это не разрешение создавать новые
 произвольные root directories. Historical/retained legacy artifacts принадлежат
-`archive/`. Exact owner: `DEVELOPMENT_RELEASE §50.0`; current migration state:
+`archive/`. Отдельный `production/` source root retired: Dispatcher source консолидирован под `src/bybit_workbench/**`. Exact owner: `DEVELOPMENT_RELEASE §50.0`; current migration state:
 `CURRENT_PROJECT_MAP §19.1`.
 
 ## Source of truth
