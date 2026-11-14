@@ -23,6 +23,7 @@ from bybit_workbench.market_identity import (
 )
 
 AT = datetime(2026, 11, 14, 11, 12, 10, tzinfo=UTC)
+CLOSED = datetime(2026, 11, 14, 11, 10, tzinfo=UTC)
 SECOND = AT - timedelta(seconds=1)
 SYMBOL = "ARBUSDT"
 INSTRUMENT = bybit_instrument_id("linear", SYMBOL)
@@ -42,9 +43,7 @@ def pin() -> ExitPublicationPin:
         symbol=SYMBOL,
         closed_refs={
             "5": {
-                "closed_at": (
-                    AT - timedelta(seconds=10)
-                ).isoformat(),
+                "closed_at": CLOSED.isoformat(),
             },
         },
         closed_quality={"5": {"required": True}},
@@ -122,7 +121,7 @@ def ports(monkeypatch: pytest.MonkeyPatch):
     candles = tuple(
         SimpleNamespace(
             is_closed=True, timeframe="5",
-            closed_at=AT - timedelta(minutes=5 * (239 - i)),
+            closed_at=CLOSED - timedelta(minutes=5 * (239 - i)),
         )
         for i in range(240)
     )
