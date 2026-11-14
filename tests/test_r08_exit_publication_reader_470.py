@@ -177,7 +177,10 @@ def test_240_contiguous_5m_source_candles_preserve_atr200_l53_geometry() -> None
     "change,reason",
     [
         (lambda db: setattr(db, "sessions", []), "ONE_ACTIVE_SOURCE"),
-        (lambda db: setattr(db, "sessions", [(EPOCH, COMMIT)] * 2), "ONE_ACTIVE_SOURCE"),
+        (
+            lambda db: setattr(db, "sessions", [(EPOCH, COMMIT)] * 2),
+            "ONE_ACTIVE_SOURCE",
+        ),
         (lambda db: setattr(db, "read_only", False), "READ_ONLY_SNAPSHOT"),
         (lambda db: setattr(db, "isolation", "read committed"), "READ_ONLY_SNAPSHOT"),
         (lambda db: setattr(db, "status", "UNKNOWN"), "PUBLICATION_IDENTITY"),
@@ -205,7 +208,9 @@ def test_240_contiguous_5m_source_candles_preserve_atr200_l53_geometry() -> None
         ),
     ],
 )
-def test_l53_fails_closed_for_epoch_manifest_time_or_history(change, reason: str) -> None:
+def test_l53_fails_closed_for_epoch_manifest_time_or_history(
+    change, reason: str,
+) -> None:
     db = FakePG()
     change(db)
     with pytest.raises(ExitPublicationUnavailable, match=reason):
@@ -227,23 +232,33 @@ def test_last_price_only_from_verified_source_epoch_and_fresh_field() -> None:
     "change,reason",
     [
         (lambda db: setattr(db, "ticker_epoch", "f" * 32), "TICKER_REF_UNVERIFIED"),
-        (lambda db: setattr(db, "ticker_ref_symbol", "BTCUSDT"), "TICKER_REF_UNVERIFIED"),
+        (
+            lambda db: setattr(db, "ticker_ref_symbol", "BTCUSDT"),
+            "TICKER_REF_UNVERIFIED",
+        ),
         (lambda db: setattr(db, "ticker_quality", "STALE"), "TICKER_REF_UNVERIFIED"),
-        (lambda db: setattr(db, "ticker_field_quality", "STALE"), "TICKER_REF_UNVERIFIED"),
+        (
+            lambda db: setattr(db, "ticker_field_quality", "STALE"),
+            "TICKER_REF_UNVERIFIED",
+        ),
         (
             lambda db: setattr(db, "ticker_second", PUBLISHED - timedelta(seconds=30)),
             "TICKER_TIME_OR_TTL",
         ),
         (lambda db: setattr(db, "ticker_commit", "0" * 40), "TICKER_PHYSICAL_IDENTITY"),
         (
-            lambda db: setattr(db, "ticker_field_at", PUBLISHED - timedelta(seconds=30)),
+            lambda db: setattr(
+                db, "ticker_field_at", PUBLISHED - timedelta(seconds=30),
+            ),
             "TICKER_FIELD_STALE",
         ),
         (lambda db: setattr(db, "ticker_price", "NaN"), "TICKER_LAST_PRICE_INVALID"),
         (lambda db: setattr(db, "ticker_price", "0"), "TICKER_LAST_PRICE_INVALID"),
     ],
 )
-def test_ticker_fails_closed_on_missing_or_mismatched_physical_fact(change, reason: str) -> None:
+def test_ticker_fails_closed_on_missing_or_mismatched_physical_fact(
+    change, reason: str,
+) -> None:
     db = FakePG()
     change(db)
     with pytest.raises(ExitPublicationUnavailable, match=reason):
