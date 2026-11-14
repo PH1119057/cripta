@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import pwd
 from typing import Any
 
 TARGETS: tuple[tuple[str, str, int], ...] = (
@@ -215,6 +214,8 @@ def main() -> int:
     args = parser.parse_args()
     if not args.check or os.name != "posix":
         raise SystemExit("STORAGE_CHECK_LINUX_ONLY")
+    import pwd
+
     if pwd.getpwuid(os.geteuid()).pw_name != ROLE:
         raise SystemExit("STORAGE_CHECK_UNIX_CRIPTA_REQUIRED")
     import psycopg
