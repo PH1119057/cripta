@@ -13,7 +13,6 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
@@ -24,6 +23,7 @@ from bybit_workbench.market_data.public_source_event_codec import (
 )
 from bybit_workbench.market_data.r11_optional_original_frame_journal import (
     R11OriginalFrameUnavailable,
+    R11OriginalPublicFrame,
     make_r11_original_optional_frame,
 )
 from bybit_workbench.mayak.core.live import LiveMayakEngine
@@ -125,7 +125,7 @@ def _levels(
 
 
 def _original_facts(page: R11OriginalFramePage) -> Iterable[
-    tuple[object, tuple[PublicSourceFact, ...]]
+    tuple[R11OriginalPublicFrame, tuple[PublicSourceFact, ...]]
 ]:
     """Re-decode all staged originals before ANY disposable engine mutation."""
     for raw in page.frames:
@@ -379,7 +379,8 @@ class R11DisposableMayakOriginalReplayer:
         self._producer = page.producer_release_commit
         self._cursor = page.next_cursor
         self._digest = page.next_digest
-        count = lambda key: sum(k == key for k, _ in pending)
+        def count(key: str) -> int:
+            return sum(k == key for k, _ in pending)
         return R11MayakOfflineReplayResult(
             source_session_id=page.source_session_id,
             transport_epoch_id=page.transport_epoch_id,
