@@ -61,7 +61,8 @@ const cases=[
       "src/bybit_workbench/universal_exit/engine.py",
       "operations/connectivity/private_runtime.py",
       "tests/test_universal_exit_engine_p5.py",
-      ".github/workflows/quality.yml"
+      ".github/workflows/quality.yml",
+      "bybit_workbench.spec"
     ],
     [],
     true
@@ -208,4 +209,8 @@ test("catalogue is special ledger",()=>assert.equal(classifyPath("operations/das
 test("archive path is canonical archive scope",()=>assert.equal(classifyPath("archive/legacy/file.py"),"archive"));
 test("legacy Pxx root is archive scope",()=>assert.equal(classifyPath("P53_1M_ENTRY_DISPLACEMENT_V1/file.py"),"archive"));
 test("legacy patch root is archive scope",()=>assert.equal(classifyPath("patch_backups/old/file.py"),"archive"));
+test("legacy root file is archive scope",()=>assert.equal(classifyPath("P47A_README.txt"),"archive"));
+test("legacy launcher is archive scope",()=>assert.equal(classifyPath("START_WORKBENCH.cmd"),"archive"));
+test("active build spec is core scope",()=>assert.equal(classifyPath("bybit_workbench.spec"),"core"));
+test("retired production root is unknown",()=>assert.equal(classifyPath("production/src/x.py"),"unknown"));
 test("unknown path fail closed",()=>assert.equal(classifyPath("outside/new.py"),"unknown"));

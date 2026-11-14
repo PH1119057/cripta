@@ -168,7 +168,8 @@ source-sync или deploy из isolated research worktree. Owner правил:
 
 Target root: `.github/` system + `docs/`, `engine/`, `research/`,
 `archive/`. Existing `src/operations/scripts/tests/config` are
-transitional CORE paths until a separately tested migration; `production/` source root retired; Dispatcher source lives under `src/bybit_workbench/**`; do not create new
+transitional CORE paths until a separately tested migration; `production/` source root retired; Dispatcher source lives under `src/bybit_workbench/**`;
+active root-file allowlist = `.gitattributes`, `.gitignore`, `.python-version`, `README.md`, `AGENTS.md`, `pyproject.toml`, `uv.lock`, `bybit_workbench.spec`; do not create new
 unknown top-level project paths. Proven inactive legacy root artifacts go to
 `archive/**` with provenance preserved. Owner: DEVELOPMENT_RELEASE §50.0;
 physical status: CURRENT_PROJECT_MAP §19.1.

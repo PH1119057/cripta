@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.61
+**Версия:** 3.62
 **Дата:** 2026-11-15
 **Статус:** канонический индекс документации
 
@@ -1926,15 +1926,17 @@ Exact позднейшее разрешение владельца: `BTCUSDT` и
 Owner установил постоянную цель: repository root не является складом patch/research
 artifacts. Нормальная верхнеуровневая структура — system `.github/` и четыре
 project roots: `docs/`, target `engine/`, `research/`, `archive/`, плюс
-минимальный explicit root-file allowlist для Git/Python/build/bootstrap.
+exact root-file allowlist: `.gitattributes`, `.gitignore`, `.python-version`,
+`README.md`, `AGENTS.md`, `pyproject.toml`, `uv.lock`,
+`bybit_workbench.spec`.
 
 До отдельной миграции `engine/` текущие физические CORE roots
 `src/`, `operations/`, `scripts/`, `tests/`, `config/`
 сохраняются как migration compatibility и не считаются новой целевой topology. Отдельный `production/` source root retired 2026-11-15: current `dispatcher_v2` консолидирован под `src/bybit_workbench/**`, а retired profile-based `strategy_dispatcher` source сохранён только в `archive/legacy_strategy_dispatcher_source/**`; runtime cutover остаётся отдельным release/deploy действием.
-`research_tools/` должен быть консолидирован в `research/`; `patches/` и
-`patch_backups/` сначала проходят exact dependency/retention classification.
-Доказанно неактивные legacy Pxx/EO/SE/ENTRY_BOT/PATCH-like folders перемещаются
-в `archive/**` с сохранением Git provenance/bytes. Unknown root path остаётся
+`research_tools/`, `patches/`, `patch_backups/` уже классифицированы как
+inactive legacy и архивированы 2026-11-15. Доказанно неактивные legacy
+Pxx/EO/SE/ENTRY_BOT/PATCH-like folders и old root patch/readme/launcher/dashboard
+files перемещаются в `archive/**` с сохранением Git provenance/bytes. Unknown root path остаётся
 fail-closed и не получает права только потому, что уже физически существует.
 
 Canonical process owner: DEVELOPMENT_RELEASE §50.0–§50.3. Current physical
