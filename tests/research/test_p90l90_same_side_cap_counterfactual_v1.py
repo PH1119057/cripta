@@ -38,7 +38,7 @@ def test_exact_variant_contract_and_paths():
     assert len(m.CASES)==8
     assert all(n.startswith("CAP") and "__" in n for n in m.CASES)
     assert all(
-        str(m.output(per)).startswith("/data/cripta/research/runs/")
+        m.output(per).as_posix().startswith("/data/cripta/research/runs/")
         and m.output(per).name==m.LEAF
         for per in ("29d","90d","183d")
     )
