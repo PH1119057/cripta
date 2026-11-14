@@ -739,6 +739,8 @@ migration_files=(
   operations/sql/20261112_r06_entry_publication_checkpoint_lineage.sql
   operations/sql/20261112_r06_checkpoint_release_bridge.sql
   operations/sql/20261112_r06_fresh_epoch_transition.sql
+  # R07 DB-enforced source-epoch transaction guard; postgres actor before code cutover.
+  operations/sql/20261114_r07_source_epoch_transaction_guard.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"

@@ -553,3 +553,20 @@ def test_final_dispatch_never_marks_an_expired_reservation_dispatched():
     # Historical nullable reservation rows retain their explicit old contract.
     assert "pre_dispatch_expires_at IS NULL" in q
     assert not any("execution_request_state_events" in s for s in db.statements)
+
+def test_r07_guard_is_applied_by_verified_release_postgres_migration():
+    """The R07 transaction fence must reach installed PostgreSQL, not only CI."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    installer = (root / "operations/infrastructure/install_verified_release.sh").read_text(
+        encoding="utf-8",
+    )
+    migration = "operations/sql/20261114_r07_source_epoch_transaction_guard.sql"
+    sql = root / migration
+    assert sql.is_file()
+    declared = installer.split("migration_files=(", 1)[1].split("\n)", 1)[0]
+    assert declared.count(migration) == 1
+    assert declared.index("20261112_r06_fresh_epoch_transition.sql") < declared.index(migration)
+    assert 'for migration in "${migration_files[@]}"; do' in installer
+    assert "runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta" in installer
