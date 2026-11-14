@@ -142,6 +142,45 @@ def _publication_pins(cursor: Any) -> dict[str, Any]:
     refs, missing, distinct_seconds = cursor.fetchone()
     if missing:
         raise RuntimeError("P90_PUBLICATION_COMPACT_REF_MISSING")
+    protected_json_refs: dict[str, dict[str, int]] = {}
+    for field, table, pk in (
+        (
+            "forming_minute_refs",
+            "analytics.public_forming_minute_observations",
+            "forming_observation_id",
+        ),
+        (
+            "rest_observation_refs",
+            "analytics.public_market_rest_observations",
+            "rest_observation_id",
+        ),
+    ):
+        query = sql.SQL(
+            "WITH refs AS ("
+            " SELECT (item.value->>{key})::bigint AS uid"
+            " FROM analytics.market_publications p"
+            " CROSS JOIN LATERAL jsonb_each(p.{field}) inst"
+            " CROSS JOIN LATERAL jsonb_each(inst.value) item"
+            " WHERE p.publication_id=ANY(%s)"
+            ")"
+            " SELECT count(*),count(DISTINCT refs.uid),"
+            " count(*) FILTER(WHERE target.{pk} IS NULL)"
+            " FROM refs LEFT JOIN {table} target ON(target.{pk}=refs.uid)"
+        ).format(
+            key=sql.Literal(pk),
+            field=sql.Identifier(field),
+            pk=sql.Identifier(pk),
+            table=sql.Identifier(*table.split(".")),
+        )
+        cursor.execute(query, (sorted(ids),))
+        total, unique, not_found = cursor.fetchone()
+        if not_found:
+            raise RuntimeError("P90_PUBLICATION_JSON_REF_MISSING")
+        protected_json_refs[field] = {
+            "refs": int(total),
+            "unique_rows": int(unique),
+            "missing": int(not_found),
+        }
     return {
         "inbound_fk_columns": names,
         "pinned_publication_ids": sorted(ids),
@@ -152,6 +191,7 @@ def _publication_pins(cursor: Any) -> dict[str, Any]:
         "pinned_compact_refs": int(refs),
         "missing_compact_refs": int(missing),
         "unique_compact_seconds": int(distinct_seconds),
+        "protected_json_refs": protected_json_refs,
         "other_json_or_consumer_pins": "NOT_AUDITED",
     }
 
