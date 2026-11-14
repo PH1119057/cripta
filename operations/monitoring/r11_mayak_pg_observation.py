@@ -5,8 +5,9 @@ There is no Bybit public WebSocket, REST or signed Exchange access on this
 path. Default service mode remains unchanged until separately controlled
 no-start release + physical source continuity and Dispatcher parity.
 
-A bounded PG-source observation can populate operator diagnostics but does
-NOT certify original provider coverage, turn on trading or retire old sockets.
+A bounded PG-source observation can publish the normal MAYAK observational
+contexts for the existing Dispatcher V2.  This still does NOT certify physical
+runtime cutover, turn on trading or authorize retirement of old sockets.
 """
 from __future__ import annotations
 
@@ -471,10 +472,11 @@ def _persist_mayak_dispatcher_outputs(
 
 
 def run_r11_pg_observation(collector: Collector) -> None:
-    """PG-only seven-symbol dry-run path; no new market collector sockets.
+    """PG-only seven-symbol observation path; no new market collector sockets.
 
     PostgreSQL stores one bounded latest-state row. Source cursor, exact replay
-    engine, snapshot and Dispatcher handoff commit in one CAS transaction.
+    engine, snapshot and normal MAYAK context outputs share one outer
+    transaction; Dispatcher V2 remains the downstream persistence owner.
     """
     from operations.monitoring.mayak_v2 import DSN
 
