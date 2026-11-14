@@ -272,3 +272,39 @@ def test_no_io_or_control_effect_inside_native_parity_projection() -> None:
     assert "source_continuity_verified: bool = False" in source
     assert "seven_symbol_parity_verified: bool = False" in source
     assert "safe_to_switch_mayak_public_socket: bool = False" in source
+
+
+@pytest.mark.parametrize("symbol", ["BTCUSDT", "ETHUSDT"])
+def test_owner_approved_mayak_reference_original_trade_parity(
+    symbol: str,
+) -> None:
+    """BTC/ETH retain native seq/execId without entering trading decisions."""
+    event = replace(native(5, 1, 1001, f"mayak-{symbol}"), symbol=symbol)
+    page = replace(native_page((event,)), symbol=symbol)
+    batch = project_r11_native_linear_trade_page(page)
+    assert len(batch.events) == 1
+    assert batch.events[0].symbol == symbol
+    assert batch.events[0].seq == 1001
+    assert batch.events[0].exec_id == f"mayak-{symbol}"
+    direct = LiveMayakEngine((symbol,))
+    replay = LiveMayakEngine((symbol,))
+    direct.on_trade(
+        "linear", symbol, event.traded_at.timestamp(), event.side,
+        float(event.price), float(event.quantity),
+    )
+    for item in batch.events:
+        replay.on_trade(*item.on_trade_args())
+    assert replay.trades[("linear", symbol)].frozen_view().rows == (
+        direct.trades[("linear", symbol)].frozen_view().rows
+    )
+    assert not batch.seven_symbol_parity_verified
+    assert not batch.safe_to_switch_mayak_public_socket
+
+
+def test_unapproved_symbol_never_projects_as_native_mayak_trade() -> None:
+    event = replace(native(5, 1, 1001, "xrp-rejected"), symbol="XRPUSDT")
+    with pytest.raises(R11TradeReplayUnverified,
+                       match="PAGE_SHAPE_OR_SCOPE_INVALID"):
+        project_r11_native_linear_trade_page(
+            replace(native_page((event,)), symbol="XRPUSDT"),
+        )
