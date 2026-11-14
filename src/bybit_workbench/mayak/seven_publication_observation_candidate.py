@@ -8,7 +8,7 @@ permission to replace the legacy source is inferred from a successful read.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from bybit_workbench.mayak.core.live import LiveMayakEngine
