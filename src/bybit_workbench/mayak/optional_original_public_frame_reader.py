@@ -68,13 +68,15 @@ def _need(value: bool, reason: str) -> None:
 
 
 def _utc(value: object, reason: str) -> datetime:
-    _need(
-        isinstance(value, datetime)
-        and value.tzinfo is not None
-        and value.utcoffset() == timedelta(0),
-        reason,
-    )
-    return cast(datetime, value).astimezone(UTC)
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() != timedelta(0)
+    ):
+        raise R11OriginalFrameReadUnverified(
+            "R11_ORIGINAL_READ_" + reason
+        )
+    return value.astimezone(UTC)
 
 
 def read_r11_optional_original_frame_page(
