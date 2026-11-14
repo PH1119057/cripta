@@ -10,6 +10,7 @@ account-ratio/instrument-info and live feature parity remain explicit gates.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -25,6 +26,8 @@ R11_MAYAK_PANEL = (
     "BTCUSDT", "ETHUSDT",
 )
 _R01_R05_CAPTURE = frozenset(R11_MAYAK_PANEL[:5])
+_EPOCH = re.compile(r"^[0-9a-f]{32}$")
+_RELEASE = re.compile(r"^[0-9a-f]{40}$")
 _FIELD_TTL = timedelta(seconds=5)
 _PUBLICATION_TTL = timedelta(seconds=30)
 _TICKER = (
@@ -219,7 +222,8 @@ def read_r11_mayak_feature_candidate(
     _need(
         len(sessions) == 1 and isinstance(sessions[0][0], str)
         and isinstance(sessions[0][1], str)
-        and len(sessions[0][0]) == 32 and len(sessions[0][1]) == 40,
+        and _EPOCH.fullmatch(sessions[0][0]) is not None
+        and _RELEASE.fullmatch(sessions[0][1]) is not None,
         "ONE_ACTIVE_SOURCE_REQUIRED",
     )
     epoch, commit = sessions[0]
