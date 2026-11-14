@@ -32,6 +32,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from typing import Any
+
+prior: Any = None  # imported only after argparse, from immutable producer checkout
 
 AUDITOR = Path(__file__).resolve().parents[2]
 PRODUCER = Path("/data/cripta/research/worktrees/p90l90_sidecap_638_20261114")
