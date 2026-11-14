@@ -319,6 +319,16 @@ def decode_r11_mayak_state(
             state["fingerprint"] == engine.configuration_fingerprint(),
             "ENGINE_CONFIG_CHANGED",
         )
+        _need(
+            set(state["trades"]) == {"spot", "linear"}
+            and all(
+                set(state["trades"][product]) == set(_SEVEN)
+                for product in ("spot", "linear")
+            )
+            and set(state["ticker_history"]) == set(_SEVEN)
+            and set(state["funding_history"]) == set(_SEVEN),
+            "ENGINE_EXTRA_OR_MISSING_SYMBOL",
+        )
         for product in ("spot", "linear"):
             for symbol in _SEVEN:
                 rows = _history(
