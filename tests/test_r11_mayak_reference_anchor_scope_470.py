@@ -15,7 +15,7 @@ from operations.monitoring.public_market_source_union_capture import (
 
 _FIVE = ("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT")
 _REFERENCES = ("BTCUSDT", "ETHUSDT")
-_MANIFEST = Path("operations/monitoring/required_public_feeds.json")
+_MANIFEST = Path("operations/monitoring/r11_seven_public_feeds.json")
 
 
 def _rows() -> list[dict[str, object]]:
