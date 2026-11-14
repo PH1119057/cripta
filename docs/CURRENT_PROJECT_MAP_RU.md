@@ -1379,7 +1379,7 @@ Target repository roots по DEV §50.0: `.github/` (system), `docs/`,
 завершённая `engine/` migration: current active source CORE остаётся в `src/`, `operations/`,
 `scripts/`, `tests/`, `config/` до отдельного consumer/CI/package/release path migration. `research_tools/` остаётся transitional.
 `patches/` и `patch_backups/` архивированы в repository cleanup 2026-11-15.
-Отдельный source root `production/` retired этим protected source changeset: `dispatcher_v2` и retained legacy `strategy_dispatcher` Python modules консолидированы в `src/bybit_workbench/**`; installer/unit/tests переведены на единственный source package root. DEPLOYED=NO; установленный runtime не изменяется самим Git merge.
+Отдельный source root `production/` retired этим protected source changeset: current `dispatcher_v2` консолидирован в `src/bybit_workbench/**`; retired profile-based `strategy_dispatcher` source вынесен в `archive/legacy_strategy_dispatcher_source/**` и исключён из active tests/package. Installer/unit/tests current Dispatcher переведены на единственный source package root. DEPLOYED=NO; установленный runtime не изменяется самим Git merge.
 
 Для 73 legacy top-level directories выполнена bounded GitHub classification:
 cutoff 2026-09-15; после cutoff они не изменялись, а более новый delta между

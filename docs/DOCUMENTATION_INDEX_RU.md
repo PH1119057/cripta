@@ -1930,7 +1930,7 @@ project roots: `docs/`, target `engine/`, `research/`, `archive/`, плюс
 
 До отдельной миграции `engine/` текущие физические CORE roots
 `src/`, `operations/`, `scripts/`, `tests/`, `config/`
-сохраняются как migration compatibility и не считаются новой целевой topology. Отдельный `production/` source root retired 2026-11-15: его Dispatcher modules консолидированы под `src/bybit_workbench/**`; runtime cutover остаётся отдельным release/deploy действием.
+сохраняются как migration compatibility и не считаются новой целевой topology. Отдельный `production/` source root retired 2026-11-15: current `dispatcher_v2` консолидирован под `src/bybit_workbench/**`, а retired profile-based `strategy_dispatcher` source сохранён только в `archive/legacy_strategy_dispatcher_source/**`; runtime cutover остаётся отдельным release/deploy действием.
 `research_tools/` должен быть консолидирован в `research/`; `patches/` и
 `patch_backups/` сначала проходят exact dependency/retention classification.
 Доказанно неактивные legacy Pxx/EO/SE/ENTRY_BOT/PATCH-like folders перемещаются

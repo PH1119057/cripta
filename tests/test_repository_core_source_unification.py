@@ -6,7 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_single_python_package_root_for_dispatcher() -> None:
     assert not (ROOT / "production").exists()
     assert (ROOT / "src/bybit_workbench/dispatcher_v2").is_dir()
-    assert (ROOT / "src/bybit_workbench/strategy_dispatcher").is_dir()
+    assert not (ROOT / "src/bybit_workbench/strategy_dispatcher").exists()
+    assert (ROOT / "archive/legacy_strategy_dispatcher_source/bybit_workbench/strategy_dispatcher").is_dir()
 
 
 def test_dispatcher_release_paths_use_single_src_root() -> None:

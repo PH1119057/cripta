@@ -2038,7 +2038,7 @@ dependency. Scope checker обязан распознавать canonical `archi
 approved legacy-root housekeeping, но остаётся fail-closed для любого иного
 unknown top-level path.
 
-Отдельный repository source root `production/` выведен из target/transitional topology owner-approved consolidation 2026-11-15: его Dispatcher Python modules принадлежат единому `src/bybit_workbench/**`. Installed runtime может сохранять старый release до отдельного verified deploy; source merge не доказывает runtime cutover.
+Отдельный repository source root `production/` выведен из target/transitional topology owner-approved consolidation 2026-11-15: его current `dispatcher_v2` Python modules принадлежат единому `src/bybit_workbench/**`; retired profile-based `strategy_dispatcher` source сохраняется только под `archive/legacy_strategy_dispatcher_source/**` и не является active package. Installed runtime может сохранять старый release до отдельного verified deploy; source merge не доказывает runtime cutover.
 
 До завершения physical `engine/` migration branch/path scope ниже продолжает
 описывать текущие transitional physical roots; это migration compatibility, а
