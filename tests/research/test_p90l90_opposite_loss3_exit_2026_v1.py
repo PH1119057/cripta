@@ -2,7 +2,15 @@
 from decimal import Decimal as D
 
 from scripts.research import p90l90_exit_90d_v2 as base
-from scripts.research import p90l90_opposite_loss3_exit_2026_v1 as experiment
+import importlib.util
+from pathlib import Path
+
+_SCRIPT = (Path(__file__).resolve().parents[2] / "scripts" / "research"
+           / "p90l90_opposite_loss3_exit_2026_v1.py")
+_SPEC = importlib.util.spec_from_file_location("r690_opposite_2026", _SCRIPT)
+assert _SPEC is not None and _SPEC.loader is not None
+experiment = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(experiment)
 
 
 def event(side, price, ident):
