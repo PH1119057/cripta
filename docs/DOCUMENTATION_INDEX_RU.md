@@ -1831,13 +1831,25 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
 
 Для R06 владелец явно утвердил single-pass новую `MarketPublication` + полный current 5m/15m/ATR seed + positive/negative source parity + новый no-order decision checkpoint по будущей полностью закрытой 5m границе + controlled cutover/rollback. Full historical entry replay старой native-сессии **не является** mandatory. Architecture остаётся ARCH §60.2.1/§60.5 и TC §4.19, конкретный owner этого уточнения — OBS §7.10.5.6, release/actor — DEV §59.4, текущий source/runtime evidence — Issue #470 и датированный MAP. Ни technical ACK, ни старые Engine/P90 checkpoints не могут подменять новый источник. Сначала потребительская эквивалентность и no-order/signed safety, потом физическое переключение; при недоказанной замене HARD_STOP. Пять native symbols, current 11 canonical docs и Project Source set, обязательные paths/pre-read/routing/README/AGENTS/Instructions без изменений. LIVE/R07 не разрешены.
 
-## 80. P90L90-only minimum HOT PostgreSQL, backup and reclaim — OWNER DECISION 2026-11-13 (#642)
+## 80. Production PostgreSQL minimum: current Strategies only by default — OWNER DECISION 2026-11-14 (#642)
 
-- Owner selected all eight former-system retirement groups; keep in
-  production PostgreSQL only the current P90L90 MAIN/SUB five-symbol
-  source/Strategy/Exit/Execution, required ATR/PREV7D seeds, signed
-  account/position/protection/reconciliation and bounded current evidence.
-- **CANON owner:** ARCH §61 (scope, preservation, before/after, 8 retire groups,
+- **Default invariant:** production PostgreSQL contains only the minimum data
+  independently proven necessary for the currently canonical, non-retired
+  Strategy/Version/Activation set and any still-open/pending Exchange
+  obligations owned by it. Retired Strategy/research/debug history,
+  redundant views and extra raw horizons have no implicit retention right.
+- Any longer/deeper/wider retention requires a **separate explicit owner
+  decision** naming exact data class/table(s), consumer/reason,
+  horizon/cutoff, maximum storage budget and purge/compaction rule. Without
+  such decision, excess data are retirement candidates after ordinary
+  FK/consumer/actor/mutation safety checks.
+- The current 2026-11-14 instance is P90L90 MAIN/SUB and its exact
+  source/Strategy/Entry/Exit/Execution/safety/recovery dependencies; this
+  generic rule follows future current Strategies and is not permanently tied
+  to P90L90 or five symbols. Owner selected all eight former-system retirement
+  groups under that rule.
+- **CANON owner:** ARCH §61 (generic current-Strategy-only retention invariant,
+  scope, preservation, before/after, 8 retire groups,
   required preflight, physical reclaim); GLOSSARY §46 (terminology).
   No new Entry/Exit economics or LIVE permission; trading-specific original
   dependency remains TC §7.6 and §4.18, OBS §7.10 and ARCH §60.
@@ -1884,11 +1896,12 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   root>=2GiB, WAL check, Unix+DB postgres exact allowlist, bounded lock,
   independent post-SQL/df reclaim QC. No new trading permission or
   authorization for unrelated native/financial data deletion.
-- Existing Project Source set remains 11; no current-doc rename/path, mandatory
-  pre-read, routing or Instructions/bootstrap changes. Root README/AGENTS
-  unchanged because document topology unchanged. Implementation needs an
-  independently tested Git-first release; this policy commit alone makes
-  no PostgreSQL, service, Exchange or LIVE mutation.
+- Existing Project Source set remains 11; no current-doc rename/path,
+  mandatory pre-read or routing changes. This 2026-11-14 clarification is
+  synchronized in README, AGENTS and derived Project Instructions/bootstrap
+  under INDEX §17; the owner updates the actual ChatGPT UI copy separately.
+  This policy commit alone makes no PostgreSQL, service, Exchange or LIVE
+  mutation.
 
 ## 81. R07 MarketSource epoch/Consumer atomic handoff — OWNER CONTINUATION 2026-11-14 (#470)
 

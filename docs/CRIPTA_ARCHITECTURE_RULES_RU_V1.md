@@ -1815,17 +1815,39 @@ Physical MAYAK source/consumer scope, качество BTC/ETH reference anchors
 
 **Status:** technical contract CANON on merged source only; source/SQL implementation, installed migration, runtime behavior и financial Entry readiness получают отдельные доказательства. R06 `SOURCE_ONLY/NO-ORDER` сохраняется; владелец производства финансовых EntryDecision/EntryExecutionRequest и независимая signed R09 Exit-приёмка остаются следующими отдельными gates. No LIVE change.
 
-## 61. P90L90-only minimum production storage — OWNER DECISION 2026-11-13 (Issue #642)
+## 61. Minimum production PostgreSQL: current Strategies only by default — OWNER DECISION 2026-11-14 (Issue #642)
 
-**Decision and scope.** Owner approved retirement of all eight obsolete-data
-packages from production PostgreSQL (cold MAYAK/Dispatcher copies, Entry V1/M3,
-old Strategy Dispatcher, historical parity, old R1 PAPER, full unpinned JSON
-telemetry, obsolete minute history and superseded state generations).
-**Target:** keep only the minimum independently proven current P90L90
-MAIN/SUB trading and recovery dependencies on a 20-GiB System SSD. The owner
-does not require old research/market downloads or retired Strategy telemetry
-to be kept merely for convenience and may acquire external inputs again.
-This decision does not reactivate any Strategy or grant Exchange/LIVE rights.
+**Base invariant (supersedes narrower P90L90-only wording).** Production
+PostgreSQL is operational storage, not a historical archive. By default it
+MUST contain only the minimum data independently proven necessary for correct
+operation, safety, financial truth, restart/recovery and bounded audit of the
+currently canonical, non-retired Strategy/Version/Activation set, plus any
+still-open/pending Exchange obligations owned by that current set.
+
+Data from retired Strategy/Version, old research/observation/debug contours,
+redundant physical views, extended raw history or "на всякий случай"
+retention are not valid retention grounds merely because they may be useful
+later.
+
+**No excess retention by default.** Any storage beyond that minimum requires
+a separate explicit OWNER DECISION before it is intentionally retained. That
+decision must identify the exact data class/table(s), current consumer or
+other reason, retention horizon/cutoff, maximum storage budget and
+purge/compaction rule. Without such owner decision, data beyond the
+current-Strategy minimum are RETIRE/DELETE candidates once exact
+FK/consumer/actor/mutation safety is checked. An inactive/retired code path,
+dashboard convenience, historical research reproducibility or possible future
+use is not a retention owner.
+
+**Current instantiation.** On 2026-11-14 the current Strategy scope is P90L90
+MAIN/SUB and its exact current source/Entry/Exit/Execution dependencies. Owner
+also approved retirement of all eight obsolete-data packages from production
+PostgreSQL (cold MAYAK/Dispatcher copies, Entry V1/M3, old Strategy Dispatcher,
+historical parity, old R1 PAPER, full unpinned JSON telemetry, obsolete minute
+history and superseded state generations). The invariant follows any future
+canonically current Strategy set automatically; it is not permanently tied to
+the P90L90 name, five symbols or today's retention horizons. This decision
+does not reactivate any Strategy or grant Exchange/LIVE rights.
 
 This section **supersedes any presumption that inactive V1/M3/R1 research,
 old MAYAK/Dispatcher full snapshots, or *_cold_20261107 SQL copies must
@@ -1837,6 +1859,10 @@ Strategy/ExitPlan or P90 source/causal lineage is not re-downloadable simply
 because the owner will reacquire public market history.
 
 ### 61.1 Required minimum and exact consumers
+
+Every retained class must have either a proven dependency on the current
+non-retired Strategy set/open obligations or a separate explicit owner
+retention exception under §61. No implicit historical-retention owner exists.
 
 | Retained class in production PostgreSQL | Required boundary | Proven owner/consumer |
 |---|---|---|
