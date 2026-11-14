@@ -341,7 +341,10 @@ def test_source_only_sql_role_scope_and_five_symbol_contract() -> None:
     py = Path(
         "src/bybit_workbench/market_data/r11_optional_original_frame_journal.py"
     ).read_text()
-    assert "CREATE TABLE IF NOT EXISTS analytics.public_source_original_event_frames" in sql
+    assert (
+        "CREATE TABLE IF NOT EXISTS analytics.public_source_original_event_frames"
+        in sql
+    )
     assert "GRANT SELECT, INSERT" in sql
     assert "REVOKE UPDATE, DELETE, TRUNCATE" in sql
     assert "PRIMARY KEY (" in sql
