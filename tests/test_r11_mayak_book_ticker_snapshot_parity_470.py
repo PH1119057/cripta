@@ -182,8 +182,9 @@ def test_any_spot_book_compact_math_drift_is_rejected(field: str) -> None:
 def test_stale_book_fixture_cannot_be_synthesized_from_same_top_of_book() -> None:
     # The top price/size is unchanged. Missing internal depth is detectable.
     altered = (
-        SPOT_BIDS[0], SPOT_BIDS[1], SPOT_BIDS[2],
-        (SPOT_BIDS[3][0], Decimal("100")),
+        SPOT_BIDS[0], SPOT_BIDS[1],
+        (SPOT_BIDS[2][0], Decimal("100")),
+        SPOT_BIDS[3],
     )
     with pytest.raises(R11SnapshotParityUnverified, match="BOOK_MATH_DRIFT"):
         check_r11_book_snapshot_math(
