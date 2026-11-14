@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from bybit_workbench.mayak.core.live import LiveMayakEngine
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
@@ -225,3 +226,55 @@ def read_r11_mayak_rest_candidate(
         spot_supported=spot == "Trading",
         linear_supported=linear == "Trading",
     )
+
+
+def apply_r11_mayak_rest_candidates_offline(
+    engine: LiveMayakEngine,
+    candidates: tuple[R11MayakRestCandidate, ...],
+) -> None:
+    """Only disposable seven-panel replay; NEVER a live consumer cutover.
+
+    The old collector sources seven public REST ratios and two product
+    support sets. This adapter uses the same real engine callbacks, but
+    only after ALL seven immutable source candidates are individually
+    identity/freshness verified by read_r11_mayak_rest_candidate().
+    """
+    _need(
+        isinstance(engine, LiveMayakEngine)
+        and isinstance(candidates, tuple)
+        and len(candidates) == len(_SEVEN)
+        and all(isinstance(row, R11MayakRestCandidate) for row in candidates)
+        and {row.symbol for row in candidates} == _SEVEN,
+        "SEVEN_PANEL_NOT_COMPLETE",
+    )
+    first = candidates[0]
+    _need(
+        all(
+            row.publication_id == first.publication_id
+            and row.source_session_id == first.source_session_id
+            and row.release_commit == first.release_commit
+            and row.as_of == first.as_of
+            and row.physical_rest_proven is True
+            and row.mayak_cutover_ready is False
+            and row.ratio_sample_at <= row.as_of
+            and 0 <= row.long_ratio <= 1
+            and 0 <= row.short_ratio <= 1
+            and math.isfinite(row.long_ratio)
+            and math.isfinite(row.short_ratio)
+            and abs(row.long_ratio + row.short_ratio - 1) <= 0.015
+            for row in candidates
+        ),
+        "REST_PARITY_MIXED_OR_FORGED",
+    )
+    engine.set_instrument_support(
+        "spot", {row.symbol for row in candidates if row.spot_supported},
+    )
+    engine.set_instrument_support(
+        "linear", {row.symbol for row in candidates if row.linear_supported},
+    )
+    for row in candidates:
+        engine.on_ticker(
+            row.symbol, row.ratio_sample_at.timestamp(),
+            long_ratio=row.long_ratio,
+            short_ratio=row.short_ratio,
+        )
