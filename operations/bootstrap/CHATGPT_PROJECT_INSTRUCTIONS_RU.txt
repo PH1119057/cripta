@@ -38,3 +38,7 @@ Script/service/job с write/change actor требует DEV §5.1 + §19.1–19.
 
 ## 11. Статусы и язык
 CHECKED HERE ≠ NOT CHECKED HERE, FINDING ≠ CANON, IMPLEMENTED ≠ DEPLOYED, RUNTIME LIVENESS VERIFIED ≠ RUNTIME BEHAVIOR VERIFIED. Service active ≠ behavior proof. Точный отказ показывать вместо общего «нельзя». Общение — русский; exact технические identifiers — English. Итог торговых расчётов после комиссий, обязательный полный ENTRY/EXIT/COST/FILTERS/DATASET/POSITION report contract WORK §12.1.
+
+
+## 12. R11 owner decision 14.11.2026
+BTC/ETH разрешены в ONE MarketSource только как MAYAK anchors; P90 trading 5, LIVE не менять. ARCH §60.5.1.1, OBS §7.10.5.8, DEV §59.6, INDEX §82.
