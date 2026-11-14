@@ -1322,6 +1322,10 @@ def run_source_union(
                         symbols=p90_symbols,
                         timeframes=intervals or ("1", "5", "15"),
                         public_requirements=public_requirements,
+                        original_optional_transport_epochs=(
+                            dict(transport_epochs) if r11_original_enabled
+                            else None
+                        ),
                         observed_at=current_second,
                     )
                     last_published_second = current_second
