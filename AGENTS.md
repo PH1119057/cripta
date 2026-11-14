@@ -164,6 +164,15 @@ source-sync или deploy из isolated research worktree. Owner правил:
 `docs/DEVELOPMENT_RELEASE_RULES_RU.md §50`; research publication:
 `docs/RESEARCH_COMPUTE_RULES_RU.md §24`.
 
+## Repository root topology
+
+Target root: `.github/` system + `docs/`, `engine/`, `research/`,
+`archive/`. Existing `src/operations/production/scripts/tests/config` are
+transitional CORE paths until a separately tested migration; do not create new
+unknown top-level project paths. Proven inactive legacy root artifacts go to
+`archive/**` with provenance preserved. Owner: DEVELOPMENT_RELEASE §50.0;
+physical status: CURRENT_PROJECT_MAP §19.1.
+
 ## Continuity: новый чат
 
 НЕ создавать новую ветку по ранее начатой задаче без discovery: Issue/PR,
