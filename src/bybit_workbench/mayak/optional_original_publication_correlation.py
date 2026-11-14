@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
