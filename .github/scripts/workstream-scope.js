@@ -2,12 +2,41 @@
 
 // Canonical owner: docs/DEVELOPMENT_RELEASE_RULES_RU.md §50.
 // pull_request_target runs this ONLY from trusted main checkout; never checkout PR HEAD.
+const LEGACY_ARCHIVE_ROOTS = new Set(["patches","patch_backups","research_tools"]);
+const LEGACY_ARCHIVE_FILES = new Set([
+  "APPLY_FULL_PANEL_PATCH_FIXED (1).ps1",
+  "P46_1_README.txt","P46_README.txt",
+  "P47A_README.txt","P47B_README.txt","P47C_README.txt",
+  "P47E_README.txt","P47F_README.txt","P47H_README.txt",
+  "PATCH_P17_ENDPOINT_SELECTOR.txt",
+  "PATCH_P48_1_CONNECTION_LEVERAGE_FIX.txt",
+  "PATCH_P48_3_AUTOMATIC_TIME_PREFLIGHT.txt",
+  "PATCH_P48_4_CLOCK_WATCHDOG_AUTORECONNECT.txt",
+  "PATCH_UI_LEVERAGE_SYMBOLS_1H.txt",
+  "START_MICRO_LIVE.cmd","START_WORKBENCH.cmd",
+  "dashboard_server_index.html"
+]);
+const LEGACY_ARCHIVE_PREFIXES = [
+  "ENTRY_BOT_","ENTRY_P31_","ENTRY_RUNTIME_","ENTRY_V1_",
+  "EO1","EO2","EO3","GUI_CONNECTION_ACTIVITY_RACE_FIX_V1",
+  "P44_","P45_","P46_","P47I_","P47J_","P47K_","P47L_","P47M_","P47N_",
+  "P49_","P50_","P51_","P52_","P53_","SE1","SE2","ZS1_"
+];
+
+function isLegacyArchivePath(path) {
+  const root=path.split("/")[0];
+  return LEGACY_ARCHIVE_ROOTS.has(root) ||
+    LEGACY_ARCHIVE_FILES.has(root) ||
+    LEGACY_ARCHIVE_PREFIXES.some(prefix=>root.startsWith(prefix));
+}
+
 function classifyPath(path) {
   if (typeof path !== "string" || !path || path.startsWith("/") || path.includes("\\") || path.includes("\0") || path.split("/").some(p=>p===""||p==="."||p==="..")) return "unknown";
   if (path === "operations/dashboard/instrument_research_catalog.json") return "ledger";
+  if (path.startsWith("archive/") || isLegacyArchivePath(path)) return "archive";
   if (path.startsWith("docs/") || path==="README.md" || path==="AGENTS.md" || path==="operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt") return "docs";
   if (path.startsWith("research/") || path.startsWith("tests/research/") || path.startsWith("scripts/research/")) return "research";
-  if (path.startsWith("src/") || path.startsWith("production/") || path.startsWith("operations/") || path.startsWith("tests/") || path.startsWith("scripts/") || path.startsWith(".github/workflows/") || path.startsWith(".github/scripts/") || ["pyproject.toml","uv.lock",".python-version",".gitignore",".gitattributes"].includes(path)) return "core";
+  if (path.startsWith("src/") || path.startsWith("operations/") || path.startsWith("tests/") || path.startsWith("scripts/") || path.startsWith(".github/workflows/") || path.startsWith(".github/scripts/") || ["pyproject.toml","uv.lock",".python-version",".gitignore",".gitattributes","bybit_workbench.spec"].includes(path)) return "core";
   return "unknown";
 }
 

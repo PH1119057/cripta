@@ -34,7 +34,7 @@ def test_legacy_dispatcher_docs_are_historical_only() -> None:
         assert name not in index
 
 def test_dispatcher_v2_source_tree_has_no_legacy_imports() -> None:
-    package = ROOT / "production/src/bybit_workbench/dispatcher_v2"
+    package = ROOT / "src/bybit_workbench/dispatcher_v2"
     if not package.exists():
         return
     body = "\n".join(path.read_text(encoding="utf-8") for path in package.glob("*.py"))

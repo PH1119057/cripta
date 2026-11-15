@@ -49,6 +49,17 @@ Routed documents:
 Exact UI Project Instructions template хранится вне Project Source:
 `operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt`.
 
+## Repository root topology
+
+Target repository layout: system `.github/` плюс project roots `docs/`,
+`engine/`, `research/`, `archive/`. Current `src/`, `operations/`,
+`scripts/`, `tests/`, `config/` — transitional CORE paths
+до отдельной tested migration в `engine/`; это не разрешение создавать новые
+произвольные root directories. Historical/retained legacy artifacts принадлежат
+`archive/`. Отдельный `production/` source root retired: Dispatcher source консолидирован под `src/bybit_workbench/**`.
+Active root files: `.gitattributes`, `.gitignore`, `.python-version`, `README.md`, `AGENTS.md`, `pyproject.toml`, `uv.lock`, `bybit_workbench.spec`; другие project root files не допускаются. Legacy root files сохранены в `archive/legacy_root_files_pre_2026-09-15/`. Exact owner: `DEVELOPMENT_RELEASE §50.0`; current migration state:
+`CURRENT_PROJECT_MAP §19.1`.
+
 ## Source of truth
 
 ```text
@@ -125,6 +136,15 @@ capability вместе с неправильным owner. Если replacement 
 implementation не доказаны, действует ARCHITECTURE_CAPABILITY_GAP=YES +
 HARD_STOP=YES. Exact contract: META §15, WORK §4.3, ARCH §13.
 
+## Production PostgreSQL retention invariant
+
+Production PostgreSQL хранит только минимальный объём, доказанно нужный
+текущим non-retired Strategy/Version/Activation и их текущим
+safety/financial/recovery obligations. Любое более долгое, глубокое или
+широкое хранение требует отдельного owner decision с exact scope,
+horizon/cutoff, storage budget и purge/compaction rule. Канон: ARCH §61;
+маршрут: INDEX §80.
+
 ## Routine restart recovery
 
 The canonical recovery requirements are defined in ARCH, TRADING_CONTOUR, GLOSSARY, DEVELOPMENT_RELEASE and DOCUMENTATION_INDEX. Exchange snapshots are authoritative for current positions, while durable local history must be preserved. A canonical decision is not deployed implementation.
@@ -157,3 +177,7 @@ GitHub PR scope checker проверяет изменённые пути, а з�
 
 ## REAL readiness preparation — OWNER DECISION 2026-11-02
 Обычная остановленная служба будущего REAL-контура должна восстанавливаться через generic bounded preparation, а не ручное администрирование владельцем. `REAL Readiness Coordinator` и узкий `Service Start Broker` не заменяют OWNER ARM и не получают торговые права. Канон: ARCH §52, DEVELOPMENT_RELEASE §51, GLOSSARY §40; status: MAP / Issue #343.
+
+## R11 BTC/ETH observational source decision — 2026-11-14
+
+Для MAYAK разрешены BTCUSDT/ETHUSDT только как reference-аналитика внутри единого Native MarketSource/MarketPublication; пять P90 trading symbols, LIVE и старые MAYAK WS до parity не меняются. Канон: ARCH §60.5.1.1, OBS §7.10.5.8, DEV §59.6, INDEX §82 / Issue #470.

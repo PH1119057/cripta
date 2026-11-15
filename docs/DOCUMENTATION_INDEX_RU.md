@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.59
-**Дата:** 2026-11-14
+**Версия:** 3.63
+**Дата:** 2026-11-15
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -319,6 +319,11 @@ Strategy/Entry/Exit policy и не разрешает real execution.
 ## 17.1 Topology / bootstrap
 
 - current substantive docs живут только в `docs/`;
+- canonical repository root target задаёт DEVELOPMENT_RELEASE §50.0:
+  system `.github/` + project roots `docs/`, `engine/`, `research/`, `archive/`;
+  current `src/operations/production/scripts/tests/config` являются transitional CORE
+  layout до отдельной tested migration, а не дополнительной постоянной topology;
+
 - root Markdown entrypoints — только `README.md` и `AGENTS.md`;
 - все 11 current docs доступны в Project Source;
 - ChatGPT Project Source hard limit = 12 files; current bundle = 11;
@@ -1831,13 +1836,25 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
 
 Для R06 владелец явно утвердил single-pass новую `MarketPublication` + полный current 5m/15m/ATR seed + positive/negative source parity + новый no-order decision checkpoint по будущей полностью закрытой 5m границе + controlled cutover/rollback. Full historical entry replay старой native-сессии **не является** mandatory. Architecture остаётся ARCH §60.2.1/§60.5 и TC §4.19, конкретный owner этого уточнения — OBS §7.10.5.6, release/actor — DEV §59.4, текущий source/runtime evidence — Issue #470 и датированный MAP. Ни technical ACK, ни старые Engine/P90 checkpoints не могут подменять новый источник. Сначала потребительская эквивалентность и no-order/signed safety, потом физическое переключение; при недоказанной замене HARD_STOP. Пять native symbols, current 11 canonical docs и Project Source set, обязательные paths/pre-read/routing/README/AGENTS/Instructions без изменений. LIVE/R07 не разрешены.
 
-## 80. P90L90-only minimum HOT PostgreSQL, backup and reclaim — OWNER DECISION 2026-11-13 (#642)
+## 80. Production PostgreSQL minimum: current Strategies only by default — OWNER DECISION 2026-11-14 (#642)
 
-- Owner selected all eight former-system retirement groups; keep in
-  production PostgreSQL only the current P90L90 MAIN/SUB five-symbol
-  source/Strategy/Exit/Execution, required ATR/PREV7D seeds, signed
-  account/position/protection/reconciliation and bounded current evidence.
-- **CANON owner:** ARCH §61 (scope, preservation, before/after, 8 retire groups,
+- **Default invariant:** production PostgreSQL contains only the minimum data
+  independently proven necessary for the currently canonical, non-retired
+  Strategy/Version/Activation set and any still-open/pending Exchange
+  obligations owned by it. Retired Strategy/research/debug history,
+  redundant views and extra raw horizons have no implicit retention right.
+- Any longer/deeper/wider retention requires a **separate explicit owner
+  decision** naming exact data class/table(s), consumer/reason,
+  horizon/cutoff, maximum storage budget and purge/compaction rule. Without
+  such decision, excess data are retirement candidates after ordinary
+  FK/consumer/actor/mutation safety checks.
+- The current 2026-11-14 instance is P90L90 MAIN/SUB and its exact
+  source/Strategy/Entry/Exit/Execution/safety/recovery dependencies; this
+  generic rule follows future current Strategies and is not permanently tied
+  to P90L90 or five symbols. Owner selected all eight former-system retirement
+  groups under that rule.
+- **CANON owner:** ARCH §61 (generic current-Strategy-only retention invariant,
+  scope, preservation, before/after, 8 retire groups,
   required preflight, physical reclaim); GLOSSARY §46 (terminology).
   No new Entry/Exit economics or LIVE permission; trading-specific original
   dependency remains TC §7.6 and §4.18, OBS §7.10 and ARCH §60.
@@ -1884,11 +1901,12 @@ No new current docs, changes to Project Source set (11), paths, pre-read, root R
   root>=2GiB, WAL check, Unix+DB postgres exact allowlist, bounded lock,
   independent post-SQL/df reclaim QC. No new trading permission or
   authorization for unrelated native/financial data deletion.
-- Existing Project Source set remains 11; no current-doc rename/path, mandatory
-  pre-read, routing or Instructions/bootstrap changes. Root README/AGENTS
-  unchanged because document topology unchanged. Implementation needs an
-  independently tested Git-first release; this policy commit alone makes
-  no PostgreSQL, service, Exchange or LIVE mutation.
+- Existing Project Source set remains 11; no current-doc rename/path,
+  mandatory pre-read or routing changes. This 2026-11-14 clarification is
+  synchronized in README, AGENTS and derived Project Instructions/bootstrap
+  under INDEX §17; the owner updates the actual ChatGPT UI copy separately.
+  This policy commit alone makes no PostgreSQL, service, Exchange or LIVE
+  mutation.
 
 ## 81. R07 MarketSource epoch/Consumer atomic handoff — OWNER CONTINUATION 2026-11-14 (#470)
 
@@ -1896,3 +1914,32 @@ Owner directed completion of the safety gaps identified in R07, with no repeated
 
 No new sixth trading layer, second public writer, Strategy/Exit parameter, source-only→financial bridge, credential, historical rewrite or LIVE-arm. No change to current canonical document set (11), routes, source paths, README/AGENTS or derived Project Instructions/bootstrap. Before any deployed DDL verify effective Unix/DB `postgres` actor separately from application `cripta`, actual rights and permissions; never grant blanket admin privilege to `cripta` to mask an operator error. Source sync != migration != deploy != loaded behavior.
 
+
+
+## 82. R11 MAYAK BTC/ETH observational anchors — OWNER DECISION 2026-11-14 (#470)
+
+Exact позднейшее разрешение владельца: `BTCUSDT` и `ETHUSDT` могут входить в **один существующий Native MarketSource и общую MarketPublication** только ради R11 MAYAK reference-market аналитики. Это точечное исключение из прежнего запрета на седьмой/шестой native instrument, а **не** увеличение пяти P90 Strategy/Entry/Exit/Execution symbols, не новый writer и не LIVE. Architecture owner — ARCH §60.5.1.1; stream and consumer ownership — OBS §7.10.5.8; migration/permissions/release — DEV §59.6; current acceptance — MAP/Issue #470. Current Source set 11, path/routing/bootstrap unaffected; root entrypoints/derived Instructions synchronize with this decision. До исходных семисимвольных parity/continuity and source-cutover gates старый MAYAK сохраняется. `OWNER_DECISION=YES`; `CANON_UPDATE=THIS_PROTECTED_CHANGESET`; `IMPLEMENTED/DEPLOYED/RUNTIME_VERIFIED=NOT_CLAIMED`.
+
+
+## 83. Repository root topology cleanup — OWNER DECISION 2026-11-15 (Issue #153)
+
+Owner установил постоянную цель: repository root не является складом patch/research
+artifacts. Нормальная верхнеуровневая структура — system `.github/` и четыре
+project roots: `docs/`, target `engine/`, `research/`, `archive/`, плюс
+exact root-file allowlist: `.gitattributes`, `.gitignore`, `.python-version`,
+`README.md`, `AGENTS.md`, `pyproject.toml`, `uv.lock`,
+`bybit_workbench.spec`.
+
+До отдельной миграции `engine/` текущие физические CORE roots
+`src/`, `operations/`, `scripts/`, `tests/`, `config/`
+сохраняются как migration compatibility и не считаются новой целевой topology. Отдельный `production/` source root retired 2026-11-15: current `dispatcher_v2` консолидирован под `src/bybit_workbench/**`, а retired profile-based `strategy_dispatcher` source сохранён только в `archive/legacy_strategy_dispatcher_source/**`; runtime cutover остаётся отдельным release/deploy действием.
+`research_tools/`, `patches/`, `patch_backups/` уже классифицированы как
+inactive legacy и архивированы 2026-11-15. Доказанно неактивные legacy
+Pxx/EO/SE/ENTRY_BOT/PATCH-like folders уже архивированы; final 2026-11-15 root-file cleanup
+переносит old patch/readme/launcher/dashboard files в `archive/legacy_root_files_pre_2026-09-15/**`
+с сохранением Git provenance/bytes. После этого tracked repository root содержит только exact allowlist. Unknown root path остаётся
+fail-closed и не получает права только потому, что уже физически существует.
+
+Canonical process owner: DEVELOPMENT_RELEASE §50.0–§50.3. Current physical
+checkpoint: CURRENT_PROJECT_MAP §19.1. Это решение не меняет торговую Strategy,
+runtime/DB/Exchange/LIVE и не утверждает `engine/` migration IMPLEMENTED.
