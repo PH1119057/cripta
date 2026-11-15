@@ -1225,6 +1225,9 @@ else
         AND s.state='ACTIVE'
         AND s.market_source_id='ms-bybit-mainnet-public-v1'
         AND s.last_accepted_at >= now() - interval '10 seconds'
+        AND c.external_symbol IN (
+          'APTUSDT','ARBUSDT','DOTUSDT','INJUSDT','LTCUSDT'
+        )
         AND c.accepted_at >= '$native_probe_started_at'::timestamptz
         AND c.event_at >= '$native_probe_started_at'::timestamptz
                               - interval '5 seconds'
