@@ -86,10 +86,16 @@ STAGES: tuple[tuple[str, str, str], ...] = (
     # and replays cross-stream facts by durable receiver order.
     ("R11_REPAIR6", "b9caae2843db344067412a5fb4b42ae15c244022",
      "84f7fd5583daed5559a251284ffd90b8847fa496"),
-    ("R12", "84f7fd5583daed5559a251284ffd90b8847fa496",
-     "267fae6f1a8611d505d0e36e9609df48ab4e0eca"),
-    ("R13", "267fae6f1a8611d505d0e36e9609df48ab4e0eca",
-     "174ad435df06afafcf64f262b3934150792c22e1"),
+    # R11_REPAIR6 passed causal-order runtime but physical acceptance proved
+    # the consumer could not catch up because every backlog generation paid
+    # an unconditional 1s idle. Drain backlog immediately; poll at 1 Hz only
+    # when the durable cursor is already at publication head.
+    ("R11_REPAIR7", "84f7fd5583daed5559a251284ffd90b8847fa496",
+     "3f368fe88d72d6e10f0af0902d6205fc141d8447"),
+    ("R12", "3f368fe88d72d6e10f0af0902d6205fc141d8447",
+     "26b9e6c3b3fd50cebbc82de8a82476aa18e52447"),
+    ("R13", "26b9e6c3b3fd50cebbc82de8a82476aa18e52447",
+     "7c3c1289c233843b25e0707ca5c37af70c52016a"),
 )
 
 
