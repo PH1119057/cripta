@@ -85,6 +85,7 @@ def prove(
     *,
     source_state: str = "ACTIVE",
     spot_epoch: str = SPOT_EPOCH,
+    previous_continuity_starts: dict[tuple[str, str, str], datetime] | None = None,
 ):
     original_boundaries, original_observations = evidence()
     return prove_r11_provider_continuity(
@@ -99,6 +100,7 @@ def prove(
         observations=(
             original_observations if observations is None else observations
         ),
+        previous_continuity_starts=previous_continuity_starts,
     )
 
 
