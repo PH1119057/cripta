@@ -18,7 +18,11 @@ from bybit_workbench.mayak.causal_warmup import (
     reconcile_r11_engine_continuity,
 )
 from bybit_workbench.mayak.core.live import LiveMayakEngine
+from bybit_workbench.mayak.native_trade_replay_parity import (
+    R11MayakTradeInput,
+)
 from bybit_workbench.mayak.optional_original_event_parity import (
+    R11OptionalMayakEvent,
     R11OptionalMayakReplayUnverified,
 )
 from bybit_workbench.mayak.provider_continuity import (
@@ -49,6 +53,40 @@ def _need(value: bool, reason: str) -> None:
         raise R11MayakReplayNotReady("R11_PG_MAYAK_" + reason)
 
 
+StreamKey = tuple[str, str, str]
+
+
+def _stream_key(
+    event: R11OptionalMayakEvent | R11MayakTradeInput,
+) -> StreamKey:
+    if isinstance(event, R11OptionalMayakEvent):
+        return (event.product.lower(), event.event.lower(), event.symbol)
+    return (event.market, "trade", event.symbol)
+
+
+def _engine_last_stream_event_at(
+    engine: LiveMayakEngine, key: StreamKey,
+) -> float | None:
+    market, kind, symbol = key
+    if kind == "trade":
+        window = engine.trades.get((market, symbol))
+        return window.rows[-1][0] if window is not None and window.rows else None
+    if kind == "book":
+        stamp = engine.stamps.get((market, symbol, "book"))
+        return stamp.observed_at if stamp is not None else None
+    if kind == "ticker":
+        stamp = engine.stamps.get((market, symbol, "ticker"))
+        return stamp.observed_at if stamp is not None else None
+    if kind == "liquidation":
+        for at, row_symbol, _side, _usd in reversed(engine.liquidations.rows):
+            if row_symbol == symbol:
+                return at
+        return None
+    raise R11MayakReplayNotReady(
+        "R11_PG_MAYAK_ORIGINAL_EVENT_STREAM_INVALID"
+    )
+
+
 @dataclass(slots=True)
 class R11MayakPublicationReplay:
     """A causal seven-coin MAYAK calculation session from immutable PG data.
@@ -64,6 +102,8 @@ class R11MayakPublicationReplay:
     )
     checkpoint: R11SevenMayakReplayCheckpoint | None = None
     first_publication_at: datetime | None = None
+    # V1 durable-state compatibility: maximum provider event_time seen,
+    # never a global cross-stream ordering gate.
     last_original_event_at: float | None = None
     failed: bool = False
     observations: int = 0
@@ -181,44 +221,89 @@ class R11MayakPublicationReplay:
                 proof=proof,
                 previous_starts=self.continuity_starts,
             )
-        original_events: list[tuple[float, int, int, Any]] = []
-        for index, event in enumerate(candidate.optional_events):
+        original_events: list[tuple[float, int, int, int, Any]] = []
+        for event in candidate.optional_events:
+            received = event.received_at
             _need(
                 event.symbol in _SYMBOLS
                 and event.product in ("SPOT", "LINEAR"),
                 "OPTIONAL_EVENT_SCOPE_INVALID",
             )
-            original_events.append((event.timestamp, 0, index, event))
-        for index, trade in enumerate(candidate.native_linear_trades):
+            _need(
+                isinstance(received, datetime)
+                and received.tzinfo is not None
+                and received.utcoffset() == timedelta(0)
+                and type(event.source_frame_number) is int
+                and event.source_frame_number > 0
+                and type(event.source_fact_index) is int
+                and event.source_fact_index >= 0
+                and received.timestamp()
+                <= candidate.as_of_second.timestamp() + 5,
+                "OPTIONAL_EVENT_RECEIVER_INVALID",
+            )
+            original_events.append((
+                received.timestamp(), 0, event.source_frame_number,
+                event.source_fact_index, event,
+            ))
+        for trade in candidate.native_linear_trades:
+            accepted = trade.accepted_at
             _need(
                 trade.symbol in _SYMBOLS and trade.market == "linear",
                 "NATIVE_TRADE_SCOPE_INVALID",
             )
-            original_events.append((trade.timestamp, 1, index, trade))
-        # Validate the *entire* batch before calling any engine callback.
-        # One late event after the committed causal edge is UNKNOWN rather
-        # than silently reordering historical trade/liquidation/book windows.
+            _need(
+                isinstance(accepted, datetime)
+                and accepted.tzinfo is not None
+                and accepted.utcoffset() == timedelta(0)
+                and type(trade.frame_number) is int
+                and trade.frame_number > 0
+                and type(trade.frame_index) is int
+                and trade.frame_index >= 0
+                and accepted.timestamp()
+                <= candidate.as_of_second.timestamp() + 5,
+                "NATIVE_TRADE_RECEIVER_INVALID",
+            )
+            original_events.append((
+                accepted.timestamp(), 1, trade.frame_number,
+                trade.frame_index, trade,
+            ))
+        # Provider event_time is monotonic per exact physical stream, not
+        # globally across independent SPOT/LINEAR/topic/symbol streams.
+        # Deterministic cross-stream replay follows durable receiver order.
+        # Validate the entire batch before calling any engine callback.
         events = sorted(original_events)
-        last = self.last_original_event_at
-        for timestamp, _family, _index, _event in events:
+        stream_last: dict[StreamKey, float | None] = {}
+        legacy_max = self.last_original_event_at
+        for _received, _family, _frame, _index, event in events:
+            timestamp = event.timestamp
+            key = _stream_key(event)
+            if key not in stream_last:
+                stream_last[key] = _engine_last_stream_event_at(
+                    self.engine, key,
+                )
+            previous = stream_last[key]
             _need(
                 isinstance(timestamp, float)
                 and timestamp <= candidate.as_of_second.timestamp() + 5
-                and (last is None or timestamp >= last),
+                and (previous is None or timestamp >= previous),
                 "ORIGINAL_EVENT_TIME_REGRESSED",
             )
-            last = timestamp
+            stream_last[key] = timestamp
+            legacy_max = (
+                timestamp if legacy_max is None
+                else max(legacy_max, timestamp)
+            )
         apply_r11_mayak_rest_candidates_offline(
             self.engine, candidate.rest_facts,
         )
-        for _timestamp, family, _index, event in events:
+        for _received, family, _frame, _index, event in events:
             if family == 0:
                 event.apply_offline(self.engine)
             else:
                 self.engine.on_trade(*event.on_trade_args())
 
         self.checkpoint = candidate.checkpoint()
-        self.last_original_event_at = last
+        self.last_original_event_at = legacy_max
         if self.first_publication_at is None:
             self.first_publication_at = candidate.as_of_second
         self.observations += 1
