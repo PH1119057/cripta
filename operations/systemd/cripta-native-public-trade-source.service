@@ -1,7 +1,7 @@
 [Unit]
 Description=Cripta independent credential-free native Bybit publicTrade capture
 After=network-online.target postgresql.service
-Wants=network-online.target
+Wants=network-online.target cripta-market-hot-retention.timer
 Requires=postgresql.service
 
 [Service]
