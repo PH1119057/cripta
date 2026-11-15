@@ -99,18 +99,40 @@ def _fence_source_epoch(
     )
 
 
-def _canonical_snapshot(snapshot: dict[str, Any]) -> bytes:
+def _snapshot_json_dumps(value: Any) -> str:
     try:
-        binary = json.dumps(
-            snapshot, ensure_ascii=False, sort_keys=True,
+        return json.dumps(
+            value, ensure_ascii=False, sort_keys=True,
             separators=(",", ":"), default=str, allow_nan=False,
-        ).encode("utf-8")
+        )
     except (TypeError, ValueError, OverflowError) as exc:
         raise R11ConsumerCommitUnverified(
             "R11_CONSUMER_COMMIT_SNAPSHOT_JSON_INVALID"
         ) from exc
+
+
+def _canonical_snapshot(snapshot: dict[str, Any]) -> bytes:
+    binary = _snapshot_json_dumps(snapshot).encode("utf-8")
     _need(len(binary) <= _MAX_SNAPSHOT_BYTES, "SNAPSHOT_TOO_LARGE")
     return binary
+
+
+def _postgres_snapshot_text(connection: Any, snapshot: dict[str, Any]) -> str:
+    """Return PostgreSQL's canonical text for the exact JSONB value to store."""
+    from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
+
+    row = connection.execute(
+        "SELECT %s::jsonb::text",
+        (Jsonb(snapshot, dumps=_snapshot_json_dumps),),
+    ).fetchone()
+    _need(
+        isinstance(row, (tuple, list)) and len(row) == 1
+        and isinstance(row[0], str),
+        "SNAPSHOT_STORAGE_CANONICAL_INVALID",
+    )
+    binary = row[0].encode("utf-8")
+    _need(len(binary) <= _MAX_SNAPSHOT_BYTES, "SNAPSHOT_TOO_LARGE")
+    return row[0]
 
 
 def _snapshot_matches_replay(
@@ -233,9 +255,8 @@ def commit_r11_mayak_publication(
     checkpoint = replay.checkpoint
     assert checkpoint is not None
     state = encode_r11_mayak_state(replay)
-    snapshot_binary = _canonical_snapshot(snapshot)
+    _canonical_snapshot(snapshot)
     state_sha = hashlib.sha256(state).hexdigest()
-    snapshot_sha = hashlib.sha256(snapshot_binary).hexdigest()
     if fault_injector is not None:
         fault_injector("AFTER_ENCODE")
 
@@ -300,6 +321,10 @@ def commit_r11_mayak_publication(
             )
         if fault_injector is not None:
             fault_injector("AFTER_LOCK")
+        snapshot_storage_text = _postgres_snapshot_text(connection, snapshot)
+        snapshot_sha = hashlib.sha256(
+            snapshot_storage_text.encode("utf-8")
+        ).hexdigest()
         saved = connection.execute(
             """INSERT INTO mayak_v2.r11_consumer_commit(
                    consumer_id,generation,market_source_id,source_session_id,
@@ -326,10 +351,7 @@ def commit_r11_mayak_publication(
                 checkpoint.source_session_id, checkpoint.release_commit,
                 checkpoint.publication_id, checkpoint.as_of_second,
                 replay.engine.configuration_fingerprint(), state, state_sha,
-                Jsonb(snapshot, dumps=lambda value: json.dumps(
-                    value, ensure_ascii=False, sort_keys=True,
-                    separators=(",", ":"), default=str, allow_nan=False,
-                )),
+                Jsonb(snapshot, dumps=_snapshot_json_dumps),
                 snapshot_sha,
             ),
         ).fetchone()
@@ -354,18 +376,19 @@ def load_r11_mayak_consumer_commit(
         """SELECT generation,market_source_id,source_session_id,
                   producer_release_commit,publication_id,publication_as_of,
                   config_fingerprint,state_checkpoint,state_sha256,snapshot,
-                  snapshot_sha256,committed_at
+                  snapshot_sha256,committed_at,snapshot::text
              FROM mayak_v2.r11_consumer_commit
             WHERE consumer_id=%s""",
         (_CONSUMER_ID,),
     ).fetchone()
     if row is None:
         return None
-    _need(isinstance(row, (tuple, list)) and len(row) == 12,
+    _need(isinstance(row, (tuple, list)) and len(row) == 13,
           "RESTORE_ROW_SHAPE_INVALID")
     (
         generation, source, session, release, publication_id, as_of,
         fingerprint, state, state_sha, snapshot, snapshot_sha, committed_at,
+        snapshot_storage_text,
     ) = row
     _need(
         type(generation) is int and generation > 0
@@ -378,12 +401,14 @@ def load_r11_mayak_consumer_commit(
         and isinstance(fingerprint, str) and len(fingerprint) == 64
         and isinstance(state, bytes)
         and hashlib.sha256(state).hexdigest() == state_sha
-        and isinstance(snapshot, dict),
+        and isinstance(snapshot, dict)
+        and isinstance(snapshot_storage_text, str),
         "RESTORE_IDENTITY_OR_DIGEST_INVALID",
     )
-    snapshot_binary = _canonical_snapshot(snapshot)
+    snapshot_storage_binary = snapshot_storage_text.encode("utf-8")
     _need(
-        hashlib.sha256(snapshot_binary).hexdigest() == snapshot_sha,
+        len(snapshot_storage_binary) <= _MAX_SNAPSHOT_BYTES
+        and hashlib.sha256(snapshot_storage_binary).hexdigest() == snapshot_sha,
         "RESTORE_SNAPSHOT_DIGEST_INVALID",
     )
     replay = decode_r11_mayak_state(
@@ -403,4 +428,67 @@ def load_r11_mayak_consumer_commit(
         generation=generation, replay=replay, snapshot=snapshot,
         state_sha256=state_sha, snapshot_sha256=snapshot_sha,
         committed_at=committed_at,
+    )
+
+
+def verify_r11_mayak_consumer_reset_lineage(
+    connection: Any, *,
+    expected_source_session_id: str,
+    expected_release_commit: str,
+) -> R11ConsumerHead | None:
+    """Verify only durable state lineage for a transition to a new source epoch.
+
+    A previous-epoch snapshot is never reused as engine state.  This path
+    intentionally does not accept its snapshot digest as authority: historical
+    rows may carry the pre-REPAIR8 Python-JSON digest.  State bytes, source
+    identity, generation/publication lineage and configuration remain strict.
+    """
+    row = connection.execute(
+        """SELECT generation,market_source_id,source_session_id,
+                  producer_release_commit,publication_id,publication_as_of,
+                  config_fingerprint,state_checkpoint,state_sha256
+             FROM mayak_v2.r11_consumer_commit
+            WHERE consumer_id=%s""",
+        (_CONSUMER_ID,),
+    ).fetchone()
+    if row is None:
+        return None
+    _need(
+        isinstance(row, (tuple, list)) and len(row) == 9,
+        "RESET_LINEAGE_ROW_SHAPE_INVALID",
+    )
+    (
+        generation, source, session, release, publication_id, as_of,
+        fingerprint, state, state_sha,
+    ) = row
+    _need(
+        type(generation) is int and generation > 0
+        and source == BYBIT_PUBLIC_MARKET_SOURCE_ID
+        and session == expected_source_session_id
+        and release == expected_release_commit
+        and type(publication_id) is int and publication_id > 0
+        and isinstance(as_of, datetime) and as_of.tzinfo is not None
+        and as_of.utcoffset() == timedelta(0)
+        and isinstance(fingerprint, str) and len(fingerprint) == 64
+        and isinstance(state, bytes)
+        and hashlib.sha256(state).hexdigest() == state_sha,
+        "RESET_LINEAGE_IDENTITY_OR_STATE_DIGEST_INVALID",
+    )
+    replay = decode_r11_mayak_state(
+        state,
+        expected_source_session_id=session,
+        expected_release_commit=release,
+    )
+    _need(
+        replay.checkpoint is not None
+        and replay.checkpoint.publication_id == publication_id
+        and replay.checkpoint.as_of_second == as_of
+        and replay.engine.configuration_fingerprint() == fingerprint,
+        "RESET_LINEAGE_MIXED_GENERATION",
+    )
+    return R11ConsumerHead(
+        generation=generation,
+        source_session_id=session,
+        release_commit=release,
+        publication_id=publication_id,
     )
