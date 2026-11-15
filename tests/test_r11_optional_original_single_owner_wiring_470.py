@@ -167,7 +167,10 @@ def test_native_single_owner_wiring_is_default_off_and_scoped() -> None:
         "r11_original_batch.append(original)", loop
     )
     assert "native._persist_frame(" in code
-    assert "r11_original_enabled and events" in code
+    assert "r11_original_enabled" in code
+    assert "and not r11_original_storage_blocked" in code
+    assert "R11_ORIGINAL_FRAME_ROOT_HEADROOM_BLOCKED" in code
+    assert "r11_original_storage_headroom_ok()" in code
     assert "except (" in code and "R11OriginalFrameUnavailable" in code
     assert "product=product, topic=topic" in code
     # No new source owner, Exchange API or independent socket is created.
