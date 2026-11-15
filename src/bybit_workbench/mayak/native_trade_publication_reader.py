@@ -103,6 +103,7 @@ def _positive(value: object) -> Decimal:
 
 def read_r11_original_linear_page(
     connection: Any, *,
+    publication_id: int,
     symbol: str,
     observed_at: datetime,
     read_after: tuple[int, int] = (0, 0),
@@ -114,6 +115,10 @@ def read_r11_original_linear_page(
     symbol/source epoch. No caller-supplied "coverage complete" flag.
     """
     now = _utc(observed_at, "NOW_NOT_UTC")
+    _need(
+        type(publication_id) is int and publication_id > 0,
+        "PUBLICATION_ID_INVALID",
+    )
     _need(symbol in _MAYAK_SEVEN, "SYMBOL_OUTSIDE_MAYAK_SOURCE_SCOPE")
     _need(
         type(max_events) is int and 1 <= max_events <= _MAX_PAGE
@@ -149,8 +154,8 @@ def read_r11_original_linear_page(
                   as_of_second,publication_status,native_watermarks
              FROM analytics.market_publications
             WHERE market_source_id=%s AND source_session_id=%s
-            ORDER BY as_of_second DESC,publication_id DESC LIMIT 1""",
-        (BYBIT_PUBLIC_MARKET_SOURCE_ID, session),
+              AND publication_id=%s""",
+        (BYBIT_PUBLIC_MARKET_SOURCE_ID, session, publication_id),
     ).fetchone()
     _need(
         isinstance(publication, (tuple, list)) and len(publication) == 6,
@@ -159,7 +164,7 @@ def read_r11_original_linear_page(
     pid, pub_session, pub_commit, as_of, state, refs = publication
     published = _utc(as_of, "PUBLICATION_TIME_INVALID")
     _need(
-        type(pid) is int and pid >= 1
+        type(pid) is int and pid == publication_id
         and pub_session == session and pub_commit == commit
         and state == "WATERMARKS_ONLY"
         and not published.microsecond
