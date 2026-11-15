@@ -54,7 +54,11 @@ class R11OriginalFrameUnavailable(RuntimeError):
 
 def r11_original_storage_headroom_ok(path: str = "/") -> bool:
     """Protect the System SSD if retention stalls; no filesystem mutation."""
-    stat = os.statvfs(path)
+    statvfs = getattr(os, "statvfs", None)
+    if statvfs is None:
+        # Production source is Linux-only. Keep import/unit tests portable.
+        return True
+    stat = statvfs(path)
     return stat.f_bavail * stat.f_frsize >= _MIN_ROOT_FREE_BYTES
 
 
