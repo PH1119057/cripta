@@ -49,3 +49,28 @@ def test_supervisor_has_independent_flat_safe_behavior_heartbeat() -> None:
     ) in unit
     assert "RuntimeDirectory=cripta-position-supervisor" in unit
     assert "RuntimeDirectoryMode=0750" in unit
+
+def test_r12_position_supervisor_has_no_independent_public_bybit_reader() -> None:
+    source = Path("operations/monitoring/position_supervisor.py").read_text(
+        encoding="utf-8"
+    )
+    assert "r12_position_publication" in source
+    assert "read_r12_position_market_snapshot" in source
+    assert "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY" in source
+    assert "api.bybit.kz" not in source
+    assert "urllib.request" not in source
+    assert "/v5/market/kline" not in source
+    assert "/v5/market/tickers" not in source
+    assert "/v5/market/orderbook" not in source
+    assert "websocket" not in source
+
+
+def test_r12_position_mark_remains_account_local_not_public_ticker() -> None:
+    source = Path("operations/monitoring/position_supervisor.py").read_text(
+        encoding="utf-8"
+    )
+    assert "runtime.hot_positions" in source
+    assert 'raw.get("markPrice")' in source
+    assert "PositionEvent(" in source
+    assert "public_mark_price" in source
+    assert "POSITION_SUPERVISOR_INFORMATION_ONLY_V36" in source
