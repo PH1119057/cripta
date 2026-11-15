@@ -41,6 +41,7 @@ class R11MayakTradeInput:
     frame_index: int
     seq: int
     exec_id: str
+    accepted_at: datetime
     market: str = "linear"
 
     def on_trade_args(self) -> tuple[str, str, float, str, float, float]:
@@ -225,6 +226,7 @@ def project_r11_native_linear_trade_page(
             side=event.side, price=price, quantity=quantity,
             frame_number=event.frame_number, frame_index=event.frame_index,
             seq=event.seq, exec_id=event.exec_id,
+            accepted_at=accepted_at,
         ))
         cursor = place
         last_seq = event.seq
