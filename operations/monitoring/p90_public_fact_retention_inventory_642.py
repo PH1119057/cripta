@@ -196,6 +196,114 @@ def _publication_pins(cursor: Any) -> dict[str, Any]:
     }
 
 
+def _possible_retention_plan(
+    cursor: Any,
+    pins: dict[str, Any],
+    tables: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Exact provisional candidates, *not* permission to delete originals.
+
+    Every immutable publication retained by age OR a P90 SQL FK keeps all
+    referenced compact and forming facts, even beyond the 24-hour window.
+    Every row still requires independent consumer and recovery proof.
+    """
+    ids = pins["pinned_publication_ids"]
+    by_table = {table["table"]: table for table in tables}
+    cutoff_seconds = 24
+    cursor.execute("SELECT now()")
+    snapshot_at = cursor.fetchone()[0]
+    cursor.execute(
+        """SELECT count(*) FROM analytics.market_publications
+            WHERE as_of_second < now()-make_interval(hours=>24)
+              AND NOT (publication_id=ANY(%s))""",
+        (ids,),
+    )
+    publication_candidates = int(cursor.fetchone()[0])
+
+    cursor.execute(
+        """WITH kept AS (
+            SELECT compact_second_refs
+              FROM analytics.market_publications
+             WHERE as_of_second >= now()-make_interval(hours=>24)
+                OR publication_id=ANY(%s)
+           ), refs AS (
+            SELECT item.value->>'source_session_id' AS sid,
+                   item.value->>'instrument_id' AS iid,
+                   (item.value->>'observed_second')::timestamptz AS sec
+              FROM kept p
+             CROSS JOIN LATERAL jsonb_each(p.compact_second_refs) inst
+             CROSS JOIN LATERAL jsonb_each(inst.value) item
+           )
+           SELECT count(*),
+                  count(*) FILTER(WHERE s.source_session_id IS NULL),
+                  count(DISTINCT (refs.sid,refs.iid,refs.sec))
+                    FILTER(WHERE refs.sec <
+                           now()-make_interval(hours=>24))
+             FROM refs
+             LEFT JOIN analytics.public_market_source_seconds s
+               ON (s.source_session_id,s.instrument_id,s.observed_second)
+                = (refs.sid,refs.iid,refs.sec)""",
+        (ids,),
+    )
+    compact_refs, missing_compact, old_compact = cursor.fetchone()
+    if missing_compact:
+        raise RuntimeError("RETAINED_PUBLICATION_COMPACT_DANGLING_REF")
+
+    cursor.execute(
+        """WITH kept AS (
+            SELECT forming_minute_refs
+              FROM analytics.market_publications
+             WHERE as_of_second >= now()-make_interval(hours=>24)
+                OR publication_id=ANY(%s)
+           ), refs AS (
+            SELECT (item.value->>'forming_observation_id')::bigint AS rid
+              FROM kept p
+             CROSS JOIN LATERAL jsonb_each(p.forming_minute_refs) inst
+             CROSS JOIN LATERAL jsonb_each(inst.value) item
+           )
+           SELECT count(*),
+                  count(*) FILTER(WHERE f.forming_observation_id IS NULL),
+                  count(DISTINCT refs.rid)
+                     FILTER(WHERE f.received_at <
+                            now()-make_interval(hours=>24))
+             FROM refs
+             LEFT JOIN analytics.public_forming_minute_observations f
+               ON f.forming_observation_id=refs.rid""",
+        (ids,),
+    )
+    forming_refs, missing_forming, old_forming = cursor.fetchone()
+    if missing_forming:
+        raise RuntimeError("RETAINED_PUBLICATION_FORMING_DANGLING_REF")
+
+    old_seconds = by_table[
+        "analytics.public_market_source_seconds"
+    ]["older_than_cutoff_rows"]
+    old_forming_total = by_table[
+        "analytics.public_forming_minute_observations"
+    ]["older_than_cutoff_rows"]
+    if int(old_compact) > old_seconds:
+        raise RuntimeError("RETENTION_SECOND_PIN_COUNT_INVALID")
+    if int(old_forming) > old_forming_total:
+        raise RuntimeError("RETENTION_FORMING_PIN_COUNT_INVALID")
+    return {
+        "snapshot_at_utc": snapshot_at.isoformat(),
+        "retention_hours": cutoff_seconds,
+        "old_unpinned_publication_candidates": publication_candidates,
+        "old_unreferenced_second_candidates": (
+            old_seconds - int(old_compact)
+        ),
+        "old_unreferenced_forming_candidates": (
+            old_forming_total - int(old_forming)
+        ),
+        "retained_publication_compact_ref_count": int(compact_refs),
+        "retained_publication_forming_ref_count": int(forming_refs),
+        "retained_publication_missing_refs": 0,
+        "capacity_financial_retention_gate": "NOT_PROVEN",
+        "candidate_status": "PRELIMINARY_ONLY_NO_DELETE_APPROVAL",
+        "actual_reclaim_bytes": None,
+    }
+
+
 def inspect(connection: Any) -> dict[str, Any]:
     """One read-only snapshot: no change to trading data or transaction state."""
     with connection.cursor() as cursor:
@@ -214,6 +322,7 @@ def inspect(connection: Any) -> dict[str, Any]:
             for table, col, hours in TARGETS
         ]
         pins = _publication_pins(cursor)
+        potential = _possible_retention_plan(cursor, pins, tables)
         cursor.execute(
             """SELECT count(*)
                  FROM dispatcher_v2.trading_capacity_snapshots capacity
@@ -233,6 +342,7 @@ def inspect(connection: Any) -> dict[str, Any]:
         "transaction_read_only": readonly,
         "tables": tables,
         "publication_fk_pins": pins,
+        "provisional_retention_candidates": potential,
         "capacity_old_unreferenced_by_direct_fk": detached_capacity,
         "required_before_apply": [
             "source_and_loaded_consumer_inventory",
@@ -265,6 +375,7 @@ def main() -> int:
         options="-c default_transaction_read_only=on "
         "-c statement_timeout=40000",
     ) as connection:
+        connection.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
         connection.read_only = True
         result = inspect(connection)
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
