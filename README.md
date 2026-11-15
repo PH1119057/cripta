@@ -181,3 +181,9 @@ GitHub PR scope checker проверяет изменённые пути, а з�
 ## R11 BTC/ETH observational source decision — 2026-11-14
 
 Для MAYAK разрешены BTCUSDT/ETHUSDT только как reference-аналитика внутри единого Native MarketSource/MarketPublication; пять P90 trading symbols, LIVE и старые MAYAK WS до parity не меняются. Канон: ARCH §60.5.1.1, OBS §7.10.5.8, DEV §59.6, INDEX §82 / Issue #470.
+
+R11 causal replay — OWNER DECISION 2026-11-15: provider-time monotonicity
+проверяется внутри exact physical stream; независимые streams сливаются
+детерминированно по durable receiver order, а MarketPublication/snapshot clock
+остаётся глобально монотонным. Same-stream regression fail-closed; arbitrary
+holdback запрещён. Canon: OBS §4.12, INDEX §84 / Issue #470.

@@ -713,7 +713,17 @@ historical market events
 ~~~
 
 Обязательные свойства:
-- historical event ordering причинный; event/snapshot time не движется назад;
+- historical event ordering причинный. Для одного exact physical stream
+  `(market_source_id, transport_epoch_id, product/topic/symbol)` provider
+  `event_time` и применимая native sequence/identity не движутся назад;
+  реальная same-stream regression остаётся fail-closed. Независимые streams
+  не обязаны образовывать глобальный total order по provider `event_time`:
+  exact timestamps сохраняются, а deterministic cross-stream merge replay
+  следует durable receiver order (`received_at` / `accepted_at`) с
+  source cursor/identity как stable tie-break. `MarketPublication.as_of_second`
+  и replay snapshot time глобально монотонны. Cross-stream provider-time
+  interleaving само по себе не является GAP/UNKNOWN и не разрешает
+  придумывать latency/holdback window;
 - MAYAK replay использует тот же `LiveMayakEngine`, а не копию feature formulas;
 - Dispatcher replay использует те же production `dispatcher_v2` builders,
   config fingerprints, freshness/coverage/data-quality semantics;
@@ -734,6 +744,16 @@ MarketObservationAlert fact с его exact class/payload/provenance.
 
 Observation Replay Contour заканчивается до Strategy и не является
 LIVE EQUIVALENCE торгового контура сам по себе.
+
+**OWNER DECISION 2026-11-15 / Issue #470 — R11 causal ordering, variant A.**
+Эта stream-scoped трактовка supersedes прежнее возможное чтение
+`event/snapshot time не движется назад` как единой глобальной provider-time
+шкалы для независимых SPOT/LINEAR/topic/symbol streams. Она сохраняет тот же
+`LiveMayakEngine`, exact provider timestamps, source frame/sequence/execId,
+durable receiver order и fail-closed same-stream regression. Новый глобальный
+event-time reorder/holdback buffer либо иной искусственный latency threshold
+требует отдельного owner decision после измеренного latency contract и не
+может вводиться как скрытый implementation detail.
 
 # 5. Общая граница наблюдательного контура
 

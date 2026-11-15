@@ -1943,3 +1943,30 @@ fail-closed и не получает права только потому, чт�
 Canonical process owner: DEVELOPMENT_RELEASE §50.0–§50.3. Current physical
 checkpoint: CURRENT_PROJECT_MAP §19.1. Это решение не меняет торговую Strategy,
 runtime/DB/Exchange/LIVE и не утверждает `engine/` migration IMPLEMENTED.
+
+
+## 84. R11 stream-scoped causal replay ordering — OWNER DECISION 2026-11-15 (#470)
+
+Owner выбрал вариант **A** для физической приёмки R11 MAYAK. Канонический
+owner exact replay semantics — `OBSERVATION_ANALYTICS §4.12`: provider
+`event_time`/native ordering обязаны быть неубывающими **внутри exact physical
+stream**, а независимые SPOT/LINEAR/topic/symbol streams не получают
+синтетический global provider-time total order. Их cross-stream replay merge
+детерминируется уже durable receiver order (`received_at` / `accepted_at`) и
+stable source cursor/identity; exact provider timestamps не переписываются.
+`MarketPublication.as_of_second` и replay snapshot time остаются глобально
+монотонными; same-stream regression остаётся fail-closed.
+
+Production evidence по R11_REPAIR3/4/5 показало тысячи естественных
+cross-stream provider-time interleavings и ноль same-stream regressions;
+поэтому это clarification существующей causal owner/consumer boundary, а не
+разрешение скрыто выбрать 2–3s holdback. Любой будущий global event-time
+buffer/latency threshold требует отдельного owner decision и измеренного
+contract. ARCH §60.5 ownership, trading symbols/Strategy/Entry/Exit/Execution,
+private safety и LIVE/ARM не меняются.
+
+Cross-contour implementation допускается только после этого canon update,
+с тем же `LiveMayakEngine`, backward-compatible durable consumer checkpoint,
+tests/CI/protected merge/staged release и новой physical R11 acceptance.
+`OWNER_DECISION=YES`; `CANON_UPDATE=THIS_PROTECTED_CHANGESET`;
+`IMPLEMENTED/DEPLOYED/RUNTIME_VERIFIED=NOT_CLAIMED_BY_DOCS`.

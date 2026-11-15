@@ -198,3 +198,9 @@ resume existing branch/worktree, не reset/overwrite; ambiguity -> HARD_STOP
 ## R11 scoped observation anchors — OWNER APPROVED 2026-11-14
 
 BTCUSDT/ETHUSDT authorized only as MAYAK observational inputs to the ONE native MarketSource/MarketPublication (ARCH §60.5.1.1, OBS §7.10.5.8, DEV §59.6, INDEX §82). P90 five trading symbols, private signed safety, old MAYAK WS pending full parity and LIVE unchanged. Canon merge != installed/loaded/runtime acceptance.
+
+R11 replay ordering — OWNER DECISION 2026-11-15: OBS §4.12 / INDEX §84.
+Provider event-time must be monotonic per exact physical stream; independent
+streams merge by durable receiver order, with global monotonic
+MarketPublication/snapshot time. Same-stream regression remains fail-closed;
+do not invent a global provider-time holdback threshold.
