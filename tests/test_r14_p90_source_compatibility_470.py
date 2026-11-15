@@ -44,8 +44,7 @@ def test_r14_r06_origin_accepts_only_exact_reviewed_two_file_delta() -> None:
 
 def test_r14_reviewed_r07_r10_hashes_bind_current_exact_bytes() -> None:
     package = Path(compat.__file__).resolve().parents[1]
-    for relative, expected in (
-        compat._REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256.items()
-    ):
+    reviewed = compat._REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256
+    for relative, expected in reviewed.items():
         actual = hashlib.sha256((package / relative).read_bytes()).hexdigest()
         assert actual == expected
