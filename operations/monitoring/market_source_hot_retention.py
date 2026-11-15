@@ -18,7 +18,6 @@ import argparse
 import hashlib
 import json
 import os
-import pwd
 import sys
 import zlib
 from dataclasses import dataclass
@@ -53,6 +52,12 @@ class Result:
 def _need(ok: bool, code: str) -> None:
     if not ok:
         raise SourceRetentionBlocked("MARKET_SOURCE_RETENTION_" + code)
+
+
+def _postgres_unix_uid() -> int:
+    import pwd
+
+    return int(pwd.getpwnam("postgres").pw_uid)
 
 
 def _publication_fk_pins(connection: Any) -> tuple[int, ...]:
@@ -538,7 +543,7 @@ def collect_check(connection: Any, cutoff: datetime) -> Result:
 def run_apply(connection: Any, cutoff: datetime, limit: int) -> Result:
     if sys.platform != "linux":
         raise RuntimeError("MARKET_SOURCE_RETENTION_LINUX_REQUIRED")
-    if os.geteuid() != pwd.getpwnam("postgres").pw_uid:
+    if os.geteuid() != _postgres_unix_uid():
         raise RuntimeError("MARKET_SOURCE_RETENTION_POSTGRES_UNIX_ACTOR_REQUIRED")
     rows: dict[str, int] = {}
     with connection.transaction():
