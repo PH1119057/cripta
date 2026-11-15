@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.13 · 2026-11-14
+**Версия:** 2.16 · 2026-11-15
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2003,13 +2003,55 @@ Never move running PGDATA, drop unique history, change Strategy/Entry/Exit/analy
 
 **Authority неизменен:** единственный канонический publisher — GitHub `PH1119057/cripta:main`. Research, docs, code и Dashboard остаются в одном репозитории; это разделение процесса, НЕ перенос capability, source roots или stores. Изолированные ветки/worktrees не дают отдельного authority; публикация в `main` не является deploy, а deploy не является LIVE-arm. Existing worktrees/branches/PRs не удаляются, не переписываются и не сливаются автоматически.
 
+### 50.0 Canonical repository root topology — OWNER DECISION 2026-11-15
+
+Target top-level project layout в GitHub repository:
+
+```text
+.github/     GitHub/system repository infrastructure
+docs/        current canonical/project documentation
+engine/      target root всего активного CORE engine/code/config/tests/operations
+research/    active Research source/methods/tests/tooling
+archive/     historical/retained non-current artifacts
+```
+
+Root files имеют точный active allowlist:
+`.gitattributes`, `.gitignore`, `.python-version`, `README.md`, `AGENTS.md`,
+`pyproject.toml`, `uv.lock`, `bybit_workbench.spec`. Последний остаётся
+активным Windows packaging input до отдельной packaging-path migration. Любой
+другой новый project file или directory в repository root запрещён: он должен
+иметь owner и жить в canonical/transitional root либо быть явно system-managed.
+
+Это **target topology**, а не утверждение о завершённой миграции. До отдельного
+tested path migration существующие `src/`, `operations/`, `scripts/`,
+`tests/`, `config/` остаются transitional physical CORE roots,
+потому что их используют imports/CI/package/release/runtime contracts.
+`research_tools/`, `patches/`, `patch_backups/` классифицированы как
+inactive legacy и уже перенесены в `archive/` owner-approved cleanup 2026-11-15. Нельзя переименовать активные roots ради красоты без
+одновременного обновления всех consumers и tests.
+
+Historical Pxx/EO/SE/ENTRY_BOT/PATCH-like directories, old root patch/readme/
+launcher/dashboard files и иные доказанно неактивные legacy artifacts не
+являются active project roots. После exact
+dependency/reference classification их штатное место — `archive/**`; такой move
+должен сохранять bytes/Git provenance и не превращать archive в executable
+dependency. Scope checker обязан распознавать canonical `archive/**` и exact
+approved legacy-root housekeeping, но остаётся fail-closed для любого иного
+unknown top-level path.
+
+Отдельный repository source root `production/` выведен из target/transitional topology owner-approved consolidation 2026-11-15: его current `dispatcher_v2` Python modules принадлежат единому `src/bybit_workbench/**`; retired profile-based `strategy_dispatcher` source сохраняется только под `archive/legacy_strategy_dispatcher_source/**` и не является active package. Installed runtime может сохранять старый release до отдельного verified deploy; source merge не доказывает runtime cutover.
+
+До завершения physical `engine/` migration branch/path scope ниже продолжает
+описывать текущие transitional physical roots; это migration compatibility, а
+не постоянное разрешение разрастаться корню.
+
 Каждая независимая работа начинается от проверенного актуального remote `main`, имеет ровно один task owner, отдельную тематическую ветку и isolated worktree. Перед публикацией проверить новый remote head, разрешить изменения upstream без force push и без перезаписи чужих изменений, явно перечислить изменённые пути, выполнить относящиеся к задаче тесты и сохранить research evidence. При совпадении изменяемых canonical файлов параллельных задач один editorial integration owner последовательно разрешает PR; изоляция веток не устраняет текстовые конфликты в одном файле автоматически.
 
 ### 50.1 Три стандартных типа веток
 
 - `research/<task>`: только `research/**`, `tests/research/**`, `scripts/research/**`; source snapshot / manifests / large run outputs по RESEARCH_COMPUTE §17 — на data-disk, без vendor datasets и outputs в Git. Исключение: точный `operations/dashboard/instrument_research_catalog.json` допускается только с независимой владельческой регистрацией `owner-approved-ledger-registration`, отдельным QC и контрактом RESEARCH_COMPUTE §23. Это не разрешает менять Dashboard code.
 - `docs/<task>`: только `docs/**`, root `README.md`, `AGENTS.md` и точный derived `operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt`. Изменения по INDEX §17; authoring/верификация канона не равны patch или runtime release. Исследовательский исполнитель не вправе параллельно переписывать эти файлы своей research веткой.
-- `core/<task>`: executable `src/**`, `production/**`, `operations/**` за исключением каталога research JSON и derived Project Instructions, `tests/**` за исключением `tests/research/**`, `scripts/**` за исключением `scripts/research/**`, CI `.github/workflows/**` и `.github/scripts/**`, и явно допускаемые build root configs (`pyproject.toml`, `uv.lock`, `.python-version`, `.gitignore`, `.gitattributes`). Canonical docs и чужие research outputs не менять. Любой опасный trading/control/mutation change сохраняет полные release, rollback и LIVE gates.
+- `core/<task>`: executable `src/**`, `operations/**` за исключением каталога research JSON и derived Project Instructions, `tests/**` за исключением `tests/research/**`, `scripts/**` за исключением `scripts/research/**`, CI `.github/workflows/**` и `.github/scripts/**`, и exact active build root files (`pyproject.toml`, `uv.lock`, `.python-version`, `.gitignore`, `.gitattributes`, `bybit_workbench.spec`). Canonical docs и чужие research outputs не менять. Любой опасный trading/control/mutation change сохраняет полные release, rollback и LIVE gates.
 
 Точный scope checker является **implementation**, а не вторым владельцем архитектуры. Неизвестные пути и переименования проверяются по обоим старым/новым путям и блокируются fail-closed. Смена имени ветки не может заменить approved cross-contour review.
 
@@ -2595,3 +2637,10 @@ Consumer также берёт source table `ROW EXCLUSIVE NOWAIT` в command tr
 
 Full R07 `C/M/I/T/D/R=PASS` needs both source/canonical and physical release proofs; an offline R07 CI green never closes D/R, never advances R08 and never arms Exchange. R06 source-only remains NO-ORDER until separately approved financial producer and Exit protection.
 
+
+
+### 59.6 R11 seven-symbol MAYAK observational capture/consumer release — OWNER DECISION 2026-11-14 (#470)
+
+ARCH §60.5.1.1 и OBS §7.10.5.8 разрешают ровно BTCUSDT/ETHUSDT только как R11 MAYAK observational anchors в **существующем single-owner** MarketSource, в дополнение к пяти P90 instruments. Ни P90 native trading journal/Entry/Exit/Execution Strategy universe, ни signed Bybit private truth, ни LIVE-arm не расширяются. Одна проверенная source configuration объединяет exact five trading requirements и отдельные BTC/ETH MAYAK-only requirements; запрещено выдавать BTC/ETH trading consumer requirements или включать без exact manifest/fingerprint.
+
+Gate: (1) full #470 PR/worktree/writer/job continuity, (2) isolated additive source-only manifest/parser/event/PG16 schema and original publication tests, provider sequence/epoch reset/GAP/REST failures, (3) readonly DB preflight and no-start migration only authorized `postgres`, native effective Unix `cripta` write permissions, backup, capacity and rollback, (4) controlled SINGLE native producer ABI/source epoch transition with five trading cursors intact, (5) MAYAK & Dispatcher seven-coin feature equivalence against original feeds; BTC/ETH anchoring, 5–900s causal features, WARMUP and config_fingerprint, source/no-source negative and restart/lag tests, (6) only then controlled MAYAK public WS retirement with safe rollback, same source/installed/loaded identities and signed independent OPEN protection. Trade and financial-arm changes require **another** owner decision. No silent release or DDL from GitHub docs PR. R11 CLOSED only with C/M/I/T/D/R proven; separate R14 final consolidation not implied.

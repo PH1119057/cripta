@@ -147,9 +147,10 @@ def test_verified_installer_is_fail_closed_for_release_integrity_not_inventory()
         "GATE=$gate_after",
     ):
         assert token in source
-    assert "production/src/bybit_workbench/dispatcher_v2" in source
+    assert "production/src" not in source
+    assert 'git -C "$SOURCE" archive' in source
+    assert '-- src operations config' in source
     assert 'PYTHONPATH="$runtime_release/src"' in source
-    assert 'PYTHONPATH="$runtime_release/production/src"' in source
     assert "import sqlalchemy" in source
     assert "import bybit_workbench.dispatcher_v2" in source
     assert "systemctl start cripta-universal-entry-consumer.service" not in source
@@ -199,7 +200,8 @@ def test_dispatcher_unit_uses_packaged_dispatcher_source_root() -> None:
     unit = (
         ROOT / "operations" / "dispatcher_v2" / "cripta-dispatcher-v2.service"
     ).read_text(encoding="utf-8")
-    assert "Environment=PYTHONPATH=/srv/cripta/runtime/current/production/src" in unit
+    assert "Environment=PYTHONPATH=/srv/cripta/runtime/current/src" in unit
+    assert "production/src" not in unit
 
 
 def test_verified_installer_prunes_release_backups_to_one_previous_with_short_control_checkpoint(

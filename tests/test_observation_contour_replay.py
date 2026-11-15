@@ -75,7 +75,8 @@ def test_full_replay_reuses_production_dispatcher_and_keeps_no_policy() -> None:
     assert result["provenance"]["mayak_engine"] == "LiveMayakEngine"
     package_dir = Path(result["dispatcher"]["production_package_dir"])
     assert package_dir.name == "dispatcher_v2"
-    assert "production/src/bybit_workbench/dispatcher_v2" in package_dir.as_posix()
+    assert "src/bybit_workbench/dispatcher_v2" in package_dir.as_posix()
+    assert "production/src" not in package_dir.as_posix()
 
 
 def test_replay_dispatcher_output_matches_direct_production_builders() -> None:

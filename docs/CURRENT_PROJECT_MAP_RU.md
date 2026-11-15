@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.46
-**Дата:** 2026-11-14
+**Версия:** 12.50
+**Дата:** 2026-11-15
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -1369,6 +1369,45 @@ CHECKED HERE 2026-09-21:
 repository остаётся отдельным cleanup finding. Их перенос в `archive/**`
 должен быть отдельным exact repository-cleanup changeset после dependency
 classification; текущая документационная синхронизация их не перемещает.
+
+## 19.1 Repository root topology cleanup — CHECKED HERE 2026-11-15
+
+GitHub main after single-source consolidation:
+`3dfd46032b89c0bc128e1f92e725dfd9ea76d054`.
+
+Target repository roots по DEV §50.0: `.github/` (system), `docs/`,
+`engine/`, `research/`, `archive/`. Physical `engine/` ещё НЕ завершён:
+current source CORE временно остаётся в `src/`, `operations/`, `scripts/`,
+`tests/`, `config/`.
+
+Completed protected cleanup:
+- PR #721 / `14a7637e25e72c65018ef7eb5cb7b45475c86370`: 73 legacy
+  Pxx/EO/SE/ENTRY/ZS/GUI directories + `patches/`, `patch_backups/`,
+  `research_tools/` moved byte-preserving into `archive/**`; old PR #716
+  closed superseded;
+- PR #722 / `3dfd46032b89c0bc128e1f92e725dfd9ea76d054`: separate
+  `production/` source root retired; current `dispatcher_v2` moved to the
+  single `src/bybit_workbench/**` package root, retired profile-based
+  `strategy_dispatcher` preserved only under
+  `archive/legacy_strategy_dispatcher_source/**`; installer/unit/replay/tests
+  updated and full CI PASS. Git merge did NOT deploy the new source/runtime.
+
+Current root-file active allowlist:
+`.gitattributes`, `.gitignore`, `.python-version`, `README.md`, `AGENTS.md`,
+`pyproject.toml`, `uv.lock`, `bybit_workbench.spec`.
+`bybit_workbench.spec` is retained because current Windows release packaging
+hashes it as an input.
+
+Final root-file cleanup completed in the protected 2026-11-15 repository cleanup:
+17 historical root files — old patch/readme notes, patch PowerShell, two Windows
+launchers and standalone dashboard HTML — moved byte-preserving to
+`archive/legacy_root_files_pre_2026-09-15/**`.
+
+Tracked root files now equal the exact active allowlist:
+`.gitattributes`, `.gitignore`, `.python-version`, `README.md`, `AGENTS.md`,
+`pyproject.toml`, `uv.lock`, `bybit_workbench.spec`.
+A regression test checks both exact tracked root directories and files.
+Runtime/DB/Exchange/LIVE are unchanged by this repository cleanup.
 
 # 20. Verification results — checkpoint 2026-09-21
 
@@ -5244,3 +5283,8 @@ Current source code after last verified main: source transition helper `operatio
 
 Source checkout read-only `git status --porcelain` returned clean (no output) and worktree inventory 113, no matching R07 worktree. SentinelX subsequently reported one **orphaned tool execution** `job_23ab99f07bdd` with unknown result: it is NOT a proven active R07 job and must be forensically identified before any matching server-side mutation. No R07 server job launched in this authoring. Actual `SOURCE_HEAD`, `INSTALLED_COMMIT`, `LOADED_COMMIT`, `OPERATIONAL_DELTA_COMMITS`, live account/Exit and production PostgreSQL ACL state **NOT CHECKED HERE**. R07 `C=PASS, M/I/T=PARTIAL, D/R=NOT_STARTED`; R08–R14 do not advance before R07 full acceptance per DEV §59.2. No source sync/deploy, PostgreSQL DDL, Exchange mutation or LIVE.
 
+
+
+## 2026-11-14 R11 seven-symbol observation-source owner decision — GitHub source-only checkpoint
+
+**OWNER APPROVED:** добавление BTCUSDT и ETHUSDT в один Native MarketSource/MarketPublication только для MAYAK analytical reference anchors, без изменения P90 five-symbol Strategy/Entry/Exit/Execution и без LIVE. ARCH §60.5.1.1 / OBS §7.10.5.8 / DEV §59.6; single roadmap Issue #470. Это owner authorization, NOT claim of installed code/physical runtime. Исторические PR #693–#702 — incremental code/CI evidence, не семь-symbol provider continuity и не switched MAYAK WS. Путь R11 source/consumer quality/REST/BTC/ETH/Dispatcher WARMUP и replay остается gated; before/after snapshot и signed flat/protected check нужны перед deploy. `REMOTE_HEAD_PRE_CHANGESET=58afd1a23884e362858cd581bb2c0bd83d1fd539` (checked GitHub 2026-11-14); `SOURCE_HEAD/INSTALLED_COMMIT/LOADED_COMMIT=NOT_CHECKED_HERE` в этом docs-only checkpoint; `CANON_CONFLICT=RESOLVED_AFTER_MERGE`, `R11_C=OWNER_APPROVED`, `R11_M/I/T=PARTIAL`, `R11_D/R=NOT_STARTED`. Ни production PostgreSQL, ни server/native/MAYAK, ни LIVE/Exchange не меняются документационной публикацией.
