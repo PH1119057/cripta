@@ -24,6 +24,45 @@ def document(value: Any) -> dict[str, Any]:
         return {}
 
 
+_LINEAGE_KEYS = (
+    "market_publication_id",
+    "publication_id",
+    "market_source_id",
+    "source_session_id",
+    "producer_release_commit",
+    "global_context_id",
+    "coin_context_id",
+    "mayak_snapshot_id",
+    "config_fingerprint",
+)
+
+
+def market_lineage(*values: Any) -> dict[str, object]:
+    """Preserve only lineage that upstream records actually contain."""
+    sources: list[dict[str, object]] = []
+    for value in values:
+        payload = document(value)
+        found: dict[str, object] = {}
+        stack: list[object] = [payload]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, dict):
+                for key, item in current.items():
+                    if key in _LINEAGE_KEYS and item not in (None, ""):
+                        found.setdefault(key, item)
+                    if isinstance(item, (dict, list, tuple)):
+                        stack.append(item)
+            elif isinstance(current, (list, tuple)):
+                stack.extend(current)
+        if found:
+            sources.append(found)
+    return {
+        "status": "LINKED" if sources else "MISSING",
+        "sources": sources,
+        "trading_rights": "NONE",
+    }
+
+
 def decimal(value: Any) -> Decimal:
     try:
         return Decimal(str(value or 0))
@@ -285,6 +324,11 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
             else {"id": decision["signal_id"], "at_ms": decision["signal_at_epoch_ms"]},
             "entry_decision": None if decision is None else dict(decision),
             "consumed_context": None if context is None else dict(context),
+            "market_lineage": market_lineage(
+                None if decision is None else dict(decision),
+                None if context is None else dict(context),
+                entry_payload,
+            ),
             "order": {
                 "command_id": entry["command_id"],
                 "processing_state": entry["state"],
