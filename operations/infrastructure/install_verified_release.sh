@@ -54,15 +54,18 @@ roadmap470_pair() {
     R10) printf '%s %s\n' \
       0e0a661695ab920a2b64ad11d5bea56bd6163302 \
       14a4fc65857d2a3158bdb3fda73578dd238057d2 ;;
-    R11) printf '%s %s\n' \
+    R10_ACTIVATE) printf '%s %s\n' \
       14a4fc65857d2a3158bdb3fda73578dd238057d2 \
-      9ae126f676185a2fcff23ad7f2ad2ab9e2367d39 ;;
+      0cdf4ce0ca80ee4dcc5c7cc5c2595223fd4208d4 ;;
+    R11) printf '%s %s\n' \
+      0cdf4ce0ca80ee4dcc5c7cc5c2595223fd4208d4 \
+      45534558275fa854f939a0113f054c05674302da ;;
     R12) printf '%s %s\n' \
-      9ae126f676185a2fcff23ad7f2ad2ab9e2367d39 \
-      dcd820d667d9e50be6857d14881460dc2b64170b ;;
+      45534558275fa854f939a0113f054c05674302da \
+      47eed331b11d9204a41eea8d610b62d97d958120 ;;
     R13) printf '%s %s\n' \
-      dcd820d667d9e50be6857d14881460dc2b64170b \
-      06621815df755983134c85797e4022ec62ea2370 ;;
+      47eed331b11d9204a41eea8d610b62d97d958120 \
+      4ad2397b70ef583aaed505b01aaea443a1c3cf5f ;;
     *) return 1 ;;
   esac
 }
@@ -378,7 +381,7 @@ print("RUNTIME_IMPORT_PREFLIGHT=PASS")
 PY
 
 case "$ROADMAP470_STAGE" in
-  R07|R08|R09|R09_REPAIR|R09_REPAIR2|R10)
+  R07|R08|R09|R09_REPAIR|R09_REPAIR2|R10|R10_ACTIVATE)
     # Dispatcher was consolidated under src/bybit_workbench only at R11.
     # Historical staged acceptance must validate the code that actually existed
     # at the immutable target, not impose a later package on an earlier release.
