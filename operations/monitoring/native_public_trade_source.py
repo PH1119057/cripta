@@ -11,7 +11,11 @@ import json
 import os
 import re
 import signal
+import threading
 import time
+import urllib.parse
+import urllib.request
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -40,6 +44,8 @@ from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
 )
+from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
+from bybit_workbench.universal_entry.transport_continuity import ContinuityNotProvable
 
 DATABASE_DSN = os.environ.get(
     "CRIPTA_U5_DATABASE_DSN",
@@ -47,6 +53,9 @@ DATABASE_DSN = os.environ.get(
 )
 PUBLIC_WS = os.environ.get(
     "CRIPTA_U5_PUBLIC_WS", "wss://stream.bybit.kz/v5/public/linear",
+)
+PUBLIC_REST = os.environ.get(
+    "CRIPTA_U5_PUBLIC_REST", "https://api.bybit.kz",
 )
 RELEASE = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
 STATE_ROOT = Path("/var/lib/cripta/native_public_trade_source")
@@ -73,6 +82,11 @@ _PUBLICATION_FLAG = os.environ.get("CRIPTA_SOURCE_PUBLICATION", "0")
 _UNION_CAPTURE_FLAG = os.environ.get("CRIPTA_SOURCE_UNION_CAPTURE", "0")
 # R11 BTC/ETH are MAYAK observational anchors only, never P90 signals.
 _R11_MAYAK_ANCHORS_FLAG = os.environ.get("CRIPTA_R11_MAYAK_ANCHORS", "0")
+# R09 continuity witness belongs to this one credential-free MarketSource.
+# It never owns Strategy/Entry/Exit policy, credentials, or Exchange mutation.
+_R09_POSTFILL_BROKER_FLAG = os.environ.get(
+    "CRIPTA_R09_SOURCE_POSTFILL_BROKER", "DISABLED",
+).strip().upper()
 _UNION_MANIFEST_FILE = os.environ.get("CRIPTA_SOURCE_UNION_MANIFEST_FILE", "")
 _KLINE_INTERVALS = frozenset(
     part.strip()
@@ -108,6 +122,149 @@ def _checked_kline_intervals(intervals: frozenset[str]) -> tuple[str, ...]:
     }:
         raise NativeSourceInputUnverified("NATIVE_SOURCE_KLINE_MANIFEST_INVALID")
     return tuple(sorted(intervals, key=int))
+
+
+def _r09_postfill_broker_enabled() -> bool:
+    if _R09_POSTFILL_BROKER_FLAG not in {"DISABLED", "ENABLED"}:
+        raise NativeSourceInputUnverified(
+            "R09_POSTFILL_BROKER_FLAG_INVALID"
+        )
+    return _R09_POSTFILL_BROKER_FLAG == "ENABLED"
+
+
+def _fetch_recent_trade_snapshot(
+    symbol: str,
+) -> tuple[list[Mapping[str, object]], datetime]:
+    """Bounded public gap proof owned by the one MarketSource producer."""
+    if symbol not in _ALLOWED_SYMBOLS:
+        raise ContinuityNotProvable(
+            "R09_RECENT_TRADE_SYMBOL_OUT_OF_SCOPE"
+        )
+    query = urllib.parse.urlencode({
+        "category": "linear", "symbol": symbol, "limit": 1000,
+    })
+    request = urllib.request.Request(
+        f"{PUBLIC_REST.rstrip('/')}/v5/market/recent-trade?{query}",
+        headers={"User-Agent": "Cripta-Native-MarketSource-R09/1"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=2.0) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        raise ContinuityNotProvable(
+            "R09_RECENT_TRADE_GAP_PROOF_UNAVAILABLE"
+        ) from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("retCode") != 0
+        or not isinstance(payload.get("result"), dict)
+        or not isinstance(payload["result"].get("list"), list)
+        or not 1 <= len(payload["result"]["list"]) <= 1000
+    ):
+        raise ContinuityNotProvable(
+            "R09_RECENT_TRADE_GAP_PROOF_INVALID"
+        )
+    try:
+        server_at = datetime.fromtimestamp(
+            int(str(payload["time"])) / 1000, UTC,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ContinuityNotProvable(
+            "R09_RECENT_TRADE_SERVER_TIME_INVALID"
+        ) from exc
+    rows = [
+        row for row in payload["result"]["list"]
+        if isinstance(row, Mapping)
+    ]
+    if len(rows) != len(payload["result"]["list"]):
+        raise ContinuityNotProvable(
+            "R09_RECENT_TRADE_ROW_INVALID"
+        )
+    return rows, server_at
+
+
+def _new_r09_postfill_mirror(
+    symbols: tuple[str, ...],
+) -> PublicTradeMirrorBuffer | None:
+    if not _r09_postfill_broker_enabled():
+        return None
+    return PublicTradeMirrorBuffer(symbols, retention_seconds=60)
+
+
+def _start_r09_postfill_broker(
+    mirror: PublicTradeMirrorBuffer | None,
+) -> tuple[threading.Event, threading.Thread] | None:
+    """Bind one read-only continuity socket inside the source owner process."""
+    if mirror is None:
+        return None
+    from operations.monitoring.p90l90_real_postfill_source_broker import (
+        read_current_source_position,
+        serve_source_windows,
+    )
+
+    stop = threading.Event()
+    ready = threading.Event()
+    thread = threading.Thread(
+        target=serve_source_windows,
+        kwargs={
+            "mirror": mirror,
+            "source_commit": None,
+            "source_epoch_id": None,
+            "read_position": None,
+            "resolve_current_source": (
+                lambda position_id, account, symbol, requested_epoch:
+                read_current_source_position(
+                    database_dsn=DATABASE_DSN,
+                    requested_epoch_id=requested_epoch,
+                    position_id=position_id,
+                    trading_account_id=account,
+                    symbol=symbol,
+                )
+            ),
+            "running": lambda: not stop.is_set() and not stopping,
+            "ready": ready.set,
+            "fetch_recent_trades": _fetch_recent_trade_snapshot,
+        },
+        name="native-market-source-r09-postfill-broker",
+        daemon=True,
+    )
+    thread.start()
+    if not ready.wait(timeout=3.0) or not thread.is_alive():
+        stop.set()
+        thread.join(timeout=2.0)
+        raise NativeSourceInputUnverified(
+            "R09_POSTFILL_SOURCE_BROKER_NOT_BOUND"
+        )
+    return stop, thread
+
+
+def _record_r09_postfill_message(
+    mirror: PublicTradeMirrorBuffer | None,
+    message: Mapping[str, object],
+    *,
+    received_at: datetime,
+) -> None:
+    if mirror is None:
+        return
+    try:
+        mirror.record_message(message, received_at=received_at)
+    except ContinuityNotProvable:
+        # Market capture remains durable; strict R09 becomes unavailable until
+        # the next source epoch instead of inventing continuity.
+        if mirror.snapshot()["state"] == "ACTIVE":
+            mirror.mark_gap("R09_SOURCE_MIRROR_UNVERIFIED")
+
+
+def _stop_r09_postfill_broker(
+    mirror: PublicTradeMirrorBuffer | None,
+    owner: tuple[threading.Event, threading.Thread] | None,
+) -> None:
+    if owner is not None:
+        stop, thread = owner
+        stop.set()
+        thread.join(timeout=2.0)
+    if mirror is not None and mirror.snapshot()["state"] == "ACTIVE":
+        mirror.mark_gap("NATIVE_MARKET_SOURCE_EPOCH_ENDED")
 
 
 def decode_native_trades(
@@ -434,14 +591,19 @@ def _run_stream(
         f"kline.{tf}.{sym}" for sym in symbols for tf in intervals
     )
     sock, initial = _subscribe(symbols, extra_topics=extra_topics)
+    r09_mirror = _new_r09_postfill_mirror(symbols)
+    if r09_mirror is not None:
+        r09_mirror.start_epoch(datetime.now(UTC))
     session = uuid4().hex
     _session_start(connection, session)
     _status("ACTIVE", session=session)
+    r09_broker_owner: tuple[threading.Event, threading.Thread] | None = None
     last_provider_frame = time.monotonic()
     last_ping = last_provider_frame
     frame_number = 0
     last_published_second: datetime | None = None
     try:
+        r09_broker_owner = _start_r09_postfill_broker(r09_mirror)
         pending = list(initial)
         while not stopping:
             message: dict[str, object] | None = None
@@ -477,6 +639,10 @@ def _run_stream(
                         connection, session=session,
                         frame_number=frame_number, facts=facts,
                     )
+                    _record_r09_postfill_message(
+                        r09_mirror, message,
+                        received_at=datetime.now(UTC),
+                    )
                 elif capture_kline and topic.startswith("kline."):
                     _persist_closed_kline_frame(
                         connection, message=message,
@@ -511,6 +677,7 @@ def _run_stream(
         _status("RECONNECTING", session=session, reason=reason)
         raise
     finally:
+        _stop_r09_postfill_broker(r09_mirror, r09_broker_owner)
         sock.close()
 
 
