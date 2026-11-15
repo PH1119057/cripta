@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import sys
 import zlib
 from pathlib import Path
@@ -199,4 +200,18 @@ def test_native_cutover_retries_transient_status_wrapper_failure():
     assert 'source_commit_seen=""' in installer
     assert "for _attempt in {1..60}; do" in installer
     assert "independent native source five-symbol fresh cursor proof missing" in installer
+
+def test_native_cutover_inline_status_python_compiles():
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text()
+    snippets = re.findall(
+        r"runuser -u cripta -- python3 -c '\n(.*?)\n  ' "
+        r"/var/lib/cripta/native_public_trade_source/status\.json",
+        installer,
+        flags=re.DOTALL,
+    )
+    assert len(snippets) == 2
+    for index, snippet in enumerate(snippets):
+        compile(snippet, f"native-status-inline-{index}", "exec")
 
