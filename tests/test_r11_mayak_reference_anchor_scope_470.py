@@ -105,4 +105,4 @@ def test_one_existing_native_owner_and_no_new_financial_symbol_default() -> None
     assert "r11_anchor_symbols" in union
     assert "native._persist_frame(" in union
     assert 'symbols=tuple((*p90_symbols, *r11_anchor_symbols))' in union
-    assert "CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=1" not in unit
+    assert "CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=1" in unit
