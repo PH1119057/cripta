@@ -1,0 +1,647 @@
+{
+  "generated_date": "2026-11-05",
+  "record_type": "RESEARCH_FORENSIC_METADATA_INVENTORY_NOT_CANON_NOT_DELETE",
+  "authority": {
+    "repo": "PH1119057/cripta",
+    "baseline_main": "738ff5151bd5f17d49bdc5e1be7f033f52d1a08f",
+    "snapshot_role": "static file metadata evidence"
+  },
+  "source": "/data/cripta/datasets/raw/20260518_20260816",
+  "method": "READ_ONLY STAT INVENTORY, NO CONTENT HASH",
+  "total_bytes": 99263363490,
+  "total_files": 3620,
+  "symbols": 20,
+  "source_name_coverage": "All contiguous filename dates; content/CRC/SHA NOT CHECKED for this inventory",
+  "protected_symbols": [
+    "APTUSDT",
+    "INJUSDT",
+    "DOTUSDT",
+    "LTCUSDT",
+    "ARBUSDT"
+  ],
+  "protected_bytes": 14392774645,
+  "other_symbols_bytes": 84870588845,
+  "per_file_remote_sha_verified": 14,
+  "per_file_remote_sha_untested": 3606,
+  "safe_to_delete_now_bytes": 0,
+  "raw_delete_authorized": false,
+  "notes": [
+    "Raw source files for five P90L90 symbols are targeted by 455 verified warmup symlinks (91 public-trades per symbol). Open native tick research also consumes the source.",
+    "Other symbols are not safe to delete until exact source consumers and reproducible restoration have per-file proof.",
+    "Fourteen TRXUSDT week1 compressed sources have independently verified remote/local SHA256 parity; this does NOT prove future availability or reader migration.",
+    "Source original is May18-Aug15 orderbook OB200 and May17-Aug15 public trades; this is NOT the separate BTC/ETH Sep18-Oct01 archive.",
+    "Never treat a minute-level compact mart as lossless replacement for full trade/book chronology."
+  ],
+  "groups": [
+    {
+      "symbol": "AAVEUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 3149305589,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 765941053,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 3915246642,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "ADAUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 2006242897,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 474598986,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 2480841883,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "APTUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 2606814103,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 492180895,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 3098994998,
+      "classification": "PROTECTED_RAW_NATIVE_CONSUMERS",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "ARBUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 2851813305,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 629239072,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 3481052377,
+      "classification": "PROTECTED_RAW_NATIVE_CONSUMERS",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 2719284205,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 563037642,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 3282321847,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "BCHUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 1393562500,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 251324035,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 1644886535,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "BNBUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 1874045107,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 278681339,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 2152726446,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 15186574369,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 5965260876,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 21151835245,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "DOTUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 2574415947,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 570034873,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 3144450820,
+      "classification": "PROTECTED_RAW_NATIVE_CONSUMERS",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "ETHUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 14420736694,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 6824937470,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 21245674164,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "HBARUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 1788658457,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 319123460,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 2107781917,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "INJUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 2204186364,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 685882470,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 2890068834,
+      "classification": "PROTECTED_RAW_NATIVE_CONSUMERS",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "LINKUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 3022161560,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 559298423,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 3581459983,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "LTCUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 1539259988,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 238947628,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 1778207616,
+      "classification": "PROTECTED_RAW_NATIVE_CONSUMERS",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "OPUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 2522855412,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 669215725,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 3192071137,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "SOLUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 4275064166,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 1412677589,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 5687741755,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "SUIUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 3113040696,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 692876685,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 3805917381,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "TRXUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 1107130535,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 164787097,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 1271917632,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false,
+      "verified_remote_reacquire": {
+        "days": [
+          "2026-05-18",
+          "2026-05-24"
+        ],
+        "files": 14,
+        "source_sha256_match": 14,
+        "source": "research/microstructure/evidence/trx_20260518_20260524_public_source_reacquisition_sha256_20261105.json",
+        "status": "CURRENT_REMOTE_EXACT_EQUIVALENCE_ONLY_NOT_PURGE_AUTHORIZATION"
+      }
+    },
+    {
+      "symbol": "UNIUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 1913122766,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 458490147,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 2371612913,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    },
+    {
+      "symbol": "XRPUSDT",
+      "sources": [
+        {
+          "kind": "orderbook",
+          "files": 90,
+          "bytes": 5596142176,
+          "first_day": "2026-05-18",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        },
+        {
+          "kind": "public_trades",
+          "files": 91,
+          "bytes": 1382411189,
+          "first_day": "2026-05-17",
+          "last_day": "2026-08-15",
+          "contiguous_date_names": true,
+          "symlinks": 0,
+          "hardlink_names": 0,
+          "nonregular": []
+        }
+      ],
+      "bytes": 6978553365,
+      "classification": "RAW_RESTORE_AND_CONSUMER_QC_REQUIRED",
+      "raw_delete_allowed": false
+    }
+  ]
+}
