@@ -256,7 +256,8 @@ def collect_r11_seven_mayak_candidate(
             after = native_before.cursor if native_before is not None else (0, 0)
             for _ in range(_MAX_NATIVE_PAGES):
                 page = read_r11_original_linear_page(
-                    connection, symbol=symbol, observed_at=observed_at,
+                    connection, publication_id=publication_id,
+                    symbol=symbol, observed_at=observed_at,
                     read_after=after,
                 )
                 _need(
