@@ -96,8 +96,10 @@ def test_one_existing_native_owner_and_no_new_financial_symbol_default() -> None
     unit = Path(
         "operations/systemd/cripta-native-public-trade-source.service"
     ).read_text(encoding="utf-8")
+    # Code remains fail-safe OFF when invoked outside the reviewed unit;
+    # physical #470 R11 acceptance explicitly activates the one source owner.
     assert 'os.environ.get("CRIPTA_R11_MAYAK_ANCHORS", "0")' in source
-    assert "CRIPTA_R11_MAYAK_ANCHORS=1" not in unit
+    assert "CRIPTA_R11_MAYAK_ANCHORS=1" in unit
     assert 'native_symbols=symbols' in source
     assert 'mayak_reference_symbols=(' in source
     assert "r11_anchor_symbols" in union
