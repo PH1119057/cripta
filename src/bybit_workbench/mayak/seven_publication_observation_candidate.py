@@ -124,6 +124,7 @@ def collect_r11_seven_mayak_candidate(
     observed_at: datetime,
     previous: R11SevenMayakReplayCheckpoint | None = None,
     require_provider_continuity: bool = False,
+    previous_continuity_starts: dict[tuple[str, str, str], datetime] | None = None,
 ) -> R11SevenMayakObservationCandidate:
     """Bounded full source transaction; caller owns RR READ ONLY.
 
@@ -134,6 +135,7 @@ def collect_r11_seven_mayak_candidate(
     _need(
         type(publication_id) is int and publication_id > 0
         and type(require_provider_continuity) is bool
+        and isinstance(previous_continuity_starts or {}, dict)
         and isinstance(observed_at, datetime)
         and observed_at.tzinfo is not None
         and observed_at.utcoffset() == timedelta(0),
@@ -324,6 +326,7 @@ def collect_r11_seven_mayak_candidate(
             transport_witnesses=tuple(transport_witnesses),
             optional_events=tuple(originals),
             rest_facts=rest,
+            previous_continuity_starts=previous_continuity_starts,
         )
         _need(
             r11_provider_continuity_proof_matches(
