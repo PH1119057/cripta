@@ -75,10 +75,15 @@ STAGES: tuple[tuple[str, str, str], ...] = (
     # rows incorrectly treated as raw transport discontinuities.
     ("R11_REPAIR4", "35923cfb7a8c1149284d2ba327a8d5ae306f5490",
      "5fc00daf43676c30c494f871efb1a69e0eac33b4"),
-    ("R12", "5fc00daf43676c30c494f871efb1a69e0eac33b4",
-     "4ae97520e44e2580a82e08985fcad744106a3769"),
-    ("R13", "4ae97520e44e2580a82e08985fcad744106a3769",
-     "acec641eff61a90f302806fb913321b61d0f61c8"),
+    # Physical R11_REPAIR4 produced the first durable MAYAK generation, then
+    # backlog replay exposed an implicit latest-head native publication read.
+    # Pin native replay to the selected causal MarketPublication before R12.
+    ("R11_REPAIR5", "5fc00daf43676c30c494f871efb1a69e0eac33b4",
+     "b9caae2843db344067412a5fb4b42ae15c244022"),
+    ("R12", "b9caae2843db344067412a5fb4b42ae15c244022",
+     "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0"),
+    ("R13", "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0",
+     "05c5e011d40b1c134942f1ff5449a55bc4ad331f"),
 )
 
 
