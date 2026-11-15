@@ -90,3 +90,101 @@ def test_read_one_rejects_unknown_source_before_any_replay(
             Fake(), replay=pg.R11MayakPublicationReplay(),
             now=__import__("datetime").datetime.now(__import__("datetime").UTC),
         )
+
+
+def test_pg_mode_waits_fail_closed_when_source_is_temporarily_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[object] = []
+
+    class Stop:
+        stopped = False
+
+        def is_set(self) -> bool:
+            return self.stopped
+
+        def wait(self, delay: float) -> bool:
+            calls.append(("wait", delay))
+            self.stopped = True
+            return True
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql: str):
+            assert sql == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            return None
+
+    collector = SimpleNamespace(
+        stop=Stop(),
+        _write_error=lambda market, exc: calls.append(
+            ("error", market, str(exc))
+        ),
+    )
+    monkeypatch.setattr(pg.psycopg, "connect", lambda *_a, **_k: Connection())
+    monkeypatch.setattr(
+        pg,
+        "_restore_or_reset_replay",
+        lambda _db: (_ for _ in ()).throw(
+            pg.R11MayakPGSourceUnavailable(
+                "R11_MAYAK_PG_ONE_CURRENT_NATIVE_SOURCE_REQUIRED"
+            )
+        ),
+    )
+
+    pg.run_r11_pg_observation(collector)
+
+    assert calls == [
+        (
+            "error",
+            "PG_PUBLICATION",
+            "R11_MAYAK_PG_ONE_CURRENT_NATIVE_SOURCE_REQUIRED",
+        ),
+        ("wait", 1.0),
+    ]
+
+
+def test_pg_mode_keeps_nonavailability_integrity_failures_hard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Stop:
+        def is_set(self) -> bool:
+            return False
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql: str):
+            assert sql == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            return None
+
+    errors: list[str] = []
+    collector = SimpleNamespace(
+        stop=Stop(),
+        _write_error=lambda _market, exc: errors.append(str(exc)),
+    )
+    monkeypatch.setattr(pg.psycopg, "connect", lambda *_a, **_k: Connection())
+    monkeypatch.setattr(
+        pg,
+        "_restore_or_reset_replay",
+        lambda _db: (_ for _ in ()).throw(
+            pg.R11MayakPGSourceUnavailable(
+                "R11_MAYAK_PG_PUBLICATION_BACKLOG_EXCEEDS_BOUND"
+            )
+        ),
+    )
+
+    with pytest.raises(
+        pg.R11MayakPGSourceUnavailable,
+        match="PUBLICATION_BACKLOG_EXCEEDS_BOUND",
+    ):
+        pg.run_r11_pg_observation(collector)
+    assert errors == ["R11_MAYAK_PG_PUBLICATION_BACKLOG_EXCEEDS_BOUND"]
