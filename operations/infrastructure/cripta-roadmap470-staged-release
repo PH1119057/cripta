@@ -60,10 +60,15 @@ STAGES: tuple[tuple[str, str, str], ...] = (
     # unit exposed only src/ on PYTHONPATH. Repair R11 before any R12 bytes.
     ("R11_REPAIR", "29cbe0229c137112e3f4e9d3b5b778ebdbc05738",
      "103ac4dc7ce0d7d06b413847938a22e356cc26b9"),
-    ("R12", "103ac4dc7ce0d7d06b413847938a22e356cc26b9",
-     "73987ad4be915dc554e7d6f63ea196849c616bb2"),
-    ("R13", "73987ad4be915dc554e7d6f63ea196849c616bb2",
-     "7f6430fb30a2d68353ca669e15b778ec58680240"),
+    # Physical R11 producer repeatedly GAPped with the exact LINEAR fatal
+    # class hidden behind a generic wrapper. Install evidence-only bytes before
+    # selecting the causal repair; no source policy changes in this stage.
+    ("R11_REPAIR2", "103ac4dc7ce0d7d06b413847938a22e356cc26b9",
+     "f16601924f6623260cbe45d96547c6e9fc71067a"),
+    ("R12", "f16601924f6623260cbe45d96547c6e9fc71067a",
+     "4ae97520e44e2580a82e08985fcad744106a3769"),
+    ("R13", "4ae97520e44e2580a82e08985fcad744106a3769",
+     "acec641eff61a90f302806fb913321b61d0f61c8"),
 )
 
 
