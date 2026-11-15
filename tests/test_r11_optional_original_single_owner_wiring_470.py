@@ -151,8 +151,10 @@ def test_native_single_owner_wiring_is_default_off_and_scoped() -> None:
     unit = Path(
         "operations/systemd/cripta-native-public-trade-source.service"
     ).read_text()
+    # Library default remains OFF; the reviewed physical R11 unit is the
+    # explicit activation boundary for this same single source owner.
     assert '"CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES", "0"' in code
-    assert "CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=1" not in unit
+    assert "CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=1" in unit
     assert code.count("r11_optional_frame_index += 1") == 1
     assert "r11_original_optional_kind(" in code
     assert "make_r11_original_optional_frame(" in code
