@@ -24,7 +24,10 @@ def test_r11_manifest_is_backed_up_and_installed_only_from_r11_onward() -> None:
     exact = "operations/monitoring/r11_seven_public_feeds.json"
     assert manifest in source
     assert exact in source
-    assert 'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R12|R13)' in source
+    assert (
+        'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R11_REPAIR2'
+        '|R11_REPAIR3|R12|R13)'
+    ) in source
     assert "install -d -o root -g cripta -m 0750 /etc/cripta/market-source" in source
     assert "install -o root -g cripta -m 0640" in source
     assert "R11_SEVEN_FEED_MANIFEST=INSTALLED_EXACT" in source
