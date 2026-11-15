@@ -136,7 +136,10 @@ def test_staged_migrations_do_not_reach_forward() -> None:
     assert "20261114_r11_optional_publication_frame_refs.sql" in source
     assert "20261115_r11_mayak_consumer_commit.sql" in source
     assert "20261115_r13_opportunity_source_checkpoint.sql" in source
-    assert 'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R12|R13)' in source
+    assert (
+        'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R11_REPAIR2'
+        '|R11_REPAIR3|R12|R13)'
+    ) in source
     assert 'case "$ROADMAP470_STAGE" in\n  ""|R13)' in source
 
 
