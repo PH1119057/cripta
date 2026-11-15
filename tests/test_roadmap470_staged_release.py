@@ -40,7 +40,7 @@ def test_rail_is_valid_python_no_args_and_exact_ladder_only() -> None:
         assert target in source
     assert "ROADMAP470_INSTALLED_BASELINE_NOT_IN_FIXED_LADDER" in source
     assert "ROADMAP470_RAIL_BYTES_DRIFT" in source
-    assert "merge-base", "--is-ancestor"" in source
+    assert '"merge-base", "--is-ancestor"' in source
     assert "CRIPTA_STAGED_OFFLINE_CUTOVER=1" in source
     assert "CRIPTA_NATIVE_SOURCE_CUTOVER=0" in source
 
@@ -51,7 +51,11 @@ def test_unit_is_manual_inert_root_management_entrypoint() -> None:
     assert "User=root" in unit and "Group=root" in unit
     assert "NoNewPrivileges=yes" in unit
     assert "ProtectSystem=strict" in unit
-    assert "ExecStart=/usr/bin/python3 /usr/local/libexec/cripta-roadmap470-staged-release/cripta-roadmap470-staged-release" in unit
+    assert (
+        "ExecStart=/usr/bin/python3 "
+        "/usr/local/libexec/cripta-roadmap470-staged-release/"
+        "cripta-roadmap470-staged-release"
+    ) in unit
     assert "timer" not in unit.lower()
     # Installing the unit never means enabling or starting it.
     installer = INSTALLER.read_text(encoding="utf-8")
