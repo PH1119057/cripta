@@ -158,12 +158,13 @@ def test_native_single_owner_wiring_is_default_off_and_scoped() -> None:
     assert code.count("r11_optional_frame_index += 1") == 1
     assert "r11_original_optional_kind(" in code
     assert "make_r11_original_optional_frame(" in code
-    assert "append_r11_original_optional_frame(" in code
+    assert "append_r11_original_optional_frames(" in code
     assert "transport_epoch_id=frame_epoch" in code
     assert "source_frame_number=r11_optional_frame_index" in code
     assert "reason=\"R11_ORIGINAL_FRAME_APPEND_UNVERIFIED\"" in code
-    assert code.index("native._persist_frame(") < code.index(
-        "append_r11_original_optional_frame("
+    loop = code.index("while not done.is_set()")
+    assert code.index("native._persist_frame(", loop) < code.index(
+        "r11_original_batch.append(original)", loop
     )
     assert "native._persist_frame(" in code
     assert "r11_original_enabled and events" in code
@@ -172,3 +173,10 @@ def test_native_single_owner_wiring_is_default_off_and_scoped() -> None:
     # No new source owner, Exchange API or independent socket is created.
     assert "r11-original-source.service" not in code
     assert "source_session_id=session" in code
+    assert "_R11_ORIGINAL_BATCH_MAX = 64" in code
+    assert "flush_r11_original_batch()" in code
+    assert """if current_second != last_published_second:
+                    # Durable original optional rows must never trail the
+                    # immutable publication that pins their exact refs.
+                    flush_r11_original_batch()
+                    publish_market_source_second(""" in code
