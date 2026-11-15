@@ -189,3 +189,29 @@ def test_native_cutover_waits_for_transitional_source_and_records_exact_failure(
     assert "trap 'record_err" in installer
     assert 'rm -f "$STATE_ROOT/LAST_FAILED_RELEASE"' in installer
 
+def test_native_cutover_transient_reads_retry_instead_of_aborting_installer():
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text()
+    assert (
+        "/var/lib/cripta/native_public_trade_source/status.json "
+        "2>/dev/null || true"
+    ) in installer
+    assert (
+        "--value --property=MainPID 2>/dev/null || true"
+        in installer
+    )
+    assert (
+        "source_cursor_count=\"$(sql_scalar"
+        in installer
+    )
+    assert (
+        "interval '3 minutes'\" 2>/dev/null || true)"
+        in installer
+    )
+    assert "for _attempt in {1..60}; do" in installer
+    assert (
+        "independent native source five-symbol fresh cursor proof missing"
+        in installer
+    )
+
