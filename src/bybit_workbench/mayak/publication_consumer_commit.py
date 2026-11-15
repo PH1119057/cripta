@@ -119,11 +119,9 @@ def _canonical_snapshot(snapshot: dict[str, Any]) -> bytes:
 
 def _postgres_snapshot_text(connection: Any, snapshot: dict[str, Any]) -> str:
     """Return PostgreSQL's canonical text for the exact JSONB value to store."""
-    from psycopg.types.json import Jsonb
-
     row = connection.execute(
         "SELECT %s::jsonb::text",
-        (Jsonb(snapshot, dumps=_snapshot_json_dumps),),
+        (_snapshot_json_dumps(snapshot),),
     ).fetchone()
     _need(
         isinstance(row, (tuple, list)) and len(row) == 1
