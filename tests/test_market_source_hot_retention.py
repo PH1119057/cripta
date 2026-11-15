@@ -170,3 +170,22 @@ def test_native_cutover_fresh_cursor_proof_counts_only_trading_panel():
         assert f"'{symbol}'" in installer
     assert '"$source_cursor_count" == "5"' in installer
 
+def test_native_cutover_waits_for_transitional_source_and_records_exact_failure():
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text()
+    assert (
+        "systemctl show cripta-native-public-trade-source.service "
+        "--value --property=ActiveState"
+    ) in installer
+    assert "activating|reloading)" in installer
+    assert (
+        "native MarketSource writer not active during source cutover:"
+        in installer
+    )
+    assert "LAST_FAILED_RELEASE" in installer
+    assert "last_error_line" in installer
+    assert "last_error_command" in installer
+    assert "trap 'record_err" in installer
+    assert 'rm -f "$STATE_ROOT/LAST_FAILED_RELEASE"' in installer
+

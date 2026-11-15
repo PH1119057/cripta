@@ -22,6 +22,13 @@ NATIVE_SOURCE_CUTOVER="${CRIPTA_NATIVE_SOURCE_CUTOVER:-0}"
 ROADMAP470_STAGE="${CRIPTA_ROADMAP470_STAGE:-}"
 CONTROL_MAX_AGE_SECONDS=604800
 controller_stage=""
+last_error_line=""
+last_error_command=""
+
+record_err() {
+  last_error_line="$1"
+  last_error_command="$2"
+}
 
 cleanup_controller_stage() {
   if [[ -n "$controller_stage" && -d "$controller_stage" ]]; then
@@ -29,6 +36,7 @@ cleanup_controller_stage() {
   fi
 }
 trap cleanup_controller_stage EXIT
+trap 'record_err "$LINENO" "$BASH_COMMAND"' ERR
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 as_repo_owner() { runuser -u cripta -- env GIT_OPTIONAL_LOCKS=0 "$@"; }
@@ -718,6 +726,19 @@ release_exit_handler() {
   if [[ "$deploy_succeeded" == "1" ]]; then
     return
   fi
+  if [[ "$rc" != "0" ]]; then
+    local failure_tmp="$STATE_ROOT/.LAST_FAILED_RELEASE.$"
+    {
+      printf 'release=%s\n' "$RELEASE_COMMIT"
+      printf 'exit_code=%s\n' "$rc"
+      printf 'line=%s\n' "${last_error_line:-unknown}"
+      printf 'command=%q\n' "${last_error_command:-unknown}"
+      printf 'recorded_at_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } > "$failure_tmp" || true
+    chown root:cripta "$failure_tmp" 2>/dev/null || true
+    chmod 0640 "$failure_tmp" 2>/dev/null || true
+    mv -f "$failure_tmp" "$STATE_ROOT/LAST_FAILED_RELEASE" 2>/dev/null || true
+  fi
   if [[ -n "$ROADMAP470_STAGE" ]]; then
     echo "DEPLOY_FAILED=YES" >&2
     echo "FAILED_RELEASE_COMMIT=$RELEASE_COMMIT" >&2
@@ -1180,9 +1201,21 @@ else
   systemctl start cripta-native-public-trade-source.service
   native_source_ready=0
   for _attempt in {1..60}; do
-    if ! systemctl is-active --quiet cripta-native-public-trade-source.service; then
-      die "native MarketSource writer exited during source cutover"
-    fi
+    source_active_state="$(systemctl show cripta-native-public-trade-source.service --value --property=ActiveState 2>/dev/null || true)"
+    case "$source_active_state" in
+      active) ;;
+      activating|reloading)
+        sleep 1
+        continue
+        ;;
+      inactive|failed|deactivating|"")
+        die "native MarketSource writer not active during source cutover: ${source_active_state:-unknown}"
+        ;;
+      *)
+        sleep 1
+        continue
+        ;;
+    esac
     # Read only the current source process's exact advertised ACTIVE session.
     # A stale ACTIVE row left by a killed old process cannot prove readiness.
     source_session="$(runuser -u cripta -- python3 -c '
@@ -1353,9 +1386,11 @@ runuser -u root -- /usr/bin/python3 \
   --current-sha "$RELEASE_COMMIT" \
   --previous-sha "$EXPECTED_BASELINE"
 
+rm -f "$STATE_ROOT/LAST_FAILED_RELEASE"
 deploy_succeeded=1
 cleanup_controller_stage
 trap - EXIT
+trap - ERR
 
 echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"
 if [[ -n "$ROADMAP470_STAGE" ]]; then
