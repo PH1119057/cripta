@@ -47,6 +47,26 @@ EXPECTED = (
 )
 
 
+def test_r11_repair4_is_exact_gate_between_repair3_and_r12() -> None:
+    stages = tuple(row[0] for row in EXPECTED)
+    index = stages.index("R11_REPAIR4")
+    assert EXPECTED[index - 1] == (
+        "R11_REPAIR3",
+        "f16601924f6623260cbe45d96547c6e9fc71067a",
+        "35923cfb7a8c1149284d2ba327a8d5ae306f5490",
+    )
+    assert EXPECTED[index] == (
+        "R11_REPAIR4",
+        "35923cfb7a8c1149284d2ba327a8d5ae306f5490",
+        "5fc00daf43676c30c494f871efb1a69e0eac33b4",
+    )
+    assert EXPECTED[index + 1] == (
+        "R12",
+        "5fc00daf43676c30c494f871efb1a69e0eac33b4",
+        "4ae97520e44e2580a82e08985fcad744106a3769",
+    )
+
+
 def test_rail_is_valid_python_no_args_and_exact_ladder_only() -> None:
     source = RAIL.read_text(encoding="utf-8")
     ast.parse(source)
