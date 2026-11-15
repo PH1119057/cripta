@@ -26,6 +26,10 @@ INSTALLER_REL = "operations/infrastructure/install_verified_release.sh"
 SELF_REL = "operations/infrastructure/cripta-roadmap470-staged-release"
 LOCK_PATH = Path("/run/lock/cripta-roadmap470-staged-release.lock")
 SHA = re.compile(r"^[0-9a-f]{40}$")
+SENSITIVE_DIAGNOSTIC = re.compile(
+    r"(?i)(password|secret|authorization|cookie|api[_-]?key|"
+    r"private[_-]?key|bearer[ =:]|token[ =:])"
+)
 
 # Exact owner-approved physical acceptance ladder.  R14 is deliberately absent.
 STAGES: tuple[tuple[str, str, str], ...] = (
@@ -206,8 +210,26 @@ def main() -> int:
                 "CRIPTA_NATIVE_SOURCE_CUTOVER=0",
                 f"CRIPTA_ROADMAP470_STAGE={stage}",
                 "/usr/bin/bash", str(staged_path),
-            ], check=False)
+            ], check=False, capture_output=True, text=True)
             if result.returncode != 0:
+                combined = "\n".join(
+                    part for part in (result.stdout, result.stderr) if part
+                )
+                safe_lines = [
+                    line[:600]
+                    for line in combined.splitlines()[-60:]
+                    if not SENSITIVE_DIAGNOSTIC.search(line)
+                ]
+                if safe_lines:
+                    print(
+                        "ROADMAP470_INSTALLER_DIAGNOSTIC_BEGIN",
+                        file=sys.stderr,
+                    )
+                    print("\n".join(safe_lines), file=sys.stderr)
+                    print(
+                        "ROADMAP470_INSTALLER_DIAGNOSTIC_END",
+                        file=sys.stderr,
+                    )
                 raise StagedReleaseError(
                     f"ROADMAP470_STAGE_INSTALL_FAILED:{stage}:{result.returncode}"
                 )

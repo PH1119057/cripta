@@ -260,6 +260,33 @@ install -d -o root -g root -m 0700 "$RELEASE_CONTROLLER_STATE_ROOT/used"
 runtime_release="$RUNTIME_ROOT/releases/$RELEASE_COMMIT"
 tooling_release="$RESEARCH_TOOLING_ROOT/releases/$RELEASE_COMMIT"
 
+# A failed #470 pre-backup attempt may leave only an immutable candidate tree.
+# It is not an installed release until INSTALLED_COMMIT exists and current points
+# to it. Rebuild that exact target from Git instead of trusting partial bytes.
+if [[ -n "$ROADMAP470_STAGE" ]]; then
+  roadmap470_reset_incomplete_candidate() {
+    local candidate="$1"
+    local current_link="$2"
+    local expected_parent="$3"
+    local label="$4"
+    local current_target=""
+
+    [[ "$candidate" == "$expected_parent/$RELEASE_COMMIT" ]] ||
+      die "ROADMAP470_INCOMPLETE_CANDIDATE_SCOPE_INVALID:$label"
+    if [[ -d "$candidate" && ! -f "$candidate/INSTALLED_COMMIT" ]]; then
+      [[ ! -L "$candidate" ]] ||
+        die "ROADMAP470_INCOMPLETE_CANDIDATE_SYMLINK:$label"
+      current_target="$(readlink -f "$current_link" 2>/dev/null || true)"
+      [[ "$current_target" != "$candidate" ]] ||
+        die "ROADMAP470_INCOMPLETE_CANDIDATE_IS_CURRENT:$label"
+      rm -rf --one-file-system -- "$candidate"
+      echo "ROADMAP470_INCOMPLETE_CANDIDATE_RESET=PASS label:$label target:$RELEASE_COMMIT"
+    fi
+  }
+  roadmap470_reset_incomplete_candidate     "$runtime_release" "$RUNTIME_ROOT/current" "$RUNTIME_ROOT/releases" runtime
+  roadmap470_reset_incomplete_candidate     "$tooling_release" "$RESEARCH_TOOLING_ROOT/current"     "$RESEARCH_TOOLING_ROOT/releases" tooling
+fi
+
 if [[ ! -d "$runtime_release" ]]; then
   as_repo_owner install -d -m 0750 "$runtime_release"
   as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src operations config research/server/backup research/server/connectivity research/server/monitoring research/server/control pyproject.toml     | runuser -u cripta -- tar -xf - -C "$runtime_release"
@@ -344,10 +371,20 @@ assert pydantic.__version__ == "2.13.5"
 print("RUNTIME_IMPORT_PREFLIGHT=PASS")
 PY
 
-PYTHONPATH="$runtime_release/src" "$runtime_release/.venv/bin/python" - <<'PY'
+case "$ROADMAP470_STAGE" in
+  R07|R08|R09|R10)
+    # Dispatcher was consolidated under src/bybit_workbench only at R11.
+    # Historical staged acceptance must validate the code that actually existed
+    # at the immutable target, not impose a later package on an earlier release.
+    echo "DISPATCHER_IMPORT_PREFLIGHT=DEFERRED_NOT_IN_STAGE stage:$ROADMAP470_STAGE"
+    ;;
+  *)
+    PYTHONPATH="$runtime_release/src" "$runtime_release/.venv/bin/python" - <<'PY'
 import bybit_workbench.dispatcher_v2
 print("DISPATCHER_IMPORT_PREFLIGHT=PASS")
 PY
+    ;;
+esac
 
 printf '%s\n' "$RELEASE_COMMIT" > "$runtime_release/INSTALLED_COMMIT"
 printf '%s\n' "$RELEASE_COMMIT" > "$tooling_release/INSTALLED_COMMIT"
