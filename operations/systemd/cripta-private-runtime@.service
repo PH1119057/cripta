@@ -24,6 +24,7 @@ Environment=CRIPTA_PRIVATE_STATUS_DIR=/var/lib/cripta/private_runtime/sub-%i
 Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30
 Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90
 Environment=CRIPTA_P90_REAL_PRIVATE_IPC=ENABLED
+Environment=CRIPTA_R10_EXECUTION_PUBLICATION=1
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/operations/connectivity:/srv/cripta/runtime/current/research/server/connectivity
 EnvironmentFile=/etc/cripta/release.env
 EnvironmentFile=/etc/cripta/private-runtime-%i.env
