@@ -389,3 +389,152 @@ def read_publication_tickers(
             funding_rate=_optional_decimal(ticker.get("fundingRate")),
         )
     return result
+
+
+def read_market_publication_quality(
+    connection: Any,
+    *,
+    observed_at: datetime,
+) -> dict[str, object]:
+    """Operator read-model of actual source/publication/checkpoint facts."""
+    require_repeatable_read_only(connection)
+    now = _utc(observed_at, "QUALITY_CLOCK_INVALID")
+    epoch = read_active_source_epoch(connection)
+    publication = connection.execute(
+        """SELECT publication_id,source_session_id,producer_release_commit,
+                  as_of_second,publication_status
+             FROM analytics.market_publications
+            WHERE market_source_id=%s AND source_session_id=%s
+            ORDER BY as_of_second DESC,publication_id DESC LIMIT 1""",
+        (BYBIT_PUBLIC_MARKET_SOURCE_ID, epoch.source_session_id),
+    ).fetchone()
+    if publication is None or len(publication) != 5:
+        _fail("QUALITY_PUBLICATION_MISSING")
+    pid, session, producer, as_of, status = publication
+    published = _utc(as_of, "QUALITY_PUBLICATION_TIME_INVALID")
+    if (
+        type(pid) is not int
+        or session != epoch.source_session_id
+        or producer != epoch.producer_release_commit
+    ):
+        _fail("QUALITY_PUBLICATION_IDENTITY_DRIFT")
+    publication_age = (now - published).total_seconds()
+    source_age = (
+        None
+        if epoch.last_accepted_at is None
+        else (now - epoch.last_accepted_at).total_seconds()
+    )
+    gap = connection.execute(
+        """SELECT source_session_id,producer_release_commit,ended_at,reason
+             FROM analytics.native_public_trade_source_sessions
+            WHERE market_source_id=%s AND state='GAP'
+            ORDER BY ended_at DESC NULLS LAST,subscribed_at DESC LIMIT 1""",
+        (BYBIT_PUBLIC_MARKET_SOURCE_ID,),
+    ).fetchone()
+    last_gap: dict[str, object] | None = None
+    if gap is not None:
+        last_gap = {
+            "source_session_id": gap[0],
+            "producer_release_commit": gap[1],
+            "ended_at": (
+                None if gap[2] is None
+                else _utc(gap[2], "QUALITY_GAP_TIME_INVALID").isoformat()
+            ),
+            "reason": gap[3],
+        }
+
+    consumers: list[dict[str, object]] = []
+    if connection.execute(
+        "SELECT to_regclass('analytics.native_public_trade_observer_delivery')"
+    ).fetchone()[0] is not None:
+        for row in connection.execute(
+            """SELECT consumer_id,source_session_id,producer_release_commit,
+                      frame_number,frame_index,updated_at
+                 FROM analytics.native_public_trade_observer_delivery
+                ORDER BY consumer_id,updated_at DESC"""
+        ).fetchall():
+            consumers.append({
+                "consumer_id": row[0],
+                "mode": "DURABLE_NATIVE_CURSOR",
+                "source_session_id": row[1],
+                "producer_release_commit": row[2],
+                "frame_number": row[3],
+                "frame_index": row[4],
+                "updated_at": _utc(
+                    row[5], "QUALITY_OBSERVER_CURSOR_TIME_INVALID"
+                ).isoformat(),
+            })
+    if connection.execute(
+        "SELECT to_regclass('mayak_v2.r11_consumer_commit')"
+    ).fetchone()[0] is not None:
+        row = connection.execute(
+            """SELECT consumer_id,generation,source_session_id,
+                      producer_release_commit,publication_id,committed_at
+                 FROM mayak_v2.r11_consumer_commit
+                ORDER BY committed_at DESC LIMIT 1"""
+        ).fetchone()
+        if row is not None:
+            consumers.append({
+                "consumer_id": row[0],
+                "mode": "DURABLE_PUBLICATION_CURSOR",
+                "generation": row[1],
+                "source_session_id": row[2],
+                "producer_release_commit": row[3],
+                "publication_id": row[4],
+                "updated_at": _utc(
+                    row[5], "QUALITY_MAYAK_CURSOR_TIME_INVALID"
+                ).isoformat(),
+            })
+    if connection.execute(
+        "SELECT to_regclass('monitoring.opportunity_source_checkpoints')"
+    ).fetchone()[0] is not None:
+        rows = connection.execute(
+            """SELECT source_quality,count(*),max(updated_at)
+                 FROM monitoring.opportunity_source_checkpoints
+                GROUP BY source_quality ORDER BY source_quality"""
+        ).fetchall()
+        consumers.append({
+            "consumer_id": "OPPORTUNITY_R13",
+            "mode": "PER_SIGNAL_DURABLE_NATIVE_CURSOR",
+            "quality_counts": {
+                str(row[0]): int(row[1]) for row in rows
+            },
+            "updated_at": (
+                None if not rows
+                else max(
+                    _utc(
+                        row[2], "QUALITY_OPPORTUNITY_CURSOR_TIME_INVALID"
+                    )
+                    for row in rows if row[2] is not None
+                ).isoformat()
+            ),
+        })
+    consumers.append({
+        "consumer_id": "POSITION_R12",
+        "mode": "LATEST_PUBLICATION_READ_ONLY",
+        "durable_cursor": False,
+    })
+    return {
+        "state": (
+            "CURRENT"
+            if status == "WATERMARKS_ONLY"
+            and 0 <= publication_age <= _PUBLICATION_MAX_AGE.total_seconds()
+            else "STALE_OR_UNVERIFIED"
+        ),
+        "market_source_id": BYBIT_PUBLIC_MARKET_SOURCE_ID,
+        "source_session_id": epoch.source_session_id,
+        "producer_release_commit": epoch.producer_release_commit,
+        "source_subscribed_at": epoch.subscribed_at.isoformat(),
+        "source_last_accepted_at": (
+            None if epoch.last_accepted_at is None
+            else epoch.last_accepted_at.isoformat()
+        ),
+        "source_age_seconds": source_age,
+        "publication_id": pid,
+        "publication_as_of": published.isoformat(),
+        "publication_age_seconds": publication_age,
+        "publication_status": status,
+        "last_gap": last_gap,
+        "consumers": consumers,
+        "trading_rights": "NONE",
+    }
