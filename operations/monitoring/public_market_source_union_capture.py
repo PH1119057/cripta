@@ -617,9 +617,13 @@ def run_source_union(
     sock["LINEAR"], buffer["LINEAR"] = _connect_subscribe(
         product="LINEAR", union=union,
     )
+    r09_mirror = native._new_r09_postfill_mirror(p90_symbols)
+    if r09_mirror is not None:
+        r09_mirror.start_epoch(datetime.now(UTC))
     session = native.uuid4().hex
     native._session_start(connection, session)
     native._status("ACTIVE", session=session)
+    r09_broker_owner: tuple[threading.Event, threading.Thread] | None = None
     done = threading.Event()
     failures: list[str] = []  # Required LINEAR transport only.
     optional_faults: queue.Queue[PublicSourceQualityEvent] = queue.Queue(
@@ -1048,6 +1052,7 @@ def run_source_union(
     # a separate causal inflight gate until that precise result is handled.
     repair_inflight = False
     try:
+        r09_broker_owner = native._start_r09_postfill_broker(r09_mirror)
         while not done.is_set() and not source_stopping():
             # Retry a bounded topic-only snapshot request even when the
             # provider sends only deltas (which are intentionally ignored
@@ -1091,6 +1096,9 @@ def run_source_union(
                         native._persist_frame(
                             connection, session=session,
                             frame_number=frame_index, facts=facts,
+                        )
+                        native._record_r09_postfill_message(
+                            r09_mirror, item, received_at=received,
                         )
                 key = (product, topic)
                 if key in book_waiting_snapshot and (
@@ -1427,6 +1435,9 @@ def run_source_union(
         raise
     finally:
         done.set()
+        native._stop_r09_postfill_broker(
+            r09_mirror, r09_broker_owner,
+        )
         for s in sock.values():
             s.close()
         for worker in workers:
