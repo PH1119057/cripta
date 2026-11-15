@@ -1223,13 +1223,13 @@ else
     # 60-second readiness loop. Invalid/missing identity still cannot PASS.
     source_session=""
     if ! source_session="$(runuser -u cripta -- python3 -c '
-  import json,sys
-  try:
-      v=json.load(open(sys.argv[1],encoding="utf-8"))
-      sid=v.get("session") if v.get("state")=="ACTIVE" else ""
-  except Exception:
-      sid=""
-  print(sid if isinstance(sid,str) else "")
+import json,sys
+try:
+    v=json.load(open(sys.argv[1],encoding="utf-8"))
+    sid=v.get("session") if v.get("state")=="ACTIVE" else ""
+except Exception:
+    sid=""
+print(sid if isinstance(sid,str) else "")
   ' /var/lib/cripta/native_public_trade_source/status.json)"; then
       source_session=""
     fi
@@ -1243,12 +1243,12 @@ else
       source_pid="$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)"
       source_commit_seen=""
       if ! source_commit_seen="$(runuser -u cripta -- python3 -c '
-  import json,sys
-  try:
-      v=json.load(open(sys.argv[1],encoding="utf-8"))
-      print(v.get("source_commit","") if v.get("state")=="ACTIVE" else "")
-  except Exception:
-      print("")
+import json,sys
+try:
+    v=json.load(open(sys.argv[1],encoding="utf-8"))
+    print(v.get("source_commit","") if v.get("state")=="ACTIVE" else "")
+except Exception:
+    print("")
   ' /var/lib/cripta/native_public_trade_source/status.json)"; then
         source_commit_seen=""
       fi
