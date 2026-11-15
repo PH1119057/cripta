@@ -28,12 +28,14 @@ EXPECTED = (
      "0e0a661695ab920a2b64ad11d5bea56bd6163302"),
     ("R10", "0e0a661695ab920a2b64ad11d5bea56bd6163302",
      "14a4fc65857d2a3158bdb3fda73578dd238057d2"),
-    ("R11", "14a4fc65857d2a3158bdb3fda73578dd238057d2",
-     "9ae126f676185a2fcff23ad7f2ad2ab9e2367d39"),
-    ("R12", "9ae126f676185a2fcff23ad7f2ad2ab9e2367d39",
-     "dcd820d667d9e50be6857d14881460dc2b64170b"),
-    ("R13", "dcd820d667d9e50be6857d14881460dc2b64170b",
-     "06621815df755983134c85797e4022ec62ea2370"),
+    ("R10_ACTIVATE", "14a4fc65857d2a3158bdb3fda73578dd238057d2",
+     "0cdf4ce0ca80ee4dcc5c7cc5c2595223fd4208d4"),
+    ("R11", "0cdf4ce0ca80ee4dcc5c7cc5c2595223fd4208d4",
+     "45534558275fa854f939a0113f054c05674302da"),
+    ("R12", "45534558275fa854f939a0113f054c05674302da",
+     "47eed331b11d9204a41eea8d610b62d97d958120"),
+    ("R13", "47eed331b11d9204a41eea8d610b62d97d958120",
+     "4ad2397b70ef583aaed505b01aaea443a1c3cf5f"),
 )
 
 
@@ -107,7 +109,7 @@ def test_installer_shell_syntax_and_staged_no_start_contract() -> None:
     assert "ROADMAP470_INCOMPLETE_CANDIDATE_RESET=PASS" in source
     assert "rm -rf --one-file-system --" in source
     assert "ROADMAP470_INCOMPLETE_CANDIDATE_IS_CURRENT" in source
-    assert "R07|R08|R09|R09_REPAIR|R09_REPAIR2|R10)" in source
+    assert "R07|R08|R09|R09_REPAIR|R09_REPAIR2|R10|R10_ACTIVATE)" in source
     assert "DISPATCHER_IMPORT_PREFLIGHT=DEFERRED_NOT_IN_STAGE" in source
     assert "import bybit_workbench.dispatcher_v2" in source
 
