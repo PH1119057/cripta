@@ -47,7 +47,12 @@ _SEVEN = (
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
     "BTCUSDT", "ETHUSDT",
 )
-_MAX_PAGES = 16
+# Production cold-start evidence on #470 showed the first complete
+# 21/21 REST-backed publication at 4,842 LINEAR / 3,097 SPOT optional frames.
+# 64 x 128 preserves a bounded cold bootstrap with measured headroom. Native
+# publicTrade replay keeps its separately proven 16 x 512 ceiling.
+_MAX_OPTIONAL_PAGES = 64
+_MAX_NATIVE_PAGES = 16
 
 
 class R11SevenMayakCollectionUnverified(RuntimeError):
@@ -186,7 +191,7 @@ def collect_r11_seven_mayak_candidate(
     try:
         for product in ("SPOT", "LINEAR"):
             state: R11OptionalMayakCursor | None = previous_optional.get(product)
-            for _ in range(_MAX_PAGES):
+            for _ in range(_MAX_OPTIONAL_PAGES):
                 result = read_r11_pinned_mayak_optional_page(
                     connection, publication_id=publication_id,
                     product_category=product, previous=state,
@@ -249,7 +254,7 @@ def collect_r11_seven_mayak_candidate(
         for symbol in _SEVEN:
             native_before: R11ReplayCursor | None = previous_native.get(symbol)
             after = native_before.cursor if native_before is not None else (0, 0)
-            for _ in range(_MAX_PAGES):
+            for _ in range(_MAX_NATIVE_PAGES):
                 page = read_r11_original_linear_page(
                     connection, symbol=symbol, observed_at=observed_at,
                     read_after=after,

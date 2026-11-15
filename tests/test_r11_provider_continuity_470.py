@@ -287,6 +287,21 @@ def test_rr_candidate_reader_uses_durable_quality_and_rest_receipts() -> None:
                         SESSION, "LINEAR", "*", "", "RECOVERING",
                         "PUBLIC_LINEAR_SUBSCRIPTIONS_ACKED", START,
                     ),
+                    (
+                        SESSION, "LINEAR", "tickers.APTUSDT", "APTUSDT",
+                        "UNKNOWN", "PUBLIC_FEED_LATE_RECEIVE_SECOND",
+                        AT - timedelta(seconds=20),
+                    ),
+                    (
+                        SESSION, "LINEAR", "publicTrade.ARBUSDT", "ARBUSDT",
+                        "UNKNOWN", "PUBLIC_FEED_RECEIVE_REGRESSION",
+                        AT - timedelta(seconds=15),
+                    ),
+                    (
+                        SPOT_EPOCH, "SPOT", "orderbook.50.BTCUSDT", "BTCUSDT",
+                        "UNKNOWN", "PUBLIC_FEED_BACKPRESSURE_UNVERIFIED",
+                        AT - timedelta(seconds=10),
+                    ),
                 ])
             raise AssertionError(sql)
 

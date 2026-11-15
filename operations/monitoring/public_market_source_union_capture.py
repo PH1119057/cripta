@@ -66,6 +66,7 @@ from bybit_workbench.market_data.public_source_quality import (
     persist_public_source_quality_events,
 )
 from bybit_workbench.market_data.public_source_second_store import (
+    COMPACT_PROJECTION_ONLY_REASONS,
     PublicSecondAccumulator,
     PublicSourceSecondUnavailable,
     persist_compact_source_seconds,
@@ -380,18 +381,11 @@ def _scoped_quality_reason(exc: Exception, fallback: str) -> str:
     return fallback
 
 
-_COMPACT_PROJECTION_ONLY = frozenset((
-    "PUBLIC_FEED_LATE_RECEIVE_SECOND",
-    "PUBLIC_FEED_RECEIVE_REGRESSION",
-    "PUBLIC_FEED_BACKPRESSURE_UNVERIFIED",
-))
-
-
 def _requires_source_recovery(exc: Exception) -> bool:
     """A PG compact-second admission fault is NOT a Bybit book GAP."""
     return not (
         isinstance(exc, PublicSourceSecondUnavailable)
-        and str(exc) in _COMPACT_PROJECTION_ONLY
+        and str(exc) in COMPACT_PROJECTION_ONLY_REASONS
     )
 
 

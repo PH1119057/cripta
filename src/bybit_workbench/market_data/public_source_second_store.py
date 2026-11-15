@@ -20,6 +20,11 @@ from bybit_workbench.market_data.public_source_event_codec import (
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 
 _KINDS = frozenset(("TRADE", "TICKER", "BOOK", "LIQUIDATION"))
+COMPACT_PROJECTION_ONLY_REASONS = frozenset((
+    "PUBLIC_FEED_LATE_RECEIVE_SECOND",
+    "PUBLIC_FEED_RECEIVE_REGRESSION",
+    "PUBLIC_FEED_BACKPRESSURE_UNVERIFIED",
+))
 
 
 class PublicSourceSecondUnavailable(RuntimeError):
