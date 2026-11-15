@@ -4,6 +4,9 @@ from pathlib import Path
 TRACKER = Path(
     "research/server/monitoring/opportunity_tracker.py"
 ).read_text(encoding="utf-8")
+TRACKER_SERVICE = Path(
+    "research/server/monitoring/cripta-opportunity-tracker.service"
+).read_text(encoding="utf-8")
 REGISTER = Path(
     "research/server/monitoring/register_opportunity.py"
 ).read_text(encoding="utf-8")
@@ -38,6 +41,17 @@ def test_r13_opportunity_has_no_independent_public_network_reader() -> None:
     assert "read_opportunity_trade_batch" in TRACKER
     assert "opportunity_source_checkpoints" in TRACKER
     assert '"completed_partial"' in TRACKER
+
+
+def test_r13_opportunity_service_loads_installed_application_package() -> None:
+    assert "User=cripta" in TRACKER_SERVICE
+    assert "Group=cripta" in TRACKER_SERVICE
+    assert "Environment=PYTHONPATH=/srv/cripta/runtime/current/src" in TRACKER_SERVICE
+    assert (
+        "ExecStart=/srv/cripta/runtime/current/.venv/bin/python "
+        "/srv/cripta/runtime/current/research/server/monitoring/opportunity_tracker.py"
+        in TRACKER_SERVICE
+    )
 
 
 def test_r13_registration_uses_publication_ticker_not_bybit_rest() -> None:
