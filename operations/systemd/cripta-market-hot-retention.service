@@ -1,5 +1,5 @@
 [Unit]
-Description=CRIPTA bounded 24h recomputable market telemetry retention (non-trading)
+Description=CRIPTA bounded recomputable market telemetry retention (non-trading)
 After=postgresql@16-main.service
 Requires=postgresql@16-main.service
 
@@ -7,7 +7,8 @@ Requires=postgresql@16-main.service
 Type=oneshot
 User=postgres
 Group=postgres
-ExecStart=/usr/bin/python3 -B /usr/local/libexec/cripta-market-hot-retention.py --apply --batch-limit 1000
+ExecStart=/usr/bin/python3 -B /usr/local/libexec/cripta-market-source-hot-retention.py --apply --batch-limit 10000
+ExecStart=/usr/bin/python3 -B /usr/local/libexec/cripta-market-hot-retention.py --apply --batch-limit 5000
 TimeoutStartSec=240
 NoNewPrivileges=true
 PrivateTmp=true

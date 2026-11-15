@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -37,6 +38,7 @@ _SEVEN = frozenset((
 _EPOCH = re.compile(r"^[0-9a-f]{32}$")
 _RELEASE = re.compile(r"^[0-9a-f]{40}$")
 _MAX_FACTS = 4096
+_MIN_ROOT_FREE_BYTES = 2 * 1024 * 1024 * 1024
 _ALLOWED: dict[tuple[str, str], Family] = {
     ("SPOT", "TRADE"): "SPOT_TRADE",
     ("SPOT", "BOOK"): "ORDERBOOK_50",
@@ -48,6 +50,16 @@ _ALLOWED: dict[tuple[str, str], Family] = {
 
 class R11OriginalFrameUnavailable(RuntimeError):
     """Source identity/parsed JSON/source ownership/append state unverified."""
+
+
+def r11_original_storage_headroom_ok(path: str = "/") -> bool:
+    """Protect the System SSD if retention stalls; no filesystem mutation."""
+    statvfs = getattr(os, "statvfs", None)
+    if statvfs is None:
+        # Production source is Linux-only. Keep import/unit tests portable.
+        return True
+    stat = statvfs(path)
+    return bool(stat.f_bavail * stat.f_frsize >= _MIN_ROOT_FREE_BYTES)
 
 
 @dataclass(frozen=True, slots=True)

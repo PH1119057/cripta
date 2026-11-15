@@ -4,11 +4,17 @@ on:
   pull_request:
     paths:
       - "operations/monitoring/market_hot_retention.py"
+      - "operations/monitoring/market_source_hot_retention.py"
+      - "operations/monitoring/public_market_source_union_capture.py"
+      - "src/bybit_workbench/market_data/r11_optional_original_frame_journal.py"
+      - "operations/systemd/cripta-native-public-trade-source.service"
       - "operations/systemd/cripta-market-hot-retention.service"
       - "operations/systemd/cripta-market-hot-retention.timer"
       - "operations/infrastructure/install_verified_release.sh"
       - "tests/test_market_hot_retention.py"
       - "tests/test_market_hot_retention_postgres.py"
+      - "tests/test_market_source_hot_retention.py"
+      - "tests/test_market_source_hot_retention_postgres.py"
       - ".github/workflows/mayak-dispatcher-hot-retention-postgres.yml"
 
 permissions:
@@ -41,4 +47,8 @@ jobs:
         run: python -m pip install "psycopg[binary]==3.2.10" "pytest>=8,<10"
       - name: Run disposable PostgreSQL 16 integration and static scope tests
         run: |
-          python -m pytest -q tests/test_market_hot_retention.py tests/test_market_hot_retention_postgres.py
+          python -m pytest -q \
+            tests/test_market_hot_retention.py \
+            tests/test_market_hot_retention_postgres.py \
+            tests/test_market_source_hot_retention.py \
+            tests/test_market_source_hot_retention_postgres.py
