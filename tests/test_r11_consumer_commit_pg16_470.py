@@ -1,6 +1,8 @@
 """#470 R11: atomic consumer/source-epoch fence on disposable PostgreSQL 16."""
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import queue
 import threading
@@ -17,6 +19,7 @@ from bybit_workbench.mayak.optional_original_event_parity import (
     R11OptionalMayakCursor,
 )
 from bybit_workbench.mayak.publication_consumer_commit import (
+    R11ConsumerCommitUnverified,
     commit_r11_mayak_publication,
     load_r11_mayak_consumer_commit,
 )
@@ -290,11 +293,16 @@ def test_pg16_commit_restore_and_effective_grants(db) -> None:
     ).fetchone() == (False,)
 
     replay = _replay()
+    snapshot = _snapshot(replay)
+    snapshot["jsonb_numeric_probe"] = {
+        "negzero": -0.0,
+        "tiny": -8.700000000000001e-7,
+    }
     with _runtime() as runtime:
         committed = commit_r11_mayak_publication(
             runtime,
             replay=replay,
-            snapshot=_snapshot(replay),
+            snapshot=snapshot,
             expected_generation=0,
             expected_previous_publication_id=None,
         )
@@ -308,6 +316,12 @@ def test_pg16_commit_restore_and_effective_grants(db) -> None:
     assert restored.generation == 1
     assert restored.replay.checkpoint == replay.checkpoint
     assert restored.snapshot == committed.snapshot
+    storage_text, storage_sha = admin.execute(
+        "SELECT snapshot::text,snapshot_sha256 "
+        "FROM mayak_v2.r11_consumer_commit"
+    ).fetchone()
+    assert hashlib.sha256(storage_text.encode("utf-8")).hexdigest() == storage_sha
+    assert storage_sha == committed.snapshot_sha256
 
 
 def test_pg16_shared_epoch_fence_blocks_source_transition_until_consumer_commit(db) -> None:
@@ -515,3 +529,152 @@ def test_pg16_source_session_reset_replaces_whole_generation(db) -> None:
         cursor.source_session_id == NEW_SESSION
         for cursor in restored.replay.checkpoint.native_cursors
     )
+
+
+def test_pg16_same_source_snapshot_tamper_fails_closed(db) -> None:
+    admin = db
+    replay = _replay()
+    snapshot = _snapshot(replay)
+    snapshot["jsonb_numeric_probe"] = {
+        "negzero": -0.0,
+        "tiny": -8.700000000000001e-7,
+    }
+    with _runtime() as runtime:
+        commit_r11_mayak_publication(
+            runtime,
+            replay=replay,
+            snapshot=snapshot,
+            expected_generation=0,
+            expected_previous_publication_id=None,
+        )
+
+    admin.execute(
+        """UPDATE mayak_v2.r11_consumer_commit
+              SET snapshot=jsonb_set(
+                  snapshot,'{jsonb_numeric_probe,negzero}','1'::jsonb
+              )"""
+    )
+    with _runtime() as runtime, pytest.raises(
+        R11ConsumerCommitUnverified,
+        match="RESTORE_SNAPSHOT_DIGEST_INVALID",
+    ):
+        load_r11_mayak_consumer_commit(
+            runtime,
+            expected_source_session_id=SESSION,
+            expected_release_commit=PRODUCER,
+        )
+
+
+def test_pg16_legacy_snapshot_digest_allowed_only_for_source_reset(db) -> None:
+    admin = db
+    first = _replay()
+    first_snapshot = _snapshot(first)
+    first_snapshot["jsonb_numeric_probe"] = {
+        "negzero": -0.0,
+        "tiny": -8.700000000000001e-7,
+    }
+    legacy_text = json.dumps(
+        first_snapshot,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+        allow_nan=False,
+    )
+    legacy_sha = hashlib.sha256(legacy_text.encode("utf-8")).hexdigest()
+
+    with _runtime() as runtime:
+        committed = commit_r11_mayak_publication(
+            runtime,
+            replay=first,
+            snapshot=first_snapshot,
+            expected_generation=0,
+            expected_previous_publication_id=None,
+        )
+    storage_text, storage_sha = admin.execute(
+        "SELECT snapshot::text,snapshot_sha256 "
+        "FROM mayak_v2.r11_consumer_commit"
+    ).fetchone()
+    assert hashlib.sha256(storage_text.encode("utf-8")).hexdigest() == storage_sha
+    assert committed.snapshot_sha256 == storage_sha
+    assert legacy_sha != storage_sha
+
+    admin.execute(
+        "UPDATE mayak_v2.r11_consumer_commit SET snapshot_sha256=%s",
+        (legacy_sha,),
+    )
+    with _runtime() as runtime, pytest.raises(
+        R11ConsumerCommitUnverified,
+        match="RESTORE_SNAPSHOT_DIGEST_INVALID",
+    ):
+        load_r11_mayak_consumer_commit(
+            runtime,
+            expected_source_session_id=SESSION,
+            expected_release_commit=PRODUCER,
+        )
+
+    admin.execute(
+        "UPDATE analytics.native_public_trade_source_sessions "
+        "SET state='GAP' WHERE source_session_id=%s",
+        (SESSION,),
+    )
+    admin.execute(
+        "INSERT INTO analytics.native_public_trade_source_sessions "
+        "(source_session_id,market_source_id,state,producer_release_commit,subscribed_at) "
+        "VALUES (%s,%s,'ACTIVE',%s,%s)",
+        (NEW_SESSION, SOURCE, NEW_PRODUCER, AT + timedelta(seconds=1)),
+    )
+    admin.execute(
+        "INSERT INTO analytics.market_publications "
+        "(publication_id,source_session_id,market_source_id,producer_release_commit,"
+        "as_of_second,publication_status) "
+        "VALUES (200,%s,%s,%s,%s,'WATERMARKS_ONLY')",
+        (NEW_SESSION, SOURCE, NEW_PRODUCER, AT + timedelta(seconds=2)),
+    )
+
+    with _runtime() as runtime:
+        replay, generation, previous_publication_id, previous_session, previous_release = (
+            pg._restore_or_reset_replay(runtime)
+        )
+    assert replay.checkpoint is None
+    assert generation == 1
+    assert previous_publication_id == 100
+    assert previous_session == SESSION
+    assert previous_release == PRODUCER
+
+    second = _replay(
+        200,
+        session=NEW_SESSION,
+        producer=NEW_PRODUCER,
+        at=AT + timedelta(seconds=2),
+    )
+    second_snapshot = _snapshot(second)
+    second_snapshot["jsonb_numeric_probe"] = {
+        "negzero": -0.0,
+        "tiny": -8.700000000000001e-7,
+    }
+    with _runtime() as runtime:
+        reset = commit_r11_mayak_publication(
+            runtime,
+            replay=second,
+            snapshot=second_snapshot,
+            expected_generation=generation,
+            expected_previous_publication_id=previous_publication_id,
+            expected_previous_source_session_id=previous_session,
+            expected_previous_release_commit=previous_release,
+        )
+        restored = load_r11_mayak_consumer_commit(
+            runtime,
+            expected_source_session_id=NEW_SESSION,
+            expected_release_commit=NEW_PRODUCER,
+        )
+
+    assert reset.generation == 2
+    assert restored is not None
+    assert restored.generation == 2
+    storage_text, storage_sha = admin.execute(
+        "SELECT snapshot::text,snapshot_sha256 "
+        "FROM mayak_v2.r11_consumer_commit"
+    ).fetchone()
+    assert hashlib.sha256(storage_text.encode("utf-8")).hexdigest() == storage_sha
+    assert storage_sha == reset.snapshot_sha256
