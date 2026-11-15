@@ -2240,6 +2240,7 @@ def _observer_status(
     signals: int = 0,
     warmup_until: datetime | None = None,
     reason: str = "",
+    fact_source_id: str = FACT_SOURCE_ID,
     sensor_status: Mapping[str, object] | None = None,
     strategy_monitors: tuple[Mapping[str, object], ...] = (),
     p90_owner_arm_stage: str | None = None,
@@ -2256,7 +2257,7 @@ def _observer_status(
             "observer_ready": state in {"IDLE", "WARMUP", "RUNNING", "RELOADING"},
             "trading_effect": "NONE",
             "source_commit": LOADED_COMMIT,
-            "fact_source_id": FACT_SOURCE_ID,
+            "fact_source_id": fact_source_id,
             "observer_epoch_id": epoch_id,
             "active_strategies": len(active_bundles),
             "active_entry_plans": [
