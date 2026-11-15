@@ -24,6 +24,8 @@ Environment=CRIPTA_SOURCE_CLOSED_KLINES=0
 Environment=CRIPTA_SOURCE_UNION_CAPTURE=1
 Environment=CRIPTA_SOURCE_PUBLICATION=1
 Environment=CRIPTA_R09_SOURCE_POSTFILL_BROKER=ENABLED
+Environment=CRIPTA_R11_MAYAK_ANCHORS=1
+Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=1
 Environment=CRIPTA_SOURCE_KLINE_INTERVALS=1,5,15
 Environment=CRIPTA_SOURCE_UNION_MANIFEST_FILE=/etc/cripta/market-source/required_public_feeds.json
 WorkingDirectory=/srv/cripta/runtime/current
