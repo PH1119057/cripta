@@ -59,13 +59,13 @@ roadmap470_pair() {
       0cdf4ce0ca80ee4dcc5c7cc5c2595223fd4208d4 ;;
     R11) printf '%s %s\n' \
       0cdf4ce0ca80ee4dcc5c7cc5c2595223fd4208d4 \
-      45534558275fa854f939a0113f054c05674302da ;;
+      29cbe0229c137112e3f4e9d3b5b778ebdbc05738 ;;
     R12) printf '%s %s\n' \
-      45534558275fa854f939a0113f054c05674302da \
-      47eed331b11d9204a41eea8d610b62d97d958120 ;;
+      29cbe0229c137112e3f4e9d3b5b778ebdbc05738 \
+      fedf6bea772a9d7b4269e2b2c856a8d7bd65efd9 ;;
     R13) printf '%s %s\n' \
-      47eed331b11d9204a41eea8d610b62d97d958120 \
-      4ad2397b70ef583aaed505b01aaea443a1c3cf5f ;;
+      fedf6bea772a9d7b4269e2b2c856a8d7bd65efd9 \
+      8c5164d33972bdfc357c64b29927e3caacc964b7 ;;
     *) return 1 ;;
   esac
 }
@@ -565,7 +565,7 @@ if [[ -d /etc/systemd/system/cripta-private-runtime.service.d ]]; then
   install -d -m 0700 "$backup/files/etc/systemd/system"
   cp -a /etc/systemd/system/cripta-private-runtime.service.d "$backup/files/etc/systemd/system/"
 fi
-for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /usr/local/libexec/cripta-r06-switch /usr/local/libexec/cripta-market-hot-retention.py /etc/cripta/release.env; do
+for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /usr/local/libexec/cripta-r06-switch /usr/local/libexec/cripta-market-hot-retention.py /etc/cripta/release.env /etc/cripta/market-source/required_public_feeds.json; do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
     install -d -m 0700 "$backup/files/$(dirname "$safe")"
@@ -1011,6 +1011,24 @@ for spec in "${unit_specs[@]}"; do
 done
 install -d -o root -g root -m 0755 /etc/systemd/system/cripta-private-runtime.service.d
 install -o root -g root -m 0644 "$runtime_release/operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf" /etc/systemd/system/cripta-private-runtime.service.d/10-pythonpath.conf
+
+# R11 physical activation: the same one Native MarketSource gains the
+# owner-approved BTC/ETH MAYAK-only reference requirements and original
+# optional frame capture.  Preserve the prior operator manifest in the
+# release backup above, then install exact reviewed bytes only for R11+.
+case "$ROADMAP470_STAGE" in
+  ""|R11|R12|R13)
+    install -d -o root -g cripta -m 0750 /etc/cripta/market-source
+    install -o root -g cripta -m 0640 \
+      "$runtime_release/operations/monitoring/r11_seven_public_feeds.json" \
+      /etc/cripta/market-source/required_public_feeds.json
+    cmp -s \
+      "$runtime_release/operations/monitoring/r11_seven_public_feeds.json" \
+      /etc/cripta/market-source/required_public_feeds.json ||
+      die "R11 seven-feed manifest install-byte mismatch"
+    echo "R11_SEVEN_FEED_MANIFEST=INSTALLED_EXACT"
+    ;;
+esac
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/cripta-apply-incoming" /usr/local/sbin/cripta-apply-incoming
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/deploy_dashboard_ui.sh" /usr/local/sbin/cripta-deploy-dashboard-ui
 install -d -o root -g root -m 0755 /usr/local/libexec/cripta-release-controller
