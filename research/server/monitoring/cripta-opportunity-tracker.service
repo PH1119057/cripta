@@ -8,6 +8,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/research/server/monitoring/opportunity_tracker.py
 Restart=always
 RestartSec=5
