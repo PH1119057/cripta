@@ -58,10 +58,30 @@ def _run(args: list[str], *, check: bool = True, text: bool = True) -> subproces
     return result
 
 
+def _run_as_cripta(
+    args: list[str], *, check: bool = True, text: bool = True,
+) -> subprocess.CompletedProcess:
+    """Run one bounded child as cripta through PID1, never setuid under NNP."""
+    return _run([
+        "/usr/bin/systemd-run",
+        "--wait", "--pipe", "--collect", "--quiet",
+        "--property=Type=oneshot",
+        "--property=User=cripta",
+        "--property=Group=cripta",
+        "--property=NoNewPrivileges=yes",
+        "--property=PrivateTmp=yes",
+        "--property=ProtectHome=yes",
+        "--property=ProtectSystem=strict",
+        "--property=ReadOnlyPaths=/srv/cripta/source_checkout",
+        "/usr/bin/env",
+        "GIT_OPTIONAL_LOCKS=0",
+        "GIT_TERMINAL_PROMPT=0",
+        *args,
+    ], check=check, text=text)
+
+
 def _git_as_cripta(*args: str) -> str:
-    result = _run([
-        "/usr/sbin/runuser", "-u", "cripta", "--",
-        "/usr/bin/env", "GIT_OPTIONAL_LOCKS=0",
+    result = _run_as_cripta([
         "/usr/bin/git", "-C", str(SOURCE), *args,
     ])
     return result.stdout.strip()
@@ -84,10 +104,9 @@ def next_stage(installed: str) -> tuple[str, str, str]:
 
 
 def _git_bytes(commit: str, relative: str) -> bytes:
-    result = _run([
-        "/usr/sbin/runuser", "-u", "cripta", "--",
-        "/usr/bin/env", "GIT_OPTIONAL_LOCKS=0",
-        "/usr/bin/git", "-C", str(SOURCE), "show", f"{commit}:{relative}",
+    result = _run_as_cripta([
+        "/usr/bin/git", "-C", str(SOURCE),
+        "show", f"{commit}:{relative}",
     ], text=False)
     return result.stdout
 
@@ -97,9 +116,7 @@ def _verify_rail(remote: str) -> str:
     if SHA.fullmatch(rail_commit) is None:
         raise StagedReleaseError("ROADMAP470_RAIL_COMMIT_INVALID")
     _git_as_cripta("cat-file", "-e", f"{rail_commit}^{{commit}}")
-    if _run([
-        "/usr/sbin/runuser", "-u", "cripta", "--",
-        "/usr/bin/env", "GIT_OPTIONAL_LOCKS=0",
+    if _run_as_cripta([
         "/usr/bin/git", "-C", str(SOURCE),
         "merge-base", "--is-ancestor", rail_commit, remote,
     ], check=False).returncode != 0:
@@ -140,9 +157,7 @@ def main() -> int:
             raise StagedReleaseError("ROADMAP470_RUNTIME_TOOLING_BASELINE_SPLIT")
         stage, baseline, target = next_stage(runtime)
         _git_as_cripta("cat-file", "-e", f"{target}^{{commit}}")
-        ancestor = _run([
-            "/usr/sbin/runuser", "-u", "cripta", "--",
-            "/usr/bin/env", "GIT_OPTIONAL_LOCKS=0",
+        ancestor = _run_as_cripta([
             "/usr/bin/git", "-C", str(SOURCE),
             "merge-base", "--is-ancestor", target, remote,
         ], check=False)
