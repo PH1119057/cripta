@@ -23,6 +23,7 @@ from bybit_workbench.mayak.native_trade_replay_parity import (
 )
 from bybit_workbench.mayak.optional_original_event_parity import (
     R11OptionalMayakCursor,
+    R11OptionalMayakEvent,
 )
 from bybit_workbench.mayak.publication_rest_parity import (
     R11MayakRestCandidate,
@@ -50,6 +51,7 @@ SEVEN = ("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
 def candidate(
     *, publication_id: int = 42, as_of: datetime = AT,
     previous: R11SevenMayakReplayCheckpoint | None = None,
+    optional_events: tuple[R11OptionalMayakEvent, ...] = (),
     native_trades: tuple[R11MayakTradeInput, ...] = (),
 ) -> R11SevenMayakObservationCandidate:
     options = tuple(R11OptionalMayakCursor(
@@ -77,18 +79,40 @@ def candidate(
     return R11SevenMayakObservationCandidate(
         publication_id=publication_id, source_session_id=SESSION,
         release_commit=RELEASE, as_of_second=as_of,
-        optional_events=(), native_linear_trades=native_trades,
+        optional_events=optional_events, native_linear_trades=native_trades,
         rest_facts=rest, optional_cursors=options, native_cursors=native,
         read_after_checkpoint=previous,
     )
 
 
-def native(symbol: str, timestamp: float) -> R11MayakTradeInput:
+def native(
+    symbol: str, timestamp: float, *,
+    accepted_at: datetime | None = None,
+) -> R11MayakTradeInput:
     return R11MayakTradeInput(
         symbol=symbol, timestamp=timestamp, side="Buy",
         price=100.5, quantity=0.25,
         frame_number=1, frame_index=0,
         seq=100, exec_id="physical-id-" + symbol,
+        accepted_at=(
+            accepted_at
+            or datetime.fromtimestamp(timestamp, UTC)
+            + timedelta(milliseconds=90)
+        ),
+    )
+
+
+def optional_spot_trade(
+    symbol: str, timestamp: float, *,
+    received_at: datetime, frame_number: int,
+) -> R11OptionalMayakEvent:
+    return R11OptionalMayakEvent(
+        event="TRADE", product="SPOT", symbol=symbol, timestamp=timestamp,
+        source_frame_number=frame_number, source_fact_index=0,
+        source_sequence=100 + frame_number,
+        exec_id=f"spot-{symbol}-{frame_number}", side="Buy",
+        price=100.25, quantity=0.5, received_at=received_at,
+        frame_type="snapshot",
     )
 
 
@@ -208,9 +232,69 @@ def test_restart_matches_uninterrupted_seven_symbol_dispatcher_output() -> None:
         assert actual_dispatch == expected_dispatch
 
 
+def test_cross_stream_provider_time_interleaving_uses_receiver_order() -> None:
+    replay = R11MayakPublicationReplay()
+    first = candidate(native_trades=(
+        native(
+            "BTCUSDT", AT.timestamp() - 2,
+            accepted_at=AT - timedelta(seconds=1),
+        ),
+    ))
+    replay.apply(first, now=AT + timedelta(seconds=5))
+
+    second_at = AT + timedelta(seconds=20)
+    # This SPOT provider timestamp is older than the last LINEAR/BTC event,
+    # but it belongs to an independent stream and was received later.
+    second = candidate(
+        publication_id=43, as_of=second_at, previous=first.checkpoint(),
+        optional_events=(
+            optional_spot_trade(
+                "BTCUSDT", AT.timestamp() - 3,
+                received_at=second_at - timedelta(seconds=1),
+                frame_number=2,
+            ),
+        ),
+    )
+    replay.apply(second, now=second_at + timedelta(seconds=5))
+
+    assert replay.observations == 2
+    assert len(replay.engine.trades[("linear", "BTCUSDT")].rows) == 1
+    assert len(replay.engine.trades[("spot", "BTCUSDT")].rows) == 1
+    assert replay.last_original_event_at == AT.timestamp() - 2
+
+
+def test_same_stream_provider_time_regression_still_fails_closed() -> None:
+    replay = R11MayakPublicationReplay()
+    first = candidate(optional_events=(
+        optional_spot_trade(
+            "BTCUSDT", AT.timestamp() - 2,
+            received_at=AT - timedelta(seconds=1),
+            frame_number=1,
+        ),
+    ))
+    replay.apply(first, now=AT + timedelta(seconds=5))
+    second_at = AT + timedelta(seconds=20)
+    second = candidate(
+        publication_id=43, as_of=second_at, previous=first.checkpoint(),
+        optional_events=(
+            optional_spot_trade(
+                "BTCUSDT", AT.timestamp() - 3,
+                received_at=second_at - timedelta(seconds=1),
+                frame_number=2,
+            ),
+        ),
+    )
+    with pytest.raises(
+        R11MayakReplayNotReady, match="ORIGINAL_EVENT_TIME_REGRESSED",
+    ):
+        replay.apply(second, now=second_at + timedelta(seconds=5))
+    assert replay.failed
+
+
 @pytest.mark.parametrize("corrupt", [
     "mixed_epoch", "detached_cursor", "faked_ready", "foreign_symbol",
-    "more_pages", "wrong_rest", "foreign_native_cursor", "late_event",
+    "more_pages", "wrong_rest", "foreign_native_cursor",
+    "same_stream_late_event",
 ])
 def test_invalid_source_fails_closed_and_poisoned_replay_stays_stopped(
     corrupt: str,
@@ -249,9 +333,12 @@ def test_invalid_source_fails_closed_and_poisoned_replay_stays_stopped(
                 *following.native_cursors[1:],
             ),
         )
-    elif corrupt == "late_event":
+    elif corrupt == "same_stream_late_event":
         following = replace(following, native_linear_trades=(
-            native("ETHUSDT", AT.timestamp()-3),
+            native(
+                "BTCUSDT", AT.timestamp()-3,
+                accepted_at=second_at - timedelta(seconds=1),
+            ),
         ))
     with pytest.raises(R11MayakReplayNotReady):
         replay.apply(following, now=second_at+timedelta(seconds=5))

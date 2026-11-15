@@ -286,6 +286,7 @@ def test_owner_approved_mayak_reference_original_trade_parity(
     assert batch.events[0].symbol == symbol
     assert batch.events[0].seq == 1001
     assert batch.events[0].exec_id == f"mayak-{symbol}"
+    assert batch.events[0].accepted_at == event.accepted_at
     direct = LiveMayakEngine((symbol,))
     replay = LiveMayakEngine((symbol,))
     direct.on_trade(
