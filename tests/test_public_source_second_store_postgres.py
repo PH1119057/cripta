@@ -340,7 +340,7 @@ def test_r12_pg16_position_reader_uses_one_publication_and_exact_top25(
         product="LINEAR", allowed_symbols=frozenset({"LTCUSDT"}),
         received_at=ticker_at,
     )
-    book_at = publication_at - timedelta(seconds=2)
+    book_at = ticker_at
     book_ms = int(book_at.timestamp() * 1000)
     bids = [[str(50 - i / 100), "2"] for i in range(30)]
     asks = [[str(51 + i / 100), "2"] for i in range(30)]
