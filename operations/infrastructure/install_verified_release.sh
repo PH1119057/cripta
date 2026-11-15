@@ -17,6 +17,9 @@ STAGED_OFFLINE="${CRIPTA_STAGED_OFFLINE_CUTOVER:-0}"
 # Only the separately owner-approved controller purpose supplies this switch.
 # Ordinary exact releases must keep the independent native producer running.
 NATIVE_SOURCE_CUTOVER="${CRIPTA_NATIVE_SOURCE_CUTOVER:-0}"
+# One-off #470 staged physical acceptance. The value is never caller-selected
+# freely: the dedicated no-argument roadmap rail derives it from INSTALLED_COMMIT.
+ROADMAP470_STAGE="${CRIPTA_ROADMAP470_STAGE:-}"
 CONTROL_MAX_AGE_SECONDS=604800
 controller_stage=""
 
@@ -30,6 +33,33 @@ trap cleanup_controller_stage EXIT
 die() { echo "ERROR: $*" >&2; exit 1; }
 as_repo_owner() { runuser -u cripta -- env GIT_OPTIONAL_LOCKS=0 "$@"; }
 sql_scalar() { runuser -u postgres -- psql -X -Atqc "$1" cripta; }
+
+roadmap470_pair() {
+  case "$1" in
+    R07) printf '%s %s\n' \
+      99a1ba4c16edbe5cb32022addf6c52888574716d \
+      bbc21196fc7233d199f1ff016ea8553450e55532 ;;
+    R08) printf '%s %s\n' \
+      bbc21196fc7233d199f1ff016ea8553450e55532 \
+      a18a78b849ea0c6a18dfb6dce422e757466f5ab8 ;;
+    R09) printf '%s %s\n' \
+      a18a78b849ea0c6a18dfb6dce422e757466f5ab8 \
+      1e29f9d5105ffc99a91af01c3c500cad062534ea ;;
+    R10) printf '%s %s\n' \
+      1e29f9d5105ffc99a91af01c3c500cad062534ea \
+      dbe65bdd1883b09f752ef62864a8221bbb75106e ;;
+    R11) printf '%s %s\n' \
+      dbe65bdd1883b09f752ef62864a8221bbb75106e \
+      caa5a636a67c6ff677a9796d172c8e072f71b4db ;;
+    R12) printf '%s %s\n' \
+      caa5a636a67c6ff677a9796d172c8e072f71b4db \
+      5dfac7de21152ce67bfc2fc333eb53d22f292a15 ;;
+    R13) printf '%s %s\n' \
+      5dfac7de21152ce67bfc2fc333eb53d22f292a15 \
+      b7731f1c7788703e0b9043c7b5dc0cc007552d4e ;;
+    *) return 1 ;;
+  esac
+}
 
 prune_release_backups() {
   local now dir marker expires
@@ -75,6 +105,21 @@ flock -n 9 || die "another release installer is already running"
   die "CRIPTA_NATIVE_SOURCE_CUTOVER must be 0 or 1"
 [[ "$NATIVE_SOURCE_CUTOVER" == "0" || "$STAGED_OFFLINE" == "0" ]] ||
   die "NATIVE_SOURCE_CUTOVER_CANNOT_COMBINE_STAGED_OFFLINE"
+if [[ -n "$ROADMAP470_STAGE" ]]; then
+  [[ "$STAGED_OFFLINE" == "1" ]] ||
+    die "ROADMAP470_STAGE_REQUIRES_STAGED_OFFLINE"
+  [[ "$CONTROL_CHECKPOINT" == "1" ]] ||
+    die "ROADMAP470_STAGE_REQUIRES_CONTROL_CHECKPOINT"
+  [[ "$NATIVE_SOURCE_CUTOVER" == "0" ]] ||
+    die "ROADMAP470_STAGE_FORBIDS_NATIVE_CUTOVER"
+  read -r roadmap470_expected_baseline roadmap470_expected_target < <(
+    roadmap470_pair "$ROADMAP470_STAGE"
+  ) || die "ROADMAP470_STAGE_INVALID"
+  [[ "$EXPECTED_BASELINE" == "$roadmap470_expected_baseline" ]] ||
+    die "ROADMAP470_BASELINE_NOT_EXACT_STAGE_PREDECESSOR"
+  [[ "$RELEASE_COMMIT" == "$roadmap470_expected_target" ]] ||
+    die "ROADMAP470_TARGET_NOT_EXACT_STAGE_COMMIT"
+fi
 if [[ "$STAGED_OFFLINE" == "1" ]]; then
   [[ "$CONTROL_CHECKPOINT" == "1" ]] || die "STAGED_OFFLINE_REQUIRES_CONTROL_CHECKPOINT"
 fi
@@ -83,8 +128,23 @@ if [[ "$CONTROL_CHECKPOINT" == "1" ]]; then
 fi
 
 remote="$(as_repo_owner git -C "$SOURCE" ls-remote origin refs/heads/main | awk 'NR==1{print $1}')"
-[[ "$remote" == "$RELEASE_COMMIT" ]] || die "remote main differs from requested release commit"
-as_repo_owner git -C "$SOURCE" fetch --no-tags origin "$RELEASE_COMMIT" >/dev/null
+if [[ -n "$ROADMAP470_STAGE" ]]; then
+  source_branch="$(as_repo_owner git -C "$SOURCE" symbolic-ref --quiet --short HEAD || true)"
+  source_head="$(as_repo_owner git -C "$SOURCE" rev-parse HEAD)"
+  source_dirty="$(as_repo_owner git -C "$SOURCE" status --porcelain=v1 --untracked-files=all)"
+  [[ "$source_branch" == "main" ]] || die "ROADMAP470_SOURCE_BRANCH_NOT_MAIN"
+  [[ -z "$source_dirty" ]] || die "ROADMAP470_SOURCE_NOT_CLEAN"
+  [[ "$source_head" == "$remote" ]] || die "ROADMAP470_SOURCE_NOT_CURRENT_REMOTE_MAIN"
+  as_repo_owner git -C "$SOURCE" cat-file -e "${RELEASE_COMMIT}^{commit}" ||
+    die "ROADMAP470_TARGET_NOT_IN_LOCAL_VERIFIED_GIT"
+  as_repo_owner git -C "$SOURCE" merge-base --is-ancestor "$RELEASE_COMMIT" "$remote" ||
+    die "ROADMAP470_TARGET_NOT_ANCESTOR_OF_CURRENT_MAIN"
+  echo "ROADMAP470_AUTHORITY=PASS stage:$ROADMAP470_STAGE remote:$remote target:$RELEASE_COMMIT"
+else
+  [[ "$remote" == "$RELEASE_COMMIT" ]] ||
+    die "remote main differs from requested release commit"
+  as_repo_owner git -C "$SOURCE" fetch --no-tags origin "$RELEASE_COMMIT" >/dev/null
+fi
 tree="$(as_repo_owner git -C "$SOURCE" rev-parse "${RELEASE_COMMIT}^{tree}")"
 if [[ -n "$EXPECTED_TREE" && "$tree" != "$EXPECTED_TREE" ]]; then die "release tree mismatch"; fi
 
@@ -579,7 +639,22 @@ restore_pre_cutover_services() {
 release_exit_handler() {
   local rc=$?
   cleanup_controller_stage
-  if [[ "$deploy_succeeded" == "1" || "$services_stopped" == "0" ]]; then
+  if [[ "$deploy_succeeded" == "1" ]]; then
+    return
+  fi
+  if [[ -n "$ROADMAP470_STAGE" ]]; then
+    echo "DEPLOY_FAILED=YES" >&2
+    echo "FAILED_RELEASE_COMMIT=$RELEASE_COMMIT" >&2
+    echo "ROADMAP470_FAILED_STAGE=$ROADMAP470_STAGE" >&2
+    echo "DB_MUTATION_STEPS_COMMITTED=$db_mutation_steps" >&2
+    echo "CUTOVER_STARTED=$cutover_started" >&2
+    if [[ "$db_mutation_steps" != "0" || "$cutover_started" != "0" ]]; then
+      echo "HARD_STOP=YES" >&2
+      echo "DEPLOY_RECOVERY=ROADMAP470_RECONCILE_BEFORE_RETRY" >&2
+    fi
+    return
+  fi
+  if [[ "$services_stopped" == "0" ]]; then
     return
   fi
   echo "DEPLOY_FAILED=YES" >&2
@@ -619,14 +694,54 @@ for service in "${managed_services[@]}"; do
 done
 
 trap release_exit_handler EXIT
-services_stopped=1
-for service in "${managed_services[@]}"; do
-  if [[ "${was_active[$service]}" == "1" ]]; then
-    systemctl stop "$service"
-  fi
-done
+if [[ -n "$ROADMAP470_STAGE" ]]; then
+  # This rail installs code/schema only. It does not disturb unrelated
+  # research infrastructure, and it refuses to proceed if any trading/market
+  # runtime that could observe a partial stage is active.
+  roadmap470_core_services=(
+    cripta-native-public-trade-source.service
+    cripta-universal-entry-observer.service
+    cripta-universal-entry-consumer.service
+    cripta-universal-exit-shadow.service
+    cripta-universal-exit-consumer.service
+    cripta-private-runtime.service
+    cripta-lifecycle-supervisor.service
+    cripta-safety-observer.service
+    cripta-mayak-v2.service
+    cripta-dispatcher-v2.service
+    cripta-dispatcher-v2-context-correlator.service
+    cripta-position-supervisor.service
+    cripta-opportunity-tracker.service
+    cripta-m3-trade-analyst.service
+    cripta-dashboard.service
+    cripta-real-service-broker.service
+    cripta-runtime-recovery-supervisor.service
+    cripta-shadow-command-worker.service
+  )
+  for service in "${roadmap470_core_services[@]}"; do
+    systemctl is-active --quiet "$service" &&
+      die "ROADMAP470_CORE_SERVICE_MUST_BE_STOPPED:$service"
+  done
+  for service in "${discovered_sub_units[@]}"; do
+    systemctl is-active --quiet "$service" &&
+      die "ROADMAP470_SUB_SERVICE_MUST_BE_STOPPED:$service"
+  done
+  [[ "$native_source_was_active" == "0" ]] ||
+    die "ROADMAP470_NATIVE_SOURCE_MUST_BE_STOPPED"
+  services_stopped=0
+  echo "ROADMAP470_NO_START_PREFLIGHT=PASS stage:$ROADMAP470_STAGE"
+else
+  services_stopped=1
+  for service in "${managed_services[@]}"; do
+    if [[ "${was_active[$service]}" == "1" ]]; then
+      systemctl stop "$service"
+    fi
+  done
+fi
 
-# The rollback dump must describe the quiesced pre-migration baseline.
+# The rollback dump must describe the pre-migration baseline. In roadmap staged
+# mode all trading services are already stopped and unrelated research services
+# remain untouched.
 runuser -u postgres -- pg_dump -Fc -d cripta > "$backup/cripta_before.dump"
 
 migration_files=(
@@ -742,6 +857,24 @@ migration_files=(
   # R07 DB-enforced source-epoch transaction guard; postgres actor before code cutover.
   operations/sql/20261114_r07_source_epoch_transaction_guard.sql
 )
+# Later #470 migrations are appended only when the staged target actually
+# contains that roadmap stage. Normal releases always include every current
+# migration. This prevents R07-R10 staged installs from reaching forward into
+# files that do not exist in their immutable historical target.
+case "$ROADMAP470_STAGE" in
+  ""|R11|R12|R13)
+    migration_files+=(
+      operations/sql/20261114_r11_optional_original_public_event_frames.sql
+      operations/sql/20261114_r11_optional_publication_frame_refs.sql
+      operations/sql/20261115_r11_mayak_consumer_commit.sql
+    )
+    ;;
+esac
+case "$ROADMAP470_STAGE" in
+  ""|R13)
+    migration_files+=(operations/sql/20261115_r13_opportunity_source_checkpoint.sql)
+    ;;
+esac
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
   db_mutation_steps=$((db_mutation_steps + 1))
@@ -883,171 +1016,201 @@ controller_enabled_state="$(systemctl is-enabled cripta-release-controller.servi
 [[ "$controller_enabled_state" == "disabled" ]] ||
   die "release controller must remain disabled/manual-only"
 
-# The management-plane broker must be available before Dashboard accepts an
-# owner preparation click. It has no trading authority and cannot open gate/arms.
-systemctl enable cripta-real-service-broker.service >/dev/null
-systemctl start cripta-real-service-broker.service
-systemctl is-active --quiet cripta-real-service-broker.service ||
-  die "REAL service broker failed after deploy"
-echo "REAL_SERVICE_BROKER=ACTIVE"
-
-# The supervisor only requests narrow, signed-proof account WS technical
-# clearance. It never issues broker restarts, gate changes, or owner re-arms.
-systemctl enable cripta-runtime-recovery-supervisor.service >/dev/null
-systemctl start cripta-runtime-recovery-supervisor.service
-systemctl is-active --quiet cripta-runtime-recovery-supervisor.service ||
-  die "SUB WS technical recovery supervisor failed after deploy"
-echo "SUB_WS_TECHNICAL_RECOVERY_SUPERVISOR=ACTIVE"
-
-# The approved release explicitly prepares data/code compatibility before the
-# Observer starts. This only appends independently verified evidence as cripta;
-# it never relabels history or opens financial controls. Failure must not strand
-# existing positions with their managed Exit services stopped.
-if runuser -u cripta -- env PYTHONDONTWRITEBYTECODE=1 \
-  "$runtime_release/.venv/bin/python" \
-  "$runtime_release/operations/implementation/register_p90_real_source_compatibility.py" \
-  --current-release --active-epoch --register --release-preparation; then
-  echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=COMPLETED"
+if [[ -n "$ROADMAP470_STAGE" ]]; then
+  # Installation-only checkpoint: no MarketSource, broker, private runtime,
+  # consumer, observer or analytics service is started here. Preserve every
+  # pre-existing service active/inactive state, including unrelated research.
+  for service in "${managed_services[@]}"; do
+    if [[ "${was_active[$service]}" == "1" ]]; then
+      systemctl is-active --quiet "$service" ||
+        die "ROADMAP470_UNRELATED_ACTIVE_SERVICE_CHANGED:$service"
+    else
+      ! systemctl is-active --quiet "$service" ||
+        die "ROADMAP470_INACTIVE_SERVICE_BECAME_ACTIVE:$service"
+    fi
+  done
+  ! systemctl is-active --quiet cripta-native-public-trade-source.service ||
+    die "ROADMAP470_NATIVE_SOURCE_STARTED_UNEXPECTEDLY"
+  gate_after="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
+  permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
+  sessions_after="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
+  account_sessions_after="$(sql_scalar "SELECT count(*) FROM control.account_live_arm_sessions WHERE state='ACTIVE'")"
+  [[ "$gate_after" == "$pre_gate" &&
+     "$permissions_after" == "$pre_permissions" &&
+     "$sessions_after" == "$pre_sessions" &&
+     "$account_sessions_after" == "$pre_account_sessions" ]] ||
+    die "ROADMAP470_TRADING_CONTROL_CHANGED_DURING_NO_START_INSTALL"
+  echo "ROADMAP470_NO_START_INSTALL=PASS stage:$ROADMAP470_STAGE"
+  echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=DEFERRED_NO_START"
 else
-  echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=BLOCKED_OBSERVER_NOT_READY" >&2
-fi
-
-# Native writer starts independently BEFORE the read-only Observer.
-# This is market-data-only (no credentials/Exchange controls/OWNER ARM).
-# A source that never records accepted provider cursors cannot be considered
-# healthy merely because systemd says active.
-# A stale ACTIVE status/session is not a fresh five-symbol source proof.
-native_probe_started_at="$(sql_scalar "SELECT clock_timestamp()")"
-systemctl enable cripta-native-public-trade-source.service >/dev/null
-systemctl start cripta-native-public-trade-source.service
-native_source_ready=0
-for _attempt in {1..60}; do
-  if ! systemctl is-active --quiet cripta-native-public-trade-source.service; then
-    die "native MarketSource writer exited during source cutover"
+  # The management-plane broker must be available before Dashboard accepts an
+  # owner preparation click. It has no trading authority and cannot open gate/arms.
+  systemctl enable cripta-real-service-broker.service >/dev/null
+  systemctl start cripta-real-service-broker.service
+  systemctl is-active --quiet cripta-real-service-broker.service ||
+    die "REAL service broker failed after deploy"
+  echo "REAL_SERVICE_BROKER=ACTIVE"
+  
+  # The supervisor only requests narrow, signed-proof account WS technical
+  # clearance. It never issues broker restarts, gate changes, or owner re-arms.
+  systemctl enable cripta-runtime-recovery-supervisor.service >/dev/null
+  systemctl start cripta-runtime-recovery-supervisor.service
+  systemctl is-active --quiet cripta-runtime-recovery-supervisor.service ||
+    die "SUB WS technical recovery supervisor failed after deploy"
+  echo "SUB_WS_TECHNICAL_RECOVERY_SUPERVISOR=ACTIVE"
+  
+  # The approved release explicitly prepares data/code compatibility before the
+  # Observer starts. This only appends independently verified evidence as cripta;
+  # it never relabels history or opens financial controls. Failure must not strand
+  # existing positions with their managed Exit services stopped.
+  if runuser -u cripta -- env PYTHONDONTWRITEBYTECODE=1 \
+    "$runtime_release/.venv/bin/python" \
+    "$runtime_release/operations/implementation/register_p90_real_source_compatibility.py" \
+    --current-release --active-epoch --register --release-preparation; then
+    echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=COMPLETED"
+  else
+    echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=BLOCKED_OBSERVER_NOT_READY" >&2
   fi
-  # Read only the current source process's exact advertised ACTIVE session.
-  # A stale ACTIVE row left by a killed old process cannot prove readiness.
-  source_session="$(runuser -u cripta -- python3 -c '
-import json,sys
-try:
-    v=json.load(open(sys.argv[1],encoding="utf-8"))
-    sid=v.get("session") if v.get("state")=="ACTIVE" else ""
-except Exception:
-    sid=""
-print(sid if isinstance(sid,str) else "")
-' /var/lib/cripta/native_public_trade_source/status.json)"
-  if [[ ! "$source_session" =~ ^[0-9a-f]{32}$ ]]; then
-    sleep 1
-    continue
-  fi
-  if [[ "$native_code_changed" == "1" ]]; then
-    # A reused status file, stale PID or old session cannot approve the new
-    # source. Exact loaded release must match the installed candidate.
-    source_pid="$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)"
-    source_commit_seen="$(runuser -u cripta -- python3 -c '
-import json,sys
-try:
-    v=json.load(open(sys.argv[1],encoding="utf-8"))
-    print(v.get("source_commit","") if v.get("state")=="ACTIVE" else "")
-except Exception:
-    print("")
-' /var/lib/cripta/native_public_trade_source/status.json)"
-    if [[ "$source_pid" == "$producer_old_pid" ||
-          "$source_commit_seen" != "$RELEASE_COMMIT" ||
-          "$source_session" == "$producer_old_session" ]]; then
+  
+  # Native writer starts independently BEFORE the read-only Observer.
+  # This is market-data-only (no credentials/Exchange controls/OWNER ARM).
+  # A source that never records accepted provider cursors cannot be considered
+  # healthy merely because systemd says active.
+  # A stale ACTIVE status/session is not a fresh five-symbol source proof.
+  native_probe_started_at="$(sql_scalar "SELECT clock_timestamp()")"
+  systemctl enable cripta-native-public-trade-source.service >/dev/null
+  systemctl start cripta-native-public-trade-source.service
+  native_source_ready=0
+  for _attempt in {1..60}; do
+    if ! systemctl is-active --quiet cripta-native-public-trade-source.service; then
+      die "native MarketSource writer exited during source cutover"
+    fi
+    # Read only the current source process's exact advertised ACTIVE session.
+    # A stale ACTIVE row left by a killed old process cannot prove readiness.
+    source_session="$(runuser -u cripta -- python3 -c '
+  import json,sys
+  try:
+      v=json.load(open(sys.argv[1],encoding="utf-8"))
+      sid=v.get("session") if v.get("state")=="ACTIVE" else ""
+  except Exception:
+      sid=""
+  print(sid if isinstance(sid,str) else "")
+  ' /var/lib/cripta/native_public_trade_source/status.json)"
+    if [[ ! "$source_session" =~ ^[0-9a-f]{32}$ ]]; then
       sleep 1
       continue
     fi
-  fi
-  source_cursor_count="$(sql_scalar "SELECT count(DISTINCT c.external_symbol)
-    FROM analytics.native_public_trade_source_cursors c
-    JOIN analytics.native_public_trade_source_sessions s
-      ON s.source_session_id=c.source_session_id
-    WHERE s.source_session_id='$source_session'
-      AND s.state='ACTIVE'
-      AND s.market_source_id='ms-bybit-mainnet-public-v1'
-      AND s.last_accepted_at >= now() - interval '10 seconds'
-      AND c.accepted_at >= '$native_probe_started_at'::timestamptz
-      AND c.event_at >= '$native_probe_started_at'::timestamptz
-                            - interval '5 seconds'
-      AND c.event_at >= now() - interval '3 minutes'")"
-  if [[ "$source_cursor_count" == "5" ]]; then
-    native_source_ready=1
-    break
-  fi
-  sleep 1
-done
-[[ "$native_source_ready" == "1" ]] ||
-  die "independent native source five-symbol fresh cursor proof missing"
-echo "INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS"
-if [[ "$native_code_changed" == "1" ]]; then
-  new_source_status="$(sql_scalar "SELECT state FROM
-    analytics.native_public_trade_source_sessions
-    WHERE source_session_id='$source_session'
-      AND producer_release_commit='$RELEASE_COMMIT'")"
-  [[ "$new_source_status" == "ACTIVE" ]] ||
-    die "NATIVE_SOURCE_NEW_SESSION_IDENTITY_UNVERIFIED"
-  old_source_status="$(sql_scalar "SELECT state FROM
-    analytics.native_public_trade_source_sessions
-    WHERE source_session_id='$producer_old_session'")"
-  [[ "$old_source_status" == "GAP" ]] ||
-    die "NATIVE_SOURCE_OLD_GAP_LOST"
-  echo "NATIVE_SOURCE_EXACT_CODE_CUTOVER=PASS old:$producer_loaded_commit new:$RELEASE_COMMIT"
-fi
-
-for service in "${managed_services[@]}"; do
-  if [[ "$service" == "cripta-real-service-broker.service" ||
-        "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
-    continue
-  fi
-  if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
-done
-for service in "${managed_services[@]}"; do
-  if [[ "$service" == "cripta-real-service-broker.service" ||
-        "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
-    systemctl is-active --quiet "$service" ||
-      die "required control-plane service inactive after deploy: $service"
-  elif [[ "${was_active[$service]}" == "1" ]]; then
-    systemctl is-active --quiet "$service" || die "service failed after deploy: $service"
-  else
-    systemctl is-active --quiet "$service" && die "previously inactive service became active: $service"
-  fi
-done
-
-gate_after="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
-permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
-sessions_after="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
-account_sessions_after="$(sql_scalar "SELECT count(*) FROM control.account_live_arm_sessions WHERE state='ACTIVE'")"
-# Trading controls are reported, never used as installer go/no-go decisions.
-# A supervisor/runtime may legitimately change trading state during deployment.
-if [[ "$gate_after" == "$pre_gate" && "$permissions_after" == "$pre_permissions" && "$sessions_after" == "$pre_sessions" && "$account_sessions_after" == "$pre_account_sessions" ]]; then
-  echo "TRADING_CONTROL_UNCHANGED=PASS"
-else
-  echo "TRADING_CONTROL_CHANGED_EXTERNALLY=WARNING before:$pre_gate/$pre_permissions/$pre_sessions/$pre_account_sessions after:$gate_after/$permissions_after/$sessions_after/$account_sessions_after" >&2
-fi
-# Exchange -> DB synchronization belongs to private runtime reconciliation.
-# Never send Exchange mutations from the installer.
-echo "POST_DEPLOY_RECONCILIATION_OWNER=cripta-private-runtime.service"
-if [[ "${was_active[cripta-private-runtime.service]:-0}" == "1" ]]; then
-  # Wait for the new process to read the authoritative Exchange snapshot.
-  # A failed/stale sync is an operational alert, not an Exchange mutation.
-  sync_started_ms="$(( $(date -u +%s) * 1000 ))"
-  sync_verified=0
-  for attempt in {1..30}; do
-    successful_ms="$(sql_scalar "SELECT coalesce((SELECT finished_at_epoch_ms FROM runtime.reconciliation_runs WHERE ok=1 ORDER BY id DESC LIMIT 1),0)")"
-    if [[ "$successful_ms" =~ ^[0-9]+$ ]] && (( successful_ms >= sync_started_ms )); then
-      sync_verified=1
+    if [[ "$native_code_changed" == "1" ]]; then
+      # A reused status file, stale PID or old session cannot approve the new
+      # source. Exact loaded release must match the installed candidate.
+      source_pid="$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)"
+      source_commit_seen="$(runuser -u cripta -- python3 -c '
+  import json,sys
+  try:
+      v=json.load(open(sys.argv[1],encoding="utf-8"))
+      print(v.get("source_commit","") if v.get("state")=="ACTIVE" else "")
+  except Exception:
+      print("")
+  ' /var/lib/cripta/native_public_trade_source/status.json)"
+      if [[ "$source_pid" == "$producer_old_pid" ||
+            "$source_commit_seen" != "$RELEASE_COMMIT" ||
+            "$source_session" == "$producer_old_session" ]]; then
+        sleep 1
+        continue
+      fi
+    fi
+    source_cursor_count="$(sql_scalar "SELECT count(DISTINCT c.external_symbol)
+      FROM analytics.native_public_trade_source_cursors c
+      JOIN analytics.native_public_trade_source_sessions s
+        ON s.source_session_id=c.source_session_id
+      WHERE s.source_session_id='$source_session'
+        AND s.state='ACTIVE'
+        AND s.market_source_id='ms-bybit-mainnet-public-v1'
+        AND s.last_accepted_at >= now() - interval '10 seconds'
+        AND c.accepted_at >= '$native_probe_started_at'::timestamptz
+        AND c.event_at >= '$native_probe_started_at'::timestamptz
+                              - interval '5 seconds'
+        AND c.event_at >= now() - interval '3 minutes'")"
+    if [[ "$source_cursor_count" == "5" ]]; then
+      native_source_ready=1
       break
     fi
-    sleep 2
+    sleep 1
   done
-  if [[ "$sync_verified" == "1" ]]; then
-    echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=PASS"
-  else
-    echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=NOT_VERIFIED_REQUIRES_RUNTIME_ATTENTION" >&2
+  [[ "$native_source_ready" == "1" ]] ||
+    die "independent native source five-symbol fresh cursor proof missing"
+  echo "INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS"
+  if [[ "$native_code_changed" == "1" ]]; then
+    new_source_status="$(sql_scalar "SELECT state FROM
+      analytics.native_public_trade_source_sessions
+      WHERE source_session_id='$source_session'
+        AND producer_release_commit='$RELEASE_COMMIT'")"
+    [[ "$new_source_status" == "ACTIVE" ]] ||
+      die "NATIVE_SOURCE_NEW_SESSION_IDENTITY_UNVERIFIED"
+    old_source_status="$(sql_scalar "SELECT state FROM
+      analytics.native_public_trade_source_sessions
+      WHERE source_session_id='$producer_old_session'")"
+    [[ "$old_source_status" == "GAP" ]] ||
+      die "NATIVE_SOURCE_OLD_GAP_LOST"
+    echo "NATIVE_SOURCE_EXACT_CODE_CUTOVER=PASS old:$producer_loaded_commit new:$RELEASE_COMMIT"
   fi
-else
-  echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=NOT_APPLICABLE_PRIVATE_RUNTIME_INACTIVE"
+  
+  for service in "${managed_services[@]}"; do
+    if [[ "$service" == "cripta-real-service-broker.service" ||
+          "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
+      continue
+    fi
+    if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
+  done
+  for service in "${managed_services[@]}"; do
+    if [[ "$service" == "cripta-real-service-broker.service" ||
+          "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
+      systemctl is-active --quiet "$service" ||
+        die "required control-plane service inactive after deploy: $service"
+    elif [[ "${was_active[$service]}" == "1" ]]; then
+      systemctl is-active --quiet "$service" || die "service failed after deploy: $service"
+    else
+      systemctl is-active --quiet "$service" && die "previously inactive service became active: $service"
+    fi
+  done
+  
+  gate_after="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
+  permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
+  sessions_after="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
+  account_sessions_after="$(sql_scalar "SELECT count(*) FROM control.account_live_arm_sessions WHERE state='ACTIVE'")"
+  # Trading controls are reported, never used as installer go/no-go decisions.
+  # A supervisor/runtime may legitimately change trading state during deployment.
+  if [[ "$gate_after" == "$pre_gate" && "$permissions_after" == "$pre_permissions" && "$sessions_after" == "$pre_sessions" && "$account_sessions_after" == "$pre_account_sessions" ]]; then
+    echo "TRADING_CONTROL_UNCHANGED=PASS"
+  else
+    echo "TRADING_CONTROL_CHANGED_EXTERNALLY=WARNING before:$pre_gate/$pre_permissions/$pre_sessions/$pre_account_sessions after:$gate_after/$permissions_after/$sessions_after/$account_sessions_after" >&2
+  fi
+  # Exchange -> DB synchronization belongs to private runtime reconciliation.
+  # Never send Exchange mutations from the installer.
+  echo "POST_DEPLOY_RECONCILIATION_OWNER=cripta-private-runtime.service"
+  if [[ "${was_active[cripta-private-runtime.service]:-0}" == "1" ]]; then
+    # Wait for the new process to read the authoritative Exchange snapshot.
+    # A failed/stale sync is an operational alert, not an Exchange mutation.
+    sync_started_ms="$(( $(date -u +%s) * 1000 ))"
+    sync_verified=0
+    for attempt in {1..30}; do
+      successful_ms="$(sql_scalar "SELECT coalesce((SELECT finished_at_epoch_ms FROM runtime.reconciliation_runs WHERE ok=1 ORDER BY id DESC LIMIT 1),0)")"
+      if [[ "$successful_ms" =~ ^[0-9]+$ ]] && (( successful_ms >= sync_started_ms )); then
+        sync_verified=1
+        break
+      fi
+      sleep 2
+    done
+    if [[ "$sync_verified" == "1" ]]; then
+      echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=PASS"
+    else
+      echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=NOT_VERIFIED_REQUIRES_RUNTIME_ATTENTION" >&2
+    fi
+  else
+    echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=NOT_APPLICABLE_PRIVATE_RUNTIME_INACTIVE"
+  fi
+  
+  
 fi
 
 printf '%s\n' "$RELEASE_COMMIT" > "$STATE_ROOT/INSTALLED_COMMIT"
@@ -1057,11 +1220,13 @@ printf '%s\n' "$backup" > "$STATE_ROOT/LAST_BACKUP"
 chown root:cripta "$STATE_ROOT/LAST_BACKUP"
 chmod 0640 "$STATE_ROOT/LAST_BACKUP"
 
-if [[ "$STAGED_OFFLINE" == "1" ]]; then
-  # Protect all historic archives and release backups during breaking R10.
-  # Pruning may resume only under a separately reviewed retention decision.
+if [[ "$STAGED_OFFLINE" == "1" && -z "$ROADMAP470_STAGE" ]]; then
+  # Generic staged-offline behavior keeps every backup.
   echo "STAGED_OFFLINE_BACKUP_RETENTION=KEEP_ALL"
 else
+  # #470 incremental acceptance keeps the newest rollback backup plus at most
+  # one still-valid control checkpoint. Seven full pg_dump copies would exceed
+  # the currently measured /data capacity before R13.
   prune_release_backups
 fi
 
@@ -1082,6 +1247,9 @@ cleanup_controller_stage
 trap - EXIT
 
 echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"
+if [[ -n "$ROADMAP470_STAGE" ]]; then
+  echo "ROADMAP470_STAGED_INSTALL=PASS stage:$ROADMAP470_STAGE"
+fi
 echo "INSTALLED_COMMIT=$RELEASE_COMMIT"
 echo "RUNTIME_CURRENT=$(readlink -f "$RUNTIME_ROOT/current")"
 echo "DASHBOARD_UI_CURRENT=$(readlink -f "$DASHBOARD_UI_ROOT/current")"
