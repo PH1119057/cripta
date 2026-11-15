@@ -81,12 +81,15 @@ roadmap470_pair() {
     R11_REPAIR7) printf '%s %s\n' \
       84f7fd5583daed5559a251284ffd90b8847fa496 \
       3f368fe88d72d6e10f0af0902d6205fc141d8447 ;;
-    R12) printf '%s %s\n' \
+    R11_REPAIR8) printf '%s %s\n' \
       3f368fe88d72d6e10f0af0902d6205fc141d8447 \
-      26b9e6c3b3fd50cebbc82de8a82476aa18e52447 ;;
+      edc6363293b6f6dc64972f01684619a313936ef5 ;;
+    R12) printf '%s %s\n' \
+      edc6363293b6f6dc64972f01684619a313936ef5 \
+      dbcacb2203950fa0417d78ab93566aa1146dce79 ;;
     R13) printf '%s %s\n' \
-      26b9e6c3b3fd50cebbc82de8a82476aa18e52447 \
-      7c3c1289c233843b25e0707ca5c37af70c52016a ;;
+      dbcacb2203950fa0417d78ab93566aa1146dce79 \
+      edf734b874ee11e1b988a6b1d86d0c6a452dd2da ;;
     *) return 1 ;;
   esac
 }
@@ -929,7 +932,7 @@ migration_files=(
 # migration. This prevents R07-R10 staged installs from reaching forward into
 # files that do not exist in their immutable historical target.
 case "$ROADMAP470_STAGE" in
-  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R12|R13)
+  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R12|R13)
     migration_files+=(
       operations/sql/20261114_r11_optional_original_public_event_frames.sql
       operations/sql/20261114_r11_optional_publication_frame_refs.sql
@@ -1038,7 +1041,7 @@ install -o root -g root -m 0644 "$runtime_release/operations/systemd/cripta-priv
 # optional frame capture.  Preserve the prior operator manifest in the
 # release backup above, then install exact reviewed bytes only for R11+.
 case "$ROADMAP470_STAGE" in
-  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R12|R13)
+  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R12|R13)
     install -d -o root -g cripta -m 0750 /etc/cripta/market-source
     install -o root -g cripta -m 0640 \
       "$runtime_release/operations/monitoring/r11_seven_public_feeds.json" \
