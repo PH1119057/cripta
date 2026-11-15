@@ -38,7 +38,9 @@ EXPECTED = (
      "f16601924f6623260cbe45d96547c6e9fc71067a"),
     ("R11_REPAIR3", "f16601924f6623260cbe45d96547c6e9fc71067a",
      "35923cfb7a8c1149284d2ba327a8d5ae306f5490"),
-    ("R12", "35923cfb7a8c1149284d2ba327a8d5ae306f5490",
+    ("R11_REPAIR4", "35923cfb7a8c1149284d2ba327a8d5ae306f5490",
+     "5fc00daf43676c30c494f871efb1a69e0eac33b4"),
+    ("R12", "5fc00daf43676c30c494f871efb1a69e0eac33b4",
      "4ae97520e44e2580a82e08985fcad744106a3769"),
     ("R13", "4ae97520e44e2580a82e08985fcad744106a3769",
      "acec641eff61a90f302806fb913321b61d0f61c8"),
@@ -138,7 +140,7 @@ def test_staged_migrations_do_not_reach_forward() -> None:
     assert "20261115_r13_opportunity_source_checkpoint.sql" in source
     assert (
         'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R11_REPAIR2'
-        '|R11_REPAIR3|R12|R13)'
+        '|R11_REPAIR3|R11_REPAIR4|R12|R13)'
     ) in source
     assert 'case "$ROADMAP470_STAGE" in\n  ""|R13)' in source
 
