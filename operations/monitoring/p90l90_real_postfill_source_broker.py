@@ -40,9 +40,10 @@ class P90RealPostfillMarketSourceUnverified(RuntimeError):
     """Independent live fill-forward MarketSource proof is missing."""
 
 
-def checked_request(
-    data: Mapping[str, object], *, source_epoch_id: str,
-) -> tuple[str, str, str, str]:
+def checked_dynamic_request(
+    data: Mapping[str, object],
+) -> tuple[str, str, str, str, str]:
+    requested_epoch = data.get("source_epoch_id")
     if (
         set(data) != {
             "kind", "version", "nonce", "position_id", "trading_account_id",
@@ -57,15 +58,30 @@ def checked_request(
         or not isinstance(data.get("trading_account_id"), str)
         or not re.fullmatch(r"ta-[0-9a-f]{32}", data["trading_account_id"])
         or not isinstance(data.get("symbol"), str)
-        or data.get("source_epoch_id") != source_epoch_id
+        or not isinstance(requested_epoch, str)
+        or not requested_epoch.startswith("p90-real-epoch-")
+        or len(requested_epoch) != 55
     ):
         raise P90RealPostfillMarketSourceUnverified(
             "P90_REAL_MARKET_SOURCE_REQUEST_IDENTITY_INVALID"
         )
     return (
         str(data["position_id"]), str(data["trading_account_id"]),
-        str(data["symbol"]), str(data["nonce"]),
+        str(data["symbol"]), str(data["nonce"]), requested_epoch,
     )
+
+
+def checked_request(
+    data: Mapping[str, object], *, source_epoch_id: str,
+) -> tuple[str, str, str, str]:
+    position_id, account, symbol, nonce, requested_epoch = (
+        checked_dynamic_request(data)
+    )
+    if requested_epoch != source_epoch_id:
+        raise P90RealPostfillMarketSourceUnverified(
+            "P90_REAL_MARKET_SOURCE_REQUEST_IDENTITY_INVALID"
+        )
+    return position_id, account, symbol, nonce
 
 
 def build_source_window(
@@ -344,6 +360,62 @@ def read_exact_source_position(
             )
         return position, source_epoch_id
 
+def read_current_source_position(
+    *,
+    database_dsn: str,
+    requested_epoch_id: str,
+    position_id: str,
+    trading_account_id: str,
+    symbol: str,
+) -> tuple[StrategyPosition, str, str]:
+    """Resolve current P90 epoch per request for the one Native MarketSource.
+
+    The source service stays Strategy-independent at startup.  A request must
+    still name the sole ACTIVE durable P90 epoch; no caller-supplied commit or
+    position payload is trusted.
+    """
+    import psycopg
+    from psycopg.rows import dict_row
+
+    from bybit_workbench.universal_exit.loader import load_exit_binding
+
+    with psycopg.connect(database_dsn, row_factory=dict_row) as connection:
+        connection.execute("SET TRANSACTION READ ONLY")
+        position, plan = load_exit_binding(
+            connection, strategy_position_id=position_id
+        )
+        if (
+            position.strategy_position_id != position_id
+            or position.trading_account_id != trading_account_id
+            or position.symbol != symbol
+            or position.strategy_id not in ALLOWED_SYMBOLS
+            or position.strategy_version != VERSION
+            or position.identity_status != "PROVEN"
+            or position.initial_protection_confirmed_at is None
+            or plan.exit_plan_fingerprint != position.exit_plan_fingerprint
+        ):
+            raise P90RealPostfillMarketSourceUnverified(
+                "P90_REAL_MARKET_SOURCE_DURABLE_POSITION_UNVERIFIED"
+            )
+        rows = connection.execute(
+            """SELECT epoch_id,source_commit
+                 FROM strategy_entry.p90l90_real_source_epochs
+                WHERE status='ACTIVE'
+                ORDER BY epoch_id"""
+        ).fetchall()
+        if (
+            len(rows) != 1
+            or not isinstance(rows[0], Mapping)
+            or rows[0].get("epoch_id") != requested_epoch_id
+            or not isinstance(rows[0].get("source_commit"), str)
+            or _SHA.fullmatch(rows[0]["source_commit"]) is None
+        ):
+            raise P90RealPostfillMarketSourceUnverified(
+                "P90_REAL_MARKET_SOURCE_DURABLE_EPOCH_UNVERIFIED"
+            )
+        return position, requested_epoch_id, str(rows[0]["source_commit"])
+
+
 def window_to_wire(window: P90RealPostfillSourceWindow) -> dict[str, object]:
     return {
         "position_id": window.position_id,
@@ -362,13 +434,16 @@ def window_to_wire(window: P90RealPostfillSourceWindow) -> dict[str, object]:
 def serve_source_windows(
     *,
     mirror: PublicTradeMirrorBuffer,
-    source_commit: str,
-    source_epoch_id: str,
-    read_position: Callable[[str, str, str], tuple[StrategyPosition, str]],
+    source_commit: str | None,
+    source_epoch_id: str | None,
+    read_position: Callable[[str, str, str], tuple[StrategyPosition, str]] | None,
     running: Callable[[], bool],
     ready: Callable[[], None] | None = None,
     fetch_recent_trades: Callable[
         [str], tuple[list[Mapping[str, object]], datetime]
+    ] | None = None,
+    resolve_current_source: Callable[
+        [str, str, str, str], tuple[StrategyPosition, str, str]
     ] | None = None,
 ) -> None:
     """Socket binding belongs to the live Observer, not to Execution.
@@ -376,12 +451,24 @@ def serve_source_windows(
     read_position is an exact read-only DB adapter; the private worker cannot
     send a synthetic StrategyPosition or invent its own fill timeline.
     """
+    fixed_mode = (
+        isinstance(source_commit, str)
+        and _SHA.fullmatch(source_commit) is not None
+        and isinstance(source_epoch_id, str)
+        and source_epoch_id.startswith("p90-real-epoch-")
+        and callable(read_position)
+        and resolve_current_source is None
+    )
+    dynamic_mode = (
+        source_commit is None
+        and source_epoch_id is None
+        and read_position is None
+        and callable(resolve_current_source)
+    )
     if (
         sys.platform != "linux"
-        or _SHA.fullmatch(source_commit) is None
-        or not source_epoch_id.startswith("p90-real-epoch-")
-        or not callable(read_position)
         or not callable(running)
+        or fixed_mode == dynamic_mode
     ):
         raise P90RealPostfillMarketSourceUnverified(
             "P90_REAL_MARKET_SOURCE_BROKER_CONFIG_INVALID"
@@ -402,26 +489,48 @@ def serve_source_windows(
                 if not peer_same_runtime_uid(stream):
                     continue
                 nonce = None
+                position_id = ""
+                account = ""
+                requested_epoch = ""
                 try:
                     request = _receive(stream)
-                    position_id, account, symbol, nonce = checked_request(
-                        request, source_epoch_id=source_epoch_id,
-                    )
-                    position, actual_epoch = read_position(
-                        position_id, account, symbol,
-                    )
+                    if dynamic_mode:
+                        (
+                            position_id, account, symbol, nonce,
+                            requested_epoch,
+                        ) = checked_dynamic_request(request)
+                        assert resolve_current_source is not None
+                        position, actual_epoch, actual_commit = (
+                            resolve_current_source(
+                                position_id, account, symbol, requested_epoch,
+                            )
+                        )
+                    else:
+                        assert source_epoch_id is not None
+                        assert source_commit is not None
+                        assert read_position is not None
+                        position_id, account, symbol, nonce = checked_request(
+                            request, source_epoch_id=source_epoch_id,
+                        )
+                        requested_epoch = source_epoch_id
+                        position, actual_epoch = read_position(
+                            position_id, account, symbol,
+                        )
+                        actual_commit = source_commit
                     if (
                         position.strategy_position_id != position_id
                         or position.trading_account_id != account
                         or position.symbol != symbol
+                        or actual_epoch != requested_epoch
+                        or _SHA.fullmatch(actual_commit) is None
                     ):
                         raise P90RealPostfillMarketSourceUnverified(
                             "P90_REAL_MARKET_SOURCE_DURABLE_IDENTITY_DRIFT"
                         )
                     window = build_source_window(
                         mirror=mirror, position=position,
-                        source_commit=source_commit,
-                        source_epoch_id=source_epoch_id,
+                        source_commit=actual_commit,
+                        source_epoch_id=requested_epoch,
                         evidence_epoch_id=actual_epoch,
                         at=datetime.now(UTC),
                         fetch_recent_trades=fetch_recent_trades,
@@ -429,7 +538,7 @@ def serve_source_windows(
                     stream.sendall(_frame({
                         "version": 1, "nonce": nonce,
                         "status": "VERIFIED",
-                        "source_epoch_id": source_epoch_id,
+                        "source_epoch_id": requested_epoch,
                         "position_id": position_id, "trading_account_id": account,
                         "window": window_to_wire(window),
                     }))
@@ -445,7 +554,7 @@ def serve_source_windows(
                         stream.sendall(_frame({
                             "version": 1, "nonce": nonce,
                             "status": "BLOCKED", "reason_code": reason,
-                            "source_epoch_id": source_epoch_id,
+                            "source_epoch_id": requested_epoch,
                             "position_id": position_id,
                             "trading_account_id": account,
                         }))
