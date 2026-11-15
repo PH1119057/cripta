@@ -32,6 +32,7 @@ SENSITIVE_DIAGNOSTIC = re.compile(
 )
 
 # Exact owner-approved physical acceptance ladder.  R14 is deliberately absent.
+# Synthetic staged commits are attached to protected main ancestry by this release PR.
 STAGES: tuple[tuple[str, str, str], ...] = (
     ("R07", "99a1ba4c16edbe5cb32022addf6c52888574716d",
      "bbc21196fc7233d199f1ff016ea8553450e55532"),
