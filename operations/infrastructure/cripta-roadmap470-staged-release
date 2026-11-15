@@ -108,6 +108,11 @@ STAGES: tuple[tuple[str, str, str], ...] = (
      "9b95351d4d0d55a835005f99dd6738a3022dd6e2"),
     ("R13", "9b95351d4d0d55a835005f99dd6738a3022dd6e2",
      "b3b939f7e9234fd9304f60e7fa14db650713481c"),
+    # Physical R13 acceptance proved Opportunity Tracker could not import the
+    # installed bybit_workbench package because its unit omitted runtime src.
+    # Repair only that service wiring before R14; no analytics/trading policy change.
+    ("R13_REPAIR", "b3b939f7e9234fd9304f60e7fa14db650713481c",
+     "b485e97c3d601011459d235460a975da4794c5d1"),
 )
 
 
