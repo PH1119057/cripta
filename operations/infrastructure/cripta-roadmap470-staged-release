@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-off #470 no-start staged installer: R06 -> R07 -> ... -> R13.
+"""One-off #470 no-start staged installer: R06 -> R07 -> ... -> R13_REPAIR1.
 
 No caller may choose a stage, SHA, branch or service.  The exact next target is
 derived from the currently installed immutable runtime baseline.  R14 is
@@ -108,6 +108,11 @@ STAGES: tuple[tuple[str, str, str], ...] = (
      "9b95351d4d0d55a835005f99dd6738a3022dd6e2"),
     ("R13", "9b95351d4d0d55a835005f99dd6738a3022dd6e2",
      "b3b939f7e9234fd9304f60e7fa14db650713481c"),
+    # Physical R13 acceptance exposed an installed package import failure:
+    # Opportunity Tracker imports bybit_workbench but its systemd unit omitted
+    # the installed src path. Repair only that service wiring before R14.
+    ("R13_REPAIR1", "b3b939f7e9234fd9304f60e7fa14db650713481c",
+     "e921700b34e1f22dd86de2c5bf4c5045aafa683a"),
 )
 
 

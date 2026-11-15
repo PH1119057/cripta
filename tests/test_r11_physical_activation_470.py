@@ -88,3 +88,7 @@ def test_r11_physical_stage_targets_are_exact_activated_chain() -> None:
         '("R13", "9b95351d4d0d55a835005f99dd6738a3022dd6e2",' in source
         and "b3b939f7e9234fd9304f60e7fa14db650713481c" in source
     )
+    assert (
+        '("R13_REPAIR1", "b3b939f7e9234fd9304f60e7fa14db650713481c",' in source
+        and "e921700b34e1f22dd86de2c5bf4c5045aafa683a" in source
+    )

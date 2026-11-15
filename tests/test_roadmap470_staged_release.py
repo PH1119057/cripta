@@ -54,6 +54,8 @@ EXPECTED = (
      "9b95351d4d0d55a835005f99dd6738a3022dd6e2"),
     ("R13", "9b95351d4d0d55a835005f99dd6738a3022dd6e2",
      "b3b939f7e9234fd9304f60e7fa14db650713481c"),
+    ("R13_REPAIR1", "b3b939f7e9234fd9304f60e7fa14db650713481c",
+     "e921700b34e1f22dd86de2c5bf4c5045aafa683a"),
 )
 
 
@@ -179,7 +181,7 @@ def test_staged_migrations_do_not_reach_forward() -> None:
     assert "20261115_r13_opportunity_source_checkpoint.sql" in source
     assert (
         'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R11_REPAIR2'
-        '|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R11_REPAIR9|R12|R13)'
+        '|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R11_REPAIR9|R12|R13|R13_REPAIR1)'
     ) in source
     assert 'case "$ROADMAP470_STAGE" in\n  ""|R13)' in source
 
@@ -218,4 +220,8 @@ def test_r11_repair8_and_downstream_targets_match_repaired_ancestry() -> None:
     assert stages["R13"] == (
         "9b95351d4d0d55a835005f99dd6738a3022dd6e2",
         "b3b939f7e9234fd9304f60e7fa14db650713481c",
+    )
+    assert stages["R13_REPAIR1"] == (
+        "b3b939f7e9234fd9304f60e7fa14db650713481c",
+        "e921700b34e1f22dd86de2c5bf4c5045aafa683a",
     )
