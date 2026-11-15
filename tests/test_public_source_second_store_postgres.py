@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 import psycopg
@@ -17,6 +17,9 @@ import pytest
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
+)
+from bybit_workbench.market_data.native_public_trade_journal import (
+    NativeTradeEvidence,
 )
 from bybit_workbench.market_data.public_forming_minute_source import (
     persist_forming_minute_fact,
@@ -34,9 +37,6 @@ from bybit_workbench.market_data.r12_position_publication import (
 )
 from bybit_workbench.market_data.r13_analytics_source import (
     read_publication_tickers,
-)
-from bybit_workbench.market_data.native_public_trade_journal import (
-    NativeTradeEvidence,
 )
 from bybit_workbench.market_data.shared_closed_candles import (
     MarketCandleKey,
