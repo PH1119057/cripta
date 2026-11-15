@@ -88,7 +88,8 @@ def database():
              source_session_id text NOT NULL,transport_epoch_id text NOT NULL,
              product_category text NOT NULL,source_frame_number bigint NOT NULL,
              committed_at timestamptz NOT NULL,
-             PRIMARY KEY(source_session_id,transport_epoch_id,product_category,source_frame_number))""",
+             PRIMARY KEY(source_session_id,transport_epoch_id,
+                         product_category,source_frame_number))""",
         """CREATE TABLE analytics.native_public_trade_source_sessions(
              source_session_id text PRIMARY KEY,
              producer_release_commit text NOT NULL,state text NOT NULL,
