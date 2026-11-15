@@ -1265,6 +1265,16 @@ else
           "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
       systemctl is-active --quiet "$service" ||
         die "required control-plane service inactive after deploy: $service"
+    elif [[ "$native_code_changed" == "1" &&
+            "$service" == "cripta-market-hot-retention.timer" ]]; then
+      systemctl is-active --quiet cripta-native-public-trade-source.service ||
+        die "native source inactive while source-coupled retention timer checked"
+      systemctl is-active --quiet "$service" ||
+        die "source-coupled market retention timer inactive after native cutover"
+    elif [[ "$native_code_changed" == "1" &&
+            "$service" == "cripta-market-hot-retention.service" ]]; then
+      ! systemctl is-failed --quiet "$service" ||
+        die "source-coupled market retention service failed after native cutover"
     elif [[ "${was_active[$service]}" == "1" ]]; then
       systemctl is-active --quiet "$service" || die "service failed after deploy: $service"
     else
