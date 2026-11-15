@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -63,12 +64,14 @@ def test_unit_is_manual_inert_root_management_entrypoint() -> None:
 
 
 def test_installer_shell_syntax_and_staged_no_start_contract() -> None:
-    result = subprocess.run(
-        ["/usr/bin/bash", "-n", str(INSTALLER)],
-        check=False, capture_output=True, text=True,
-    )
-    assert result.returncode == 0, result.stderr
+    if os.name == "posix":
+        result = subprocess.run(
+            ["/usr/bin/bash", "-n", str(INSTALLER)],
+            check=False, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
     source = INSTALLER.read_text(encoding="utf-8")
+    assert source.startswith("#!/usr/bin/env bash\n")
     for stage, baseline, target in EXPECTED:
         assert f"{stage}) printf" in source
         assert baseline in source and target in source
