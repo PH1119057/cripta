@@ -268,15 +268,12 @@ def make_r11_original_optional_frame(
     )
 
 
-def append_r11_original_optional_frame(
-    connection: Any, frame: R11OriginalPublicFrame,
-) -> int:
-    """Authorized source-owner DML only; 1 inserted, 0 identical replay.
+_MAX_APPEND_BATCH = 64
 
-    Caller must already own the one native producer advisory lock and use its
-    PostgreSQL actor/connection. No consumer/analyst/second writer may call.
-    The schema is NOT installed by this source-only stage.
-    """
+
+def _validate_r11_original_optional_frame_for_append(
+    frame: R11OriginalPublicFrame,
+) -> None:
     _need(
         isinstance(frame, R11OriginalPublicFrame)
         and frame.transport_continuity_verified is False
@@ -321,23 +318,84 @@ def append_r11_original_optional_frame(
         and _RELEASE.fullmatch(frame.producer_release_commit) is not None,
         "APPEND_DIGEST_OR_SOURCE_IDENTITY_INVALID",
     )
+
+
+def append_r11_original_optional_frames(
+    connection: Any,
+    frames: tuple[R11OriginalPublicFrame, ...],
+) -> int:
+    """Append one bounded source-owned batch atomically.
+
+    Every provider frame remains an independent immutable row. Batching only
+    removes per-frame PostgreSQL transaction/round-trip overhead; it does not
+    thin, aggregate or reorder the original event stream.
+    """
+    _need(
+        isinstance(frames, tuple) and 1 <= len(frames) <= _MAX_APPEND_BATCH,
+        "APPEND_BATCH_BOUND_INVALID",
+    )
+    for frame in frames:
+        _validate_r11_original_optional_frame_for_append(frame)
+
+    first = frames[0]
+    _need(
+        all(
+            frame.source_session_id == first.source_session_id
+            and frame.market_source_id == first.market_source_id
+            and frame.producer_release_commit == first.producer_release_commit
+            for frame in frames
+        ),
+        "APPEND_BATCH_SOURCE_IDENTITY_MISMATCH",
+    )
+    expected = {
+        (
+            frame.transport_epoch_id,
+            frame.product_category,
+            frame.source_frame_number,
+        ): frame.frame_content_sha256
+        for frame in frames
+    }
+    _need(
+        len(expected) == len(frames),
+        "APPEND_BATCH_KEY_DUPLICATE",
+    )
+
     from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
+
+    row_sql = (
+        "(%s,%s,%s,'venue-bybit',%s,%s,%s,%s,%s,%s,%s,"
+        "%s,%s,%s,%s,%s,%s,%s,%s)"
+    )
+    params: list[object] = []
+    for frame in frames:
+        params.extend((
+            frame.source_session_id, frame.transport_epoch_id,
+            frame.market_source_id, frame.instrument_id,
+            frame.product_category, frame.external_symbol,
+            frame.fact_family, frame.source_topic,
+            frame.source_frame_number, frame.frame_type,
+            frame.provider_frame_at, frame.source_event_first_at,
+            frame.source_event_last_at, frame.received_at,
+            Jsonb(frame.provider_frame),
+            Jsonb(list(frame.decoded_original_facts)),
+            frame.frame_content_sha256, frame.producer_release_commit,
+        ))
 
     with connection.transaction():
         source_epoch = connection.execute(
             """SELECT state,market_source_id,producer_release_commit
                  FROM analytics.native_public_trade_source_sessions
                 WHERE source_session_id=%s""",
-            (frame.source_session_id,),
+            (first.source_session_id,),
         ).fetchone()
         _need(
             source_epoch == (
-                "ACTIVE", frame.market_source_id,
-                frame.producer_release_commit,
+                "ACTIVE", first.market_source_id,
+                first.producer_release_commit,
             ),
             "ACTIVE_CANONICAL_SOURCE_EPOCH_REQUIRED",
         )
-        inserted = connection.execute(
+        inserted_rows = connection.execute(
             """INSERT INTO analytics.public_source_original_event_frames
                (source_session_id,transport_epoch_id,market_source_id,
                 venue_id,instrument_id,product_category,external_symbol,
@@ -345,44 +403,59 @@ def append_r11_original_optional_frame(
                 provider_frame_at,source_event_first_at,source_event_last_at,
                 received_at,provider_frame,decoded_original_facts,
                 frame_content_sha256,producer_release_commit)
-               VALUES
-               (%s,%s,%s,'venue-bybit',%s,%s,%s,%s,%s,%s,%s,
-                %s,%s,%s,%s,%s,%s,%s,%s)
+               VALUES """
+            + ",".join((row_sql,) * len(frames))
+            + """
                ON CONFLICT (
                  source_session_id,transport_epoch_id,product_category,
                  source_frame_number
-               ) DO NOTHING RETURNING frame_content_sha256""",
-            (
-                frame.source_session_id, frame.transport_epoch_id,
-                frame.market_source_id, frame.instrument_id,
-                frame.product_category, frame.external_symbol,
-                frame.fact_family, frame.source_topic,
-                frame.source_frame_number, frame.frame_type,
-                frame.provider_frame_at, frame.source_event_first_at,
-                frame.source_event_last_at, frame.received_at,
-                Jsonb(frame.provider_frame),
-                Jsonb(list(frame.decoded_original_facts)),
-                frame.frame_content_sha256, frame.producer_release_commit,
-            ),
-        ).fetchone()
-        if inserted is not None:
+               ) DO NOTHING
+               RETURNING transport_epoch_id,product_category,
+                         source_frame_number,frame_content_sha256""",
+            tuple(params),
+        ).fetchall()
+        inserted: dict[tuple[str, str, int], str] = {}
+        for epoch, product, frame_number, digest in inserted_rows:
+            key = (str(epoch), str(product), int(frame_number))
             _need(
-                inserted == (frame.frame_content_sha256,),
+                key in expected
+                and expected[key] == str(digest)
+                and key not in inserted,
                 "INSERT_RETURNING_IDENTITY_DRIFT",
             )
-            return 1
-        old = connection.execute(
-            """SELECT frame_content_sha256
-                 FROM analytics.public_source_original_event_frames
-                WHERE source_session_id=%s AND transport_epoch_id=%s
-                  AND product_category=%s AND source_frame_number=%s""",
-            (
-                frame.source_session_id, frame.transport_epoch_id,
-                frame.product_category, frame.source_frame_number,
-            ),
-        ).fetchone()
-        _need(
-            old == (frame.frame_content_sha256,),
-            "FRAME_COLLISION_OR_MISSING_ORIGINAL",
-        )
-        return 0
+            inserted[key] = str(digest)
+
+        missing = tuple(key for key in expected if key not in inserted)
+        if missing:
+            key_sql = ",".join(("(%s,%s,%s)",) * len(missing))
+            conflict_params: list[object] = [first.source_session_id]
+            for key in missing:
+                conflict_params.extend(key)
+            existing_rows = connection.execute(
+                """SELECT transport_epoch_id,product_category,
+                          source_frame_number,frame_content_sha256
+                     FROM analytics.public_source_original_event_frames
+                    WHERE source_session_id=%s
+                      AND (transport_epoch_id,product_category,
+                           source_frame_number) IN ("""
+                + key_sql
+                + ")",
+                tuple(conflict_params),
+            ).fetchall()
+            existing = {
+                (str(epoch), str(product), int(frame_number)): str(digest)
+                for epoch, product, frame_number, digest in existing_rows
+            }
+            _need(
+                len(existing) == len(missing)
+                and all(existing.get(key) == expected[key] for key in missing),
+                "FRAME_COLLISION_OR_MISSING_ORIGINAL",
+            )
+        return len(inserted)
+
+
+def append_r11_original_optional_frame(
+    connection: Any, frame: R11OriginalPublicFrame,
+) -> int:
+    """Compatibility wrapper for one exact source-owned frame."""
+    return append_r11_original_optional_frames(connection, (frame,))
