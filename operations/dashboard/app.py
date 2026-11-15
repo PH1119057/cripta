@@ -31,6 +31,11 @@ from bybit_workbench.fault_delivery import acknowledge_delivery
 from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
 from bybit_workbench.legacy_owner_arm_binding_gate import legacy_owner_arm_account_reasons
 from bybit_workbench.live_release_alert import project_release_arm_health
+from bybit_workbench.market_data.r13_analytics_source import (
+    R13AnalyticsSourceUnavailable,
+    read_market_publication_quality,
+    read_publication_tickers,
+)
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
@@ -287,34 +292,95 @@ BYBIT_KZ_UNSUPPORTED = frozenset(("1000PEPEUSDT", "DOGEUSDT"))
 
 
 def live_tickers() -> dict[str, dict[str, object]]:
+    """Read Dashboard ticker facts from the shared MarketPublication only."""
     global _ticker_cache
-    now = time.monotonic()
-    if _ticker_cache and now - _ticker_cache[0] < 2:
+    monotonic_now = time.monotonic()
+    if _ticker_cache and monotonic_now - _ticker_cache[0] < 2:
         return _ticker_cache[1]
-    with urllib.request.urlopen(
-        "https://api.bybit.kz/v5/market/tickers?category=linear", timeout=8
-    ) as response:
-        payload = json.load(response)
+    requested = tuple(sorted({
+        *TRADING_UNIVERSE, *INDICATORS, *EXCLUDED_MEMES,
+    }))
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql "
+            "options=-cdefault_transaction_read_only=on "
+            "application_name=dashboard-market-publication"
+        ) as connection:
+            with connection.transaction():
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
+                rows = read_publication_tickers(
+                    connection,
+                    symbols=requested,
+                    observed_at=datetime.now(UTC),
+                )
+    except (psycopg.Error, R13AnalyticsSourceUnavailable):
+        rows = {}
+
     result: dict[str, dict[str, object]] = {}
-    for item in payload.get("result", {}).get("list", []):
-        symbol = item.get("symbol")
-        if symbol not in {*TRADING_UNIVERSE, *INDICATORS, *EXCLUDED_MEMES}:
-            continue
-        bid = float(item.get("bid1Price") or 0)
-        ask = float(item.get("ask1Price") or 0)
-        middle = (bid + ask) / 2 if bid and ask else 0
+    for symbol, item in rows.items():
+        bid = float(item.bid_price or 0)
+        ask = float(item.ask_price or 0)
+        middle = (bid + ask) / 2 if bid > 0 and ask > 0 else 0
+        complete = all(
+            value is not None
+            for value in (
+                item.turnover_24h,
+                item.open_interest_value,
+                item.funding_rate,
+                item.bid_price,
+                item.ask_price,
+            )
+        )
         result[symbol] = {
-            "turnover24h": float(item.get("turnover24h") or 0),
-            "open_interest_value": float(item.get("openInterestValue") or 0),
-            "funding_rate_pct": float(item.get("fundingRate") or 0) * 100,
-            "spread_bps": ((ask - bid) / middle * 10_000) if middle else None,
-            "last_price": item.get("lastPrice") or "",
-            "mark_price": item.get("markPrice") or "",
-            "bid_price": item.get("bid1Price") or "",
-            "ask_price": item.get("ask1Price") or "",
+            "quality": "FRESH" if complete else "MISSING_FIELDS",
+            "turnover24h": float(item.turnover_24h or 0),
+            "open_interest_value": float(item.open_interest_value or 0),
+            "funding_rate_pct": float(item.funding_rate or 0) * 100,
+            "spread_bps": (
+                (ask - bid) / middle * 10_000 if middle else None
+            ),
+            "last_price": str(item.last_price),
+            "mark_price": (
+                "" if item.mark_price is None else str(item.mark_price)
+            ),
+            "bid_price": (
+                "" if item.bid_price is None else str(item.bid_price)
+            ),
+            "ask_price": (
+                "" if item.ask_price is None else str(item.ask_price)
+            ),
+            "publication_id": item.publication_id,
+            "source_session_id": item.source_session_id,
+            "producer_release_commit": item.producer_release_commit,
+            "source_time_max": item.source_time_max.isoformat(),
         }
-    _ticker_cache = (now, result)
+    _ticker_cache = (monotonic_now, result)
     return result
+
+
+def market_publication_quality_state() -> dict[str, object]:
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql "
+            "options=-cdefault_transaction_read_only=on "
+            "application_name=dashboard-market-quality"
+        ) as connection:
+            with connection.transaction():
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
+                return read_market_publication_quality(
+                    connection,
+                    observed_at=datetime.now(UTC),
+                )
+    except (psycopg.Error, R13AnalyticsSourceUnavailable) as exc:
+        return {
+            "state": "UNKNOWN",
+            "error_class": type(exc).__name__,
+            "trading_rights": "NONE",
+        }
 
 
 def traffic_light(symbol: str, ticker: dict[str, object] | None) -> tuple[str, str]:
@@ -323,7 +389,9 @@ def traffic_light(symbol: str, ticker: dict[str, object] | None) -> tuple[str, s
     if symbol in EXCLUDED_MEMES:
         return "red", "мем-монета исключена из торговли"
     if not ticker:
-        return "red", "нет свежей котировки Bybit"
+        return "red", "нет свежей котировки MarketPublication"
+    if ticker.get("quality") != "FRESH":
+        return "red", "неполная котировка MarketPublication"
     turnover = float(ticker["turnover24h"])
     oi = float(ticker["open_interest_value"])
     spread = ticker["spread_bps"]
@@ -402,16 +470,55 @@ def bot_control_state() -> dict[str, object]:
 
 
 def opportunity_state() -> dict[str, object]:
-    with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        "options=-cdefault_transaction_read_only=on"
+    ) as connection:
+        installed = connection.execute(
+            "SELECT to_regclass('monitoring.opportunity_source_checkpoints')"
+        ).fetchone()[0] is not None
         counts = {
             row[0]: row[1]
             for row in connection.execute(
                 "SELECT state,count(*) FROM monitoring.opportunities GROUP BY state"
             )
         }
-        rows = connection.execute("""SELECT signal_id,bot_id,strategy_version,symbol,direction,signal_price,decision,
-            decision_reason,traffic_light,state,max_favorable_pct,max_adverse_pct,first_hits_json,samples,
-            signal_at_epoch_ms FROM monitoring.opportunities ORDER BY signal_at_epoch_ms DESC LIMIT 100""").fetchall()
+        source_counts: dict[str, int] = {}
+        if installed:
+            source_counts = {
+                str(row[0]): int(row[1])
+                for row in connection.execute(
+                    """SELECT source_quality,count(*)
+                         FROM monitoring.opportunity_source_checkpoints
+                        GROUP BY source_quality"""
+                )
+            }
+            rows = connection.execute(
+                """SELECT o.signal_id,o.bot_id,o.strategy_version,o.symbol,
+                          o.direction,o.signal_price,o.decision,
+                          o.decision_reason,o.traffic_light,o.state,
+                          o.max_favorable_pct,o.max_adverse_pct,
+                          o.first_hits_json,o.samples,o.signal_at_epoch_ms,
+                          c.source_quality,c.source_session_id,
+                          c.producer_release_commit,c.updated_at
+                     FROM monitoring.opportunities o
+                     LEFT JOIN monitoring.opportunity_source_checkpoints c
+                       ON c.signal_id=o.signal_id
+                    ORDER BY o.signal_at_epoch_ms DESC LIMIT 100"""
+            ).fetchall()
+        else:
+            rows = [
+                (*row, None, None, None, None)
+                for row in connection.execute(
+                    """SELECT signal_id,bot_id,strategy_version,symbol,
+                              direction,signal_price,decision,decision_reason,
+                              traffic_light,state,max_favorable_pct,
+                              max_adverse_pct,first_hits_json,samples,
+                              signal_at_epoch_ms
+                         FROM monitoring.opportunities
+                        ORDER BY signal_at_epoch_ms DESC LIMIT 100"""
+                ).fetchall()
+            ]
     items = [
         {
             "signal_id": row[0],
@@ -429,10 +536,20 @@ def opportunity_state() -> dict[str, object]:
             "hits": json.loads(row[12]),
             "samples": row[13],
             "signal_at_epoch_ms": row[14],
+            "source_quality": row[15] or "MISSING",
+            "source_session_id": row[16],
+            "producer_release_commit": row[17],
+            "source_updated_at": (
+                None if row[18] is None else row[18].isoformat()
+            ),
         }
         for row in rows
     ]
-    return {"counts": counts, "items": items}
+    return {
+        "counts": counts,
+        "source_quality_counts": source_counts,
+        "items": items,
+    }
 
 
 
@@ -3883,7 +4000,13 @@ def snapshot() -> dict[str, object]:
     try:
         opportunities = opportunity_state()
     except Exception as exc:
-        opportunities = {"counts": {}, "items": [], "error": f"{type(exc).__name__}: {exc}"}
+        opportunities = {
+            "counts": {},
+            "source_quality_counts": {},
+            "items": [],
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    market_publication_quality = market_publication_quality_state()
     try:
         live_trading = live_trading_state()
     except Exception as exc:
@@ -4049,6 +4172,7 @@ def snapshot() -> dict[str, object]:
         "private_api": private_api,
         "bots": bots,
         "opportunities": opportunities,
+        "market_publication_quality": market_publication_quality,
         "live_trading": live_trading,
         "safety": safety,
         "backup": backup,
