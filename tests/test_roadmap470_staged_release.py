@@ -152,3 +152,12 @@ def test_stage_chain_is_contiguous_and_sha_shaped() -> None:
         assert sha.fullmatch(target)
         if i:
             assert EXPECTED[i - 1][2] == baseline
+
+
+def test_r11_repair4_target_pin_matches_ancestry_attachment_contract() -> None:
+    stages = {stage: (baseline, target) for stage, baseline, target in EXPECTED}
+    assert stages["R11_REPAIR4"] == (
+        "35923cfb7a8c1149284d2ba327a8d5ae306f5490",
+        "5fc00daf43676c30c494f871efb1a69e0eac33b4",
+    )
+    assert stages["R12"][0] == "5fc00daf43676c30c494f871efb1a69e0eac33b4"
