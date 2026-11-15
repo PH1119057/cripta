@@ -92,6 +92,20 @@ _REPAIR_PROVIDER_SPACING_SECONDS = 0.30
 _REPAIR_PROVIDER_SETTLE_SECONDS = 10
 
 
+def _linear_transport_failure_reason(exc: Exception) -> str:
+    """Stable public-only evidence for a fatal required LINEAR reader exit."""
+    message = str(exc).strip()
+    if (
+        3 <= len(message) <= 96
+        and message.upper() == message
+        and message.replace("_", "").isalnum()
+    ):
+        suffix = message
+    else:
+        suffix = type(exc).__name__.upper()
+    return ("PUBLIC_LINEAR_TRANSPORT_FATAL_" + suffix)[:127]
+
+
 def r11_optional_original_frames_enabled() -> bool:
     """Explicit code-first R11 flag; source installation never auto-enables."""
     value = os.environ.get("CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES", "0").strip()
@@ -853,7 +867,12 @@ def run_source_union(
                     )
             except Exception as exc:
                 if product == "LINEAR":
-                    failures.append(f"{product}:{type(exc).__name__}")
+                    reason = _linear_transport_failure_reason(exc)
+                    failures.append(reason)
+                    note_quality(
+                        product="LINEAR", topic="*", quality="GAP",
+                        reason=reason,
+                    )
                     done.set()
                     return
                 # Only SPOT is optional in the exact approved R01 manifest.
@@ -1423,7 +1442,7 @@ def run_source_union(
         flush_quality()
         if failures:
             raise PublicSourceSecondUnavailable(
-                "PUBLIC_FEED_TRANSPORT_FAILED"
+                "PUBLIC_FEED_TRANSPORT_FAILED:" + ",".join(failures[:2])
             )
         native._session_gap(connection, session, "OWNER_CONTROLLED_STOP")
         native._status("STOPPED", session=session)
