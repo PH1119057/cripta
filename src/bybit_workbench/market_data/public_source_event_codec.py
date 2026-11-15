@@ -361,6 +361,8 @@ class OrderbookContinuity:
             raise PublicSourceFrameInvalid("PUBLIC_BOOK_CROSSED")
         self._ready = True
         middle = (bid + ask) / 2
+        top_bids = sorted(self._bids.items(), reverse=True)[:25]
+        top_asks = sorted(self._asks.items())[:25]
         bands: dict[str, str] = {}
         for bps in (5, 10, 25, 50):
             ratio = Decimal(bps) / 10000
@@ -376,6 +378,12 @@ class OrderbookContinuity:
             "best_bid": str(bid), "best_ask": str(ask),
             "bid_size": str(self._bids[bid]),
             "ask_size": str(self._asks[ask]),
+            "top25_bid_usd": str(sum(
+                (price * qty for price, qty in top_bids), Decimal(0),
+            )),
+            "top25_ask_usd": str(sum(
+                (price * qty for price, qty in top_asks), Decimal(0),
+            )),
             "source_sequence": event.exchange_sequence,
             "source_time": event.source_time.isoformat(),
             **bands,

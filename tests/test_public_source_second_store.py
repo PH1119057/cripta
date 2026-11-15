@@ -67,6 +67,8 @@ def test_second_bucket_combines_native_trades_and_ticker_and_book() -> None:
     assert row["trade_sell_usd"] == Decimal("50.0")
     assert row["ticker"]["lastPrice"] == "100.25"
     assert row["book"]["best_bid"] == "100"
+    assert row["book"]["top25_bid_usd"] == "200"
+    assert row["book"]["top25_ask_usd"] == "202"
     group.mark_committed(rows)
     assert group.ready_seconds(before=AT + timedelta(seconds=2)) == ()
     with pytest.raises(PublicSourceSecondUnavailable, match="LATE"):
@@ -137,3 +139,26 @@ def test_writer_requires_exact_source_release_and_row_identity() -> None:
         )
     with pytest.raises(PublicSourceSecondUnavailable, match="EPOCH"):
         PublicSecondAccumulator(session="bad")
+
+
+def test_r12_book_projection_preserves_exact_top25_not_bps_approximation() -> None:
+    agg = PublicSecondAccumulator(session=SESSION)
+    bids = [[str(100 - i), "1"] for i in range(30)]
+    asks = [[str(101 + i), "1"] for i in range(30)]
+    frame = _event("orderbook.50.BTCUSDT", {
+        "s": "BTCUSDT", "u": 7, "seq": 77,
+        "b": bids, "a": asks,
+    })
+    for fact in _decode(frame):
+        agg.accept(fact, received_at=AT)
+    row = agg.ready_seconds(before=AT + timedelta(seconds=1))[0]
+    book = row["book"]
+    assert book["top25_bid_usd"] == str(sum(
+        Decimal(str(100 - i)) for i in range(25)
+    ))
+    assert book["top25_ask_usd"] == str(sum(
+        Decimal(str(101 + i)) for i in range(25)
+    ))
+    # The Position metric is exact top-N exchange depth, not a bps-band alias.
+    assert book["top25_bid_usd"] != book["bid_50bps_usd"]
+    assert book["top25_ask_usd"] != book["ask_50bps_usd"]
