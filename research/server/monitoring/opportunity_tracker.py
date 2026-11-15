@@ -10,6 +10,7 @@ import psycopg
 from bybit_workbench.market_data.r13_analytics_source import (
     R13AnalyticsSourceUnavailable,
     R13SourceEpoch,
+    fence_active_source_epoch,
     read_active_source_epoch,
     read_opportunity_trade_batch,
     require_opportunity_symbol,
@@ -162,6 +163,7 @@ def consume_available(
     processed = 0
     for item in tuple(active.values()):
         with connection.transaction():
+            fence_active_source_epoch(connection, epoch=epoch)
             require_opportunity_symbol(
                 connection, epoch=epoch, symbol=item.symbol,
             )
