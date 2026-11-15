@@ -290,6 +290,7 @@ def prove_r11_provider_continuity(
     transport_epochs: dict[str, str],
     boundaries: tuple[R11ProviderQualityBoundary, ...],
     observations: tuple[R11ProviderObservation, ...],
+    previous_continuity_starts: dict[tuple[str, str, str], datetime] | None = None,
 ) -> R11ProviderContinuityProof:
     """Reduce immutable source evidence to exact per-scope RED/GREEN state.
 
@@ -316,6 +317,25 @@ def prove_r11_provider_continuity(
         _validate_boundary(boundary, as_of=as_of)
     for observation in observations:
         _validate_observation(observation, as_of=as_of)
+    previous_starts = previous_continuity_starts or {}
+    stream_keys = {
+        (scope.product, scope.dataset, scope.symbol)
+        for scope in r11_required_provider_scopes()
+        if scope.coverage == "STREAM"
+    }
+    _need(
+        isinstance(previous_starts, dict)
+        and len(previous_starts) in (0, 42)
+        and set(previous_starts) <= stream_keys
+        and all(
+            isinstance(value, datetime)
+            and value.tzinfo is not None
+            and value.utcoffset() == timedelta(0)
+            and value <= as_of
+            for value in previous_starts.values()
+        ),
+        "PREVIOUS_CONTINUITY_INVALID",
+    )
 
     results: list[R11ProviderScopeContinuity] = []
     for scope in r11_required_provider_scopes():
@@ -403,10 +423,14 @@ def prove_r11_provider_continuity(
             if row.topic == "*"
             and (ack is None or row.observed_at > ack.observed_at)
         )
+        previous_start = previous_starts.get(
+            (scope.product, scope.dataset, scope.symbol)
+        )
         scoped_bad = tuple(
             row for row in relevant_boundaries
             if row.topic != "*"
             and (ack is None or row.observed_at >= ack.observed_at)
+            and (previous_start is None or row.observed_at > previous_start)
         )
         recovered_at: datetime | None = None
         if scoped_bad:
@@ -450,11 +474,15 @@ def prove_r11_provider_continuity(
             and not transport_bad
             and (not scoped_bad or recovered_at is not None)
         )
-        start = (
-            max(ack.observed_at, recovered_at)
-            if ok and ack is not None and recovered_at is not None
-            else (ack.observed_at if ok and ack is not None else None)
+        start_candidates = tuple(
+            value for value in (
+                ack.observed_at if ack is not None else None,
+                previous_start,
+                recovered_at,
+            )
+            if value is not None
         )
+        start = max(start_candidates) if ok and start_candidates else None
         results.append(R11ProviderScopeContinuity(
             scope=scope, transport_epoch_id=epoch,
             state="CONTINUOUS" if ok else "WARMUP",
@@ -538,6 +566,7 @@ def read_r11_provider_continuity_for_candidate(
     transport_witnesses: tuple[R11ProviderObservation, ...],
     optional_events: tuple[Any, ...],
     rest_facts: tuple[Any, ...],
+    previous_continuity_starts: dict[tuple[str, str, str], datetime] | None = None,
 ) -> R11ProviderContinuityProof:
     """Build the proof from the same immutable RR/RO candidate transaction."""
     source = connection.execute(
@@ -641,4 +670,5 @@ def read_r11_provider_continuity_for_candidate(
         transport_epochs=transport_epochs,
         boundaries=boundaries,
         observations=tuple(observations),
+        previous_continuity_starts=previous_continuity_starts,
     )
