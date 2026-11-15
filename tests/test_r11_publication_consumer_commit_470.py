@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,6 +17,7 @@ from bybit_workbench.mayak.publication_consumer_commit import (
     R11ConsumerCommitUnverified,
     commit_r11_mayak_publication,
     load_r11_mayak_consumer_commit,
+    verify_r11_mayak_consumer_reset_lineage,
 )
 from bybit_workbench.mayak.seven_publication_observation_candidate import (
     R11SevenMayakReplayCheckpoint,
@@ -140,6 +142,12 @@ class AtomicDB:
     ) -> Rows:
         if sql.startswith("LOCK TABLE"):
             return Rows()
+        if "SELECT %s::jsonb::text" in sql:
+            jsonb = params[0]
+            return Rows((json.dumps(
+                jsonb.obj, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"), default=str, allow_nan=False,
+            ),))
         if "FROM pg_catalog.pg_trigger" in sql:
             return Rows((self.guard_valid,))
         if "pg_try_advisory_xact_lock_shared" in sql:
@@ -166,7 +174,17 @@ class AtomicDB:
             )
             return Rows((params[1],))
         if sql.lstrip().startswith("SELECT generation,market_source_id"):
-            return Rows(self.committed)
+            if self.committed is None:
+                return Rows(None)
+            if "snapshot::text" in sql:
+                snapshot_text = json.dumps(
+                    self.committed[9], ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":"), default=str, allow_nan=False,
+                )
+                return Rows((*self.committed, snapshot_text))
+            if "state_checkpoint" in sql:
+                return Rows(self.committed[:9])
+            return Rows(self.committed[:5])
         raise AssertionError(sql)
 
 
@@ -368,3 +386,45 @@ def test_migration_is_one_bounded_latest_row_with_runtime_actor_guard() -> None:
     assert "REVOKE DELETE,TRUNCATE" in sql
     assert "CREATE TABLE IF NOT EXISTS mayak_v2.r11_consumer_commit" in sql
     assert "CREATE TABLE IF NOT EXISTS mayak_v2.r11_consumer_history" not in sql
+
+
+def test_source_reset_lineage_ignores_only_legacy_snapshot_digest() -> None:
+    db = AtomicDB()
+    replay = replay_state()
+    commit_r11_mayak_publication(
+        db, replay=replay, snapshot=snapshot(replay),
+        expected_generation=0, expected_previous_publication_id=None,
+    )
+    assert db.committed is not None
+    row = list(db.committed)
+    row[10] = "0" * 64
+    db.committed = tuple(row)
+
+    with pytest.raises(
+        R11ConsumerCommitUnverified,
+        match="RESTORE_SNAPSHOT_DIGEST_INVALID",
+    ):
+        load_r11_mayak_consumer_commit(
+            db, expected_source_session_id=SESSION,
+            expected_release_commit=RELEASE,
+        )
+
+    lineage = verify_r11_mayak_consumer_reset_lineage(
+        db, expected_source_session_id=SESSION,
+        expected_release_commit=RELEASE,
+    )
+    assert lineage is not None
+    assert lineage.generation == 1
+    assert lineage.publication_id == 100
+
+    row = list(db.committed)
+    row[8] = "0" * 64
+    db.committed = tuple(row)
+    with pytest.raises(
+        R11ConsumerCommitUnverified,
+        match="RESET_LINEAGE_IDENTITY_OR_STATE_DIGEST_INVALID",
+    ):
+        verify_r11_mayak_consumer_reset_lineage(
+            db, expected_source_session_id=SESSION,
+            expected_release_commit=RELEASE,
+        )
