@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, NoReturn, cast
 
 from bybit_workbench.market_data.shared_closed_candles import (
     MarketCandleKey,
@@ -63,25 +63,29 @@ class R12PositionMarketSnapshot:
     top25_ask_depth_usdt: Decimal
 
 
-def _fail(code: str) -> None:
+def _fail(code: str) -> NoReturn:
     raise R12PositionPublicationUnavailable("R12_POSITION_" + code)
 
 
 def _utc(value: object, code: str) -> datetime:
+    parsed: datetime
     if isinstance(value, str):
         try:
-            value = datetime.fromisoformat(value)
+            parsed = datetime.fromisoformat(value)
         except ValueError as exc:
             raise R12PositionPublicationUnavailable(
                 "R12_POSITION_" + code
             ) from exc
+    elif isinstance(value, datetime):
+        parsed = value
+    else:
+        _fail(code)
     if (
-        not isinstance(value, datetime)
-        or value.tzinfo is None
-        or value.utcoffset() != timedelta(0)
+        parsed.tzinfo is None
+        or parsed.utcoffset() != timedelta(0)
     ):
         _fail(code)
-    return value.astimezone(UTC)
+    return parsed.astimezone(UTC)
 
 
 def _positive(value: object, code: str) -> Decimal:
@@ -192,12 +196,16 @@ def _forming(
         _pid, epoch, commit, as_of, instrument,
         refs, quality, _closed, _closed_quality, _compact, _compact_quality,
     ) = pin
-    ref = refs.get("FORMING_KLINE") if isinstance(refs, dict) else None
-    state = quality.get("FORMING_KLINE") if isinstance(quality, dict) else None
+    raw_ref = refs.get("FORMING_KLINE") if isinstance(refs, dict) else None
+    raw_state = (
+        quality.get("FORMING_KLINE") if isinstance(quality, dict) else None
+    )
+    if not isinstance(raw_ref, dict) or not isinstance(raw_state, dict):
+        _fail("FORMING_1M_REF_UNVERIFIED")
+    ref = cast(dict[str, Any], raw_ref)
+    state = cast(dict[str, Any], raw_state)
     if (
-        not isinstance(ref, dict)
-        or not isinstance(state, dict)
-        or state.get("required") is not True
+        state.get("required") is not True
         or state.get("status") != "UNCONFIRMED_OPEN_MINUTE"
         or state.get("freshness_seconds") != _POSITION_FORMING_TTL
         or ref.get("source_session_id") != epoch
@@ -265,12 +273,15 @@ def _closed(
         _pid, _epoch, _commit, as_of, instrument,
         _forming, _forming_quality, refs, quality, _compact, _compact_quality,
     ) = pin
-    ref = refs.get("1") if isinstance(refs, dict) else None
-    state = quality.get("1") if isinstance(quality, dict) else None
+    raw_ref = refs.get("1") if isinstance(refs, dict) else None
+    raw_state = quality.get("1") if isinstance(quality, dict) else None
+    if not isinstance(raw_ref, dict) or not isinstance(raw_state, dict):
+        _fail("CLOSED_1M_REF_UNVERIFIED")
+    ref = cast(dict[str, Any], raw_ref)
+    state = cast(dict[str, Any], raw_state)
+    history_required_bars = state.get("history_required_bars")
     if (
-        not isinstance(ref, dict)
-        or not isinstance(state, dict)
-        or ref.get("market_source_id") != BYBIT_PUBLIC_MARKET_SOURCE_ID
+        ref.get("market_source_id") != BYBIT_PUBLIC_MARKET_SOURCE_ID
         or ref.get("instrument_id") != instrument
         or ref.get("product_category") != "LINEAR"
         or ref.get("external_symbol") != symbol
@@ -279,8 +290,8 @@ def _closed(
         or state.get("status") != "LAST_CLOSED_OBSERVED_WINDOW_UNVERIFIED"
         or state.get("history_window") != "NOT_VERIFIED"
         or state.get("freshness_seconds") != _POSITION_CLOSED_TTL
-        or type(state.get("history_required_bars")) is not int
-        or state["history_required_bars"] < 6
+        or type(history_required_bars) is not int
+        or history_required_bars < 6
     ):
         _fail("CLOSED_1M_REF_UNVERIFIED")
     through = _utc(ref.get("closed_at"), "CLOSED_1M_TIME_INVALID")
@@ -322,12 +333,14 @@ def _compact_row(
         _forming, _forming_quality, _closed, _closed_quality,
         refs, quality,
     ) = pin
-    ref = refs.get(dataset) if isinstance(refs, dict) else None
-    state = quality.get(dataset) if isinstance(quality, dict) else None
+    raw_ref = refs.get(dataset) if isinstance(refs, dict) else None
+    raw_state = quality.get(dataset) if isinstance(quality, dict) else None
+    if not isinstance(raw_ref, dict) or not isinstance(raw_state, dict):
+        _fail(dataset + "_REF_UNVERIFIED")
+    ref = cast(dict[str, Any], raw_ref)
+    state = cast(dict[str, Any], raw_state)
     if (
-        not isinstance(ref, dict)
-        or not isinstance(state, dict)
-        or ref.get("source_session_id") != epoch
+        ref.get("source_session_id") != epoch
         or ref.get("instrument_id") != instrument
         or ref.get("product_category") != "LINEAR"
         or ref.get("external_symbol") != symbol
@@ -381,17 +394,21 @@ def _ticker(
     )
     ticker = features.get("ticker")
     times = features.get("ticker_field_times")
-    quality = pin[-1].get("TICKER") if isinstance(pin[-1], dict) else None
+    raw_quality = (
+        pin[-1].get("TICKER") if isinstance(pin[-1], dict) else None
+    )
     if (
         not isinstance(ticker, dict)
         or not isinstance(times, dict)
-        or not isinstance(quality, dict)
-        or not isinstance(quality.get("fields"), dict)
-        or any(
-            quality["fields"].get(name) != "FRESH"
-            for name in _TICKER_FIELDS
-        )
+        or not isinstance(raw_quality, dict)
     ):
+        _fail("TICKER_FIELDS_NOT_FRESH")
+    quality = cast(dict[str, Any], raw_quality)
+    raw_fields = quality.get("fields")
+    if not isinstance(raw_fields, dict):
+        _fail("TICKER_FIELDS_NOT_FRESH")
+    fields = cast(dict[str, Any], raw_fields)
+    if any(fields.get(name) != "FRESH" for name in _TICKER_FIELDS):
         _fail("TICKER_FIELDS_NOT_FRESH")
     as_of = pin[3]
     for name in _TICKER_FIELDS:
