@@ -75,12 +75,15 @@ roadmap470_pair() {
     R11_REPAIR5) printf '%s %s\n' \
       5fc00daf43676c30c494f871efb1a69e0eac33b4 \
       b9caae2843db344067412a5fb4b42ae15c244022 ;;
-    R12) printf '%s %s\n' \
+    R11_REPAIR6) printf '%s %s\n' \
       b9caae2843db344067412a5fb4b42ae15c244022 \
-      a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0 ;;
+      84f7fd5583daed5559a251284ffd90b8847fa496 ;;
+    R12) printf '%s %s\n' \
+      84f7fd5583daed5559a251284ffd90b8847fa496 \
+      267fae6f1a8611d505d0e36e9609df48ab4e0eca ;;
     R13) printf '%s %s\n' \
-      a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0 \
-      05c5e011d40b1c134942f1ff5449a55bc4ad331f ;;
+      267fae6f1a8611d505d0e36e9609df48ab4e0eca \
+      174ad435df06afafcf64f262b3934150792c22e1 ;;
     *) return 1 ;;
   esac
 }
@@ -923,7 +926,7 @@ migration_files=(
 # migration. This prevents R07-R10 staged installs from reaching forward into
 # files that do not exist in their immutable historical target.
 case "$ROADMAP470_STAGE" in
-  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R12|R13)
+  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R12|R13)
     migration_files+=(
       operations/sql/20261114_r11_optional_original_public_event_frames.sql
       operations/sql/20261114_r11_optional_publication_frame_refs.sql
@@ -1032,7 +1035,7 @@ install -o root -g root -m 0644 "$runtime_release/operations/systemd/cripta-priv
 # optional frame capture.  Preserve the prior operator manifest in the
 # release backup above, then install exact reviewed bytes only for R11+.
 case "$ROADMAP470_STAGE" in
-  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R12|R13)
+  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R12|R13)
     install -d -o root -g cripta -m 0750 /etc/cripta/market-source
     install -o root -g cripta -m 0640 \
       "$runtime_release/operations/monitoring/r11_seven_public_feeds.json" \

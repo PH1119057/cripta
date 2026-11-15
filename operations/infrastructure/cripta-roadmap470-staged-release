@@ -80,10 +80,16 @@ STAGES: tuple[tuple[str, str, str], ...] = (
     # Pin native replay to the selected causal MarketPublication before R12.
     ("R11_REPAIR5", "5fc00daf43676c30c494f871efb1a69e0eac33b4",
      "b9caae2843db344067412a5fb4b42ae15c244022"),
-    ("R12", "b9caae2843db344067412a5fb4b42ae15c244022",
-     "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0"),
-    ("R13", "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0",
-     "05c5e011d40b1c134942f1ff5449a55bc4ad331f"),
+    # R11_REPAIR5 advanced durable MAYAK state to generation 6, then physical
+    # feed interleaving proved the global provider-time scalar invalid across
+    # independent streams. Variant A preserves same-stream fail-closed order
+    # and replays cross-stream facts by durable receiver order.
+    ("R11_REPAIR6", "b9caae2843db344067412a5fb4b42ae15c244022",
+     "84f7fd5583daed5559a251284ffd90b8847fa496"),
+    ("R12", "84f7fd5583daed5559a251284ffd90b8847fa496",
+     "267fae6f1a8611d505d0e36e9609df48ab4e0eca"),
+    ("R13", "267fae6f1a8611d505d0e36e9609df48ab4e0eca",
+     "174ad435df06afafcf64f262b3934150792c22e1"),
 )
 
 

@@ -42,30 +42,32 @@ EXPECTED = (
      "5fc00daf43676c30c494f871efb1a69e0eac33b4"),
     ("R11_REPAIR5", "5fc00daf43676c30c494f871efb1a69e0eac33b4",
      "b9caae2843db344067412a5fb4b42ae15c244022"),
-    ("R12", "b9caae2843db344067412a5fb4b42ae15c244022",
-     "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0"),
-    ("R13", "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0",
-     "05c5e011d40b1c134942f1ff5449a55bc4ad331f"),
+    ("R11_REPAIR6", "b9caae2843db344067412a5fb4b42ae15c244022",
+     "84f7fd5583daed5559a251284ffd90b8847fa496"),
+    ("R12", "84f7fd5583daed5559a251284ffd90b8847fa496",
+     "267fae6f1a8611d505d0e36e9609df48ab4e0eca"),
+    ("R13", "267fae6f1a8611d505d0e36e9609df48ab4e0eca",
+     "174ad435df06afafcf64f262b3934150792c22e1"),
 )
 
 
-def test_r11_repair5_is_exact_gate_between_repair4_and_r12() -> None:
+def test_r11_repair6_is_exact_gate_between_repair5_and_r12() -> None:
     stages = tuple(row[0] for row in EXPECTED)
-    index = stages.index("R11_REPAIR5")
+    index = stages.index("R11_REPAIR6")
     assert EXPECTED[index - 1] == (
-        "R11_REPAIR4",
-        "35923cfb7a8c1149284d2ba327a8d5ae306f5490",
-        "5fc00daf43676c30c494f871efb1a69e0eac33b4",
-    )
-    assert EXPECTED[index] == (
         "R11_REPAIR5",
         "5fc00daf43676c30c494f871efb1a69e0eac33b4",
         "b9caae2843db344067412a5fb4b42ae15c244022",
     )
+    assert EXPECTED[index] == (
+        "R11_REPAIR6",
+        "b9caae2843db344067412a5fb4b42ae15c244022",
+        "84f7fd5583daed5559a251284ffd90b8847fa496",
+    )
     assert EXPECTED[index + 1] == (
         "R12",
-        "b9caae2843db344067412a5fb4b42ae15c244022",
-        "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0",
+        "84f7fd5583daed5559a251284ffd90b8847fa496",
+        "267fae6f1a8611d505d0e36e9609df48ab4e0eca",
     )
 
 
@@ -171,7 +173,7 @@ def test_staged_migrations_do_not_reach_forward() -> None:
     assert "20261115_r13_opportunity_source_checkpoint.sql" in source
     assert (
         'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R11_REPAIR2'
-        '|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R12|R13)'
+        '|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R12|R13)'
     ) in source
     assert 'case "$ROADMAP470_STAGE" in\n  ""|R13)' in source
 
@@ -185,21 +187,21 @@ def test_stage_chain_is_contiguous_and_sha_shaped() -> None:
             assert EXPECTED[i - 1][2] == baseline
 
 
-def test_r11_repair5_and_downstream_targets_match_repaired_ancestry() -> None:
+def test_r11_repair6_and_downstream_targets_match_repaired_ancestry() -> None:
     stages = {stage: (baseline, target) for stage, baseline, target in EXPECTED}
-    assert stages["R11_REPAIR4"] == (
-        "35923cfb7a8c1149284d2ba327a8d5ae306f5490",
-        "5fc00daf43676c30c494f871efb1a69e0eac33b4",
-    )
     assert stages["R11_REPAIR5"] == (
         "5fc00daf43676c30c494f871efb1a69e0eac33b4",
         "b9caae2843db344067412a5fb4b42ae15c244022",
     )
-    assert stages["R12"] == (
+    assert stages["R11_REPAIR6"] == (
         "b9caae2843db344067412a5fb4b42ae15c244022",
-        "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0",
+        "84f7fd5583daed5559a251284ffd90b8847fa496",
+    )
+    assert stages["R12"] == (
+        "84f7fd5583daed5559a251284ffd90b8847fa496",
+        "267fae6f1a8611d505d0e36e9609df48ab4e0eca",
     )
     assert stages["R13"] == (
-        "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0",
-        "05c5e011d40b1c134942f1ff5449a55bc4ad331f",
+        "267fae6f1a8611d505d0e36e9609df48ab4e0eca",
+        "174ad435df06afafcf64f262b3934150792c22e1",
     )
