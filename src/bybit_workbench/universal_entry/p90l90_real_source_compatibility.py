@@ -123,10 +123,30 @@ _REVIEWED_20261108_EXIT_IPC_SHA256 = {
         "5bf3fab7a9d4fb3efa347d704a65083d3eac978701413aa65476bcb58239d5db",
 }
 
+# R14 final-release preparation can encounter the still-ACTIVE R06 physical
+# source epoch while the loaded consumer inventory already contains the exact
+# R07 provenance fence and R10 PG-publication execution contract accepted in
+# #470.  Bind that historical origin to only these two immutable reviewed
+# bytes.  This is compatibility evidence, not Strategy/Entry/Exit permission.
+_REVIEWED_R06_SOURCE_ORIGIN = (
+    "99a1ba4c16edbe5cb32022addf6c52888574716d"
+)
+_REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256 = {
+    "universal_entry/p90l90_real_contract_v3.py":
+        "2bdd80448ae7cc6274078939f8b41ebd706b09e089824ec69c99052416395ac7",
+    "universal_entry/r07_publication_provenance.py":
+        "74d6d1e2866c1170558c83b1809824f4bd99fc10818ca47e2c3a49d414316275",
+}
+
 
 def _reviewed_delta_for_origin(
     changed: set[str], *, origin_commit: str,
 ) -> dict[str, str]:
+    if (
+        origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
+        and changed == set(_REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256)
+    ):
+        return _REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256
     if (
         origin_commit == _REVIEWED_20261108_SOURCE_ORIGIN
         and changed == set(_REVIEWED_20261108_EXIT_IPC_SHA256)
