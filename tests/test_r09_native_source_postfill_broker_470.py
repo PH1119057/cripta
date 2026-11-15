@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
 from operations.monitoring import native_public_trade_source as native
 from operations.monitoring.p90l90_real_postfill_source_broker import (
     P90RealPostfillMarketSourceUnverified,
     checked_dynamic_request,
 )
-from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
 
 
 ROOT = Path(__file__).resolve().parents[1]
