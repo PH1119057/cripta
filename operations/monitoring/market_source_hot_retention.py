@@ -429,13 +429,17 @@ def _delete_compact_facts(
 def _raw_delete_predicate(
     active: tuple[str, str] | None,
     head: tuple[str, str, dict[str, tuple[str, int]]] | None,
+    cutoff: datetime,
 ) -> tuple[str, list[object]]:
-    """SQL predicate for definitely-consumed/non-current raw frames."""
+    """Bound raw originals by age; consumed frames may expire even sooner."""
     if active is None:
         return "TRUE", []
     active_session, active_release = active
-    clauses = ["r.source_session_id <> %s"]
-    params: list[object] = [active_session]
+    clauses = [
+        "r.source_session_id <> %s",
+        "(r.source_session_id=%s AND r.committed_at < %s)",
+    ]
+    params: list[object] = [active_session, active_session, cutoff]
     if head is not None and head[0:2] == (active_session, active_release):
         cursors = head[2]
         for product in ("SPOT", "LINEAR"):
@@ -452,9 +456,10 @@ def _delete_raw(
     connection: Any, *,
     active: tuple[str, str] | None,
     head: tuple[str, str, dict[str, tuple[str, int]]] | None,
+    cutoff: datetime,
     limit: int,
 ) -> int:
-    predicate, params = _raw_delete_predicate(active, head)
+    predicate, params = _raw_delete_predicate(active, head, cutoff)
     return int(connection.execute(
         f"""WITH stale AS (
              SELECT r.ctid
@@ -546,7 +551,7 @@ def _candidate_counts(
     ).fetchone()[0])
     active = _active_source(connection)
     head = _mayak_cursor_head(connection)
-    predicate, raw_params = _raw_delete_predicate(active, head)
+    predicate, raw_params = _raw_delete_predicate(active, head, cutoff)
     counts[RAW] = int(connection.execute(
         f"""WITH keep AS ({keep_publications}), refs AS (
              SELECT DISTINCT item.value->>'source_session_id' sid,
@@ -615,6 +620,7 @@ def run_apply(connection: Any, cutoff: datetime, limit: int) -> Result:
             connection,
             active=_active_source(connection),
             head=_mayak_cursor_head(connection),
+            cutoff=cutoff,
             limit=limit,
         )
         size = int(

@@ -239,14 +239,25 @@ def test_active_source_prunes_only_processed_raw_prefix(database, monkeypatch):
         "INSERT INTO mayak_v2.r11_consumer_commit VALUES(%s,%s,%s,%s,10)",
         (MODULE._CONSUMER_ID, session, release, _state(session, release, 3)),
     )
-    for frame in (1, 2, 3, 4):
+    fresh = now - timedelta(minutes=1)
+    frame_times = {
+        1: old,
+        2: fresh,
+        3: old + timedelta(seconds=3),
+        4: fresh + timedelta(seconds=2),
+    }
+    for frame, committed_at in frame_times.items():
         c.execute(
             """INSERT INTO analytics.public_source_original_event_frames
                VALUES(%s,%s,'LINEAR',%s,%s)""",
-            (session, "2" * 32, frame, old + timedelta(seconds=frame)),
+            (session, "2" * 32, frame, committed_at),
         )
+    with c.transaction():
+        c.execute("SET TRANSACTION READ ONLY")
+        check = MODULE.collect_check(c, now - timedelta(minutes=15))
+        assert check.rows[MODULE.RAW] == 2
     result = MODULE.run_apply(c, now - timedelta(minutes=15), 100)
-    assert result.rows[MODULE.RAW] == 1  # frame 2; pinned frame 1 survives
+    assert result.rows[MODULE.RAW] == 2
     assert set(r[0] for r in c.execute(
         "SELECT source_frame_number FROM analytics.public_source_original_event_frames"
-    )) == {1, 3, 4}
+    )) == {1, 4}
