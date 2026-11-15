@@ -44,6 +44,11 @@ def test_rail_is_valid_python_no_args_and_exact_ladder_only() -> None:
     assert '"merge-base", "--is-ancestor"' in source
     assert "CRIPTA_STAGED_OFFLINE_CUTOVER=1" in source
     assert "CRIPTA_NATIVE_SOURCE_CUTOVER=0" in source
+    assert "/usr/sbin/runuser" not in source
+    assert '"/usr/bin/systemd-run"' in source
+    assert '"--property=User=cripta"' in source
+    assert '"--property=Group=cripta"' in source
+    assert '"--property=NoNewPrivileges=yes"' in source
 
 
 def test_unit_is_manual_inert_root_management_entrypoint() -> None:
