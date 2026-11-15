@@ -378,13 +378,15 @@ def test_staged_offline_cutover_guard_before_release_mutation() -> None:
     assert 'SELECT count(*) FROM runtime.hot_orders' in source
 
 
-def test_staged_offline_cutover_retains_all_prior_release_backups() -> None:
+def test_staged_offline_cutover_retention_is_bounded_only_for_roadmap470() -> None:
     source = INSTALLER.read_text(encoding="utf-8")
     assert 'staged_offline=$STAGED_OFFLINE' in source
     assert 'STAGED_OFFLINE_BACKUP_RETENTION=KEEP_ALL' in source
-    assert '''if [[ "$STAGED_OFFLINE" == "1" ]]; then
-  # Protect all historic archives and release backups during breaking R10.''' in source
-    assert '''else
-  prune_release_backups
-fi''' in source
+    assert (
+        'if [[ "$STAGED_OFFLINE" == "1" && -z "$ROADMAP470_STAGE" ]]; then'
+        in source
+    )
+    assert "Generic staged-offline behavior keeps every backup." in source
+    assert "#470 incremental acceptance keeps the newest rollback backup" in source
+    assert "prune_release_backups" in source
     assert 'echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"' in source
