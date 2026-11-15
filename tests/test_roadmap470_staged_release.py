@@ -11,6 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 RAIL = ROOT / "operations/infrastructure/cripta-roadmap470-staged-release"
 INSTALLER = ROOT / "operations/infrastructure/install_verified_release.sh"
 UNIT = ROOT / "operations/systemd/cripta-roadmap470-staged-release.service"
+PREFLIGHT_UNIT = ROOT / (
+    "operations/systemd/cripta-roadmap470-staged-release-preflight.service"
+)
 
 EXPECTED = (
     ("R07", "99a1ba4c16edbe5cb32022addf6c52888574716d",
@@ -44,6 +47,11 @@ def test_rail_is_valid_python_no_args_and_exact_ladder_only() -> None:
     assert '"merge-base", "--is-ancestor"' in source
     assert "CRIPTA_STAGED_OFFLINE_CUTOVER=1" in source
     assert "CRIPTA_NATIVE_SOURCE_CUTOVER=0" in source
+    assert "/usr/sbin/runuser" not in source
+    assert '"/usr/bin/systemd-run"' in source
+    assert '"--property=User=cripta"' in source
+    assert '"--property=Group=cripta"' in source
+    assert '"--property=NoNewPrivileges=yes"' in source
 
 
 def test_unit_is_manual_inert_root_management_entrypoint() -> None:
@@ -58,9 +66,18 @@ def test_unit_is_manual_inert_root_management_entrypoint() -> None:
         "cripta-roadmap470-staged-release"
     ) in unit
     assert "timer" not in unit.lower()
-    # Installing the unit never means enabling or starting it.
+    preflight = PREFLIGHT_UNIT.read_text(encoding="utf-8")
+    assert "CRIPTA_ROADMAP470_PREFLIGHT_ONLY=1" in preflight
+    assert "User=root" in preflight and "Group=root" in preflight
+    assert "NoNewPrivileges=yes" in preflight
+    assert "ProtectSystem=strict" in preflight
+    source = RAIL.read_text(encoding="utf-8")
+    assert 'os.environ.get("CRIPTA_ROADMAP470_PREFLIGHT_ONLY") == "1"' in source
+    assert "ROADMAP470_PREFLIGHT_ONLY=PASS" in source
+    # Installing the management units never means enabling or starting them.
     installer = INSTALLER.read_text(encoding="utf-8")
     assert "cripta-roadmap470-staged-release.service" not in installer
+    assert "cripta-roadmap470-staged-release-preflight.service" not in installer
 
 
 def test_installer_shell_syntax_and_staged_no_start_contract() -> None:
