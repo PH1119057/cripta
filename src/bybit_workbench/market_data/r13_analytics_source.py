@@ -140,6 +140,23 @@ def read_active_source_epoch(connection: Any) -> R13SourceEpoch:
     return R13SourceEpoch(session, producer, started, last)
 
 
+def fence_active_source_epoch(
+    connection: Any,
+    *,
+    epoch: R13SourceEpoch,
+) -> None:
+    """Hold the exact ACTIVE epoch stable through one consumer commit."""
+    row = connection.execute(
+        """SELECT state,producer_release_commit
+             FROM analytics.native_public_trade_source_sessions
+            WHERE market_source_id=%s AND source_session_id=%s
+            FOR SHARE""",
+        (BYBIT_PUBLIC_MARKET_SOURCE_ID, epoch.source_session_id),
+    ).fetchone()
+    if row != ("ACTIVE", epoch.producer_release_commit):
+        _fail("SOURCE_EPOCH_MOVED_DURING_CONSUMER_TX")
+
+
 def require_opportunity_symbol(
     connection: Any,
     *,
