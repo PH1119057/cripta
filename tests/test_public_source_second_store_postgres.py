@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 import psycopg
@@ -16,6 +17,9 @@ import pytest
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
+)
+from bybit_workbench.market_data.native_public_trade_journal import (
+    NativeTradeEvidence,
 )
 from bybit_workbench.market_data.public_forming_minute_source import (
     persist_forming_minute_fact,
@@ -31,6 +35,9 @@ from bybit_workbench.market_data.public_source_second_store import (
 from bybit_workbench.market_data.r12_position_publication import (
     read_r12_position_market_snapshot,
 )
+from bybit_workbench.market_data.r13_analytics_source import (
+    read_publication_tickers,
+)
 from bybit_workbench.market_data.shared_closed_candles import (
     MarketCandleKey,
     SharedClosedCandleStore,
@@ -43,6 +50,11 @@ from bybit_workbench.market_identity import (
     bybit_instrument_id,
 )
 from operations.monitoring import native_public_trade_source as source
+from research.server.monitoring.opportunity_tracker import (
+    Opportunity,
+    consume_available,
+    load_active,
+)
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 pytestmark = pytest.mark.skipif(not DSN, reason="disposable PostgreSQL 16 only")
@@ -260,6 +272,23 @@ def test_pg16_one_publication_pins_spot_and_linear_compact_source_rows(
             (session,),
         ).fetchone() == (0,)
 
+    if DSN is None:
+        pytest.skip("disposable PostgreSQL required")
+    with psycopg.connect(DSN, autocommit=True) as reader:
+        reader.execute("SET ROLE cripta")
+        with reader.transaction():
+            reader.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            )
+            ticker_view = read_publication_tickers(
+                reader,
+                symbols=("LTCUSDT",),
+                observed_at=now + timedelta(seconds=1),
+            )
+    assert ticker_view["LTCUSDT"].publication_id == publication
+    assert ticker_view["LTCUSDT"].last_price == Decimal("51.7")
+    assert ticker_view["LTCUSDT"].source_session_id == session
+
 
 def test_r12_pg16_position_reader_uses_one_publication_and_exact_top25(
     monkeypatch: pytest.MonkeyPatch,
@@ -444,3 +473,191 @@ def test_r12_pg16_position_reader_uses_one_publication_and_exact_top25(
     )
     assert snapshot.top25_bid_depth_usdt == expected_bid
     assert snapshot.top25_ask_depth_usdt == expected_ask
+
+
+def _install_r13_opportunity_fixture(connection: psycopg.Connection) -> None:
+    connection.execute("CREATE SCHEMA IF NOT EXISTS monitoring")
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS monitoring.opportunities(
+            signal_id TEXT PRIMARY KEY,
+            bot_id TEXT NOT NULL,
+            strategy_version TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            signal_at_epoch_ms BIGINT NOT NULL,
+            signal_price DOUBLE PRECISION NOT NULL,
+            decision TEXT NOT NULL,
+            decision_reason TEXT NOT NULL,
+            traffic_light TEXT NOT NULL,
+            horizon_seconds INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            last_price DOUBLE PRECISION,
+            max_favorable_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+            max_adverse_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+            first_hits_json TEXT NOT NULL DEFAULT '{}',
+            samples BIGINT NOT NULL DEFAULT 0,
+            finalized_at_epoch_ms BIGINT,
+            created_at_epoch_ms BIGINT NOT NULL)"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS monitoring.opportunity_events(
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            signal_id TEXT NOT NULL,
+            at_epoch_ms BIGINT NOT NULL,
+            event TEXT NOT NULL,
+            value_pct DOUBLE PRECISION,
+            price DOUBLE PRECISION,
+            details_json TEXT NOT NULL)"""
+    )
+    migration = Path(
+        "operations/sql/20261115_r13_opportunity_source_checkpoint.sql"
+    ).read_text(encoding="utf-8")
+    connection.execute(migration)
+    connection.execute(
+        "GRANT SELECT,INSERT,UPDATE ON monitoring.opportunities TO cripta"
+    )
+    connection.execute(
+        "GRANT SELECT,INSERT ON monitoring.opportunity_events TO cripta"
+    )
+    connection.execute(
+        "GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA monitoring TO cripta"
+    )
+
+
+def _r13_native(
+    *,
+    session: str,
+    sequence: int,
+    price: str,
+    at: datetime,
+) -> NativeTradeEvidence:
+    del session
+    return NativeTradeEvidence(
+        market_source_id=BYBIT_PUBLIC_MARKET_SOURCE_ID,
+        instrument_id=bybit_instrument_id("linear", "LTCUSDT"),
+        external_symbol="LTCUSDT",
+        exchange_sequence=sequence,
+        exec_id=f"r13-{sequence}-{uuid4().hex}",
+        event_at=at,
+        price=Decimal(price),
+        quantity=Decimal("0.2"),
+        taker_side="Buy",
+        source_transport="BYBIT_WS_PUBLIC_TRADE",
+        producer_release_commit=RELEASE,
+    )
+
+
+def test_r13_pg16_opportunity_restart_and_source_epoch_gap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(source, "RELEASE", RELEASE)
+    signal_id = "r13-" + uuid4().hex
+    first_session = uuid4().hex
+
+    with _db() as admin:
+        _install_r13_opportunity_fixture(admin)
+        admin.execute(
+            """INSERT INTO identity.instruments(
+                   instrument_id,venue_id,product_category,external_symbol)
+               VALUES (%s,'venue-bybit','LINEAR','LTCUSDT')
+               ON CONFLICT (instrument_id) DO NOTHING""",
+            (bybit_instrument_id("linear", "LTCUSDT"),),
+        )
+        source._session_start(admin, first_session)
+        subscribed = admin.execute(
+            """SELECT subscribed_at
+                 FROM analytics.native_public_trade_source_sessions
+                WHERE source_session_id=%s""",
+            (first_session,),
+        ).fetchone()[0]
+        signal_at = subscribed + timedelta(seconds=1)
+        first_event_at = signal_at + timedelta(milliseconds=100)
+        source._persist_frame(
+            admin,
+            session=first_session,
+            frame_number=1,
+            facts=(
+                _r13_native(
+                    session=first_session,
+                    sequence=1001,
+                    price="101",
+                    at=first_event_at,
+                ),
+            ),
+        )
+        signal_ms = int(signal_at.timestamp() * 1000)
+        admin.execute(
+            """INSERT INTO monitoring.opportunities(
+                   signal_id,bot_id,strategy_version,symbol,direction,
+                   signal_at_epoch_ms,signal_price,decision,decision_reason,
+                   traffic_light,horizon_seconds,state,created_at_epoch_ms)
+               VALUES(%s,'r13-test','v1','LTCUSDT','long',%s,100,
+                      'shadow','r13','unknown',3600,'tracking',%s)""",
+            (signal_id, signal_ms, signal_ms),
+        )
+
+    if DSN is None:
+        pytest.skip("disposable PostgreSQL required")
+    with psycopg.connect(DSN, autocommit=True) as runtime:
+        runtime.execute("SET ROLE cripta")
+        active = {
+            signal_id: Opportunity(
+                signal_id,
+                "LTCUSDT",
+                "long",
+                signal_ms,
+                100,
+                3600,
+            )
+        }
+        assert consume_available(runtime, active) == 1
+        row = runtime.execute(
+            """SELECT source_session_id,frame_number,frame_index,
+                      source_quality
+                 FROM monitoring.opportunity_source_checkpoints
+                WHERE signal_id=%s""",
+            (signal_id,),
+        ).fetchone()
+        assert row == (first_session, 1, 0, "CURRENT")
+        assert active[signal_id].samples == 1
+
+        # A reconstructed process resumes after the durable cursor and does
+        # not count the same original provider trade twice.
+        restarted: dict[str, Opportunity] = {}
+        load_active(runtime, restarted)
+        assert restarted[signal_id].samples == 1
+        assert consume_available(runtime, restarted) == 0
+        assert restarted[signal_id].samples == 1
+
+    second_session = uuid4().hex
+    with _db() as admin:
+        source._session_start(admin, second_session)
+        second_event_at = signal_at + timedelta(seconds=2)
+        source._persist_frame(
+            admin,
+            session=second_session,
+            frame_number=1,
+            facts=(
+                _r13_native(
+                    session=second_session,
+                    sequence=2001,
+                    price="102",
+                    at=second_event_at,
+                ),
+            ),
+        )
+
+    with psycopg.connect(DSN, autocommit=True) as runtime:
+        runtime.execute("SET ROLE cripta")
+        restarted = {}
+        load_active(runtime, restarted)
+        assert consume_available(runtime, restarted) == 1
+        checkpoint = runtime.execute(
+            """SELECT source_session_id,frame_number,frame_index,
+                      source_quality
+                 FROM monitoring.opportunity_source_checkpoints
+                WHERE signal_id=%s""",
+            (signal_id,),
+        ).fetchone()
+        assert checkpoint == (second_session, 1, 0, "GAP")
+        assert restarted[signal_id].samples == 2
