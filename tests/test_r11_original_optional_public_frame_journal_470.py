@@ -19,6 +19,7 @@ from bybit_workbench.market_data.public_source_event_codec import (
 from bybit_workbench.market_data.r11_optional_original_frame_journal import (
     R11OriginalFrameUnavailable,
     append_r11_original_optional_frame,
+    append_r11_original_optional_frames,
     make_r11_original_optional_frame,
 )
 
@@ -254,13 +255,16 @@ class Rows:
     def fetchone(self):
         return self.items[0] if self.items else None
 
+    def fetchall(self):
+        return list(self.items)
+
 
 class FakeSourceConnection:
     def __init__(self) -> None:
         self.state = "ACTIVE"
         self.market_source_id = "ms-bybit-mainnet-public-v1"
         self.producer_commit = COMMIT
-        self.existing_digest: str | None = None
+        self.existing: dict[tuple[str, str, int], str] = {}
         self.transaction_entries = 0
         self.statements: list[str] = []
 
@@ -277,16 +281,34 @@ class FakeSourceConnection:
                 self.state, self.market_source_id, self.producer_commit,
             )])
         if "INSERT INTO analytics.public_source_original_event_frames" in sql:
-            digest = params[-2]
-            if self.existing_digest is None:
-                self.existing_digest = digest
-                return Rows([(digest,)])
-            return Rows([])
-        if "SELECT frame_content_sha256" in sql:
-            return Rows(
-                [(self.existing_digest,)]
-                if self.existing_digest else []
-            )
+            inserted = []
+            assert len(params) % 18 == 0
+            for offset in range(0, len(params), 18):
+                key = (
+                    str(params[offset + 1]),
+                    str(params[offset + 4]),
+                    int(params[offset + 8]),
+                )
+                digest = str(params[offset + 16])
+                if key not in self.existing:
+                    self.existing[key] = digest
+                    inserted.append((*key, digest))
+            return Rows(inserted)
+        if (
+            "SELECT transport_epoch_id,product_category" in sql
+            and "frame_content_sha256" in sql
+        ):
+            assert params[0] == SESSION
+            rows = []
+            for offset in range(1, len(params), 3):
+                key = (
+                    str(params[offset]),
+                    str(params[offset + 1]),
+                    int(params[offset + 2]),
+                )
+                if key in self.existing:
+                    rows.append((*key, self.existing[key]))
+            return Rows(rows)
         raise AssertionError("unexpected SQL:" + sql)
 
 
@@ -299,6 +321,35 @@ def test_one_native_source_transaction_is_append_once_idempotent() -> None:
     assert len([x for x in db.statements if "INSERT INTO" in x]) == 2
     assert all("UPDATE " not in x and "DELETE " not in x for x in db.statements)
     assert "ON CONFLICT" in "\n".join(db.statements)
+
+
+def test_bounded_batch_uses_one_source_check_and_one_insert_statement() -> None:
+    db = FakeSourceConnection()
+    frames = tuple(build(number=i) for i in range(1, 33))
+    assert append_r11_original_optional_frames(db, frames) == 32
+    assert db.transaction_entries == 1
+    assert len([
+        x for x in db.statements
+        if "FROM analytics.native_public_trade_source_sessions" in x
+    ]) == 1
+    inserts = [
+        x for x in db.statements
+        if "INSERT INTO analytics.public_source_original_event_frames" in x
+    ]
+    assert len(inserts) == 1
+    assert inserts[0].count("'venue-bybit'") == 32
+    assert append_r11_original_optional_frames(db, frames) == 0
+
+
+def test_batch_rejects_duplicate_primary_identity_before_db() -> None:
+    db = FakeSourceConnection()
+    frame = build()
+    with pytest.raises(
+        R11OriginalFrameUnavailable, match="APPEND_BATCH_KEY_DUPLICATE",
+    ):
+        append_r11_original_optional_frames(db, (frame, frame))
+    assert db.transaction_entries == 0
+    assert db.statements == []
 
 
 def test_real_source_session_must_be_active_on_every_append() -> None:
@@ -314,11 +365,17 @@ def test_real_source_session_must_be_active_on_every_append() -> None:
 
 def test_existing_frame_with_different_bytes_is_never_silently_overwritten() -> None:
     db = FakeSourceConnection()
-    db.existing_digest = "f" * 64
+    frame = build()
+    key = (
+        frame.transport_epoch_id,
+        frame.product_category,
+        frame.source_frame_number,
+    )
+    db.existing[key] = "f" * 64
     with pytest.raises(
         R11OriginalFrameUnavailable, match="FRAME_COLLISION",
     ):
-        append_r11_original_optional_frame(db, build())
+        append_r11_original_optional_frame(db, frame)
 
 
 def test_mutated_or_forged_dataclass_hash_blocks_before_db() -> None:
@@ -332,7 +389,6 @@ def test_mutated_or_forged_dataclass_hash_blocks_before_db() -> None:
         )
     assert db.transaction_entries == 0
     assert db.statements == []
-
 
 def test_source_only_sql_role_scope_and_five_symbol_contract() -> None:
     sql = Path(
