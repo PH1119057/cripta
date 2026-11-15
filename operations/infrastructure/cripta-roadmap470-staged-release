@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""One-off #470 no-start staged installer: R06 -> R07 -> ... -> R13.
+
+No caller may choose a stage, SHA, branch or service.  The exact next target is
+derived from the currently installed immutable runtime baseline.  R14 is
+intentionally outside this rail.
+"""
+from __future__ import annotations
+
+import fcntl
+import hashlib
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+SOURCE = Path("/srv/cripta/source_checkout")
+RUNTIME_CURRENT = Path("/srv/cripta/runtime/current")
+TOOLING_CURRENT = Path("/data/cripta/research/tooling/current")
+RAIL_ROOT = Path("/usr/local/libexec/cripta-roadmap470-staged-release")
+RAIL_MARKER = RAIL_ROOT / "RAIL_COMMIT"
+SELF_PATH = RAIL_ROOT / "cripta-roadmap470-staged-release"
+INSTALLER_REL = "operations/infrastructure/install_verified_release.sh"
+SELF_REL = "operations/infrastructure/cripta-roadmap470-staged-release"
+LOCK_PATH = Path("/run/lock/cripta-roadmap470-staged-release.lock")
+SHA = re.compile(r"^[0-9a-f]{40}$")
+
+# Exact owner-approved physical acceptance ladder.  R14 is deliberately absent.
+STAGES: tuple[tuple[str, str, str], ...] = (
+    ("R07", "99a1ba4c16edbe5cb32022addf6c52888574716d",
+     "bbc21196fc7233d199f1ff016ea8553450e55532"),
+    ("R08", "bbc21196fc7233d199f1ff016ea8553450e55532",
+     "a18a78b849ea0c6a18dfb6dce422e757466f5ab8"),
+    ("R09", "a18a78b849ea0c6a18dfb6dce422e757466f5ab8",
+     "1e29f9d5105ffc99a91af01c3c500cad062534ea"),
+    ("R10", "1e29f9d5105ffc99a91af01c3c500cad062534ea",
+     "dbe65bdd1883b09f752ef62864a8221bbb75106e"),
+    ("R11", "dbe65bdd1883b09f752ef62864a8221bbb75106e",
+     "caa5a636a67c6ff677a9796d172c8e072f71b4db"),
+    ("R12", "caa5a636a67c6ff677a9796d172c8e072f71b4db",
+     "5dfac7de21152ce67bfc2fc333eb53d22f292a15"),
+    ("R13", "5dfac7de21152ce67bfc2fc333eb53d22f292a15",
+     "b7731f1c7788703e0b9043c7b5dc0cc007552d4e"),
+)
+
+
+class StagedReleaseError(RuntimeError):
+    pass
+
+
+def _run(args: list[str], *, check: bool = True, text: bool = True) -> subprocess.CompletedProcess:
+    result = subprocess.run(args, check=False, capture_output=True, text=text)
+    if check and result.returncode != 0:
+        detail = result.stderr.strip() if text else "command failed"
+        raise StagedReleaseError(f"COMMAND_FAILED:{Path(args[0]).name}:{result.returncode}:{detail[:300]}")
+    return result
+
+
+def _git_as_cripta(*args: str) -> str:
+    result = _run([
+        "/usr/sbin/runuser", "-u", "cripta", "--",
+        "/usr/bin/env", "GIT_OPTIONAL_LOCKS=0",
+        "/usr/bin/git", "-C", str(SOURCE), *args,
+    ])
+    return result.stdout.strip()
+
+
+def _read_commit(path: Path) -> str:
+    commit = (path / "INSTALLED_COMMIT").read_text(encoding="ascii").strip()
+    if SHA.fullmatch(commit) is None:
+        raise StagedReleaseError(f"INSTALLED_COMMIT_INVALID:{path}")
+    return commit
+
+
+def next_stage(installed: str) -> tuple[str, str, str]:
+    for stage, baseline, target in STAGES:
+        if installed == baseline:
+            return stage, baseline, target
+    if installed == STAGES[-1][2]:
+        raise StagedReleaseError("ROADMAP470_R07_R13_ALREADY_INSTALLED")
+    raise StagedReleaseError("ROADMAP470_INSTALLED_BASELINE_NOT_IN_FIXED_LADDER")
+
+
+def _git_bytes(commit: str, relative: str) -> bytes:
+    result = _run([
+        "/usr/sbin/runuser", "-u", "cripta", "--",
+        "/usr/bin/env", "GIT_OPTIONAL_LOCKS=0",
+        "/usr/bin/git", "-C", str(SOURCE), "show", f"{commit}:{relative}",
+    ], text=False)
+    return result.stdout
+
+
+def _verify_rail(remote: str) -> str:
+    rail_commit = RAIL_MARKER.read_text(encoding="ascii").strip()
+    if SHA.fullmatch(rail_commit) is None:
+        raise StagedReleaseError("ROADMAP470_RAIL_COMMIT_INVALID")
+    _git_as_cripta("cat-file", "-e", f"{rail_commit}^{{commit}}")
+    if _run([
+        "/usr/sbin/runuser", "-u", "cripta", "--",
+        "/usr/bin/env", "GIT_OPTIONAL_LOCKS=0",
+        "/usr/bin/git", "-C", str(SOURCE),
+        "merge-base", "--is-ancestor", rail_commit, remote,
+    ], check=False).returncode != 0:
+        raise StagedReleaseError("ROADMAP470_RAIL_NOT_ANCESTOR_OF_MAIN")
+    expected = _git_bytes(rail_commit, SELF_REL)
+    actual = SELF_PATH.read_bytes()
+    if actual != expected:
+        raise StagedReleaseError("ROADMAP470_RAIL_BYTES_DRIFT")
+    return rail_commit
+
+
+def main() -> int:
+    if len(sys.argv) != 1:
+        raise StagedReleaseError("ROADMAP470_RAIL_TAKES_NO_ARGUMENTS")
+    if os.geteuid() != 0:
+        raise StagedReleaseError("ROADMAP470_RAIL_REQUIRES_ROOT")
+    lock_fd = os.open(LOCK_PATH, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise StagedReleaseError("ROADMAP470_RELEASE_LOCK_BUSY") from exc
+
+        branch = _git_as_cripta("symbolic-ref", "--quiet", "--short", "HEAD")
+        dirty = _git_as_cripta("status", "--porcelain=v1", "--untracked-files=all")
+        head = _git_as_cripta("rev-parse", "HEAD")
+        remote_line = _git_as_cripta("ls-remote", "origin", "refs/heads/main")
+        remote = remote_line.split()[0] if remote_line else ""
+        if branch != "main" or dirty:
+            raise StagedReleaseError("ROADMAP470_SOURCE_NOT_CLEAN_MAIN")
+        if SHA.fullmatch(remote) is None or head != remote:
+            raise StagedReleaseError("ROADMAP470_SOURCE_NOT_CURRENT_REMOTE_MAIN")
+        rail_commit = _verify_rail(remote)
+
+        runtime = _read_commit(RUNTIME_CURRENT)
+        tooling = _read_commit(TOOLING_CURRENT)
+        if runtime != tooling:
+            raise StagedReleaseError("ROADMAP470_RUNTIME_TOOLING_BASELINE_SPLIT")
+        stage, baseline, target = next_stage(runtime)
+        _git_as_cripta("cat-file", "-e", f"{target}^{{commit}}")
+        ancestor = _run([
+            "/usr/sbin/runuser", "-u", "cripta", "--",
+            "/usr/bin/env", "GIT_OPTIONAL_LOCKS=0",
+            "/usr/bin/git", "-C", str(SOURCE),
+            "merge-base", "--is-ancestor", target, remote,
+        ], check=False)
+        if ancestor.returncode != 0:
+            raise StagedReleaseError("ROADMAP470_TARGET_NOT_ANCESTOR_OF_MAIN")
+        tree = _git_as_cripta("rev-parse", f"{target}^{{tree}}")
+
+        installer = _git_bytes(rail_commit, INSTALLER_REL)
+        if not installer.startswith(b"#!/usr/bin/env bash\n"):
+            raise StagedReleaseError("ROADMAP470_INSTALLER_BYTES_INVALID")
+        digest = hashlib.sha256(
+            f"{rail_commit}:{stage}:{baseline}:{target}".encode("ascii")
+        ).hexdigest()[:12]
+        with tempfile.NamedTemporaryFile(
+            prefix="cripta-roadmap470-installer.", dir="/run/lock", delete=False
+        ) as staged:
+            staged.write(installer)
+            staged.flush()
+            os.fsync(staged.fileno())
+            staged_path = Path(staged.name)
+        os.chmod(staged_path, 0o700)
+        try:
+            print(
+                f"ROADMAP470_STAGE_PREPARED={stage} BASELINE={baseline} "
+                f"TARGET={target} RAIL={rail_commit}"
+            )
+            result = subprocess.run([
+                "/usr/bin/systemd-run",
+                "--wait", "--pipe", "--collect",
+                f"--unit=cripta-roadmap470-{stage.lower()}-{digest}",
+                "--property=Type=oneshot",
+                "--property=TimeoutStartSec=1800",
+                "/usr/bin/env",
+                f"CRIPTA_RELEASE_COMMIT={target}",
+                f"CRIPTA_EXPECTED_BASELINE_COMMIT={baseline}",
+                f"CRIPTA_RELEASE_TREE_SHA={tree}",
+                "CRIPTA_RELEASE_CONTROL_CHECKPOINT=1",
+                f"CRIPTA_RELEASE_CONTROL_REASON=ROADMAP470_{stage}_STAGED_ACCEPTANCE",
+                "CRIPTA_STAGED_OFFLINE_CUTOVER=1",
+                "CRIPTA_NATIVE_SOURCE_CUTOVER=0",
+                f"CRIPTA_ROADMAP470_STAGE={stage}",
+                "/usr/bin/bash", str(staged_path),
+            ], check=False)
+            if result.returncode != 0:
+                raise StagedReleaseError(
+                    f"ROADMAP470_STAGE_INSTALL_FAILED:{stage}:{result.returncode}"
+                )
+        finally:
+            staged_path.unlink(missing_ok=True)
+        print(f"ROADMAP470_STAGE_INSTALL_COMPLETED={stage} TARGET={target}")
+        return 0
+    finally:
+        os.close(lock_fd)
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except StagedReleaseError as exc:
+        print(f"ROADMAP470_STAGED_RELEASE=BLOCKED reason={exc}", file=sys.stderr)
+        raise SystemExit(42)
