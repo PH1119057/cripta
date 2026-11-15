@@ -65,7 +65,12 @@ STAGES: tuple[tuple[str, str, str], ...] = (
     # selecting the causal repair; no source policy changes in this stage.
     ("R11_REPAIR2", "103ac4dc7ce0d7d06b413847938a22e356cc26b9",
      "f16601924f6623260cbe45d96547c6e9fc71067a"),
-    ("R12", "f16601924f6623260cbe45d96547c6e9fc71067a",
+    # Physical diagnostic proved optional raw-frame ingress outran synchronous
+    # per-frame PostgreSQL commits until the required LINEAR queue filled.
+    # Batch the exact same immutable rows before any R12 bytes are installed.
+    ("R11_REPAIR3", "f16601924f6623260cbe45d96547c6e9fc71067a",
+     "35923cfb7a8c1149284d2ba327a8d5ae306f5490"),
+    ("R12", "35923cfb7a8c1149284d2ba327a8d5ae306f5490",
      "4ae97520e44e2580a82e08985fcad744106a3769"),
     ("R13", "4ae97520e44e2580a82e08985fcad744106a3769",
      "acec641eff61a90f302806fb913321b61d0f61c8"),
