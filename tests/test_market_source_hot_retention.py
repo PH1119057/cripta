@@ -138,3 +138,21 @@ def test_systemd_contract_starts_retention_with_source():
     assert "User=postgres" in service
     assert "PartOf=cripta-native-public-trade-source.service" in timer
     assert "OnUnitActiveSec=60s" in timer
+
+def test_native_cutover_accepts_source_coupled_retention_runtime_state():
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text()
+    assert '"$native_code_changed" == "1"' in installer
+    assert '"cripta-market-hot-retention.timer"' in installer
+    assert (
+        "source-coupled market retention timer inactive after native cutover"
+        in installer
+    )
+    assert '"cripta-market-hot-retention.service"' in installer
+    assert (
+        "source-coupled market retention service failed after native cutover"
+        in installer
+    )
+    assert "systemctl is-failed --quiet" in installer
+
