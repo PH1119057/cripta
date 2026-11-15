@@ -1,0 +1,20 @@
+[Unit]
+Description=Cripta #470 staged release read-only actor/source preflight
+After=postgresql.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/usr/local/libexec/cripta-roadmap470-staged-release/RAIL_COMMIT
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+Environment=CRIPTA_ROADMAP470_PREFLIGHT_ONLY=1
+ExecStart=/usr/bin/python3 /usr/local/libexec/cripta-roadmap470-staged-release/cripta-roadmap470-staged-release
+TimeoutStartSec=180
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadOnlyPaths=/srv/cripta/source_checkout /srv/cripta/runtime /data/cripta/research/tooling /usr/local/libexec/cripta-roadmap470-staged-release
+ReadWritePaths=/run/lock
+LockPersonality=yes
