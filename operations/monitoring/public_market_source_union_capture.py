@@ -11,7 +11,6 @@ No consumer cutover, Strategy, account, Exchange, private API or LIVE right.
 from __future__ import annotations
 
 import json
-import os
 import queue
 import threading
 import time
@@ -54,11 +53,6 @@ from bybit_workbench.market_data.public_source_event_codec import (
     PublicSourceFrameInvalid,
     decode_bybit_public_frame,
 )
-from bybit_workbench.market_data.r11_optional_original_frame_journal import (
-    R11OriginalFrameUnavailable,
-    append_r11_original_optional_frame,
-    make_r11_original_optional_frame,
-)
 from bybit_workbench.market_data.public_source_quality import (
     PublicSourceQualityEvent,
     Quality,
@@ -92,58 +86,8 @@ _REPAIR_PROVIDER_SPACING_SECONDS = 0.30
 _REPAIR_PROVIDER_SETTLE_SECONDS = 10
 
 
-def r11_optional_original_frames_enabled() -> bool:
-    """Explicit code-first R11 flag; source installation never auto-enables."""
-    value = os.environ.get("CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES", "0").strip()
-    if value not in {"0", "1"}:
-        raise SourceManifestInvalid("R11_ORIGINAL_FRAME_FLAG_INVALID")
-    return value == "1"
-
-
-def r11_original_optional_kind(product: str, kind: str) -> bool:
-    """No duplicate LINEAR publicTrade or optional cross-product topic."""
-    return (
-        (product == "SPOT" and kind in ("TRADE", "BOOK"))
-        or (product == "LINEAR" and kind in (
-            "BOOK", "TICKER", "LIQUIDATION",
-        ))
-    )
-
-
-def _r11_optional_frame_preflight(
-    connection: psycopg.Connection[Any],
-) -> None:
-    """Exact migration/SELECT+INSERT but no UPDATE/DELETE, before any WS."""
-    table = "analytics.public_source_original_event_frames"
-    found = connection.execute(
-        "SELECT to_regclass(%s)", (table,),
-    ).fetchone()
-    if found is None or found[0] is None:
-        raise SourceManifestInvalid("R11_ORIGINAL_FRAME_SCHEMA_NOT_INSTALLED")
-    rights = connection.execute(
-        """SELECT has_table_privilege(current_user,%s,'SELECT'),
-                  has_table_privilege(current_user,%s,'INSERT'),
-                  has_table_privilege(current_user,%s,'UPDATE'),
-                  has_table_privilege(current_user,%s,'DELETE')""",
-        (table, table, table, table),
-    ).fetchone()
-    if rights != (True, True, False, False):
-        raise SourceManifestInvalid("R11_ORIGINAL_FRAME_ROLE_GRANTS_INVALID")
-
-
-_R11_REFERENCE_ANCHORS = ("BTCUSDT", "ETHUSDT")
-_R11_MAYAK_REQUIREMENTS = frozenset((
-    ("SPOT", "PUBLIC_TRADE"), ("SPOT", "ORDERBOOK_50"),
-    ("SPOT", "INSTRUMENT_INFO"),
-    ("LINEAR", "PUBLIC_TRADE"), ("LINEAR", "ORDERBOOK_50"),
-    ("LINEAR", "TICKER"), ("LINEAR", "LIQUIDATION"),
-    ("LINEAR", "ACCOUNT_RATIO"), ("LINEAR", "INSTRUMENT_INFO"),
-))
-
-
 def parse_explicit_source_manifest(
     manifest: str, *, native_symbols: tuple[str, ...],
-    mayak_reference_symbols: tuple[str, ...] = (),
 ) -> PublicFeedUnion:
     """No guessed topic list; the operator must publish exact source consumers."""
     if not manifest or len(manifest) > 300000:
@@ -163,50 +107,11 @@ def parse_explicit_source_manifest(
     # reviewed native producer symbol set. Different SPOT/LINEAR products
     # of the SAME symbol remain valid; no new symbol can be silently
     # subscribed or REST-polled by an optional consumer requirement.
-    # The two explicit MAYAK anchors are NOT trading symbols. This exact
-    # opt-in keeps R01-R10 native/Entry/Exit/Execution consumers five-only.
-    if mayak_reference_symbols not in ((), _R11_REFERENCE_ANCHORS):
-        raise SourceManifestInvalid("R11_MAYAK_ANCHOR_UNIVERSE_INVALID")
-    approved_native = frozenset(native_symbols)
-    anchor_set = frozenset(mayak_reference_symbols)
-    if (not approved_native or len(approved_native) != len(native_symbols)
-            or approved_native & anchor_set):
+    approved = frozenset(native_symbols)
+    if not approved or len(approved) != len(native_symbols):
         raise SourceManifestInvalid("SOURCE_NATIVE_SYMBOL_SCOPE_INVALID")
-    approved = approved_native | anchor_set
     if any(item.symbol not in approved for item in required):
-        raise SourceManifestInvalid("SOURCE_OUTSIDE_APPROVED_UNIVERSE")
-    reference_rows = [
-        item for item in required if item.symbol in anchor_set
-    ]
-    if any(
-        item.consumer_id == "MAYAK_REFERENCE"
-        and item.symbol not in anchor_set
-        for item in required
-    ):
-        raise SourceManifestInvalid(
-            "R11_MAYAK_REFERENCE_CONSUMER_SCOPE_INVALID"
-        )
-    if mayak_reference_symbols:
-        if (
-            len(reference_rows) != 18
-            or any(item.consumer_id != "MAYAK_REFERENCE" or item.required
-                   or item.timeframe or item.lookback_bars
-                   for item in reference_rows)
-            or any(
-                frozenset((item.product, item.dataset)
-                          for item in reference_rows
-                          if item.symbol == symbol)
-                != _R11_MAYAK_REQUIREMENTS
-                or len([item for item in reference_rows
-                        if item.symbol == symbol]) != 9
-                for symbol in mayak_reference_symbols
-            )
-        ):
-            raise SourceManifestInvalid(
-                "R11_MAYAK_ANCHOR_REQUIRED_FEEDS_INVALID"
-            )
-    elif any(item.consumer_id == "MAYAK_REFERENCE" for item in required):
-        raise SourceManifestInvalid("R11_MAYAK_ANCHORS_NOT_ENABLED")
+        raise SourceManifestInvalid("SOURCE_OUTSIDE_ACTIVE_TRADING_UNIVERSE")
     feeds = union_public_feed_requirements(required)
     # Only the explicitly validated LINEAR one-minute forming adapter is
     # implemented. Confirmed SPOT closed bars use the *same canonical*
@@ -533,31 +438,6 @@ def run_source_union(
     should_stop: Callable[[], bool] | None = None,
 ) -> None:
     """Exact stage-scoped source; all PG writes remain in one native process."""
-    r11_original_enabled = r11_optional_original_frames_enabled()
-    r11_anchor_symbols = (
-        () if closed_only else tuple(sorted({
-            item.symbol for item in union.requirements
-            if item.consumer_id == "MAYAK_REFERENCE"
-        }))
-    )
-    if r11_anchor_symbols and (
-        r11_anchor_symbols != _R11_REFERENCE_ANCHORS
-        or not r11_original_enabled or not publish_seconds or closed_only
-        or any(
-            item.symbol in r11_anchor_symbols
-            and (item.consumer_id != "MAYAK_REFERENCE" or item.required)
-            for item in union.requirements
-        )
-    ):
-        raise SourceManifestInvalid(
-            "R11_ANCHOR_REQUIREMENTS_OR_CAPTURE_UNVERIFIED"
-        )
-    if r11_original_enabled:
-        if closed_only:
-            raise SourceManifestInvalid(
-                "R11_ORIGINAL_FRAME_REQUIRES_OPTIONAL_SOURCE_UNION"
-            )
-        _r11_optional_frame_preflight(connection)
     if closed_only and (
         publish_seconds
         or any(
@@ -691,15 +571,6 @@ def run_source_union(
             # status or unrelated LINEAR transport GAP.
             optional_audit_overflow.set()
 
-    # _connect_subscribe() returned only after every declared topic batch was
-    # ACKed by the provider.  Persist that exact epoch boundary as RECOVERING,
-    # never READY: a later physical frame is still required before a consumer
-    # may prove current transport continuity.
-    note_quality(
-        product="LINEAR", topic="*", quality="RECOVERING",
-        reason="PUBLIC_LINEAR_SUBSCRIPTIONS_ACKED",
-    )
-
     pipe: queue.Queue[
         tuple[str, str, dict[str, object], datetime]
     ] = queue.Queue(maxsize=_MAX_QUEUE)
@@ -758,7 +629,7 @@ def run_source_union(
                     if product == "SPOT":
                         note_quality(
                             product=product, topic="*", quality="RECOVERING",
-                            reason="PUBLIC_SPOT_SUBSCRIPTIONS_ACKED",
+                            reason="PUBLIC_SPOT_CONNECTED_NOT_CONTINUOUS",
                         )
                 # Do not stop/reconnect the native LINEAR reader when a
                 # derived book loses a snapshot: resubscribe ONLY its topic.
@@ -1043,7 +914,6 @@ def run_source_union(
                 )
 
     frame_index = 0
-    r11_optional_frame_index = 0
     last_published_second: datetime | None = None
     repair_index = 0
     next_repair_scan_at = 0.0
@@ -1083,14 +953,10 @@ def run_source_union(
                 topic = str(item.get("topic") or "")
                 if product == "LINEAR" and topic.startswith("publicTrade."):
                     symbol = topic.split(".", 1)[1]
-                    # The canonical LINEAR original tape may also hold
-                    # BTC/ETH observational anchor trades; actual trading
-                    # consumers still request only the P90 five symbols.
-                    native_scope = frozenset((*p90_symbols, *r11_anchor_symbols))
-                    if symbol in native_scope:
+                    if symbol in p90_symbols:
                         frame_index += 1
                         facts = native.decode_native_trades(
-                            item, symbols=native_scope,
+                            item, symbols=frozenset(p90_symbols),
                             release=producer_release_commit,
                         )
                         native._persist_frame(
@@ -1172,43 +1038,6 @@ def run_source_union(
                         epoch=frame_epoch,
                     )
                     events = ()
-                # R11 raw optional events are attached to the EXISTING
-                # advisory-lock-owned producer, never a new socket/service.
-                # P90 LINEAR publicTrade stays in its original native tape.
-                # The R11 feature is default OFF, no physical migration yet.
-                if (
-                    r11_original_enabled and events
-                    and r11_original_optional_kind(
-                        product, events[0].kind,
-                    )
-                ):
-                    r11_optional_frame_index += 1
-                    try:
-                        original = make_r11_original_optional_frame(
-                            source_session_id=session,
-                            transport_epoch_id=frame_epoch,
-                            producer_release_commit=producer_release_commit,
-                            product=product,
-                            source_frame_number=r11_optional_frame_index,
-                            message=item, facts=events,
-                            received_at=received,
-                        )
-                        append_r11_original_optional_frame(
-                            connection, original,
-                        )
-                    except (
-                        R11OriginalFrameUnavailable, psycopg.Error,
-                    ):
-                        # Explicitly degrade only the affected original
-                        # optional topic. Never falsify continuity or stop
-                        # unrelated mandatory LINEAR native publicTrade.
-                        note_quality(
-                            product=product, topic=topic,
-                            symbol=events[0].symbol,
-                            quality="UNKNOWN",
-                            reason="R11_ORIGINAL_FRAME_APPEND_UNVERIFIED",
-                            epoch=frame_epoch,
-                        )
                 for event in events:
                     if event.kind == "FORMING_KLINE":
                         if (
@@ -1408,13 +1237,9 @@ def run_source_union(
                     publish_market_source_second(
                         connection, source_session_id=session,
                         producer_release_commit=producer_release_commit,
-                        symbols=tuple((*p90_symbols, *r11_anchor_symbols)),
+                        symbols=p90_symbols,
                         timeframes=intervals or ("1", "5", "15"),
                         public_requirements=public_requirements,
-                        original_optional_transport_epochs=(
-                            dict(transport_epochs) if r11_original_enabled
-                            else None
-                        ),
                         observed_at=current_second,
                     )
                     last_published_second = current_second
