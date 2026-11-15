@@ -191,6 +191,7 @@ def _read_one(
         db, publication_id=publication_id, observed_at=causal_now,
         previous=replay.checkpoint,
         require_provider_continuity=True,
+        previous_continuity_starts=replay.continuity_starts,
     )
     _need(
         candidate.as_of_second == causal_now,
