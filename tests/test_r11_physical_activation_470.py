@@ -26,7 +26,7 @@ def test_r11_manifest_is_backed_up_and_installed_only_from_r11_onward() -> None:
     assert exact in source
     assert (
         'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R11_REPAIR2'
-        '|R11_REPAIR3|R11_REPAIR4|R12|R13)'
+        '|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R12|R13)'
     ) in source
     assert "install -d -o root -g cripta -m 0750 /etc/cripta/market-source" in source
     assert "install -o root -g cripta -m 0640" in source
@@ -61,10 +61,14 @@ def test_r11_physical_stage_targets_are_exact_activated_chain() -> None:
         and "5fc00daf43676c30c494f871efb1a69e0eac33b4" in source
     )
     assert (
-        '("R12", "5fc00daf43676c30c494f871efb1a69e0eac33b4",' in source
-        and "4ae97520e44e2580a82e08985fcad744106a3769" in source
+        '("R11_REPAIR5", "5fc00daf43676c30c494f871efb1a69e0eac33b4",' in source
+        and "b9caae2843db344067412a5fb4b42ae15c244022" in source
     )
     assert (
-        '("R13", "4ae97520e44e2580a82e08985fcad744106a3769",' in source
-        and "acec641eff61a90f302806fb913321b61d0f61c8" in source
+        '("R12", "b9caae2843db344067412a5fb4b42ae15c244022",' in source
+        and "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0" in source
+    )
+    assert (
+        '("R13", "a1d31ed50f0fb79cbde21537a9f0c54ec72bd1b0",' in source
+        and "05c5e011d40b1c134942f1ff5449a55bc4ad331f" in source
     )
