@@ -9,7 +9,6 @@ import sys
 import zlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -113,9 +112,7 @@ def _actor(monkeypatch):
     if sys.platform != "linux":
         pytest.skip("production actor is Linux postgres")
     monkeypatch.setattr(MODULE.os, "geteuid", lambda: 42)
-    monkeypatch.setattr(
-        MODULE.pwd, "getpwnam", lambda _: SimpleNamespace(pw_uid=42)
-    )
+    monkeypatch.setattr(MODULE, "_postgres_unix_uid", lambda: 42)
 
 
 def _pub_refs(session: str, second: datetime, raw_frame: int) -> tuple[dict, dict, dict, dict]:
