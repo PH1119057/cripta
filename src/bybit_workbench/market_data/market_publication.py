@@ -24,6 +24,9 @@ from bybit_workbench.market_data.public_rest_observations import (
 from bybit_workbench.market_data.publication_compact_refs import (
     collect_compact_public_references,
 )
+from bybit_workbench.market_data.r11_original_publication_refs import (
+    collect_r11_original_optional_publication_refs,
+)
 from bybit_workbench.market_data.source_required_feed_manifest import (
     RequiredPublicFeed,
 )
@@ -44,6 +47,7 @@ def publish_market_source_second(
     symbols: tuple[str, ...],
     timeframes: tuple[str, ...] = ("1", "5", "15"),
     public_requirements: tuple[RequiredPublicFeed, ...] = (),
+    original_optional_transport_epochs: dict[str, str] | None = None,
     observed_at: datetime | None = None,
 ) -> int | None:
     """Publish at most ONE frozen snapshot per UTC second and source epoch.
@@ -192,26 +196,67 @@ def publish_market_source_second(
         )
         from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
 
-        row = connection.execute(
-            """INSERT INTO analytics.market_publications
-                (market_source_id,source_session_id,producer_release_commit,
-                 as_of_second,native_watermarks,closed_candle_watermarks,
-                 field_coverage,compact_second_refs,compact_field_coverage,
-                 rest_observation_refs,rest_field_coverage,
-                 forming_minute_refs,forming_field_coverage,
-                 closed_instrument_refs,closed_instrument_coverage,
-                 publication_status)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'WATERMARKS_ONLY')
-               ON CONFLICT (market_source_id,source_session_id,as_of_second)
-               DO NOTHING RETURNING publication_id""",
-            (
-                BYBIT_PUBLIC_MARKET_SOURCE_ID, source_session_id,
-                producer_release_commit, second, Jsonb(native),
-                Jsonb(candle_refs), Jsonb(coverage),
-                Jsonb(compact_refs), Jsonb(compact_coverage),
-                Jsonb(rest_refs), Jsonb(rest_coverage),
-                Jsonb(forming_refs), Jsonb(forming_coverage),
-                Jsonb(closed_instrument_refs), Jsonb(closed_instrument_coverage),
-            ),
-        ).fetchone()
+        # Source-only R11: the publisher pins physical original optional
+        # frame refs INSIDE the immutable publication insertion transaction.
+        # Empty/missing refs are honest coverage, never MAYAK readiness.
+        original_refs: dict[str, dict[str, object]] = {}
+        original_coverage: dict[str, str] = {}
+        if original_optional_transport_epochs is not None:
+            original_refs, original_coverage = (
+                collect_r11_original_optional_publication_refs(
+                    connection, source_session_id=source_session_id,
+                    producer_release_commit=producer_release_commit,
+                    transport_epochs=original_optional_transport_epochs,
+                    as_of_second=second,
+                )
+            )
+        if original_optional_transport_epochs is not None:
+            row = connection.execute(
+                """INSERT INTO analytics.market_publications
+                    (market_source_id,source_session_id,producer_release_commit,
+                     as_of_second,native_watermarks,closed_candle_watermarks,
+                     field_coverage,compact_second_refs,compact_field_coverage,
+                     rest_observation_refs,rest_field_coverage,
+                     forming_minute_refs,forming_field_coverage,
+                     closed_instrument_refs,closed_instrument_coverage,
+                     original_optional_frame_refs,original_optional_frame_coverage,
+                     publication_status)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'WATERMARKS_ONLY')
+                   ON CONFLICT (market_source_id,source_session_id,as_of_second)
+                   DO NOTHING RETURNING publication_id""",
+                (
+                    BYBIT_PUBLIC_MARKET_SOURCE_ID, source_session_id,
+                    producer_release_commit, second, Jsonb(native),
+                    Jsonb(candle_refs), Jsonb(coverage),
+                    Jsonb(compact_refs), Jsonb(compact_coverage),
+                    Jsonb(rest_refs), Jsonb(rest_coverage),
+                    Jsonb(forming_refs), Jsonb(forming_coverage),
+                    Jsonb(closed_instrument_refs),
+                    Jsonb(closed_instrument_coverage),
+                    Jsonb(original_refs), Jsonb(original_coverage),
+                ),
+            ).fetchone()
+        else:
+            row = connection.execute(
+                """INSERT INTO analytics.market_publications
+                    (market_source_id,source_session_id,producer_release_commit,
+                     as_of_second,native_watermarks,closed_candle_watermarks,
+                     field_coverage,compact_second_refs,compact_field_coverage,
+                     rest_observation_refs,rest_field_coverage,
+                     forming_minute_refs,forming_field_coverage,
+                     closed_instrument_refs,closed_instrument_coverage,
+                     publication_status)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'WATERMARKS_ONLY')
+                   ON CONFLICT (market_source_id,source_session_id,as_of_second)
+                   DO NOTHING RETURNING publication_id""",
+                (
+                    BYBIT_PUBLIC_MARKET_SOURCE_ID, source_session_id,
+                    producer_release_commit, second, Jsonb(native),
+                    Jsonb(candle_refs), Jsonb(coverage),
+                    Jsonb(compact_refs), Jsonb(compact_coverage),
+                    Jsonb(rest_refs), Jsonb(rest_coverage),
+                    Jsonb(forming_refs), Jsonb(forming_coverage),
+                    Jsonb(closed_instrument_refs), Jsonb(closed_instrument_coverage),
+                ),
+            ).fetchone()
     return int(row[0]) if row is not None else None

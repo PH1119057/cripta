@@ -9,9 +9,9 @@ import pytest
 
 import bybit_workbench
 
-PRODUCTION_PACKAGE = Path(__file__).parents[1] / "production" / "src" / "bybit_workbench"
-if str(PRODUCTION_PACKAGE) not in bybit_workbench.__path__:
-    bybit_workbench.__path__.append(str(PRODUCTION_PACKAGE))
+SOURCE_PACKAGE = Path(__file__).parents[1] / "src" / "bybit_workbench"
+if str(SOURCE_PACKAGE) not in bybit_workbench.__path__:
+    bybit_workbench.__path__.append(str(SOURCE_PACKAGE))
 
 dispatcher_v2 = importlib.import_module("bybit_workbench.dispatcher_v2")
 

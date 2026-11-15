@@ -9,6 +9,7 @@ User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src
+Environment=CRIPTA_MAYAK_SOURCE_MODE=PG_PUBLICATION
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/mayak_v2.py
 Restart=always
 RestartSec=5

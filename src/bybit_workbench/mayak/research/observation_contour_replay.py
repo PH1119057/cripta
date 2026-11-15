@@ -27,7 +27,7 @@ ALERT_POLICY_STATUS = "NO_POLICY"
 
 def _default_dispatcher_package_dir() -> Path:
     release_root = Path(__file__).resolve().parents[4]
-    return release_root / "production" / "src" / "bybit_workbench" / "dispatcher_v2"
+    return release_root / "src" / "bybit_workbench" / "dispatcher_v2"
 
 
 def _load_production_dispatcher(package_dir: Path) -> tuple[ModuleType, ModuleType]:
