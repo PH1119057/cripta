@@ -15,6 +15,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+from bybit_workbench.market_data.public_source_second_store import (
+    COMPACT_PROJECTION_ONLY_REASONS,
+)
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 
 _SEVEN = (
@@ -508,11 +511,18 @@ def read_r11_provider_quality_boundaries(
         (source_session_id, release_commit, at),
     ).fetchall()
     _need(isinstance(rows, (tuple, list)), "QUALITY_ROWS_INVALID")
-    boundaries = tuple(R11ProviderQualityBoundary(
-        transport_epoch_id=row[0], product=row[1], topic=row[2],
-        symbol=row[3], quality=row[4], reason=row[5],
-        observed_at=_utc(row[6], "QUALITY_ROW_CLOCK_INVALID"),
-    ) for row in rows)
+    # Compact-second admission faults are durable quality evidence but
+    # are not original-provider transport discontinuities. The source keeps
+    # its authenticated raw ladder/tape across these exact reasons.
+    boundaries = tuple(
+        R11ProviderQualityBoundary(
+            transport_epoch_id=row[0], product=row[1], topic=row[2],
+            symbol=row[3], quality=row[4], reason=row[5],
+            observed_at=_utc(row[6], "QUALITY_ROW_CLOCK_INVALID"),
+        )
+        for row in rows
+        if row[5] not in COMPACT_PROJECTION_ONLY_REASONS
+    )
     for boundary in boundaries:
         _validate_boundary(boundary, as_of=at)
     return boundaries
