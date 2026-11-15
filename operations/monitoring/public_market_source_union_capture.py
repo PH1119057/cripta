@@ -59,6 +59,7 @@ from bybit_workbench.market_data.r11_optional_original_frame_journal import (
     R11OriginalPublicFrame,
     append_r11_original_optional_frames,
     make_r11_original_optional_frame,
+    r11_original_storage_headroom_ok,
 )
 from bybit_workbench.market_data.public_source_quality import (
     PublicSourceQualityEvent,
@@ -1060,12 +1061,31 @@ def run_source_union(
     frame_index = 0
     r11_optional_frame_index = 0
     r11_original_batch: list[R11OriginalPublicFrame] = []
+    r11_original_storage_blocked = False
 
     def flush_r11_original_batch() -> None:
+        nonlocal r11_original_storage_blocked
         if not r11_original_batch:
             return
         batch = tuple(r11_original_batch)
         r11_original_batch.clear()
+        if r11_original_storage_blocked:
+            return
+        if not r11_original_storage_headroom_ok():
+            # One bounded diagnostic only. Compact current-state publication
+            # continues, but raw optional replay becomes fail-closed until the
+            # next source epoch; never fill the System SSD for orderbook tape.
+            r11_original_storage_blocked = True
+            frame = batch[0]
+            note_quality(
+                product=frame.product_category,
+                topic=frame.source_topic,
+                symbol=frame.external_symbol,
+                quality="UNKNOWN",
+                reason="R11_ORIGINAL_FRAME_ROOT_HEADROOM_BLOCKED",
+                epoch=frame.transport_epoch_id,
+            )
+            return
         try:
             append_r11_original_optional_frames(connection, batch)
         except (R11OriginalFrameUnavailable, psycopg.Error):
@@ -1214,7 +1234,9 @@ def run_source_union(
                 # P90 LINEAR publicTrade stays in its original native tape.
                 # The R11 feature is default OFF, no physical migration yet.
                 if (
-                    r11_original_enabled and events
+                    r11_original_enabled
+                    and not r11_original_storage_blocked
+                    and events
                     and r11_original_optional_kind(
                         product, events[0].kind,
                     )
