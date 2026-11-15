@@ -489,7 +489,7 @@ def run_r11_pg_observation(collector: Collector) -> None:
             replay, generation, previous_publication_id,
             previous_source_session_id, previous_release_commit,
         ) = _restore_or_reset_replay(db)
-    while not collector.stop.wait(1.0):
+    while not collector.stop.is_set():
         now = datetime.now(UTC)
         try:
             with psycopg.connect(
@@ -511,6 +511,10 @@ def run_r11_pg_observation(collector: Collector) -> None:
                     ) = _restore_or_reset_replay(db)
                 snapshot = _read_one(db, replay=replay, now=now)
             if snapshot is None:
+                # Poll at 1 Hz only when the durable cursor is already at
+                # the current publication head. Backlog replay must not pay
+                # an unconditional one-second delay per committed generation.
+                collector.stop.wait(1.0)
                 continue
             with psycopg.connect(DSN) as writer:
                 with writer.transaction():
