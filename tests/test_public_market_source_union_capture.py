@@ -5,6 +5,7 @@ No real connections are made in the test; no consumer is rewired or LIVE arm.
 from __future__ import annotations
 
 import json
+import queue
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -39,6 +40,20 @@ from operations.monitoring.public_market_source_union_capture import (
 )
 
 P90 = ("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT")
+
+
+def test_required_linear_transport_failure_reason_is_bounded_and_machine_safe() -> None:
+    assert source._linear_transport_failure_reason(queue.Full()) == (
+        "PUBLIC_LINEAR_TRANSPORT_FATAL_FULL"
+    )
+    assert source._linear_transport_failure_reason(
+        PublicSourceSecondUnavailable("PUBLIC_FEED_STREAM_CLOSED")
+    ) == "PUBLIC_LINEAR_TRANSPORT_FATAL_PUBLIC_FEED_STREAM_CLOSED"
+    # Provider/library free-form text is never copied into durable evidence.
+    assert source._linear_transport_failure_reason(
+        ValueError("bad payload / arbitrary detail")
+    ) == "PUBLIC_LINEAR_TRANSPORT_FATAL_VALUEERROR"
+
 
 
 def _required(
