@@ -84,12 +84,15 @@ roadmap470_pair() {
     R11_REPAIR8) printf '%s %s\n' \
       3f368fe88d72d6e10f0af0902d6205fc141d8447 \
       edc6363293b6f6dc64972f01684619a313936ef5 ;;
-    R12) printf '%s %s\n' \
+    R11_REPAIR9) printf '%s %s\n' \
       edc6363293b6f6dc64972f01684619a313936ef5 \
-      dbcacb2203950fa0417d78ab93566aa1146dce79 ;;
+      0d440f1c2e401417fe11c182c2e38f57872ec5b4 ;;
+    R12) printf '%s %s\n' \
+      0d440f1c2e401417fe11c182c2e38f57872ec5b4 \
+      9b95351d4d0d55a835005f99dd6738a3022dd6e2 ;;
     R13) printf '%s %s\n' \
-      dbcacb2203950fa0417d78ab93566aa1146dce79 \
-      edf734b874ee11e1b988a6b1d86d0c6a452dd2da ;;
+      9b95351d4d0d55a835005f99dd6738a3022dd6e2 \
+      b3b939f7e9234fd9304f60e7fa14db650713481c ;;
     *) return 1 ;;
   esac
 }
@@ -932,7 +935,7 @@ migration_files=(
 # migration. This prevents R07-R10 staged installs from reaching forward into
 # files that do not exist in their immutable historical target.
 case "$ROADMAP470_STAGE" in
-  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R12|R13)
+  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R11_REPAIR9|R12|R13)
     migration_files+=(
       operations/sql/20261114_r11_optional_original_public_event_frames.sql
       operations/sql/20261114_r11_optional_publication_frame_refs.sql
@@ -1041,7 +1044,7 @@ install -o root -g root -m 0644 "$runtime_release/operations/systemd/cripta-priv
 # optional frame capture.  Preserve the prior operator manifest in the
 # release backup above, then install exact reviewed bytes only for R11+.
 case "$ROADMAP470_STAGE" in
-  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R12|R13)
+  ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R11_REPAIR9|R12|R13)
     install -d -o root -g cripta -m 0750 /etc/cripta/market-source
     install -o root -g cripta -m 0640 \
       "$runtime_release/operations/monitoring/r11_seven_public_feeds.json" \

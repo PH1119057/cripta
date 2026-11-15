@@ -98,10 +98,15 @@ STAGES: tuple[tuple[str, str, str], ...] = (
     # snapshot compatibility scoped to verified source-reset lineage only.
     ("R11_REPAIR8", "3f368fe88d72d6e10f0af0902d6205fc141d8447",
      "edc6363293b6f6dc64972f01684619a313936ef5"),
-    ("R12", "edc6363293b6f6dc64972f01684619a313936ef5",
-     "dbcacb2203950fa0417d78ab93566aa1146dce79"),
-    ("R13", "dbcacb2203950fa0417d78ab93566aa1146dce79",
-     "edf734b874ee11e1b988a6b1d86d0c6a452dd2da"),
+    # R11_REPAIR8 physical replay proved a poison publication: an already
+    # recovered provider boundary was re-required on the exact next publication.
+    # Carry only durable proven STREAM continuity; new boundaries stay fail-closed.
+    ("R11_REPAIR9", "edc6363293b6f6dc64972f01684619a313936ef5",
+     "0d440f1c2e401417fe11c182c2e38f57872ec5b4"),
+    ("R12", "0d440f1c2e401417fe11c182c2e38f57872ec5b4",
+     "9b95351d4d0d55a835005f99dd6738a3022dd6e2"),
+    ("R13", "9b95351d4d0d55a835005f99dd6738a3022dd6e2",
+     "b3b939f7e9234fd9304f60e7fa14db650713481c"),
 )
 
 
