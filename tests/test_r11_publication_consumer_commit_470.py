@@ -143,9 +143,10 @@ class AtomicDB:
         if sql.startswith("LOCK TABLE"):
             return Rows()
         if "SELECT %s::jsonb::text" in sql:
-            jsonb = params[0]
+            value = params[0]
+            parsed = json.loads(value) if isinstance(value, str) else value.obj
             return Rows((json.dumps(
-                jsonb.obj, ensure_ascii=False, sort_keys=True,
+                parsed, ensure_ascii=False, sort_keys=True,
                 separators=(",", ":"), default=str, allow_nan=False,
             ),))
         if "FROM pg_catalog.pg_trigger" in sql:
