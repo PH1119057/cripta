@@ -59,7 +59,7 @@ def r11_original_storage_headroom_ok(path: str = "/") -> bool:
         # Production source is Linux-only. Keep import/unit tests portable.
         return True
     stat = statvfs(path)
-    return stat.f_bavail * stat.f_frsize >= _MIN_ROOT_FREE_BYTES
+    return bool(stat.f_bavail * stat.f_frsize >= _MIN_ROOT_FREE_BYTES)
 
 
 @dataclass(frozen=True, slots=True)
