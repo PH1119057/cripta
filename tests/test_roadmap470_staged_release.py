@@ -32,10 +32,12 @@ EXPECTED = (
      "0cdf4ce0ca80ee4dcc5c7cc5c2595223fd4208d4"),
     ("R11", "0cdf4ce0ca80ee4dcc5c7cc5c2595223fd4208d4",
      "29cbe0229c137112e3f4e9d3b5b778ebdbc05738"),
-    ("R12", "29cbe0229c137112e3f4e9d3b5b778ebdbc05738",
-     "fedf6bea772a9d7b4269e2b2c856a8d7bd65efd9"),
-    ("R13", "fedf6bea772a9d7b4269e2b2c856a8d7bd65efd9",
-     "8c5164d33972bdfc357c64b29927e3caacc964b7"),
+    ("R11_REPAIR", "29cbe0229c137112e3f4e9d3b5b778ebdbc05738",
+     "103ac4dc7ce0d7d06b413847938a22e356cc26b9"),
+    ("R12", "103ac4dc7ce0d7d06b413847938a22e356cc26b9",
+     "73987ad4be915dc554e7d6f63ea196849c616bb2"),
+    ("R13", "73987ad4be915dc554e7d6f63ea196849c616bb2",
+     "7f6430fb30a2d68353ca669e15b778ec58680240"),
 )
 
 
@@ -130,7 +132,7 @@ def test_staged_migrations_do_not_reach_forward() -> None:
     assert "20261114_r11_optional_publication_frame_refs.sql" in source
     assert "20261115_r11_mayak_consumer_commit.sql" in source
     assert "20261115_r13_opportunity_source_checkpoint.sql" in source
-    assert 'case "$ROADMAP470_STAGE" in\n  ""|R11|R12|R13)' in source
+    assert 'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R12|R13)' in source
     assert 'case "$ROADMAP470_STAGE" in\n  ""|R13)' in source
 
 
