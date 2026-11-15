@@ -140,6 +140,26 @@ def read_active_source_epoch(connection: Any) -> R13SourceEpoch:
     return R13SourceEpoch(session, producer, started, last)
 
 
+def require_opportunity_symbol(
+    connection: Any,
+    *,
+    epoch: R13SourceEpoch,
+    symbol: str,
+) -> None:
+    """Prove this exact symbol belongs to the active original-trade epoch."""
+    if _SYMBOL.fullmatch(symbol) is None:
+        _fail("OPPORTUNITY_SYMBOL_INVALID")
+    instrument = bybit_instrument_id("linear", symbol)
+    row = connection.execute(
+        """SELECT market_source_id,instrument_id,external_symbol
+             FROM analytics.native_public_trade_source_cursors
+            WHERE source_session_id=%s AND external_symbol=%s""",
+        (epoch.source_session_id, symbol),
+    ).fetchone()
+    if row != (BYBIT_PUBLIC_MARKET_SOURCE_ID, instrument, symbol):
+        _fail("OPPORTUNITY_SYMBOL_SOURCE_CURSOR_MISSING")
+
+
 def read_opportunity_trade_batch(
     connection: Any,
     *,
