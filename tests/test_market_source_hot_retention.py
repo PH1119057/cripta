@@ -161,3 +161,12 @@ def test_native_cutover_accepts_source_coupled_retention_runtime_state():
     )
     assert "systemctl is-failed --quiet" in installer
 
+def test_native_cutover_fresh_cursor_proof_counts_only_trading_panel():
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text()
+    assert "c.external_symbol IN (" in installer
+    for symbol in ("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT"):
+        assert f"'{symbol}'" in installer
+    assert '"$source_cursor_count" == "5"' in installer
+
