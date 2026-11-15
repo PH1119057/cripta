@@ -7,7 +7,7 @@ names the physically accepted R06 origin. No broader consumer delta is allowed.
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -42,9 +42,10 @@ def test_r14_r06_origin_accepts_only_exact_reviewed_two_file_delta() -> None:
         )
 
 
-def test_r14_reviewed_r07_r10_hashes_bind_current_exact_bytes() -> None:
-    package = Path(compat.__file__).resolve().parents[1]
+def test_r14_reviewed_r07_r10_hashes_bind_current_exact_git_bytes() -> None:
     reviewed = compat._REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256
     for relative, expected in reviewed.items():
-        actual = hashlib.sha256((package / relative).read_bytes()).hexdigest()
-        assert actual == expected
+        blob = subprocess.check_output([
+            "git", "show", f"HEAD:src/bybit_workbench/{relative}",
+        ])
+        assert hashlib.sha256(blob).hexdigest() == expected
