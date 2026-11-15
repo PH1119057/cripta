@@ -114,3 +114,14 @@ def test_invalid_or_missing_mark_cannot_be_reported_as_sample() -> None:
             position_idx=0, side="Buy", entry_price="100",
             mark_price="NaN", previous_mfe=None, previous_mae=None,
         )
+
+
+def test_r12_account_position_remains_sampled_account_truth_not_market_mfe() -> None:
+    source = P.read_text(encoding="utf-8")
+    assert "ACCOUNT_SCOPED_HOT_MARK" in source
+    assert "SAMPLED_PARTIAL" in source
+    assert "runtime.hot_positions" in source
+    assert "analytics.market_publications" not in source
+    assert "native_public_trade" not in source
+    assert "api.bybit" not in source
+    assert "trading_rights" in source
