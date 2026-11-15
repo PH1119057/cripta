@@ -480,55 +480,95 @@ def _delete_raw(
 def _candidate_counts(
     connection: Any, *, cutoff: datetime, pins: tuple[int, ...],
 ) -> dict[str, int]:
+    """Pure SELECT planning; no TEMP/DDL so --check stays transaction read-only."""
+    keep_publications = (
+        "SELECT publication_id FROM analytics.market_publications "
+        "WHERE as_of_second >= %s OR publication_id=ANY(%s)"
+    )
+    params = (cutoff, list(pins))
     counts: dict[str, int] = {}
     counts[PUBLICATIONS] = int(connection.execute(
         """SELECT count(*) FROM analytics.market_publications
             WHERE as_of_second < %s AND NOT (publication_id=ANY(%s))""",
-        (cutoff, list(pins)),
+        params,
     ).fetchone()[0])
-    _create_retained_ref_tables(connection, cutoff=cutoff, pins=pins)
     counts[SECONDS] = int(connection.execute(
-        """SELECT count(*) FROM analytics.public_market_source_seconds s
+        f"""WITH keep AS ({keep_publications}), refs AS (
+             SELECT DISTINCT item.value->>'source_session_id' sid,
+                    item.value->>'instrument_id' iid,
+                    (item.value->>'observed_second')::timestamptz sec
+               FROM analytics.market_publications p
+               JOIN keep USING(publication_id)
+               CROSS JOIN LATERAL jsonb_each(p.compact_second_refs) inst
+               CROSS JOIN LATERAL jsonb_each(inst.value) item
+           )
+           SELECT count(*) FROM analytics.public_market_source_seconds s
             WHERE s.observed_second < %s
               AND NOT EXISTS (
-                SELECT 1 FROM retained_second_refs r
-                 WHERE (r.source_session_id,r.instrument_id,r.observed_second)
+                SELECT 1 FROM refs r
+                 WHERE (r.sid,r.iid,r.sec)
                       =(s.source_session_id,s.instrument_id,s.observed_second))""",
-        (cutoff,),
+        params + (cutoff,),
     ).fetchone()[0])
     counts[FORMING] = int(connection.execute(
-        """SELECT count(*) FROM analytics.public_forming_minute_observations f
+        f"""WITH keep AS ({keep_publications}), refs AS (
+             SELECT DISTINCT
+                    (item.value->>'forming_observation_id')::bigint id
+               FROM analytics.market_publications p
+               JOIN keep USING(publication_id)
+               CROSS JOIN LATERAL jsonb_each(p.forming_minute_refs) inst
+               CROSS JOIN LATERAL jsonb_each(inst.value) item
+           )
+           SELECT count(*)
+             FROM analytics.public_forming_minute_observations f
             WHERE f.received_at < %s
               AND NOT EXISTS (
-                SELECT 1 FROM retained_forming_refs r
-                 WHERE r.forming_observation_id=f.forming_observation_id)""",
-        (cutoff,),
+                SELECT 1 FROM refs r
+                 WHERE r.id=f.forming_observation_id)""",
+        params + (cutoff,),
     ).fetchone()[0])
     counts[REST] = int(connection.execute(
-        """SELECT count(*) FROM analytics.public_market_rest_observations o
+        f"""WITH keep AS ({keep_publications}), refs AS (
+             SELECT DISTINCT
+                    (item.value->>'rest_observation_id')::bigint id
+               FROM analytics.market_publications p
+               JOIN keep USING(publication_id)
+               CROSS JOIN LATERAL jsonb_each(p.rest_observation_refs) inst
+               CROSS JOIN LATERAL jsonb_each(inst.value) item
+           )
+           SELECT count(*)
+             FROM analytics.public_market_rest_observations o
             WHERE o.received_at < %s
               AND NOT EXISTS (
-                SELECT 1 FROM retained_rest_refs r
-                 WHERE r.rest_observation_id=o.rest_observation_id)""",
-        (cutoff,),
+                SELECT 1 FROM refs r
+                 WHERE r.id=o.rest_observation_id)""",
+        params + (cutoff,),
     ).fetchone()[0])
     active = _active_source(connection)
     head = _mayak_cursor_head(connection)
-    predicate, params = _raw_delete_predicate(active, head)
+    predicate, raw_params = _raw_delete_predicate(active, head)
     counts[RAW] = int(connection.execute(
-        f"""SELECT count(*)
-              FROM analytics.public_source_original_event_frames r
-             WHERE {predicate}
-               AND NOT EXISTS (
-                 SELECT 1 FROM retained_raw_refs keep
-                  WHERE (keep.source_session_id,keep.transport_epoch_id,
-                         keep.product_category,keep.source_frame_number)
-                       =(r.source_session_id,r.transport_epoch_id,
-                         r.product_category,r.source_frame_number))""",
-        tuple(params),
+        f"""WITH keep AS ({keep_publications}), refs AS (
+             SELECT DISTINCT item.value->>'source_session_id' sid,
+                    item.value->>'transport_epoch_id' eid,
+                    item.value->>'product_category' product,
+                    (item.value->>'source_frame_number')::bigint frame
+               FROM analytics.market_publications p
+               JOIN keep USING(publication_id)
+               CROSS JOIN LATERAL jsonb_each(
+                    p.original_optional_frame_refs) item
+           )
+           SELECT count(*)
+             FROM analytics.public_source_original_event_frames r
+            WHERE {predicate}
+              AND NOT EXISTS (
+                SELECT 1 FROM refs keep
+                 WHERE (keep.sid,keep.eid,keep.product,keep.frame)
+                      =(r.source_session_id,r.transport_epoch_id,
+                        r.product_category,r.source_frame_number))""",
+        params + tuple(raw_params),
     ).fetchone()[0])
     return counts
-
 
 def collect_check(connection: Any, cutoff: datetime) -> Result:
     pins = _publication_fk_pins(connection)
