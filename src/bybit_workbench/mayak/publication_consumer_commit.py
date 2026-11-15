@@ -119,7 +119,7 @@ def _canonical_snapshot(snapshot: dict[str, Any]) -> bytes:
 
 def _postgres_snapshot_text(connection: Any, snapshot: dict[str, Any]) -> str:
     """Return PostgreSQL's canonical text for the exact JSONB value to store."""
-    from psycopg.types.json import Jsonb  # type: ignore[import-not-found]
+    from psycopg.types.json import Jsonb
 
     row = connection.execute(
         "SELECT %s::jsonb::text",
@@ -132,7 +132,7 @@ def _postgres_snapshot_text(connection: Any, snapshot: dict[str, Any]) -> str:
     )
     binary = row[0].encode("utf-8")
     _need(len(binary) <= _MAX_SNAPSHOT_BYTES, "SNAPSHOT_TOO_LARGE")
-    return row[0]
+    return str(row[0])
 
 
 def _snapshot_matches_replay(
