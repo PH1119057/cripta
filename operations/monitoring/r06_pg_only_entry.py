@@ -440,6 +440,7 @@ def run_pg_only(
     status = {
         "state":"R06_PG_NO_ORDER_PREPARING", "epoch_id":None,
         "active_bundles":(), "symbols":FIVE,
+        "fact_source_id":_SOURCE,
         "reason":"R06 PG-only SOURCE_ONLY; financial and observer READY forbidden",
         "sensor_status":{"native_pg_delivery_scope":"R06_NO_ORDER_ENTRY_DECISION_ONLY"},
     }
@@ -568,6 +569,7 @@ def run_pg_only(
                                else "R06_PG_NO_ORDER_SOURCE_ONLY"),
                         epoch_id=pin.source_session_id,
                         active_bundles=bundles,symbols=FIVE,signals=signals,
+                        fact_source_id=_SOURCE,
                         reason="verified PG-only; NO financial Entry/Exit permissions",
                         sensor_status={
                             "publication_id":pin.publication_id,
@@ -586,6 +588,7 @@ def run_pg_only(
         code = _worker_block_code(exc)
         write_status(
             state="BLOCKED",epoch_id=None,active_bundles=(),symbols=FIVE,
+            fact_source_id=_SOURCE,
             reason="R06_PG_ONLY_BLOCKED:"+type(exc).__name__+":"+code,
             sensor_status={"native_pg_delivery_scope":"R06_BLOCKED_NO_ORDERS"},
         )
