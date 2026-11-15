@@ -184,6 +184,11 @@ def test_retention_keeps_fk_pin_and_recent_publication(database, monkeypatch):
         "INSERT INTO mayak_v2.r11_consumer_commit VALUES(%s,%s,%s,%s,%s)",
         (MODULE._CONSUMER_ID, session, release, _state(session, release), 1),
     )
+    with c.transaction():
+        c.execute("SET TRANSACTION READ ONLY")
+        check = MODULE.collect_check(c, now - timedelta(minutes=15))
+        assert check.rows[MODULE.PUBLICATIONS] == 1
+        assert check.rows[MODULE.RAW] == 1
     result = MODULE.run_apply(c, now - timedelta(minutes=15), 100)
     assert result.rows[MODULE.PUBLICATIONS] == 1
     assert set(r[0] for r in c.execute(
