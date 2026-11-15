@@ -100,17 +100,20 @@ def test_mayak_cursor_decoder_requires_exact_digest_and_two_products():
         raise AssertionError("corrupt MAYAK state accepted")
 
 
-def test_raw_predicate_never_deletes_unconsumed_new_source():
+def test_raw_predicate_caps_unconsumed_tail_and_prunes_consumed_prefix():
     active = ("a" * 32, "b" * 40)
+    cutoff = object()
     predicate, params = MODULE._raw_delete_predicate(
         active,
         ("c" * 32, "d" * 40, {
             "SPOT": ("1" * 32, 10),
             "LINEAR": ("2" * 32, 20),
         }),
+        cutoff,
     )
-    assert predicate == "(r.source_session_id <> %s)"
-    assert params == ["a" * 32]
+    assert "r.committed_at < %s" in predicate
+    assert "source_frame_number < %s" not in predicate
+    assert params == ["a" * 32, "a" * 32, cutoff]
 
     predicate, params = MODULE._raw_delete_predicate(
         active,
@@ -118,7 +121,9 @@ def test_raw_predicate_never_deletes_unconsumed_new_source():
             "SPOT": ("1" * 32, 10),
             "LINEAR": ("2" * 32, 20),
         }),
+        cutoff,
     )
+    assert "r.committed_at < %s" in predicate
     assert "source_frame_number < %s" in predicate
     assert params[-1] == 20
 
@@ -134,7 +139,7 @@ def test_systemd_contract_starts_retention_with_source():
         ROOT / "operations/systemd/cripta-market-hot-retention.timer"
     ).read_text()
     assert "cripta-market-hot-retention.timer" in source
-    assert "cripta-market-source-hot-retention.py --apply --batch-limit 10000" in service
+    assert "cripta-market-source-hot-retention.py --apply --batch-limit 50000" in service
     assert "User=postgres" in service
     assert "PartOf=cripta-native-public-trade-source.service" in timer
     assert "OnUnitActiveSec=60s" in timer
