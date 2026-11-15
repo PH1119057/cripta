@@ -632,7 +632,7 @@ def test_r13_pg16_opportunity_restart_and_source_epoch_gap(
     second_session = uuid4().hex
     with _db() as admin:
         source._session_start(admin, second_session)
-        second_event_at = datetime.now(UTC) + timedelta(milliseconds=100)
+        second_event_at = signal_at + timedelta(seconds=2)
         source._persist_frame(
             admin,
             session=second_session,
