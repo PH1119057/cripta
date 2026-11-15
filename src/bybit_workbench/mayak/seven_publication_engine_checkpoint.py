@@ -28,6 +28,9 @@ from bybit_workbench.mayak.optional_original_event_parity import (
     R11MayakBookState,
     R11OptionalMayakCursor,
 )
+from bybit_workbench.mayak.provider_continuity import (
+    r11_required_provider_scopes,
+)
 from bybit_workbench.mayak.seven_publication_observation_candidate import (
     R11SevenMayakReplayCheckpoint,
 )
@@ -265,12 +268,34 @@ def encode_r11_mayak_state(replay: R11MayakPublicationReplay) -> bytes:
     )
     assert replay.checkpoint is not None
     assert replay.first_publication_at is not None
+    stream_keys = {
+        (scope.product, scope.dataset, scope.symbol)
+        for scope in r11_required_provider_scopes()
+        if scope.coverage == "STREAM"
+    }
+    _need(
+        len(replay.continuity_starts) in (0, 42)
+        and set(replay.continuity_starts) <= stream_keys
+        and all(
+            isinstance(value, datetime)
+            and value.tzinfo is not None
+            and value.utcoffset() == timedelta(0)
+            and value <= replay.checkpoint.as_of_second
+            for value in replay.continuity_starts.values()
+        ),
+        "CONTINUITY_STARTS_INVALID",
+    )
     payload = {
         "format_version": 1,
         "checkpoint": _encode_checkpoint(replay.checkpoint),
         "first_publication_at": replay.first_publication_at.isoformat(),
         "last_original_event_at": replay.last_original_event_at,
         "observations": replay.observations,
+        "continuity_starts": [
+            [product, dataset, symbol, start.isoformat()]
+            for (product, dataset, symbol), start
+            in sorted(replay.continuity_starts.items())
+        ],
         "engine": _engine_payload(
             replay.engine,
             verified_transport=(
@@ -355,6 +380,39 @@ def decode_r11_mayak_state(
             checkpoint.source_session_id == expected_source_session_id
             and checkpoint.release_commit == expected_release_commit,
             "STATE_DIFFERENT_SOURCE_EPOCH",
+        )
+        raw_continuity_starts = payload.get("continuity_starts", [])
+        _need(
+            isinstance(raw_continuity_starts, list)
+            and len(raw_continuity_starts) in (0, 42),
+            "CONTINUITY_STARTS_SHAPE_INVALID",
+        )
+        stream_keys = {
+            (scope.product, scope.dataset, scope.symbol)
+            for scope in r11_required_provider_scopes()
+            if scope.coverage == "STREAM"
+        }
+        continuity_starts: dict[tuple[str, str, str], datetime] = {}
+        for row in raw_continuity_starts:
+            _need(
+                isinstance(row, list) and len(row) == 4
+                and isinstance(row[0], str)
+                and isinstance(row[1], str)
+                and isinstance(row[2], str),
+                "CONTINUITY_START_ROW_INVALID",
+            )
+            key = (row[0], row[1], row[2])
+            start = _utc(row[3])
+            _need(
+                key in stream_keys
+                and key not in continuity_starts
+                and start <= checkpoint.as_of_second,
+                "CONTINUITY_START_SCOPE_INVALID",
+            )
+            continuity_starts[key] = start
+        _need(
+            not continuity_starts or set(continuity_starts) == stream_keys,
+            "CONTINUITY_START_SCOPE_SET_INVALID",
         )
         engine = LiveMayakEngine(_SEVEN)
         state = payload["engine"]
@@ -475,6 +533,7 @@ def decode_r11_mayak_state(
                 if payload["last_original_event_at"] is not None else None
             ),
             observations=payload["observations"],
+            continuity_starts=continuity_starts,
         )
         _need(
             type(replay.observations) is int and replay.observations > 0

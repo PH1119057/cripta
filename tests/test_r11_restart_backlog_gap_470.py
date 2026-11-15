@@ -144,15 +144,19 @@ def test_backlog_replay_uses_publication_causal_clock(
     )
     observed: list[datetime] = []
     applied: list[datetime] = []
+    carried = {("LINEAR", "TICKER", "BTCUSDT"): AT}
+    received_starts: list[object] = []
 
     candidate = SimpleNamespace(as_of_second=target_at)
 
     def collect(*_args: object, **kwargs: object) -> object:
         observed.append(cast(datetime, kwargs["observed_at"]))
+        received_starts.append(kwargs["previous_continuity_starts"])
         return candidate
 
     class FakeReplay:
         checkpoint = replay_at().checkpoint
+        continuity_starts = carried
 
         def apply(self, _candidate: object, *, now: datetime) -> dict[str, Any]:
             applied.append(now)
@@ -172,6 +176,7 @@ def test_backlog_replay_uses_publication_causal_clock(
     )
     assert snapshot is not None
     assert observed == [target_at]
+    assert received_starts == [carried]
     assert applied == [target_at]
 
 

@@ -13,6 +13,9 @@ from bybit_workbench.mayak.optional_original_event_parity import (
     R11MayakBookState,
     R11OptionalMayakCursor,
 )
+from bybit_workbench.mayak.provider_continuity import (
+    r11_required_provider_scopes,
+)
 from bybit_workbench.mayak.seven_publication_engine_checkpoint import (
     R11MayakStateUnverified,
     atomic_write_r11_mayak_state,
@@ -213,4 +216,32 @@ def test_unsynchronized_or_false_connected_engine_is_not_checkpointable() -> Non
         "linear", connected=True, timestamp=AT.timestamp(),
     )
     with pytest.raises(R11MayakStateUnverified):
+        encode_r11_mayak_state(replay)
+
+
+def test_exact_stream_continuity_starts_survive_checkpoint_restart() -> None:
+    replay = state()
+    expected = {
+        (scope.product, scope.dataset, scope.symbol): AT - timedelta(minutes=2)
+        for scope in r11_required_provider_scopes()
+        if scope.coverage == "STREAM"
+    }
+    assert len(expected) == 42
+    replay.continuity_starts = expected
+    restored = decode_r11_mayak_state(
+        encode_r11_mayak_state(replay),
+        expected_source_session_id=SESSION,
+        expected_release_commit=RELEASE,
+    )
+    assert restored.continuity_starts == expected
+
+
+def test_partial_continuity_starts_are_not_checkpointable() -> None:
+    replay = state()
+    replay.continuity_starts = {
+        ("LINEAR", "TICKER", "BTCUSDT"): AT - timedelta(minutes=2),
+    }
+    with pytest.raises(
+        R11MayakStateUnverified, match="CONTINUITY_STARTS_INVALID",
+    ):
         encode_r11_mayak_state(replay)

@@ -85,6 +85,7 @@ def prove(
     *,
     source_state: str = "ACTIVE",
     spot_epoch: str = SPOT_EPOCH,
+    previous_continuity_starts: dict[tuple[str, str, str], datetime] | None = None,
 ):
     original_boundaries, original_observations = evidence()
     return prove_r11_provider_continuity(
@@ -99,6 +100,7 @@ def prove(
         observations=(
             original_observations if observations is None else observations
         ),
+        previous_continuity_starts=previous_continuity_starts,
     )
 
 
@@ -332,3 +334,56 @@ def test_rr_candidate_reader_uses_durable_quality_and_rest_receipts() -> None:
 
     assert proof.provider_continuity_verified is True
     assert len(proof.scopes) == 63
+
+
+def test_previous_proven_stream_start_carries_without_replaying_old_recovery() -> None:
+    boundaries, observations = evidence()
+    topic = "tickers.ETHUSDT"
+    fault_at = AT - timedelta(seconds=20)
+    boundaries += (boundary(
+        "LINEAR", topic=topic, symbol="ETHUSDT", quality="UNKNOWN",
+        reason="PUBLIC_TOPIC_ACCUMULATOR_UNVERIFIED", observed_at=fault_at,
+    ),)
+    recovered = R11ProviderObservation(
+        transport_epoch_id=SESSION, product="LINEAR", topic=topic,
+        symbol="ETHUSDT", observed_at=fault_at + timedelta(seconds=1),
+        kind="SOURCE_EVENT",
+    )
+    first = prove(boundaries, observations + (recovered,))
+    previous = {
+        (row.scope.product, row.scope.dataset, row.scope.symbol): row.continuous_from
+        for row in first.scopes
+        if row.scope.coverage == "STREAM" and row.continuous_from is not None
+    }
+    assert len(previous) == 42
+
+    carried = prove(
+        boundaries, observations, previous_continuity_starts=previous,
+    )
+    assert carried.provider_continuity_verified is True
+    assert carried.scope("LINEAR", "TICKER", "ETHUSDT").continuous_from == (
+        recovered.observed_at
+    )
+
+    later_fault = boundary(
+        "LINEAR", topic=topic, symbol="ETHUSDT", quality="UNKNOWN",
+        reason="PUBLIC_TOPIC_ACCUMULATOR_UNVERIFIED",
+        observed_at=AT - timedelta(seconds=5),
+    )
+    red = prove(
+        boundaries + (later_fault,), observations,
+        previous_continuity_starts=previous,
+    )
+    assert red.provider_continuity_verified is False
+
+    later_recovery = replace(
+        recovered, observed_at=AT - timedelta(seconds=4),
+    )
+    green = prove(
+        boundaries + (later_fault,), observations + (later_recovery,),
+        previous_continuity_starts=previous,
+    )
+    assert green.provider_continuity_verified is True
+    assert green.scope("LINEAR", "TICKER", "ETHUSDT").continuous_from == (
+        later_recovery.observed_at
+    )
