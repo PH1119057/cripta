@@ -482,16 +482,12 @@ def run_r11_pg_observation(collector: Collector) -> None:
     """
     from operations.monitoring.mayak_v2 import DSN
 
-    with psycopg.connect(
-        DSN, options="-cdefault_transaction_read_only=on",
-    ) as db:
-        db.execute(
-            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-        )
-        (
-            replay, generation, previous_publication_id,
-            previous_source_session_id, previous_release_commit,
-        ) = _restore_or_reset_replay(db)
+    replay: R11MayakPublicationReplay | None = None
+    generation = 0
+    previous_publication_id: int | None = None
+    previous_source_session_id: str | None = None
+    previous_release_commit: str | None = None
+    last_source_error: str | None = None
     while not collector.stop.is_set():
         now = datetime.now(UTC)
         try:
@@ -501,7 +497,13 @@ def run_r11_pg_observation(collector: Collector) -> None:
                 db.execute(
                     "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
                 )
+                if replay is None:
+                    (
+                        replay, generation, previous_publication_id,
+                        previous_source_session_id, previous_release_commit,
+                    ) = _restore_or_reset_replay(db)
                 current_source = _source_identity(db)
+                assert replay is not None
                 checkpoint = replay.checkpoint
                 if (
                     checkpoint is not None
@@ -513,6 +515,7 @@ def run_r11_pg_observation(collector: Collector) -> None:
                         previous_source_session_id, previous_release_commit,
                     ) = _restore_or_reset_replay(db)
                 snapshot = _read_one(db, replay=replay, now=now)
+            last_source_error = None
             if snapshot is None:
                 # Poll at 1 Hz only when the durable cursor is already at
                 # the current publication head. Backlog replay must not pay
@@ -547,8 +550,24 @@ def run_r11_pg_observation(collector: Collector) -> None:
             # Diagnostic JSON is derived only after the authoritative DB row.
             collector.last_snapshot = committed.snapshot
             collector._write_state(committed.snapshot)
+        except R11MayakPGSourceUnavailable as exc:
+            retryable = {
+                "R11_MAYAK_PG_ONE_CURRENT_NATIVE_SOURCE_REQUIRED",
+                "R11_MAYAK_PG_ACTIVE_SOURCE_PUBLICATION_MISSING",
+                "R11_MAYAK_PG_PUBLICATION_STREAM_STALE",
+                "R11_MAYAK_PG_SOURCE_EPOCH_CHANGED",
+            }
+            code = str(exc).split(":", 1)[0]
+            if code not in retryable:
+                collector._write_error("PG_PUBLICATION", exc)
+                raise
+            if code != last_source_error:
+                collector._write_error("PG_PUBLICATION", exc)
+                last_source_error = code
+            replay = None
+            collector.stop.wait(1.0)
+            continue
         except (
-            R11MayakPGSourceUnavailable,
             R11SevenMayakCollectionUnverified,
             R11MayakReplayNotReady,
             R11MayakStateUnverified,
