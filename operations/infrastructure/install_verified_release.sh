@@ -1218,7 +1218,11 @@ else
     esac
     # Read only the current source process's exact advertised ACTIVE session.
     # A stale ACTIVE row left by a killed old process cannot prove readiness.
-    source_session="$(runuser -u cripta -- python3 -c '
+    # A transient runuser/PAM wrapper failure while the freshly started
+    # Source is still publishing its status is retryable inside this bounded
+    # 60-second readiness loop. Invalid/missing identity still cannot PASS.
+    source_session=""
+    if ! source_session="$(runuser -u cripta -- python3 -c '
   import json,sys
   try:
       v=json.load(open(sys.argv[1],encoding="utf-8"))
@@ -1226,7 +1230,9 @@ else
   except Exception:
       sid=""
   print(sid if isinstance(sid,str) else "")
-  ' /var/lib/cripta/native_public_trade_source/status.json)"
+  ' /var/lib/cripta/native_public_trade_source/status.json)"; then
+      source_session=""
+    fi
     if [[ ! "$source_session" =~ ^[0-9a-f]{32}$ ]]; then
       sleep 1
       continue
@@ -1235,14 +1241,17 @@ else
       # A reused status file, stale PID or old session cannot approve the new
       # source. Exact loaded release must match the installed candidate.
       source_pid="$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)"
-      source_commit_seen="$(runuser -u cripta -- python3 -c '
+      source_commit_seen=""
+      if ! source_commit_seen="$(runuser -u cripta -- python3 -c '
   import json,sys
   try:
       v=json.load(open(sys.argv[1],encoding="utf-8"))
       print(v.get("source_commit","") if v.get("state")=="ACTIVE" else "")
   except Exception:
       print("")
-  ' /var/lib/cripta/native_public_trade_source/status.json)"
+  ' /var/lib/cripta/native_public_trade_source/status.json)"; then
+        source_commit_seen=""
+      fi
       if [[ "$source_pid" == "$producer_old_pid" ||
             "$source_commit_seen" != "$RELEASE_COMMIT" ||
             "$source_session" == "$producer_old_session" ]]; then
