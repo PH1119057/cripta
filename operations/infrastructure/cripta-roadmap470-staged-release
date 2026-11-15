@@ -168,6 +168,12 @@ def main() -> int:
         installer = _git_bytes(rail_commit, INSTALLER_REL)
         if not installer.startswith(b"#!/usr/bin/env bash\n"):
             raise StagedReleaseError("ROADMAP470_INSTALLER_BYTES_INVALID")
+        if os.environ.get("CRIPTA_ROADMAP470_PREFLIGHT_ONLY") == "1":
+            print(
+                f"ROADMAP470_PREFLIGHT_ONLY=PASS stage={stage} "
+                f"baseline={baseline} target={target} rail={rail_commit}"
+            )
+            return 0
         digest = hashlib.sha256(
             f"{rail_commit}:{stage}:{baseline}:{target}".encode("ascii")
         ).hexdigest()[:12]
