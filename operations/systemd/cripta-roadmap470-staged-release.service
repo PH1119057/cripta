@@ -1,0 +1,22 @@
+[Unit]
+Description=Cripta #470 fixed R07-R13 staged no-start release rail
+After=postgresql.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/usr/local/libexec/cripta-roadmap470-staged-release/RAIL_COMMIT
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /usr/local/libexec/cripta-roadmap470-staged-release/cripta-roadmap470-staged-release
+TimeoutStartSec=1900
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadOnlyPaths=/srv/cripta/source_checkout /srv/cripta/runtime /data/cripta/research/tooling /usr/local/libexec/cripta-roadmap470-staged-release
+ReadWritePaths=/run/lock
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
