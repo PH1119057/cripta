@@ -1226,7 +1226,7 @@ else
   except Exception:
       sid=""
   print(sid if isinstance(sid,str) else "")
-  ' /var/lib/cripta/native_public_trade_source/status.json)"
+  ' /var/lib/cripta/native_public_trade_source/status.json 2>/dev/null || true)"
     if [[ ! "$source_session" =~ ^[0-9a-f]{32}$ ]]; then
       sleep 1
       continue
@@ -1234,7 +1234,7 @@ else
     if [[ "$native_code_changed" == "1" ]]; then
       # A reused status file, stale PID or old session cannot approve the new
       # source. Exact loaded release must match the installed candidate.
-      source_pid="$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)"
+      source_pid="$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID 2>/dev/null || true)"
       source_commit_seen="$(runuser -u cripta -- python3 -c '
   import json,sys
   try:
@@ -1242,7 +1242,7 @@ else
       print(v.get("source_commit","") if v.get("state")=="ACTIVE" else "")
   except Exception:
       print("")
-  ' /var/lib/cripta/native_public_trade_source/status.json)"
+  ' /var/lib/cripta/native_public_trade_source/status.json 2>/dev/null || true)"
       if [[ "$source_pid" == "$producer_old_pid" ||
             "$source_commit_seen" != "$RELEASE_COMMIT" ||
             "$source_session" == "$producer_old_session" ]]; then
@@ -1264,7 +1264,7 @@ else
         AND c.accepted_at >= '$native_probe_started_at'::timestamptz
         AND c.event_at >= '$native_probe_started_at'::timestamptz
                               - interval '5 seconds'
-        AND c.event_at >= now() - interval '3 minutes'")"
+        AND c.event_at >= now() - interval '3 minutes'" 2>/dev/null || true)"
     if [[ "$source_cursor_count" == "5" ]]; then
       native_source_ready=1
       break
