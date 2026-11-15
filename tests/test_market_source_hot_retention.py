@@ -189,3 +189,14 @@ def test_native_cutover_waits_for_transitional_source_and_records_exact_failure(
     assert "trap 'record_err" in installer
     assert 'rm -f "$STATE_ROOT/LAST_FAILED_RELEASE"' in installer
 
+def test_native_cutover_retries_transient_status_wrapper_failure():
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text()
+    assert 'if ! source_session="$(runuser -u cripta -- python3 -c' in installer
+    assert 'if ! source_commit_seen="$(runuser -u cripta -- python3 -c' in installer
+    assert 'source_session=""' in installer
+    assert 'source_commit_seen=""' in installer
+    assert "for _attempt in {1..60}; do" in installer
+    assert "independent native source five-symbol fresh cursor proof missing" in installer
+
