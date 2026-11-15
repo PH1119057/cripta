@@ -54,6 +54,7 @@ class NativeFakePG:
         self.isolation = "repeatable read"
         self.read_only = True
         self.sessions: list[tuple[str, str]] = [(SESSION, COMMIT)]
+        self.pub_id = 101
         self.pub_at = AS_OF
         self.pub_state = "WATERMARKS_ONLY"
         self.pub_commit = COMMIT
@@ -83,9 +84,14 @@ class NativeFakePG:
             assert params == (SOURCE,)
             return Result(self.sessions)
         if "FROM analytics.market_publications" in sql:
-            assert params == (SOURCE, SESSION)
+            assert "publication_id=%s" in sql
+            assert "ORDER BY as_of_second DESC" not in sql
+            assert params[:2] == (SOURCE, SESSION)
+            requested = params[2]
+            if requested != self.pub_id:
+                return Result([])
             return Result([(
-                101, SESSION, self.pub_commit, self.pub_at,
+                self.pub_id, SESSION, self.pub_commit, self.pub_at,
                 self.pub_state, {SYMBOL: self.pub_ref},
             )])
         if (
@@ -124,6 +130,7 @@ class NativeFakePG:
 def read(
     db: NativeFakePG,
     *,
+    publication_id: int = 101,
     symbol: str = SYMBOL,
     after: tuple[int, int] = (0, 0),
     max_events: int = 512,
@@ -131,9 +138,26 @@ def read(
 ):
     return read_r11_original_linear_page(
         db,
+        publication_id=publication_id,
         symbol=symbol, observed_at=now,
         read_after=after, max_events=max_events,
     )
+
+
+def test_reader_pins_exact_requested_publication_not_latest_head() -> None:
+    db = NativeFakePG()
+    page = read(db, publication_id=101)
+    assert page.publication_id == 101
+    publication_sql = next(
+        sql for sql in db.queries
+        if "FROM analytics.market_publications" in sql
+    )
+    assert "publication_id=%s" in publication_sql
+    assert "ORDER BY as_of_second DESC" not in publication_sql
+    with pytest.raises(
+        R11OriginalNativeUnverified, match="PUBLICATION_MISSING",
+    ):
+        read(db, publication_id=102)
 
 
 def test_original_same_sequence_siblings_preserved_in_native_frame_order() -> None:
@@ -253,6 +277,14 @@ def test_source_is_five_not_seven_and_never_approves_mayak_replacement() -> None
         R11OriginalNativeUnverified, match="CURSOR_NOT_IN_ORIGINAL_EPOCH",
     ):
         read(db, after=(5, 0))
+
+
+def test_forged_publication_id_cannot_be_accepted() -> None:
+    for publication_id in (0, -1, True):
+        with pytest.raises(
+            R11OriginalNativeUnverified, match="PUBLICATION_ID_INVALID",
+        ):
+            read(NativeFakePG(), publication_id=publication_id)
 
 
 def test_unbounded_or_forged_pagination_cannot_be_accepted() -> None:

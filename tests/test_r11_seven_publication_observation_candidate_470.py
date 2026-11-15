@@ -120,8 +120,10 @@ def mock_all(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         seen.append("optional:" + product_category)
         return optional(product_category)
 
-    def get_native(_db: Any, *, symbol: str, observed_at: datetime,
+    def get_native(_db: Any, *, publication_id: int, symbol: str,
+                   observed_at: datetime,
                    read_after: tuple[int, int]) -> R11OriginalNativePage:
+        assert publication_id == 42
         assert isinstance(observed_at, datetime) and read_after == (0, 0)
         seen.append("native:" + symbol)
         return native_page(symbol)
@@ -180,10 +182,11 @@ def test_native_trade_replay_keeps_16_page_ceiling(
     calls = 0
 
     def get_native(
-        _db: Any, *, symbol: str, observed_at: datetime,
-        read_after: tuple[int, int],
+        _db: Any, *, publication_id: int, symbol: str,
+        observed_at: datetime, read_after: tuple[int, int],
     ) -> R11OriginalNativePage:
         nonlocal calls
+        assert publication_id == 42
         calls += 1
         return native_page(symbol)
 
@@ -373,8 +376,10 @@ def test_checkpoint_continues_exact_source_positions_after_page_commit(
         resumed.append("optional:" + product_category)
         return optional(product_category)
 
-    def get_native(_db: Any, *, symbol: str, observed_at: datetime,
+    def get_native(_db: Any, *, publication_id: int, symbol: str,
+                   observed_at: datetime,
                    read_after: tuple[int, int]) -> R11OriginalNativePage:
+        assert publication_id == 42
         assert observed_at == NOW and read_after == (1, 0)
         resumed.append("native:" + symbol)
         return native_page(symbol)
