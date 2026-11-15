@@ -321,7 +321,6 @@ def test_rr_candidate_reader_uses_durable_quality_and_rest_receipts() -> None:
     assert len(proof.scopes) == 63
 
 
-
 def test_previous_proven_stream_start_carries_without_replaying_old_recovery() -> None:
     boundaries, observations = evidence()
     topic = "tickers.ETHUSDT"
