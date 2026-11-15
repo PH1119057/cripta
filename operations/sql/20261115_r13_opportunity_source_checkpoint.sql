@@ -21,12 +21,14 @@ CREATE TABLE IF NOT EXISTS monitoring.opportunity_source_checkpoints (
 );
 
 REVOKE ALL ON monitoring.opportunity_source_checkpoints FROM PUBLIC;
+GRANT USAGE ON SCHEMA monitoring TO cripta;
 GRANT SELECT,INSERT,UPDATE ON monitoring.opportunity_source_checkpoints TO cripta;
 REVOKE DELETE,TRUNCATE ON monitoring.opportunity_source_checkpoints FROM cripta;
 
 DO $check$
 BEGIN
-    IF NOT has_table_privilege(
+    IF NOT has_schema_privilege('cripta','monitoring','USAGE')
+       OR NOT has_table_privilege(
         'cripta','monitoring.opportunity_source_checkpoints','SELECT'
     ) OR NOT has_table_privilege(
         'cripta','monitoring.opportunity_source_checkpoints','INSERT'
