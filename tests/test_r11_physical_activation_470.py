@@ -15,6 +15,7 @@ def test_r11_units_explicitly_activate_single_source_and_pg_mayak() -> None:
     assert "CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=1" in native
     assert "CRIPTA_R09_SOURCE_POSTFILL_BROKER=ENABLED" in native
     assert "CRIPTA_MAYAK_SOURCE_MODE=PG_PUBLICATION" in mayak
+    assert "PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current" in mayak
 
 
 def test_r11_manifest_is_backed_up_and_installed_only_from_r11_onward() -> None:
@@ -23,7 +24,7 @@ def test_r11_manifest_is_backed_up_and_installed_only_from_r11_onward() -> None:
     exact = "operations/monitoring/r11_seven_public_feeds.json"
     assert manifest in source
     assert exact in source
-    assert 'case "$ROADMAP470_STAGE" in\n  ""|R11|R12|R13)' in source
+    assert 'case "$ROADMAP470_STAGE" in\n  ""|R11|R11_REPAIR|R12|R13)' in source
     assert "install -d -o root -g cripta -m 0750 /etc/cripta/market-source" in source
     assert "install -o root -g cripta -m 0640" in source
     assert "R11_SEVEN_FEED_MANIFEST=INSTALLED_EXACT" in source
@@ -41,10 +42,14 @@ def test_r11_physical_stage_targets_are_exact_activated_chain() -> None:
         and "29cbe0229c137112e3f4e9d3b5b778ebdbc05738" in source
     )
     assert (
-        '("R12", "29cbe0229c137112e3f4e9d3b5b778ebdbc05738",' in source
-        and "fedf6bea772a9d7b4269e2b2c856a8d7bd65efd9" in source
+        '("R11_REPAIR", "29cbe0229c137112e3f4e9d3b5b778ebdbc05738",' in source
+        and "103ac4dc7ce0d7d06b413847938a22e356cc26b9" in source
     )
     assert (
-        '("R13", "fedf6bea772a9d7b4269e2b2c856a8d7bd65efd9",' in source
-        and "8c5164d33972bdfc357c64b29927e3caacc964b7" in source
+        '("R12", "103ac4dc7ce0d7d06b413847938a22e356cc26b9",' in source
+        and "73987ad4be915dc554e7d6f63ea196849c616bb2" in source
+    )
+    assert (
+        '("R13", "73987ad4be915dc554e7d6f63ea196849c616bb2",' in source
+        and "7f6430fb30a2d68353ca669e15b778ec58680240" in source
     )
