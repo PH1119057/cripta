@@ -4,14 +4,17 @@ import json
 import os
 import signal
 import time
-import urllib.parse
-import urllib.request
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
 import psycopg
 
+from bybit_workbench.market_data.r12_position_publication import (
+    R12PositionMarketSnapshot,
+    R12PositionPublicationUnavailable,
+    read_r12_position_market_snapshot,
+)
 from bybit_workbench.position_supervisor import (
     ExchangePosition,
     FeatureEvidence,
@@ -31,7 +34,6 @@ STATUS_PATH = Path(
 )
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 running = True
-_public_cache: dict[str, tuple[float, dict[str, object]]] = {}
 
 
 def _write_status(path: Path, *, now: datetime, open_positions: int) -> None:
@@ -57,63 +59,60 @@ def _write_status(path: Path, *, now: datetime, open_positions: int) -> None:
     temporary.replace(path)
 
 
-def public_get(path: str, params: dict[str, str], ttl: float = 5) -> dict[str, object]:
-    key = path + "?" + urllib.parse.urlencode(sorted(params.items()))
-    cached = _public_cache.get(key)
-    if cached and time.monotonic() - cached[0] <= ttl:
-        return cached[1]
-    request = urllib.request.Request(
-        "https://api.bybit.kz" + key, headers={"User-Agent": "cripta-position-card/1"}
-    )
-    with urllib.request.urlopen(request, timeout=5) as response:
-        payload = json.load(response)
-    if payload.get("retCode") != 0:
-        raise RuntimeError(str(payload.get("retMsg") or "Bybit public API error"))
-    _public_cache[key] = (time.monotonic(), payload)
-    return payload
-
-
-def price_feature(symbol: str, side: str, now: datetime) -> FeatureEvidence:
-    payload = public_get(
-        "/v5/market/kline",
-        {"category": "linear", "symbol": symbol, "interval": "1", "limit": "6"},
-        8,
-    )
-    rows = (payload.get("result") or {}).get("list") or []
-    closes = [Decimal(str(row[4])) for row in rows]
-    if len(closes) < 6 or any(value <= 0 for value in closes):
-        return FeatureEvidence("unknown", now, Quality.MISSING)
+def _position_market_features(
+    snapshot: R12PositionMarketSnapshot,
+    *,
+    side: str,
+) -> tuple[FeatureEvidence, FeatureEvidence, FeatureEvidence]:
     direction = Decimal("1") if side == "Buy" else Decimal("-1")
+    closes = snapshot.closed_closes_newest_first
+    if len(closes) != 6:
+        raise R12PositionPublicationUnavailable(
+            "R12_POSITION_CLOSED_1M_HISTORY_UNVERIFIED"
+        )
     moves = {
-        "move_1m_pct": (closes[0] / closes[1] - 1) * 100 * direction,
-        "move_3m_pct": (closes[0] / closes[3] - 1) * 100 * direction,
-        "move_5m_pct": (closes[0] / closes[5] - 1) * 100 * direction,
+        "move_1m_pct": (
+            snapshot.forming_close / closes[0] - 1
+        ) * 100 * direction,
+        "move_3m_pct": (
+            snapshot.forming_close / closes[2] - 1
+        ) * 100 * direction,
+        "move_5m_pct": (
+            snapshot.forming_close / closes[4] - 1
+        ) * 100 * direction,
     }
-    state = "continuation" if moves["move_1m_pct"] > 0 else "against"
-    return FeatureEvidence(state, now, Quality.FRESH, moves)
+    price = FeatureEvidence(
+        "continuation" if moves["move_1m_pct"] > 0 else "against",
+        snapshot.forming_source_at,
+        Quality.FRESH,
+        {
+            **moves,
+            "publication_id": str(snapshot.publication_id),
+            "source_session_id": snapshot.source_session_id,
+        },
+    )
 
-
-def execution_and_book_features(
-    symbol: str, side: str, now: datetime
-) -> tuple[FeatureEvidence, FeatureEvidence]:
-    ticker_payload = public_get("/v5/market/tickers", {"category": "linear", "symbol": symbol}, 2)
-    ticker = ((ticker_payload.get("result") or {}).get("list") or [{}])[0]
-    bid = Decimal(str(ticker.get("bid1Price") or 0))
-    ask = Decimal(str(ticker.get("ask1Price") or 0))
-    middle = (bid + ask) / 2 if bid > 0 and ask > 0 else Decimal("0")
-    spread_bps = (ask - bid) / middle * 10_000 if middle > 0 else Decimal("0")
+    middle = (snapshot.bid_price + snapshot.ask_price) / 2
+    spread_bps = (
+        (snapshot.ask_price - snapshot.bid_price) / middle * 10_000
+        if middle > 0 else Decimal("0")
+    )
     execution = FeatureEvidence(
         "executable" if middle > 0 else "unavailable",
-        now,
+        snapshot.ticker_source_at,
         Quality.FRESH if middle > 0 else Quality.MISSING,
-        {"bid": bid, "ask": ask, "spread_bps": spread_bps},
+        {
+            "bid": snapshot.bid_price,
+            "ask": snapshot.ask_price,
+            "last_price": snapshot.last_price,
+            "public_mark_price": snapshot.public_mark_price,
+            "spread_bps": spread_bps,
+            "publication_id": str(snapshot.publication_id),
+        },
     )
-    book_payload = public_get(
-        "/v5/market/orderbook", {"category": "linear", "symbol": symbol, "limit": "25"}, 3
-    )
-    result = book_payload.get("result") or {}
-    bid_depth = sum(Decimal(str(p)) * Decimal(str(q)) for p, q in result.get("b", []))
-    ask_depth = sum(Decimal(str(p)) * Decimal(str(q)) for p, q in result.get("a", []))
+
+    bid_depth = snapshot.top25_bid_depth_usdt
+    ask_depth = snapshot.top25_ask_depth_usdt
     favorable = bid_depth if side == "Buy" else ask_depth
     adverse = ask_depth if side == "Buy" else bid_depth
     ratio = favorable / adverse if adverse > 0 else Decimal("0")
@@ -126,18 +125,54 @@ def execution_and_book_features(
     )
     book = FeatureEvidence(
         state,
-        now,
+        snapshot.book_source_at,
         Quality.FRESH,
-        {"bid_depth_usdt": bid_depth, "ask_depth_usdt": ask_depth, "directional_ratio": ratio},
+        {
+            "bid_depth_usdt": bid_depth,
+            "ask_depth_usdt": ask_depth,
+            "directional_ratio": ratio,
+            "publication_id": str(snapshot.publication_id),
+        },
     )
-    return execution, book
+    return price, execution, book
 
 
-def market_feature(symbol: str, now: datetime) -> FeatureEvidence:
-    feature = price_feature(symbol, "Buy", now)
-    return FeatureEvidence(
-        feature.state, feature.observed_at, feature.quality, feature.measurements
-    )
+def _market_anchor_feature(
+    context: dict[str, dict[str, object]],
+    *,
+    symbol: str,
+    observed: datetime | None,
+    now: datetime,
+) -> FeatureEvidence:
+    item = context.get(symbol)
+    if not isinstance(item, dict) or observed is None:
+        return FeatureEvidence("unknown", now, Quality.MISSING)
+    try:
+        age = (now - observed).total_seconds()
+        returns = item.get("returns_by_horizon")
+        if not isinstance(returns, dict):
+            return FeatureEvidence("unknown", observed, Quality.MISSING)
+        raw = returns.get("1m")
+        if raw is None:
+            return FeatureEvidence("unknown", observed, Quality.MISSING)
+        value = Decimal(str(raw))
+        if not value.is_finite() or not 0 <= age <= 15:
+            return FeatureEvidence(
+                "unknown",
+                observed,
+                Quality.STALE if age > 15 else Quality.MISSING,
+            )
+        return FeatureEvidence(
+            "continuation" if value > 0 else "against",
+            observed,
+            Quality.FRESH,
+            {
+                "return_1m_pct": value,
+                "source": "MAYAK_SHARED_CONTEXT",
+            },
+        )
+    except (ValueError, TypeError):
+        return FeatureEvidence("unknown", observed, Quality.MISSING)
 
 
 def stop(*_: object) -> None:
@@ -294,6 +329,7 @@ def structure_feature(
 
 def features(
     connection: psycopg.Connection,
+    market_connection: psycopg.Connection,
     position_id: str,
     symbol: str,
     side: str,
@@ -335,26 +371,52 @@ def features(
     )
     result["structure"] = structure
     try:
-        result["price_1m"] = price_feature(symbol, side, now)
-        execution, orderbook = execution_and_book_features(symbol, side, now)
+        market = read_r12_position_market_snapshot(
+            market_connection,
+            symbol=symbol,
+            observed_at=now,
+        )
+        price, execution, orderbook = _position_market_features(
+            market,
+            side=side,
+        )
+        result["price_1m"] = price
         result["execution_now"] = execution
         result["orderbook"] = orderbook
-        flow_state = result.get("flow", FeatureEvidence("unknown", now, Quality.MISSING)).state
+        flow_state = result.get(
+            "flow", FeatureEvidence("unknown", now, Quality.MISSING)
+        ).state
         price_state = result["price_1m"].state
         absorption_state = (
             "absorption"
-            if flow_state == "persistent_adverse" and price_state == "continuation"
+            if flow_state == "persistent_adverse"
+            and price_state == "continuation"
             else "none"
         )
         absorption_quality = (
             Quality.FRESH
-            if result.get("flow") and result["flow"].quality == Quality.FRESH
+            if result.get("flow")
+            and result["flow"].quality == Quality.FRESH
             else Quality.MISSING
         )
-        result["absorption"] = FeatureEvidence(absorption_state, now, absorption_quality)
-        result["market_btc"] = market_feature("BTCUSDT", now)
-        result["market_eth"] = market_feature("ETHUSDT", now)
-    except (OSError, RuntimeError, ValueError, TypeError):
+        result["absorption"] = FeatureEvidence(
+            absorption_state,
+            market.as_of_second,
+            absorption_quality,
+            {"publication_id": str(market.publication_id)},
+        )
+        result["market_btc"] = _market_anchor_feature(
+            context, symbol="BTCUSDT", observed=observed, now=now,
+        )
+        result["market_eth"] = _market_anchor_feature(
+            context, symbol="ETHUSDT", observed=observed, now=now,
+        )
+    except (
+        R12PositionPublicationUnavailable,
+        RuntimeError,
+        ValueError,
+        TypeError,
+    ):
         for name in (
             "price_1m",
             "execution_now",
@@ -400,7 +462,11 @@ def main() -> None:
     signal.signal(signal.SIGINT, stop)
     registry = SupervisorRegistry()
     last_periodic_save: dict[str, int] = {}
-    with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+    dsn = "dbname=cripta user=cripta host=/var/run/postgresql"
+    with (
+        psycopg.connect(dsn) as connection,
+        psycopg.connect(dsn) as market_connection,
+    ):
         initialize(connection)
         while running:
             now = datetime.now(UTC)
@@ -409,15 +475,20 @@ def main() -> None:
             restore_created(connection, registry, created)
             context_observed, context = mayak_context()
             for position, mark in rows:
-                evidence, structural_event, structure_observed_at = features(
-                    connection,
-                    position.position_id,
-                    position.symbol,
-                    position.side,
-                    now,
-                    context_observed,
-                    context,
-                )
+                with market_connection.transaction():
+                    market_connection.execute(
+                        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                    )
+                    evidence, structural_event, structure_observed_at = features(
+                        connection,
+                        market_connection,
+                        position.position_id,
+                        position.symbol,
+                        position.side,
+                        now,
+                        context_observed,
+                        context,
+                    )
                 snapshot = registry.get(position.position_id).update(
                     PositionEvent(
                         now,
