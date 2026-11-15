@@ -56,7 +56,8 @@ from bybit_workbench.market_data.public_source_event_codec import (
 )
 from bybit_workbench.market_data.r11_optional_original_frame_journal import (
     R11OriginalFrameUnavailable,
-    append_r11_original_optional_frame,
+    R11OriginalPublicFrame,
+    append_r11_original_optional_frames,
     make_r11_original_optional_frame,
 )
 from bybit_workbench.market_data.public_source_quality import (
@@ -86,6 +87,7 @@ _PUBLIC_WS = {
     "LINEAR": "wss://stream.bybit.kz/v5/public/linear",
 }
 _MAX_QUEUE = 8192
+_R11_ORIGINAL_BATCH_MAX = 64
 _REPAIR_PAGES_PER_WINDOW = 20
 _REPAIR_RESCAN_SECONDS = 900
 _REPAIR_PROVIDER_SPACING_SECONDS = 0.30
@@ -1063,6 +1065,28 @@ def run_source_union(
 
     frame_index = 0
     r11_optional_frame_index = 0
+    r11_original_batch: list[R11OriginalPublicFrame] = []
+
+    def flush_r11_original_batch() -> None:
+        if not r11_original_batch:
+            return
+        batch = tuple(r11_original_batch)
+        r11_original_batch.clear()
+        try:
+            append_r11_original_optional_frames(connection, batch)
+        except (R11OriginalFrameUnavailable, psycopg.Error):
+            # Preserve the old per-frame failure boundary: no false durable
+            # frame claim, and no unrelated mandatory native trade GAP.
+            for frame in batch:
+                note_quality(
+                    product=frame.product_category,
+                    topic=frame.source_topic,
+                    symbol=frame.external_symbol,
+                    quality="UNKNOWN",
+                    reason="R11_ORIGINAL_FRAME_APPEND_UNVERIFIED",
+                    epoch=frame.transport_epoch_id,
+                )
+
     last_published_second: datetime | None = None
     repair_index = 0
     next_repair_scan_at = 0.0
@@ -1212,12 +1236,10 @@ def run_source_union(
                             message=item, facts=events,
                             received_at=received,
                         )
-                        append_r11_original_optional_frame(
-                            connection, original,
-                        )
-                    except (
-                        R11OriginalFrameUnavailable, psycopg.Error,
-                    ):
+                        r11_original_batch.append(original)
+                        if len(r11_original_batch) >= _R11_ORIGINAL_BATCH_MAX:
+                            flush_r11_original_batch()
+                    except R11OriginalFrameUnavailable:
                         # Explicitly degrade only the affected original
                         # optional topic. Never falsify continuity or stop
                         # unrelated mandatory LINEAR native publicTrade.
@@ -1424,6 +1446,9 @@ def run_source_union(
                 # redundant DB scan/ON CONFLICT every 100ms of idle polling.
                 current_second = current.replace(microsecond=0)
                 if current_second != last_published_second:
+                    # Durable original optional rows must never trail the
+                    # immutable publication that pins their exact refs.
+                    flush_r11_original_batch()
                     publish_market_source_second(
                         connection, source_session_id=session,
                         producer_release_commit=producer_release_commit,
@@ -1437,6 +1462,9 @@ def run_source_union(
                         observed_at=current_second,
                     )
                     last_published_second = current_second
+        # A clean owner stop must durably flush frames already accepted by
+        # the source loop before the epoch is closed.
+        flush_r11_original_batch()
         # Drain source-quality events before the native epoch turns GAP.
         # A clean owner stop cannot erase the final optional failure.
         flush_quality()
