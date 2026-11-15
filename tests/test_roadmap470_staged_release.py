@@ -69,6 +69,15 @@ def test_r11_repair5_is_exact_gate_between_repair4_and_r12() -> None:
     )
 
 
+def test_verified_installer_git_mode_is_executable() -> None:
+    result = subprocess.run(
+        ["git", "ls-files", "--stage",
+         "operations/infrastructure/install_verified_release.sh"],
+        check=True, capture_output=True, text=True,
+    )
+    assert result.stdout.startswith("100755 ")
+
+
 def test_rail_is_valid_python_no_args_and_exact_ladder_only() -> None:
     source = RAIL.read_text(encoding="utf-8")
     ast.parse(source)
