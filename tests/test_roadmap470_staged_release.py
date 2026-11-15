@@ -100,6 +100,21 @@ def test_installer_shell_syntax_and_staged_no_start_contract() -> None:
     assert "ROADMAP470_NATIVE_SOURCE_STARTED_UNEXPECTEDLY" in source
     assert "ROADMAP470_TRADING_CONTROL_CHANGED_DURING_NO_START_INSTALL" in source
     assert "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=DEFERRED_NO_START" in source
+    assert "ROADMAP470_INCOMPLETE_CANDIDATE_RESET=PASS" in source
+    assert "rm -rf --one-file-system --" in source
+    assert "ROADMAP470_INCOMPLETE_CANDIDATE_IS_CURRENT" in source
+    assert "R07|R08|R09|R10)" in source
+    assert "DISPATCHER_IMPORT_PREFLIGHT=DEFERRED_NOT_IN_STAGE" in source
+    assert "import bybit_workbench.dispatcher_v2" in source
+
+
+def test_rail_captures_sanitized_installer_failure_evidence() -> None:
+    source = RAIL.read_text(encoding="utf-8")
+    assert "capture_output=True, text=True" in source
+    assert "ROADMAP470_INSTALLER_DIAGNOSTIC_BEGIN" in source
+    assert "ROADMAP470_INSTALLER_DIAGNOSTIC_END" in source
+    assert "SENSITIVE_DIAGNOSTIC" in source
+    assert "safe_lines" in source
 
 
 def test_staged_migrations_do_not_reach_forward() -> None:
