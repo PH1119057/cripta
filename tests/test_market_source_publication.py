@@ -308,3 +308,70 @@ def test_inert_schema_requires_a_source_session_not_a_trading_owner() -> None:
         "20261108_native_public_trade_source_sessions.sql"
     ) < installer.index("20261110_market_source_publication.sql")
     assert "systemctl start cripta-native-public-trade-source.service" in installer
+
+
+def test_r11_original_refs_inserted_in_same_immutable_publication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import bybit_workbench.market_data.market_publication as pub
+
+    calls: list[object] = []
+
+    def collect(_db: object, **kwargs: object):
+        calls.append(kwargs)
+        return (
+            {"SPOT": {
+                "source_session_id": SESSION,
+                "transport_epoch_id": "b" * 32,
+                "source_frame_number": 42,
+                "frame_content_sha256": "c" * 64,
+            }},
+            {"SPOT": "PHYSICAL_FRAME_REF_ONLY",
+             "LINEAR": "NO_ORIGINAL_FRAME_IN_CURRENT_EPOCH"},
+        )
+
+    monkeypatch.setattr(pub, "collect_r11_original_optional_publication_refs",
+                        collect)
+    db = PublicationDB()
+    assert pub.publish_market_source_second(
+        db, source_session_id=SESSION, producer_release_commit=RELEASE,
+        symbols=SYMBOLS, observed_at=AT,
+        original_optional_transport_epochs={
+            "SPOT": "b" * 32, "LINEAR": "d" * 32,
+        },
+    ) == 27
+    assert len(calls) == 1
+    assert len(db.writes) == 1
+    assert db.writes[0][15].obj["SPOT"]["source_frame_number"] == 42
+    assert db.writes[0][16].obj["LINEAR"] == (
+        "NO_ORIGINAL_FRAME_IN_CURRENT_EPOCH"
+    )
+    assert any("original_optional_frame_refs" in sql for sql in db.sql)
+    assert any("ON CONFLICT" in sql for sql in db.sql)
+
+
+def test_r11_invalid_ref_aborts_publication_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import bybit_workbench.market_data.market_publication as pub
+    from bybit_workbench.market_data.r11_original_publication_refs import (
+        R11PublicationOriginalRefsUnverified,
+    )
+
+    def fail(_db: object, **_kwargs: object):
+        raise R11PublicationOriginalRefsUnverified(
+            "R11_PUBLICATION_ORIGINAL_PHYSICAL_ORIGINAL_FRAME_INVALID"
+        )
+
+    monkeypatch.setattr(pub, "collect_r11_original_optional_publication_refs",
+                        fail)
+    db = PublicationDB()
+    with pytest.raises(R11PublicationOriginalRefsUnverified):
+        pub.publish_market_source_second(
+            db, source_session_id=SESSION, producer_release_commit=RELEASE,
+            symbols=SYMBOLS, observed_at=AT,
+            original_optional_transport_epochs={
+                "SPOT": "b" * 32, "LINEAR": "d" * 32,
+            },
+        )
+    assert db.writes == []
