@@ -241,6 +241,7 @@ class R11MayakPublicationReplay:
                 <= candidate.as_of_second.timestamp() + 5,
                 "OPTIONAL_EVENT_RECEIVER_INVALID",
             )
+            assert isinstance(received, datetime)
             original_events.append((
                 received.timestamp(), 0, event.source_frame_number,
                 event.source_fact_index, event,
