@@ -31,6 +31,7 @@ from bybit_workbench.mayak.publication_consumer_commit import (
     commit_r11_mayak_publication,
     load_r11_mayak_consumer_commit,
     read_r11_mayak_consumer_head,
+    verify_r11_mayak_consumer_reset_lineage,
 )
 from bybit_workbench.mayak.seven_publication_engine_checkpoint import (
     R11MayakStateUnverified,
@@ -245,15 +246,16 @@ def _restore_or_reset_replay(
         replay.require_provider_continuity = True
         return replay, restored.generation, head.publication_id, None, None
 
-    previous = load_r11_mayak_consumer_commit(
+    previous = verify_r11_mayak_consumer_reset_lineage(
         db, expected_source_session_id=head.source_session_id,
         expected_release_commit=head.release_commit,
     )
     _need(
         previous is not None
         and previous.generation == head.generation
-        and previous.replay.checkpoint is not None
-        and previous.replay.checkpoint.publication_id == head.publication_id,
+        and previous.publication_id == head.publication_id
+        and previous.source_session_id == head.source_session_id
+        and previous.release_commit == head.release_commit,
         "SOURCE_RESET_PREVIOUS_STATE_UNVERIFIED",
     )
     return (
