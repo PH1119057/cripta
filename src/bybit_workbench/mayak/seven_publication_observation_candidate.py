@@ -47,11 +47,13 @@ _SEVEN = (
     "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
     "BTCUSDT", "ETHUSDT",
 )
-# Production cold-start evidence on #470 showed the first complete
-# 21/21 REST-backed publication at 4,842 LINEAR / 3,097 SPOT optional frames.
-# 64 x 128 preserves a bounded cold bootstrap with measured headroom. Native
-# publicTrade replay keeps its separately proven 16 x 512 ceiling.
-_MAX_OPTIONAL_PAGES = 64
+# Current production evidence on #642: a valid first complete publication
+# required 55,056 LINEAR / 40,094 SPOT frames and replayed successfully in
+# 57.3s.  Recent 15-minute density peaked at 175,090 LINEAR / 129,980 SPOT
+# frames.  2,048 x 128 keeps original-frame replay strictly bounded at
+# 262,144 frames/product while preserving headroom inside the HOT retention
+# horizon. Native publicTrade replay keeps its separately proven 16-page cap.
+_MAX_OPTIONAL_PAGES = 2048
 _MAX_NATIVE_PAGES = 16
 
 

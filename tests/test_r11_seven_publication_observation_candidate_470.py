@@ -142,7 +142,7 @@ def mock_all(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return seen
 
 
-def test_optional_bootstrap_can_cross_old_16_page_ceiling(
+def test_optional_bootstrap_can_cross_old_64_page_ceiling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mock_all(monkeypatch)
@@ -159,7 +159,7 @@ def test_optional_bootstrap_can_cross_old_16_page_ceiling(
             page,
             batch=replace(
                 page.batch,
-                has_more_pages=calls[product_category] < 17,
+                has_more_pages=calls[product_category] < 65,
             ),
         )
 
@@ -169,10 +169,43 @@ def test_optional_bootstrap_can_cross_old_16_page_ceiling(
     result = stage.collect_r11_seven_mayak_candidate(
         ReadOnlyPG(), publication_id=42, observed_at=NOW,
     )
-    assert calls == {"SPOT": 17, "LINEAR": 17}
+    assert calls == {"SPOT": 65, "LINEAR": 65}
     assert not result.has_more_source_pages
-    assert stage._MAX_OPTIONAL_PAGES == 64
+    assert stage._MAX_OPTIONAL_PAGES == 2048
     assert stage._MAX_NATIVE_PAGES == 16
+
+
+def test_optional_replay_keeps_2048_page_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_all(monkeypatch)
+    calls = 0
+
+    def get_optional(
+        _db: Any, *, publication_id: int,
+        product_category: str, previous: Any = None,
+    ) -> R11PinnedMayakPublicationPage:
+        nonlocal calls
+        assert publication_id == 42
+        calls += 1
+        page = optional(product_category)
+        return replace(
+            page,
+            batch=replace(page.batch, has_more_pages=True),
+        )
+
+    monkeypatch.setattr(
+        stage, "read_r11_pinned_mayak_optional_page", get_optional,
+    )
+    with pytest.raises(
+        stage.R11SevenMayakCollectionUnverified,
+        match="OPTIONAL_FRAME_BACKLOG_EXCEEDS_BOUND",
+    ):
+        stage.collect_r11_seven_mayak_candidate(
+            ReadOnlyPG(), publication_id=42, observed_at=NOW,
+        )
+    assert calls == 2048
+    assert stage._MAX_OPTIONAL_PAGES == 2048
 
 
 def test_native_trade_replay_keeps_16_page_ceiling(
