@@ -13,6 +13,7 @@ from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
 )
+from bybit_workbench.universal_entry import r06_financial_promotion as promotion
 from bybit_workbench.universal_entry.contracts import (
     FrozenPolicy,
     MarketFactEnvelope,
@@ -21,7 +22,6 @@ from bybit_workbench.universal_entry.contracts import (
 )
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
-from bybit_workbench.universal_entry import r06_financial_promotion as promotion
 from bybit_workbench.universal_entry.r07_publication_provenance import (
     R07PublicationProvenanceUnavailable,
     require_r07_publication_provenance,
@@ -307,9 +307,11 @@ def test_r07_rejects_publication_delay_beyond_signal_freshness():
 
 def test_r06_no_exposure_guard_is_bootstrap_only_not_process_restart_gate():
     source = inspect.getsource(r06_pg_only_entry.run_pg_only)
-    assert source.count("_require_no_exposure_or_requests(writer)") == 1
+    assert "bootstrap_requires_safety = not _has_durable_decision_checkpoint(writer)" in source
+    assert "if not first_cursor_accepted and bootstrap_requires_safety:" in source
+    assert "if not bootstrap_requires_safety:" in source
     assert source.index("if not checkpoints:") < source.index(
-        "_require_no_exposure_or_requests(writer)"
+        "if not bootstrap_requires_safety:"
     )
 
 
@@ -367,8 +369,12 @@ def test_migration_keeps_runtime_role_non_ddl_and_installer_owns_apply():
     [
         ({"enabled": False}, False),
         ({"enabled": True}, True),
+        ({"enabled": 0}, False),
+        ({"enabled": 1}, True),
         ((False,), False),
         ((True,), True),
+        ((0,), False),
+        ((1,), True),
     ],
 )
 def test_gate_row_shape_is_consistent_for_consumer_and_prearm(row, expected):

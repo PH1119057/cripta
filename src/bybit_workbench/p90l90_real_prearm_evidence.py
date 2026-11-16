@@ -30,11 +30,6 @@ from bybit_workbench.p90l90_real_arm_control import (
 from bybit_workbench.real_service_profiles import p90_real_v3_service_specs
 from bybit_workbench.source_live_identity import inspect_source_live_identity
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
-from bybit_workbench.universal_entry.r06_financial_promotion import (
-    R06FinancialPromotionBlocked,
-    require_disarmed_baseline,
-    sync_disarmed_baseline,
-)
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
     MAX_ACCOUNT_COMMITTED,
@@ -47,6 +42,11 @@ from bybit_workbench.universal_entry.p90l90_real_second48 import (
 )
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
+)
+from bybit_workbench.universal_entry.r06_financial_promotion import (
+    R06FinancialPromotionBlocked,
+    require_disarmed_baseline,
+    sync_disarmed_baseline,
 )
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (

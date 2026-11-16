@@ -420,6 +420,21 @@ def _process_publication(
     return signals, blocked
 
 
+def _has_durable_decision_checkpoint(writer: Any) -> bool:
+    row = writer.execute(
+        "SELECT count(*) FROM strategy_entry.p90_scoped_native_consumer_checkpoints "
+        "WHERE strategy_id=ANY(%s) AND strategy_version=%s",
+        (list(_STRATEGIES), VERSION),
+    ).fetchone()
+    if (
+        row is None
+        or type(row[0]) is not int
+        or row[0] < 0
+    ):
+        raise R06PublishedEntryBlocked("R06_DECISION_CHECKPOINT_EXISTENCE_UNVERIFIED")
+    return row[0] > 0
+
+
 def _runtime_actor_verified() -> bool:
     """Compare actual service UID with the deployed runtime owner on Linux."""
     try:
@@ -489,8 +504,11 @@ def run_pg_only(
             prior_pub = 0
             last_status = 0.0
             first_cursor_accepted = False
+            bootstrap_requires_safety = not _has_durable_decision_checkpoint(writer)
             while not stopping:
                 at = datetime.now(UTC)
+                if not first_cursor_accepted and bootstrap_requires_safety:
+                    _require_no_exposure_or_requests(writer)
                 if tuple(_exact_scope_identity(b) for b in _bundles(writer)) != original_scope:
                     raise R06PublishedEntryBlocked("R06_ACTIVATION_OR_PLAN_IDENTITY_DRIFT")
                 try:
@@ -516,7 +534,9 @@ def run_pg_only(
                     # future-only R06 decision epoch is being bootstrapped.
                     # An existing durable checkpoint survives process restarts
                     # and may coexist with downstream financial lifecycle.
-                    _require_no_exposure_or_requests(writer)
+                    if not bootstrap_requires_safety:
+                        bootstrap_requires_safety = True
+                        _require_no_exposure_or_requests(writer)
                     # A single owner process replaces old WS/REST after the
                     # service manager stopped its preceding ExecStart; the
                     # NEXT fully closed 5m after process start is mandatory.

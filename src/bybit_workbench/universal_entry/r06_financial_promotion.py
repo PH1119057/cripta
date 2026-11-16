@@ -55,9 +55,9 @@ def _gate_enabled(connection: Any) -> bool:
     if row is None:
         raise R06FinancialPromotionBlocked("R06_FINANCIAL_MAINNET_GATE_MISSING")
     value = row.get("enabled") if isinstance(row, Mapping) else row[0]
-    if type(value) is not bool:
+    if type(value) not in (bool, int) or int(value) not in (0, 1):
         raise R06FinancialPromotionBlocked("R06_FINANCIAL_MAINNET_GATE_INVALID")
-    return value
+    return bool(value)
 
 
 def _execution_permission_ready(
@@ -270,11 +270,11 @@ def sync_disarmed_baseline(
 ) -> str:
     """Tail R06 while mainnet is closed; never create financial Entry facts."""
     del account_connector_id
-    if _gate_enabled(connection):
-        return "GATE_ARMED_NO_BASELINE_CHANGE"
     route = _route_bundle(connection, trading_account_id=trading_account_id, now=now)
     if route is None:
         return "NOT_APPLICABLE"
+    if _gate_enabled(connection):
+        return "GATE_ARMED_NO_BASELINE_CHANGE"
     bundle, binding = route
     session, frame, index, publication = _r06_checkpoint(
         connection,
@@ -421,11 +421,11 @@ def promote_next(
     now: datetime,
 ) -> str:
     """Promote at most one future R06 observation into ordinary REAL admission."""
-    if not _gate_enabled(connection):
-        return "EXECUTION_GATE_DISARMED"
     route = _route_bundle(connection, trading_account_id=trading_account_id, now=now)
     if route is None:
         return "NOT_APPLICABLE"
+    if not _gate_enabled(connection):
+        return "EXECUTION_GATE_DISARMED"
     bundle, binding = route
     source = _r06_checkpoint(
         connection, bundle=bundle,

@@ -134,8 +134,11 @@ _REVIEWED_R06_SOURCE_ORIGIN = (
 _REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256 = {
     "universal_entry/p90l90_real_contract_v3.py":
         "2bdd80448ae7cc6274078939f8b41ebd706b09e089824ec69c99052416395ac7",
+    # #642: R06 promotion permits the exact publication containing the
+    # native event to commit after event/request time, bounded to the same 5s
+    # freshness window. This reviewed byte change grants no LIVE permission.
     "universal_entry/r07_publication_provenance.py":
-        "74d6d1e2866c1170558c83b1809824f4bd99fc10818ca47e2c3a49d414316275",
+        "82652dd4914672f29ad46fbf48146b0dbf61d412c16ddfcd3f45264aa7ec6f28",
 }
 
 
