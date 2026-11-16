@@ -16,6 +16,10 @@ from typing import Any
 from bybit_workbench.market_data.source_required_feed_manifest import RequiredPublicFeed
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS
+from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+    P90RealSourceCompatibilityUnverified,
+    inspect_real_source_identity,
+)
 from operations.monitoring.r06_entry_publication_shadow_probe import (
     EXISTING_P90_COLD_COUNTS,
     FIVE,
@@ -160,6 +164,44 @@ def verify_semantic_compatibility(source: Path, previous: str, target: str) -> N
             raise R06ResumeBlocked("R06_RESUME_ENTRY_SEMANTICS_CHANGED")
 
 
+def _approved_release_set(
+    connection: Any, *, bundles: tuple[Any, ...], target: str,
+) -> frozenset[str]:
+    """Require the existing append-only exact source/release attestation.
+
+    This is SELECT-only.  Registration remains the separate operator/release
+    preparation rail; R06 cannot create compatibility evidence for itself.
+    """
+    rows = connection.execute(
+        "SELECT epoch_id FROM strategy_entry.p90l90_real_source_epochs "
+        "WHERE status='ACTIVE' ORDER BY opened_at,epoch_id FOR SHARE"
+    ).fetchall()
+    if (
+        len(rows) != 1
+        or not isinstance(rows[0], (tuple, list))
+        or len(rows[0]) != 1
+        or not isinstance(rows[0][0], str)
+    ):
+        raise R06ResumeBlocked("R06_RESUME_COMPATIBILITY_EPOCH_UNVERIFIED")
+    try:
+        identity = inspect_real_source_identity(
+            connection,
+            epoch_id=rows[0][0],
+            loaded_commit=target,
+            bundles=bundles,
+        )
+    except P90RealSourceCompatibilityUnverified as exc:
+        raise R06ResumeBlocked(
+            "R06_RESUME_RELEASE_COMPATIBILITY_UNVERIFIED"
+        ) from exc
+    if (
+        identity.loaded_commit != target
+        or target not in identity.approved_producers
+    ):
+        raise R06ResumeBlocked("R06_RESUME_RELEASE_COMPATIBILITY_UNVERIFIED")
+    return identity.approved_producers
+
+
 def bridge_checkpoint_release(
     connection: Any, *, bundles: tuple[Any, ...], session: str,
     producer: str, target: str, source_checkout: Path,
@@ -176,9 +218,11 @@ def bridge_checkpoint_release(
 
     if len(bundles) != 2 or {b.card.strategy_id for b in bundles} != {MAIN_ID, SUB_ID}:
         raise R06ResumeBlocked("R06_RESUME_PLAN_SCOPE_INVALID")
-    verify_semantic_compatibility(source_checkout, APPROVED_BASELINE, target)
     preflight_p90_real_private_flat_source(connection, bundles=bundles)
     with connection.transaction():
+        approved_releases = _approved_release_set(
+            connection, bundles=bundles, target=target,
+        )
         source = connection.execute(
             "SELECT state,producer_release_commit FROM "
             "analytics.native_public_trade_source_sessions "
@@ -201,7 +245,7 @@ def bridge_checkpoint_release(
             (name, version, entry, exit_, previous, frame, index, last_exec,
              boot, last, at, state, prod) = row
             bundle = next(b for b in bundles if b.card.strategy_id == name)
-            if (previous != APPROVED_BASELINE or prod != producer
+            if (previous not in approved_releases or prod != producer
                     or version != bundle.card.strategy_version
                     or entry != bundle.entry_plan.entry_plan_fingerprint
                     or exit_ != bundle.exit_plan.exit_plan_fingerprint
