@@ -340,6 +340,32 @@ def test_signed_proof_failure_does_not_open_a_transaction(
     assert db.calls == []
 
 
+def test_bootstrap_accepts_mayak_only_native_watermark_superset() -> None:
+    db = WriterDB()
+    raw = dict(db.pub[3])
+    raw["BTCUSDT"] = {"frame_number": 900, "frame_index": 0}
+    raw["ETHUSDT"] = {"frame_number": 901, "frame_index": 0}
+    db.pub = (*db.pub[:3], raw, db.pub[4])
+    result = _bootstrap(db)
+    assert result == (mod.MAIN_ID, mod.SUB_ID)
+    assert db.inserted == [mod.MAIN_ID, mod.SUB_ID]
+
+
+def test_bootstrap_rejects_mismatch_inside_exact_p90_five_watermarks() -> None:
+    db = WriterDB()
+    raw = dict(db.pub[3])
+    raw["BTCUSDT"] = {"frame_number": 900, "frame_index": 0}
+    raw["ETHUSDT"] = {"frame_number": 901, "frame_index": 0}
+    raw["LTCUSDT"] = dict(raw["LTCUSDT"])
+    raw["LTCUSDT"]["frame_number"] += 1
+    db.pub = (*db.pub[:3], raw, db.pub[4])
+    with pytest.raises(
+        mod.R06FreshCutoverBlocked, match="START_PUBLICATION_STALE_OR_CHANGED",
+    ):
+        _bootstrap(db)
+    assert "INSERT" not in db.calls
+
+
 def test_racing_publication_or_partial_insert_rolls_back_both() -> None:
     db = WriterDB()
     db.pub = ("f" * 32, *db.pub[1:])
