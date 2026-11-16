@@ -14,7 +14,7 @@ import pwd
 import sys
 from pathlib import Path
 
-ROOT = Path("/srv/cripta/runtime/current")
+ROOT = Path(__file__).resolve().parents[2]
 SOURCE_CHECKOUT = Path("/srv/cripta/source_checkout")
 sys.path.insert(0, str(ROOT / "src"))
 
