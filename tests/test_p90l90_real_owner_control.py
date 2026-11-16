@@ -257,3 +257,12 @@ def test_p90_prearm_evidence_deduplicates_shared_strategy_scope() -> None:
     symbol_scope_keys = [(strategy, symbol, "POSITION_MODE_FRESH") for strategy, symbol in scopes]
     assert len(set(strategy_scope_keys)) == 2
     assert len(set(symbol_scope_keys)) == 5
+
+
+
+def test_p90_prearm_uses_compatibility_approved_checkpoint_writer_identity() -> None:
+    source = PREARM_EVIDENCE.read_text()
+    assert "approved_checkpoint_writers = {release_commit}" in source
+    assert "approved_checkpoint_writers = set(identity.approved_producers)" in source
+    assert "str(row[2]) in approved_checkpoint_writers" in source
+    assert "str(row[2]) == release_commit" not in source
