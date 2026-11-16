@@ -4,7 +4,7 @@ PartOf=cripta-native-public-trade-source.service
 
 [Timer]
 OnActiveSec=30s
-OnUnitActiveSec=60s
+OnUnitActiveSec=30s
 AccuracySec=5s
 Unit=cripta-market-hot-retention.service
 
