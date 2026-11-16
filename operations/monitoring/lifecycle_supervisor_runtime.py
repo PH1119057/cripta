@@ -108,9 +108,20 @@ def _entry_source_health(
     # re-establishes source/private continuity before admitting any new Entry.
     # PREARM guarantees zero hot Entry before this transition; if the bounded
     # reload does not complete within 60s the runtime guard still fail-closes.
+    # ARCH §60.5.3: R06 stays a no-order candidate SOURCE_ONLY producer
+    # even while the separate account-scoped Universal Entry owns finance.
+    # Validate the exact no-order contract; consumer READY/age/loaded-release
+    # evidence is independently checked by check_release_arm_invariant.
+    sensor = payload.get("sensor_status")
+    r06_source_only_ready = (
+        state == "R06_PG_NO_ORDER_SOURCE_ONLY"
+        and payload.get("trading_effect") == "NONE"
+        and isinstance(sensor, dict)
+        and sensor.get("financial_ready") is False
+    )
     max_age_seconds = 60 if expected_arm_reload else 15
     ready = (
-        (state == "RUNNING" or expected_arm_reload)
+        ((state == "RUNNING" or expected_arm_reload) or r06_source_only_ready)
         and payload.get("observer_ready") is True
         and str(payload.get("source_commit") or "") == loaded_commit
         and 0 <= age <= max_age_seconds
