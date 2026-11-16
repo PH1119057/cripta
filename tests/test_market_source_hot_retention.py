@@ -205,12 +205,20 @@ def test_native_cutover_inline_status_python_compiles():
     installer = (
         ROOT / "operations/infrastructure/install_verified_release.sh"
     ).read_text()
-    snippets = re.findall(
-        r"runuser -u cripta -- python3 -c '\n(.*?)\n  ' "
-        r"/var/lib/cripta/native_public_trade_source/status\.json",
-        installer,
-        flags=re.DOTALL,
+    prefixes = (
+        'if ! source_session="$(runuser -u cripta -- python3 -c \'',
+        'if ! source_commit_seen="$(runuser -u cripta -- python3 -c \'',
     )
+    snippets = []
+    for prefix in prefixes:
+        start = installer.index(prefix) + len(prefix)
+        end = installer.index(
+            "\n  ' /var/lib/cripta/native_public_trade_source/status.json)",
+            start,
+        )
+        snippet = installer[start:end]
+        assert snippet.startswith("\nimport json,sys\ntry:\n")
+        snippets.append(snippet.lstrip("\n"))
     assert len(snippets) == 2
     for index, snippet in enumerate(snippets):
         compile(snippet, f"native-status-inline-{index}", "exec")
