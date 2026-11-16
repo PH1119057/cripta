@@ -56,7 +56,9 @@ OPERATIONAL MIRROR: /srv/cripta/source_checkout
 
 Owner-controlled real execution smoke-test — explicit operator-only diagnostic,
 not StrategySignal/EntryDecision semantics. Exact current contract:
-TRADING_CONTOUR §4.8; architecture boundary: ARCH §7.1.
+TRADING_CONTOUR §4.8; architecture boundary: ARCH §7.1. P90 R06 stays
+SOURCE_ONLY/NO-ORDER; account-scoped Universal Entry owns future-only financial
+promotion after its disarmed baseline (ARCH §60.5.3 / TC §4.19.2).
 
 Current R1 Entry-time exchange protection contract: catastrophic SL `-10%` +
 price-based TP at the causal opposite current L5-3 inner boundary; subsequent TP

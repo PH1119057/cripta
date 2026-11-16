@@ -2254,7 +2254,10 @@ def _observer_status(
             "runtime_mode": "MULTI_STRATEGY_OBSERVER",
             "state": state,
             "reason": reason,
-            "observer_ready": state in {"IDLE", "WARMUP", "RUNNING", "RELOADING"},
+            "observer_ready": state in {
+                "IDLE", "WARMUP", "RUNNING", "RELOADING",
+                "R06_PG_NO_ORDER_SOURCE_ONLY",
+            },
             "trading_effect": "NONE",
             "source_commit": LOADED_COMMIT,
             "fact_source_id": fact_source_id,

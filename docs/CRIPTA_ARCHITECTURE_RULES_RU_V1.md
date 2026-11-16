@@ -1813,7 +1813,33 @@ Physical MAYAK source/consumer scope, качество BTC/ETH reference anchors
 
 **Fail closed / release:** отсутствующий/выключенный/неверной версии trigger, невозможность DB schema/read lock, отклонённый transaction advisory shared lock, неизвестный или GAP source, конфликт checkpoint, timeout/deadlock/неизвестный commit outcome запрещают новую команду до repair/reconciliation; никакого implicit retry с повторной биржевой мутацией. Trigger installation и rollback — отдельная проверенная DDL-операция `postgres` после baseline/backup/ACL/dependency/lock ordering review, producer compatibility и signed safety. Deploy consumer binary только на exact source/installed/loaded release, без авто-arm. Independent real OPEN Exit/SL/TP и source-gap recovery сохраняются; отсутствие нового Entry не блокирует сопровождение открытой позиции. После update необходимы disposable PostgreSQL16 конкурирующие транзакции в обоих порядках, source restart/GAP, shared MAIN/N SUB, checkpoint mutation, trigger-disabled/DDL, lock timeout, rollback, original-data parity и runtime evidence.
 
-**Status:** technical contract CANON on merged source only; source/SQL implementation, installed migration, runtime behavior и financial Entry readiness получают отдельные доказательства. R06 `SOURCE_ONLY/NO-ORDER` сохраняется; владелец производства финансовых EntryDecision/EntryExecutionRequest и независимая signed R09 Exit-приёмка остаются следующими отдельными gates. No LIVE change.
+**Status:** technical contract CANON on merged source only; source/SQL implementation, installed migration, runtime behavior и financial Entry readiness получают отдельные доказательства. R06 `SOURCE_ONLY/NO-ORDER` сохраняется; owner финансового EntryDecision/EntryExecutionRequest теперь определён §60.5.3. Независимая signed R09 Exit-приёмка остаётся отдельным gate. No LIVE change.
+
+### 60.5.3 R06 -> account-scoped Universal Entry financial promotion — OWNER DECISION 2026-11-16 (Issue #642)
+
+После физического перехода P90 на R06 наблюдательная capability и финансовая Entry capability разделены намеренно. **R06 остаётся единственным owner причинного SOURCE_ONLY P90 candidate/StrategySignal evidence и не получает права создавать `EntryDecision`, резервировать капитал/slot, создавать `EntryExecutionRequest` или мутировать Exchange.**
+
+Новый владелец финансового шага — **обычный Universal Entry layer в account-scoped Consumer path**. Это не шестой верхнеуровневый слой и не новый торговый смысл. Причинная цепочка:
+
+```text
+R06 qualified future candidate + immutable publication/native identity
+-> account-scoped Universal Entry financial promotion
+-> current StrategyCard / EntryPlan verification
+-> current AccountStateGeneration + exact StrategyExecutionBinding
+-> atomic physical slot claim + capital reservation
+-> EntryDecision
+-> [ACCEPTED only] EntryExecutionRequest
+-> existing R07 source-epoch fence / command dispatch
+-> Execution
+```
+
+Переход **future-only**. Пока mainnet gate закрыт и real permissions/LIVE-arm отсутствуют, каждый MAIN/SUB Universal Entry Consumer обязан durable-синхронизировать собственный promotion checkpoint с текущим verified R06 decision checkpoint **без** создания StrategySignal/EntryDecision/request/slot/reservation. После exact account-scoped OWNER ARM разрешены только R06 candidates строго новее этого baseline. SOURCE_ONLY observations, накопленные до ARM, не исполняются; restart/delay не превращает устаревший candidate в поздний order. Candidate, утративший Strategy request freshness, пропускается fail-closed до текущей verified R06 границы.
+
+R06 cutover prerequisite `mainnet=OFF + execution_permissions=0 + no OPEN/RECONCILIATION/pending request` относится к bootstrap/cutover новой причинной точки. После принятого R06 source checkpoint этот prerequisite **не является постоянным запретом** downstream финансовому lifecycle: R06 обязан продолжать source-only наблюдение при появлении штатных Entry requests/slot/reservation/positions, не создавая их сам.
+
+Promotion и R07 dispatch используют exact тот же source session/publication/original native event и immutable Strategy/EntryPlan/ExitPlan identities. Source epoch drift, missing candidate payload, ambiguous same-native-event signal, stale candidate, отсутствующий account arm/safety/generation/binding, slot/capital rejection или unknown transaction outcome — fail-closed. Historical R06 rows без нового immutable candidate payload являются SOURCE_ONLY evidence и никогда не promoted.
+
+Этот owner decision закрывает architecture capability gap из Issue #642, но сам по себе **не включает LIVE**. Required order остаётся CANON -> implementation/tests -> protected GitHub merge -> migration/deploy exact commit -> runtime evidence -> отдельный current owner-controlled re-arm. R07 §60.5.2 остаётся dispatch/fence owner уже созданного `EntryExecutionRequest`, а не producer финансового решения.
 
 ## 61. Minimum production PostgreSQL: current Strategies only by default — OWNER DECISION 2026-11-14 (Issue #642)
 

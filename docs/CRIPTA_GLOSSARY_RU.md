@@ -1293,3 +1293,14 @@ position, regardless of a general 24h/7d data window.
 approved PostgreSQL physical reclamation, distinct from stale-row count,
 table size before purge, dead tuples, logical `pg_database_size` and
 promised compression gain.
+
+
+## 47. R06 financial promotion — OWNER DECISION 2026-11-16 (Issue #642)
+
+**R06 Financial Promotion / account-scoped financial promotion** — техническая стадия существующего Universal Entry layer, которая берёт exact future-only R06 qualified candidate и только после current account-scoped arm/safety выполняет обычный real Entry admission. Она не является новым верхнеуровневым слоем, Strategy, Observer capability, Execution capability или прямым order producer.
+
+**R06 Financial Promotion Checkpoint** — durable per-`TradingAccount + StrategyVersion` курсор границы между SOURCE_ONLY evidence и допустимым будущим финансовым Entry. В состоянии `DISARMED_BASELINE` он синхронизирован с current verified R06 decision checkpoint при закрытых financial gates и не создаёт StrategySignal/EntryDecision/request. После ARM он может двигаться только вперёд по обработанным future candidates. Исторический candidate до baseline не получает торговых прав.
+
+**Candidate payload / immutable candidate envelope** в этом contract — exact сериализованный `MarketFactEnvelope` квалифицированного R06 crossing с StrategySignal provenance, достаточный для детерминированного Universal Entry replay **того же сигнала**, но сам по себе не является StrategySignal, EntryDecision или ExecutionRequest.
+
+Owner: ARCH §60.5.3; trading lifecycle: TC §4.19.2; observation boundary: OBS §7.10.5.9. R07 Source Epoch Transaction Fence остаётся отдельной сущностью после принятого `EntryExecutionRequest`.

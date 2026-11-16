@@ -2158,3 +2158,24 @@ P90L90 остаются прежними, новые Strategy и настрой�
 
 Единственный архитектурный owner синхронизации: ARCH §60.5.2. Для P90 R07 Universal Entry Consumer последний source proof и запись уже принятого `EntryExecutionRequest` в command/dispatch выполняются внутри одной DB-транзакции с доказанным SHARED transaction source-epoch fence и shared checkpoint-row protection. Если guard отсутствует, отключён, не соответствует ABI, epoch перешёл в GAP или защита/lock не получены, новая команда запрещена; существующий Exit не блокируется. Финансовый admission/permission/slot/capital и owner LIVE ARM остаются дополнительными независимыми gates, а R06 по OBS §7.10.5.6 не создаёт финансовую заявку. Не заменять этот технический fence торговой Strategy policy или правами superuser.
 
+
+
+### 4.19.2 R06 future-only financial promotion into Universal Entry — OWNER DECISION 2026-11-16 (Issue #642)
+
+Для current P90 MAIN/SUB R06 по OBS §7.10.5.6 остаётся `SOURCE_ONLY/NO-ORDER`: он фиксирует exact qualified candidate и publication/native provenance, но не создаёт финансовое решение.
+
+Финансовый owner расположен в существующем Universal Entry layer и исполняется account-scoped MAIN/SUB Consumer-ом. До ARM Consumer ведёт отдельный durable promotion checkpoint на текущей R06 decision boundary без StrategySignal/EntryDecision/request/slot/reservation. После exact release-bound account LIVE-arm только candidate **строго после** этого baseline может пройти обычный Entry admission:
+
+```text
+R06 candidate
+-> Universal Entry financial promotion
+-> AccountStateGeneration / binding / position-mode
+-> slot claim + capital reservation
+-> EntryDecision
+-> ACCEPTED => EntryExecutionRequest
+-> R07
+```
+
+Historical/source-only backlog до baseline запрещено исполнять. Если Consumer после ARM видит candidate старше Strategy-owned request freshness, он не создаёт поздний request и durable продвигает promotion cursor к текущей verified R06 границе. SECOND48, account safety, exact binding, slot ownership, capital, request TTL, initial protection, source provenance и R07 transaction fence остаются независимыми fail-closed gates.
+
+R06 bootstrap OFF/no-exposure gate не является постоянным запретом уже после принятого source checkpoint: финансовые requests/positions могут существовать downstream, пока сам R06 сохраняет `trading_effect=NONE` и не выполняет admission. Ни этот handoff, ни технический PREARM автоматически не открывают mainnet или execution permissions. Architecture owner — ARCH §60.5.3; терминология — GLOSSARY §47.

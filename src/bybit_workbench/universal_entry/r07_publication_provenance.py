@@ -214,11 +214,18 @@ def require_r07_publication_provenance(
         raise R07PublicationProvenanceUnavailable("R07_SOURCE_PROOF_TIME_INVALID")
     request_utc = requested_at.astimezone(UTC)
     event_utc = event_at.astimezone(UTC)
+    accepted_utc = accepted_at.astimezone(UTC)
+    published_utc = published_at.astimezone(UTC)
+    # R06 observes the exact native event through a subsequently committed
+    # MarketPublication. Publication time may therefore be later than the
+    # Strategy-owned event/request timestamp. Bound the causal source delay;
+    # keep request TTL anchored to the original event.
     if not (
         timedelta(0) <= request_utc - event_utc <= _MAX_SIGNAL_AGE
-        and accepted_at <= published_at <= requested_at
-        and as_of <= published_at
-        and original_at == event_at
+        and event_utc <= accepted_utc <= published_utc
+        and published_utc - event_utc <= _MAX_SIGNAL_AGE
+        and as_of.astimezone(UTC) <= published_utc
+        and original_at.astimezone(UTC) == event_utc
     ):
         raise R07PublicationProvenanceUnavailable("R07_SOURCE_PROOF_TIME_OR_FRESHNESS_MISMATCH")
 

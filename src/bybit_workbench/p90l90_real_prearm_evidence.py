@@ -30,6 +30,11 @@ from bybit_workbench.p90l90_real_arm_control import (
 from bybit_workbench.real_service_profiles import p90_real_v3_service_specs
 from bybit_workbench.source_live_identity import inspect_source_live_identity
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_entry.r06_financial_promotion import (
+    R06FinancialPromotionBlocked,
+    require_disarmed_baseline,
+    sync_disarmed_baseline,
+)
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
     MAX_ACCOUNT_COMMITTED,
@@ -448,7 +453,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
     observer_exit_plans = cast(list[object], observer.get("active_exit_plans") or [])
     observer_active_strategies = int(str(observer.get("active_strategies") or 0))
     _require(
-        observer.get("state") == "RUNNING"
+        observer.get("state") in {"RUNNING", "R06_PG_NO_ORDER_SOURCE_ONLY"}
         and observer.get("observer_ready") is True
         and observer.get("source_commit") == release_commit
         and observer_active_strategies == 2
@@ -784,6 +789,34 @@ def prepare_p90l90_real_v3_prearm_evidence(
         ) from exc
     _require(bool(rollback_ref), "rollback reference missing")
 
+    # Establish the future-only financial handoff only after all slower
+    # technical/private checks have completed. _r06_checkpoint(lock=True)
+    # then holds R06's mutable decision checkpoint only across this final
+    # evidence-write section, never across the multi-minute prearm probe.
+    # This baseline write creates no StrategySignal/EntryDecision/request,
+    # slot claim, capital reservation or Exchange mutation.
+    financial_promotion_baselines: dict[str, dict[str, object]] = {}
+    for strategy_id, (_binding, account_id, connector_id) in routes.items():
+        try:
+            sync_disarmed_baseline(
+                connection,
+                trading_account_id=str(account_id),
+                account_connector_id=str(connector_id),
+                loaded_release_commit=release_commit,
+                now=current,
+            )
+            financial_promotion_baselines[strategy_id] = require_disarmed_baseline(
+                connection,
+                trading_account_id=str(account_id),
+                loaded_release_commit=release_commit,
+                now=current,
+            )
+        except R06FinancialPromotionBlocked as exc:
+            raise P90PrearmEvidenceBlocked(
+                "P90 REAL v3 PREARM: R06 financial promotion baseline not ready "
+                + strategy_id + ": " + str(exc)
+            ) from exc
+
     written_scopes: dict[tuple[str, str, str], str] = {}
 
     def put(
@@ -1035,5 +1068,6 @@ def prepare_p90l90_real_v3_prearm_evidence(
         "owner_arm_approval_recorded": False,
         "mainnet_gate_enabled": False,
         "execution_permissions": 0,
+        "financial_promotion_baselines": financial_promotion_baselines,
         "exchange_mutation": False,
     }
