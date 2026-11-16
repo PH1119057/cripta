@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from bybit_workbench.market_identity import (
-    bybit_instrument_id,
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    bybit_instrument_id,
 )
 from bybit_workbench.universal_entry import r06_financial_promotion as promotion
 from bybit_workbench.universal_entry.contracts import (
@@ -27,7 +27,6 @@ from bybit_workbench.universal_entry.r07_publication_provenance import (
     require_r07_publication_provenance,
 )
 from operations.monitoring import r06_pg_only_entry
-
 
 EVENT = datetime(2026, 11, 16, 9, 0, tzinfo=UTC)
 SESSION = "a" * 32
