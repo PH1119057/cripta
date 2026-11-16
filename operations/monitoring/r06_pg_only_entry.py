@@ -102,6 +102,7 @@ def _bootstrap_transient_retryable(
             "R06_NEW_PUBLICATION_UNVERIFIED",
             "R06_START_PUBLICATION_STALE_OR_CHANGED",
             "R06_FUTURE_CLOSED_BOUNDARY_NOT_REACHED",
+            "R06_5M_CLOSED_BOUNDARY_NOT_COMMON",
         }
     )
 
