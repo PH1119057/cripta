@@ -66,7 +66,10 @@ def db(monkeypatch):
     signed = []
     monkeypatch.setattr(private, "preflight_p90_real_private_flat_source",
                         lambda *_a, **_k: signed.append("SIGNED"))
-    monkeypatch.setattr(mod, "verify_semantic_compatibility", lambda *_a: None)
+    monkeypatch.setattr(
+        mod, "_approved_release_set",
+        lambda *_a, **_k: frozenset({mod.APPROVED_BASELINE, TARGET}),
+    )
     monkeypatch.setattr(mod, "_require_no_exposure_or_requests", lambda _db: None)
     try:
         yield admin, runtime, signed
@@ -119,6 +122,27 @@ def test_runtime_role_preserves_every_causal_field_and_audits_both(db):
                   "strategy_entry.p90_r06_checkpoint_release_bridges"):
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             runtime.execute(f"DELETE FROM {table}")
+
+
+def test_attested_nonbaseline_previous_release_can_bridge(db, monkeypatch):
+    admin, runtime, _ = db
+    previous = "a" * 40
+    admin.execute(
+        "UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints "
+        "SET consumer_release_commit=%s",
+        (previous,),
+    )
+    monkeypatch.setattr(
+        mod, "_approved_release_set",
+        lambda *_a, **_k: frozenset({previous, TARGET}),
+    )
+    adopt(runtime)
+    assert releases(runtime) == [(TARGET,)]
+    saved = runtime.execute(
+        "SELECT DISTINCT previous_release,consumer_release_commit "
+        "FROM strategy_entry.p90_r06_checkpoint_release_bridges"
+    ).fetchall()
+    assert saved == [(previous, TARGET)]
 
 
 def test_second_audit_failure_rolls_back_first_adoption_and_audit(db):
