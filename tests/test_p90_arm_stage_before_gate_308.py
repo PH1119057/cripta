@@ -49,13 +49,17 @@ def test_dashboard_waits_for_exact_stage_and_disarms_on_failure() -> None:
     ) < handler.index("finalize_p90l90_real_v3(")
 
 
-def test_stage_readiness_requires_running_observer_consumers_and_no_incident() -> None:
+def test_stage_readiness_reuses_canonical_observer_readiness_and_stage_contract() -> None:
     start = APP.index("def _u6_p90_real_v3_stage_ready(")
     end = APP.index("\ndef _u6_wait_p90_real_v3_stage_ready(", start)
     body = APP[start:end]
-    assert 'payload.get("state") == "RUNNING"' in body
-    assert 'payload.get("observer_ready") is True' in body
-    assert 'payload.get("p90_owner_arm_stage") == "READY"' in body
+    assert "observer_arm_ready(payload, LOADED_RELEASE_COMMIT, now)" in body
+    assert 'payload.get("state") == "RUNNING"' not in body
+    assert 'observer_state == "RUNNING"' in body
+    assert 'observer_state == "R06_PG_NO_ORDER_SOURCE_ONLY"' in body
+    assert 'payload.get("p90_owner_arm_stage") != "READY"' in body
+    assert 'payload.get("trading_effect") != "NONE"' in body
+    assert 'sensor.get("financial_ready") is not False' in body
     assert "P90_OWNER_ARM_STAGE_GATE_REASON" in body
     assert "runtime.entry_consumer_health" in body
     assert "release_arm_incidents" in body

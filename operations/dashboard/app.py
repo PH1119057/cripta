@@ -4612,20 +4612,28 @@ def _u6_p90_real_v3_stage_ready() -> tuple[bool, str]:
     if updated.tzinfo is None or updated.utcoffset() is None:
         return False, "OBSERVER_TIMESTAMP_INVALID"
     now = datetime.now(UTC)
-    age = (now - updated.astimezone(UTC)).total_seconds()
-    if not (
-        0 <= age <= 10
-        and payload.get("runtime_mode") == "MULTI_STRATEGY_OBSERVER"
-        and payload.get("state") == "RUNNING"
-        and payload.get("observer_ready") is True
-        and payload.get("source_commit") == LOADED_RELEASE_COMMIT
-        and payload.get("p90_owner_arm_stage") == "READY"
-    ):
+    if not observer_arm_ready(payload, LOADED_RELEASE_COMMIT, now):
         return False, (
             "OBSERVER_STAGE_NOT_READY:"
             + str(payload.get("state") or "UNKNOWN")
             + ":" + str(payload.get("p90_owner_arm_stage") or "NONE")
         )
+    observer_state = str(payload.get("state") or "")
+    if (
+        observer_state == "RUNNING"
+        and payload.get("p90_owner_arm_stage") != "READY"
+    ):
+        return False, "OBSERVER_STAGE_NOT_READY:RUNNING:" + str(
+            payload.get("p90_owner_arm_stage") or "NONE"
+        )
+    if observer_state == "R06_PG_NO_ORDER_SOURCE_ONLY":
+        sensor = payload.get("sensor_status")
+        if (
+            payload.get("trading_effect") != "NONE"
+            or not isinstance(sensor, dict)
+            or sensor.get("financial_ready") is not False
+        ):
+            return False, "OBSERVER_STAGE_SOURCE_ONLY_CONTRACT_DRIFT"
 
     fresh_after = now - timedelta(seconds=8)
     with psycopg.connect(
