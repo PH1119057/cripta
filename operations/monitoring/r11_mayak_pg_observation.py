@@ -17,7 +17,10 @@ from typing import TYPE_CHECKING, Any
 import psycopg
 from psycopg.types.json import Jsonb
 
-from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    bybit_instrument_id,
+)
 from bybit_workbench.mayak.compact_analytics import (
     compact_market_minute_insert_sql,
     compact_market_minute_rows,
@@ -53,6 +56,86 @@ _MAX_PUBLICATION_LAG_SECONDS = 30
 # restart replay bounded while leaving ~5 minutes of recovery headroom inside
 # the 15-minute HOT publication retention window.
 _MAX_BACKLOG_PUBLICATIONS = 600
+_SEVEN = (
+    "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+    "BTCUSDT", "ETHUSDT",
+)
+
+
+def _bootstrap_publication_complete(
+    rest_coverage: object, optional_refs: object, optional_coverage: object,
+) -> bool:
+    if (
+        not isinstance(rest_coverage, dict)
+        or not isinstance(optional_refs, dict)
+        or not isinstance(optional_coverage, dict)
+        or not all(isinstance(optional_refs.get(p), dict) for p in ("SPOT", "LINEAR"))
+        or any(optional_coverage.get(p) != "PHYSICAL_FRAME_REF_ONLY"
+               for p in ("SPOT", "LINEAR"))
+    ):
+        return False
+    for symbol in _SEVEN:
+        spot = rest_coverage.get(bybit_instrument_id("spot", symbol))
+        linear = rest_coverage.get(bybit_instrument_id("linear", symbol))
+        if not isinstance(spot, dict) or not isinstance(linear, dict):
+            return False
+        spot_info = spot.get("INSTRUMENT_INFO")
+        linear_info = linear.get("INSTRUMENT_INFO")
+        ratio = linear.get("ACCOUNT_RATIO")
+        if (
+            not isinstance(spot_info, dict)
+            or spot_info.get("status") not in {"OBSERVED", "NOT_LISTED"}
+            or not isinstance(linear_info, dict)
+            or linear_info.get("status") not in {"OBSERVED", "NOT_LISTED"}
+            or not isinstance(ratio, dict)
+            or ratio.get("status") != "OBSERVED"
+        ):
+            return False
+    return True
+
+
+def _bootstrap_publication(
+    db: Any, *, now: datetime,
+) -> tuple[int, datetime]:
+    latest_id, latest_as_of, session, release = _latest_publication(db)
+    _need(
+        0 <= (now - latest_as_of).total_seconds() <= _MAX_PUBLICATION_LAG_SECONDS,
+        "PUBLICATION_STREAM_STALE",
+    )
+    rows = db.execute(
+        """SELECT publication_id,as_of_second,rest_field_coverage,
+                  original_optional_frame_refs,original_optional_frame_coverage
+             FROM analytics.market_publications
+            WHERE market_source_id=%s
+              AND source_session_id=%s
+              AND producer_release_commit=%s
+              AND publication_status='WATERMARKS_ONLY'
+              AND publication_id<=%s
+            ORDER BY as_of_second,publication_id
+            LIMIT %s""",
+        (
+            BYBIT_PUBLIC_MARKET_SOURCE_ID, session, release, latest_id,
+            _MAX_BACKLOG_PUBLICATIONS,
+        ),
+    ).fetchall()
+    _need(
+        isinstance(rows, list) and len(rows) <= _MAX_BACKLOG_PUBLICATIONS,
+        "BOOTSTRAP_QUERY_INVALID",
+    )
+    for row in rows:
+        if (
+            isinstance(row, (tuple, list)) and len(row) == 5
+            and type(row[0]) is int and 0 < row[0] <= latest_id
+            and isinstance(row[1], datetime)
+            and row[1].utcoffset() is not None
+            and row[1].utcoffset().total_seconds() == 0
+            and row[1] <= latest_as_of
+            and _bootstrap_publication_complete(row[2], row[3], row[4])
+        ):
+            return int(row[0]), row[1]
+    raise R11MayakPGSourceUnavailable(
+        "R11_MAYAK_PG_BOOTSTRAP_PUBLICATION_NOT_READY"
+    )
 
 
 class R11MayakPGSourceUnavailable(RuntimeError):
@@ -98,12 +181,7 @@ def _next_publication(
 ) -> tuple[int, datetime] | None:
     checkpoint = replay.checkpoint
     if checkpoint is None:
-        publication_id, as_of, _session, _release = _latest_publication(db)
-        _need(
-            0 <= (now - as_of).total_seconds() <= _MAX_PUBLICATION_LAG_SECONDS,
-            "PUBLICATION_STREAM_STALE",
-        )
-        return publication_id, as_of
+        return _bootstrap_publication(db, now=now)
 
     rows = db.execute(
         """SELECT p.publication_id,p.as_of_second
@@ -559,6 +637,7 @@ def run_r11_pg_observation(collector: Collector) -> None:
                 "R11_MAYAK_PG_ACTIVE_SOURCE_PUBLICATION_MISSING",
                 "R11_MAYAK_PG_PUBLICATION_STREAM_STALE",
                 "R11_MAYAK_PG_SOURCE_EPOCH_CHANGED",
+                "R11_MAYAK_PG_BOOTSTRAP_PUBLICATION_NOT_READY",
             }
             code = str(exc).split(":", 1)[0]
             if code not in retryable:
