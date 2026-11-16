@@ -12,6 +12,7 @@ ACTIVE_STATES = frozenset(
     {"REQUESTED", "CHECKING", "STARTING_SERVICES", "RECONCILING", "VALIDATING"}
 )
 TERMINAL_STATES = frozenset({"READY_FOR_OWNER_ARM", "BLOCKED"})
+BLOCKABLE_STATES = frozenset({*ACTIVE_STATES, "READY_FOR_OWNER_ARM"})
 STALE_AFTER = timedelta(minutes=5)
 
 
@@ -249,7 +250,7 @@ def mark_blocked(
             current,
             current,
             request_id,
-            list(ACTIVE_STATES),
+            list(BLOCKABLE_STATES),
         ),
     )
     if result.rowcount != 1:
