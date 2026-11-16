@@ -52,6 +52,34 @@ _REVIEWED_HISTORICAL_CONSUMERS.update({
         "ccc5f7629a3a80e6daf2e59952cb67a5bb7dd8de33d5bc8c6c83017706dfd279",
 })
 
+# The ACTIVE R06 physical source epoch accumulated these append-only
+# compatibility attestations before #786 introduced the financial promotion
+# consumer. Their exact consumer inventories were reconstructed from immutable
+# Git objects and all hash to this historical digest. Keep each row bound to
+# its own release bytes; never compare it to a later loaded consumer digest.
+_R06_PRE_PROMOTION_HISTORICAL_DIGEST = (
+    "f492f4449816dd9ed4d36b377d3fbc0679c0e007a816c4225e39fbb2ca0843c8"
+)
+_REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
+    "1abfd16a10a36128c5da74b2a05844fcf9f7bc62",
+    "2f27a371e97a206b0c430e4ddca3d51fd6980bb9",
+    "3623ce4f528f01187ffe58285e528ec556e3f613",
+    "46c6419e0ea08a6d4ab8895966f079748aaf31f3",
+    "52cae12a1f74d58b55c9d681744ab9d572f69f55",
+    "5e60bb622fe01db6efe1406399f86b765feabfe5",
+    "68edf160aff1b65d9d37e93bc52446f11ebc5afc",
+    "72f39e3aa139862842900a9fb9e3cb39911aec7c",
+    "759c419dd42dc6b0f048d0bfd917d15f9da4dd18",
+    "796a10ab62df1c21dbe4bd72ef4dcbb8cc1b0ee6",
+    "7eaf2d71673676ed28f336d0bd8b8d78a921169b",
+    "8ff4d34da2f91bdac026488a2d360aabcd7251ba",
+    "988fc1ae6aca50acd4f122bbd06856f8c695df2e",
+    "bfe40a81ab90b936e61844c337ab966612459a9f",
+    "ce212eaef4157bd06afdd5b489e6792269082e4d",
+    "dcedda4dd9e47a1ebaa5797f089ce5569f8177a8",
+    "f61af319084f4d5bf50ec305ae54aa3ba8391be4",
+), _R06_PRE_PROMOTION_HISTORICAL_DIGEST))
+
 # These wiring adapters are reviewed in the release diff. All Strategy,
 # Entry/Exit algorithms, codecs, contracts, account and private-proof modules
 # below remain byte-identical to the retained origin release.
@@ -125,15 +153,20 @@ _REVIEWED_20261108_EXIT_IPC_SHA256 = {
 
 # R14 final-release preparation can encounter the still-ACTIVE R06 physical
 # source epoch while the loaded consumer inventory already contains the exact
-# R07 provenance fence and R10 PG-publication execution contract accepted in
-# #470.  Bind that historical origin to only these two immutable reviewed
-# bytes.  This is compatibility evidence, not Strategy/Entry/Exit permission.
+# R06 financial-promotion handoff, R07 provenance fence and R10 PG-publication
+# execution contract accepted in #470/#642. Bind that historical origin only
+# to these immutable reviewed bytes. This is compatibility evidence, not
+# Strategy/Entry/Exit permission.
 _REVIEWED_R06_SOURCE_ORIGIN = (
     "99a1ba4c16edbe5cb32022addf6c52888574716d"
 )
 _REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256 = {
     "universal_entry/p90l90_real_contract_v3.py":
         "2bdd80448ae7cc6274078939f8b41ebd706b09e089824ec69c99052416395ac7",
+    # #642: account-scoped R06 financial promotion is a reviewed Universal
+    # Entry consumer. Its inclusion here does not grant LIVE or arm anything.
+    "universal_entry/r06_financial_promotion.py":
+        "eb2ba7b2d98a844b874dbd201e8c5ab9b9e99df82a487d52eceef8ba6870c178",
     # #642: R06 promotion permits the exact publication containing the
     # native event to commit after event/request time, bounded to the same 5s
     # freshness window. This reviewed byte change grants no LIVE permission.
