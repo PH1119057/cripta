@@ -11,7 +11,7 @@ def observer_arm_ready(payload: Mapping[str, object], release: str, now: datetim
         return (
             at.tzinfo is not None
             and 0 <= (now - at.astimezone(UTC)).total_seconds() <= 10
-            and payload.get("state") == "RUNNING"
+            and payload.get("state") in {"RUNNING", "R06_PG_NO_ORDER_SOURCE_ONLY"}
             and payload.get("observer_ready") is True
             and payload.get("runtime_mode") == "MULTI_STRATEGY_OBSERVER"
             and payload.get("source_commit") == release
