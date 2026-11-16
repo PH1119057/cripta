@@ -263,6 +263,6 @@ def test_p90_prearm_evidence_deduplicates_shared_strategy_scope() -> None:
 def test_p90_prearm_uses_compatibility_approved_checkpoint_writer_identity() -> None:
     source = PREARM_EVIDENCE.read_text()
     assert "approved_checkpoint_writers = {release_commit}" in source
-    assert "approved_checkpoint_writers = set(identity.approved_producers)" in source
+    assert "approved_checkpoint_writers = set(source_identity.approved_producers)" in source
     assert "str(row[2]) in approved_checkpoint_writers" in source
     assert "str(row[2]) == release_commit" not in source
