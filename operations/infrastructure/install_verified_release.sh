@@ -603,7 +603,7 @@ if [[ -d /etc/systemd/system/cripta-private-runtime.service.d ]]; then
   install -d -m 0700 "$backup/files/etc/systemd/system"
   cp -a /etc/systemd/system/cripta-private-runtime.service.d "$backup/files/etc/systemd/system/"
 fi
-for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /usr/local/libexec/cripta-r06-switch /usr/local/libexec/cripta-market-hot-retention.py /usr/local/libexec/cripta-market-source-hot-retention.py /etc/cripta/release.env /etc/cripta/market-source/required_public_feeds.json; do
+for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /usr/local/libexec/cripta-real-service-broker /usr/local/libexec/cripta-r06-switch /usr/local/libexec/cripta-market-hot-retention.py /usr/local/libexec/cripta-market-source-hot-retention.py /usr/local/libexec/cripta-native-public-trade-hot-retention.py /etc/cripta/release.env /etc/cripta/market-source/required_public_feeds.json; do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
     install -d -m 0700 "$backup/files/$(dirname "$safe")"
@@ -1054,6 +1054,10 @@ cmp -s "$runtime_release/operations/monitoring/market_hot_retention.py" /usr/loc
 install -o root -g root -m 0644 "$runtime_release/operations/monitoring/market_source_hot_retention.py" /usr/local/libexec/cripta-market-source-hot-retention.py
 cmp -s "$runtime_release/operations/monitoring/market_source_hot_retention.py" /usr/local/libexec/cripta-market-source-hot-retention.py ||
   die "market source retention actor path bytes differ from exact installed release"
+
+install -o root -g root -m 0644 "$runtime_release/operations/monitoring/native_public_trade_hot_retention.py" /usr/local/libexec/cripta-native-public-trade-hot-retention.py
+cmp -s "$runtime_release/operations/monitoring/native_public_trade_hot_retention.py" /usr/local/libexec/cripta-native-public-trade-hot-retention.py ||
+  die "native publicTrade retention actor path bytes differ from exact installed release"
 
 for spec in "${unit_specs[@]}"; do
   IFS='|' read -r src_rel unit scope <<<"$spec"
