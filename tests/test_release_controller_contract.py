@@ -128,3 +128,21 @@ def test_old_native_writer_is_stopped_only_after_db_backup_and_migrations():
     assert before < migration < stop < switch < new
     assert installer.index("native_source_stopped_for_cutover=1") < switch
     assert "NATIVE_SOURCE_PRE_SWITCH_RECOVERY=STARTED_OLD_CODE" in installer
+
+def test_inactive_native_source_only_blocks_real_producer_abi_delta():
+    source = CONTROLLER.read_text(encoding="utf-8")
+    start = source.index("def _select_scoped_purpose(")
+    end = source.index("\ndef main()", start)
+    block = source[start:end]
+    assert "installed_source_delta = _git(" in block
+    assert '"diff", "--name-only", runtime_baseline, target, "--"' in block
+    assert "if installed_source_delta:" in block
+    assert "NATIVE_SOURCE_BASELINE_NOT_PROVEN" in block
+    assert block.index("installed_source_delta = _git(") < block.index(
+        'Path("/var/lib/cripta/native_public_trade_source/status.json")'
+    )
+    assert block.index("if installed_source_delta:") < block.index(
+        "NATIVE_SOURCE_BASELINE_NOT_PROVEN"
+    )
+    assert "return NATIVE_CUTOVER_PURPOSE, True" in block
+
