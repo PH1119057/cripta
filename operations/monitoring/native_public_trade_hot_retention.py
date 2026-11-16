@@ -315,38 +315,64 @@ def _delete_active_prefix(
     ).rowcount)
 
 
+def _eligible_gap_sessions(
+    connection: Any, *, cutoff: datetime,
+) -> tuple[str, ...]:
+    rows = connection.execute(
+        """SELECT source_session_id
+             FROM analytics.native_public_trade_source_sessions
+            WHERE state='GAP'
+              AND ended_at IS NOT NULL
+              AND ended_at < %s
+            ORDER BY ended_at,source_session_id""",
+        (cutoff,),
+    ).fetchall()
+    result: list[str] = []
+    for row in rows:
+        _need(
+            isinstance(row, (tuple, list))
+            and len(row) == 1
+            and isinstance(row[0], str)
+            and len(row[0]) == 32,
+            "GAP_SESSION_IDENTITY_INVALID",
+        )
+        result.append(str(row[0]))
+    return tuple(result)
+
+
 def _delete_gap_batch(
-    connection: Any, *, cutoff: datetime, limit: int,
+    connection: Any, *, gap_sessions: tuple[str, ...], limit: int,
 ) -> int:
     if limit <= 0:
         return 0
-    return int(connection.execute(
-        f"""WITH stale AS (
-              SELECT e.ctid
-                FROM analytics.native_public_trade_source_sessions s
-                JOIN analytics.native_public_trade_source_events e
-                  USING(source_session_id)
-               WHERE s.state='GAP'
-                 AND s.ended_at IS NOT NULL
-                 AND s.ended_at < %s
-                 {_POINT_EXCLUSION}
-                 {_POSITION_EXCLUSION}
-               ORDER BY s.ended_at,s.source_session_id,
-                        e.frame_number,e.frame_index
-               LIMIT %s
-               FOR UPDATE OF e SKIP LOCKED
-            ), gone AS (
-              DELETE FROM analytics.native_public_trade_source_events e
-               USING stale
-               WHERE e.ctid=stale.ctid
-               RETURNING e.market_source_id,e.instrument_id,
-                         e.exchange_sequence,e.exec_id
-            )
-            INSERT INTO deleted_native_keys
-            SELECT market_source_id,instrument_id,exchange_sequence,exec_id
-              FROM gone""",
-        (cutoff, limit),
-    ).rowcount)
+    deleted = 0
+    for session_id in gap_sessions:
+        remaining = limit - deleted
+        if remaining <= 0:
+            break
+        deleted += int(connection.execute(
+            f"""WITH stale AS (
+                  SELECT e.ctid
+                    FROM analytics.native_public_trade_source_events e
+                   WHERE e.source_session_id=%s
+                     {_POINT_EXCLUSION}
+                     {_POSITION_EXCLUSION}
+                   ORDER BY e.frame_number,e.frame_index
+                   LIMIT %s
+                   FOR UPDATE SKIP LOCKED
+                ), gone AS (
+                  DELETE FROM analytics.native_public_trade_source_events e
+                   USING stale
+                   WHERE e.ctid=stale.ctid
+                   RETURNING e.market_source_id,e.instrument_id,
+                             e.exchange_sequence,e.exec_id
+                )
+                INSERT INTO deleted_native_keys
+                SELECT market_source_id,instrument_id,exchange_sequence,exec_id
+                  FROM gone""",
+            (session_id, remaining),
+        ).rowcount)
+    return deleted
 
 
 def _delete_unowned_parents(connection: Any) -> int:
@@ -416,6 +442,7 @@ def _next_candidate_counts(
     connection: Any, *,
     active_session: str | None,
     frontier: tuple[int, int] | None,
+    gap_sessions: tuple[str, ...],
     cutoff: datetime,
     limit: int,
 ) -> tuple[int, int]:
@@ -453,23 +480,23 @@ def _next_candidate_counts(
             tuple(params),
         ).fetchone()[0])
 
-    gap_count = int(connection.execute(
-        f"""SELECT count(*) FROM (
-              SELECT 1
-                FROM analytics.native_public_trade_source_sessions s
-                JOIN analytics.native_public_trade_source_events e
-                  USING(source_session_id)
-               WHERE s.state='GAP'
-                 AND s.ended_at IS NOT NULL
-                 AND s.ended_at < %s
-                 AND {point_filter}
-                 AND {position_filter}
-               ORDER BY s.ended_at,s.source_session_id,
-                        e.frame_number,e.frame_index
-               LIMIT %s
-            ) q""",
-        (cutoff, limit),
-    ).fetchone()[0])
+    gap_count = 0
+    for session_id in gap_sessions:
+        remaining = limit - gap_count
+        if remaining <= 0:
+            break
+        gap_count += int(connection.execute(
+            f"""SELECT count(*) FROM (
+                  SELECT 1
+                    FROM analytics.native_public_trade_source_events e
+                   WHERE e.source_session_id=%s
+                     AND {point_filter}
+                     AND {position_filter}
+                   ORDER BY e.frame_number,e.frame_index
+                   LIMIT %s
+                ) q""",
+            (session_id, remaining),
+        ).fetchone()[0])
     return active_count, gap_count
 
 
@@ -478,10 +505,12 @@ def collect_check(connection: Any, cutoff: datetime, limit: int) -> Result:
     _validate_point_pins(connection)
     active = _active_source(connection)
     frontier = _active_frontier(connection, active)
+    gap_sessions = _eligible_gap_sessions(connection, cutoff=cutoff)
     active_count, gap_count = _next_candidate_counts(
         connection,
         active_session=active,
         frontier=frontier,
+        gap_sessions=gap_sessions,
         cutoff=cutoff,
         limit=limit,
     )
@@ -526,6 +555,7 @@ def run_apply(connection: Any, cutoff: datetime, limit: int) -> Result:
         _validate_point_pins(connection)
         active = _active_source(connection)
         frontier = _active_frontier(connection, active)
+        gap_sessions = _eligible_gap_sessions(connection, cutoff=cutoff)
         _create_retained_points(connection)
         _create_deleted_keys(connection)
 
@@ -538,7 +568,7 @@ def run_apply(connection: Any, cutoff: datetime, limit: int) -> Result:
         )
         gap_deleted = _delete_gap_batch(
             connection,
-            cutoff=cutoff,
+            gap_sessions=gap_sessions,
             limit=max(0, limit - active_deleted),
         )
         parent_deleted = _delete_unowned_parents(connection)
