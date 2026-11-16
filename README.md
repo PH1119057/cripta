@@ -71,7 +71,9 @@ Installed runtime, PostgreSQL и Exchange truth проверяются отде�
 
 Owner-controlled real execution smoke-test is an explicit operator diagnostic,
 not Strategy behavior. Exact contract: `TRADING_CONTOUR §4.8`, architecture
-boundary: `ARCH §7.1`.
+boundary: `ARCH §7.1`. P90 R06 remains SOURCE_ONLY/NO-ORDER; financial
+`EntryDecision/EntryExecutionRequest` owner is account-scoped Universal Entry,
+future-only after the disarmed baseline (ARCH §60.5.3 / TC §4.19.2).
 
 Current R1 Entry-time exchange protection contract: catastrophic SL `-10%` +
 price-based TP at the causal opposite current L5-3 inner boundary; subsequent TP

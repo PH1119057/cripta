@@ -89,7 +89,8 @@ def test_open_position_source_repair_cannot_be_reported_as_financial_ready() -> 
     )
     body = ast.get_source_segment(source, status)
     assert body is not None
-    assert '"observer_ready": state in {"IDLE", "WARMUP", "RUNNING", "RELOADING"}' in body
+    assert '"observer_ready": state in {' in body
+    assert '"R06_PG_NO_ORDER_SOURCE_ONLY"' in body
     assert "SOURCE_REPAIR_ONLY" not in body
 
     epoch = next(

@@ -1970,3 +1970,20 @@ Cross-contour implementation допускается только после эт
 tests/CI/protected merge/staged release и новой physical R11 acceptance.
 `OWNER_DECISION=YES`; `CANON_UPDATE=THIS_PROTECTED_CHANGESET`;
 `IMPLEMENTED/DEPLOYED/RUNTIME_VERIFIED=NOT_CLAIMED_BY_DOCS`.
+
+
+## 85. R06 -> Universal Entry financial owner handoff — OWNER DECISION 2026-11-16 (Issue #642)
+
+Owner confirmed the next architecture step after the R06 SOURCE_ONLY cutover. ARCH §60.5.3 is the sole intercomponent ownership contract: R06 remains no-order source/candidate owner; account-scoped Universal Entry becomes the producer of real `EntryDecision` and, only after ordinary admission succeeds, `EntryExecutionRequest`; existing R07 remains the source-epoch fence/dispatch consumer of that already-created request.
+
+The handoff is explicitly future-only. MAIN/SUB Consumers maintain a durable financial-promotion baseline while mainnet/permissions/account arms are closed, so pre-arm R06 observations are never replayed into finance. Stale post-arm backlog is skipped fail-closed. The original R06 OFF/no-exposure rule remains a bootstrap/cutover gate, not a permanent prohibition on downstream financial lifecycle after the source checkpoint is established.
+
+Exact routes:
+- architecture/ownership: ARCH §60.5.3;
+- trading lifecycle: TC §4.19.2;
+- R06 observation boundary: OBS §7.10.5.9;
+- terms: GLOSSARY §47;
+- PostgreSQL/release/migration/actor sequence: DEV;
+- current implementation/deploy evidence: MAP §39 and Issue #642.
+
+No current document set/path/routing change: Project Source stays at 11 files. Root README, AGENTS and derived Project Instructions/bootstrap are synchronized in this cycle with the same R06 no-order -> account-scoped Universal Entry pointer. No LIVE/mainnet/execution permission is granted by the documentation changeset.

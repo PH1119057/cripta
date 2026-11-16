@@ -132,6 +132,11 @@ def test_consumer_routes_different_private_workers_to_separate_request_partition
             patch.object(consumer, "ACCOUNT_CONNECTOR_ID", connector),
             patch.object(consumer, "_release_expired_reserved_requests", return_value=0),
             patch.object(consumer, "_execution_gate_enabled", return_value=True),
+            patch.object(
+                consumer,
+                "promote_next_r06_financial_signal",
+                return_value="NOT_APPLICABLE",
+            ),
         ):
             outcome = consumer.run_once(db)
         assert outcome == "NO_REQUEST"

@@ -5288,3 +5288,32 @@ Source checkout read-only `git status --porcelain` returned clean (no output) an
 ## 2026-11-14 R11 seven-symbol observation-source owner decision — GitHub source-only checkpoint
 
 **OWNER APPROVED:** добавление BTCUSDT и ETHUSDT в один Native MarketSource/MarketPublication только для MAYAK analytical reference anchors, без изменения P90 five-symbol Strategy/Entry/Exit/Execution и без LIVE. ARCH §60.5.1.1 / OBS §7.10.5.8 / DEV §59.6; single roadmap Issue #470. Это owner authorization, NOT claim of installed code/physical runtime. Исторические PR #693–#702 — incremental code/CI evidence, не семь-symbol provider continuity и не switched MAYAK WS. Путь R11 source/consumer quality/REST/BTC/ETH/Dispatcher WARMUP и replay остается gated; before/after snapshot и signed flat/protected check нужны перед deploy. `REMOTE_HEAD_PRE_CHANGESET=58afd1a23884e362858cd581bb2c0bd83d1fd539` (checked GitHub 2026-11-14); `SOURCE_HEAD/INSTALLED_COMMIT/LOADED_COMMIT=NOT_CHECKED_HERE` в этом docs-only checkpoint; `CANON_CONFLICT=RESOLVED_AFTER_MERGE`, `R11_C=OWNER_APPROVED`, `R11_M/I/T=PARTIAL`, `R11_D/R=NOT_STARTED`. Ни production PostgreSQL, ни server/native/MAYAK, ни LIVE/Exchange не меняются документационной публикацией.
+
+
+# 39. R06 financial promotion / gateway failure repair — CHECKED HERE 2026-11-16 (Issue #642)
+
+**Authority baseline:** GitHub main and clean production source mirror were verified at `7eaf2d71673676ed28f336d0bd8b8d78a921169b` before this changeset. The previous Issue #642 checkpoint had technical production contour recovered with R06 `SOURCE_ONLY/NO-ORDER`, MAIN/SUB Entry Consumers READY, private runtimes active and financial gates closed.
+
+**Failure reproduced from current host evidence after the owner's gateway attempt:** `/var/lib/cripta/universal_entry_observer/status.json` changed to `state=BLOCKED`, reason `R06_PG_ONLY_BLOCKED:RuntimeError:R06_UNCLASSIFIED_RUNTIME_EXCEPTION`, updated_at `2026-11-16T08:18:33.228355+00:00`. The base prearm control still proved `mainnet=0`, `execution_permissions=0`, no active global/account LIVE-arm sessions and both P90 Strategy bindings active after rollback. Static/source forensic found R06 was re-running its original cutover-only `no exposure / no execution permissions / no pending requests` guard permanently, so the gateway staging state could make the source observer exit even though R06 itself still created no order.
+
+**Production runtime ACL checked as exact runtime actor `cripta`:** current production grants already allow the ordinary Entry path to INSERT `strategy_signals`, `strategy_attempts`, `entry_decisions`, `execution_requests` and INSERT/UPDATE slot-claim/capital-reservation state; no DELETE and no DDL were added. Therefore the missing financial producer is an ownership/implementation gap, not a need to broaden runtime DB privilege. DDL for the new additive promotion checkpoint remains migration-actor work (`postgres`) through the canonical installer.
+
+**This source changeset target:** ARCH §60.5.3 / TC §4.19.2 / OBS §7.10.5.9. It adds immutable R06 candidate payload for future observations, a per-account durable promotion checkpoint, account-scoped Universal Entry promotion using the existing atomic admission path, R07 provenance proof before financial persistence/dispatch, and prearm baseline proof. R06's no-exposure/no-permission check is retained for bootstrap/cutover only; after the source checkpoint it may coexist with downstream finance while retaining `trading_effect=NONE`.
+
+**Future-only safety:** while disarmed, each Consumer tails its promotion checkpoint to the current R06 boundary and creates no financial object. Only newer exact candidates may be promoted after account arm. Candidate older than the 5-second Strategy request window is skipped to the current verified R06 checkpoint; historical rows without candidate payload are never promoted.
+
+**Current source status at documentation checkpoint:** isolated overlay
+`/data/cripta/research/worktrees/p90_financial_producer_642_20261116`,
+branch `core/r06-financial-producer-642-20261116`, based on
+`7eaf2d71673676ed28f336d0bd8b8d78a921169b`.
+Implementation is present in the overlay. Exact-actor local validation passes: all edited Python modules compile under `cripta`, installer `bash -n` passes, production effective ACLs for the existing financial path were verified, and a direct R06 candidate -> R07 provenance smoke returned `R06_R07_FINANCIAL_SMOKE=PASS`. The host environment does not contain pytest, so protected GitHub CI remains the required full test/ruff/mypy gate. Protected merge, production migration/deploy and runtime behavior are **NOT YET CLAIMED** by this MAP entry.
+
+```text
+CANON_CONFLICT=RESOLVED_BY_OWNER_DECISION_AND_THIS_CHANGESET_AFTER_MERGE
+ARCHITECTURE_CAPABILITY_GAP=TARGETED_CLOSED
+IMPLEMENTED=PREPARED_IN_ISOLATED_OVERLAY
+TESTED=LOCAL_STATIC_AND_DIRECT_SMOKE_PASS_GITHUB_CI_PENDING
+DEPLOYED=NO
+RUNTIME_BEHAVIOR_VERIFIED=NO
+LIVE_CHANGE=NO
+```

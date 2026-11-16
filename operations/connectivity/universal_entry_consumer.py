@@ -56,6 +56,15 @@ from bybit_workbench.universal_entry.owner_full_contour_runtime import (
     materialize_requested_run,
     refresh_run_lifecycle,
 )
+from bybit_workbench.universal_entry.r06_financial_promotion import (
+    R06FinancialPromotionBlocked,
+)
+from bybit_workbench.universal_entry.r06_financial_promotion import (
+    promote_next as promote_next_r06_financial_signal,
+)
+from bybit_workbench.universal_entry.r06_financial_promotion import (
+    sync_disarmed_baseline as sync_r06_financial_disarmed_baseline,
+)
 from bybit_workbench.universal_entry.r07_publication_provenance import (
     R07PublicationProvenanceUnavailable,
     require_r07_dispatch_epoch_guard,
@@ -128,12 +137,36 @@ def _json_mapping(value: object, label: str) -> Mapping[str, object]:
 
 
 _REQUIRED_DB_PRIVILEGES = (
+    # Existing R07 consumer privileges.
     ("strategy_entry.execution_requests", "SELECT"),
     ("strategy_entry.strategy_attempts", "SELECT"),
     ("strategy_entry.strategy_activations", "SELECT"),
     ("strategy_entry.execution_permissions", "SELECT"),
     ("strategy_entry.execution_permissions", "UPDATE"),
     ("strategy_entry.entry_decisions", "SELECT"),
+    # #642 R06 -> financial promotion writes ordinary Universal Entry facts.
+    ("strategy_entry.strategy_signals", "INSERT"),
+    ("strategy_entry.strategy_attempts", "INSERT"),
+    ("strategy_entry.entry_decisions", "INSERT"),
+    ("strategy_entry.execution_requests", "INSERT"),
+    ("strategy_entry.notifications", "INSERT"),
+    ("strategy_entry.context_links", "INSERT"),
+    ("strategy_entry.sensor_links", "INSERT"),
+    ("strategy_entry.strategy_execution_bindings", "SELECT"),
+    ("strategy_entry.p90_r06_publication_observations", "SELECT"),
+    ("strategy_entry.p90_scoped_native_consumer_checkpoints", "SELECT"),
+    ("strategy_entry.p90_scoped_native_consumer_checkpoints", "UPDATE"),
+    ("strategy_entry.p90_r06_financial_promotion_checkpoints", "SELECT"),
+    ("strategy_entry.p90_r06_financial_promotion_checkpoints", "INSERT"),
+    ("strategy_entry.p90_r06_financial_promotion_checkpoints", "UPDATE"),
+    ("analytics.native_public_trade_source_sessions", "SELECT"),
+    ("analytics.native_public_trade_source_events", "SELECT"),
+    ("analytics.market_publications", "SELECT"),
+    ("identity.trading_accounts", "SELECT"),
+    ("identity.account_connectors", "SELECT"),
+    ("runtime.account_state_generations", "SELECT"),
+    ("runtime.position_mode_states", "SELECT"),
+    ("control.account_live_arm_sessions", "SELECT"),
     ("strategy_entry.execution_dispatches", "SELECT"),
     ("strategy_entry.execution_dispatches", "INSERT"),
     ("strategy_entry.execution_request_state_events", "SELECT"),
@@ -1634,6 +1667,21 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY:" + ",".join(route_check.reasons)
 
     if not _execution_gate_enabled(connection):
+        # While disarmed, tail the exact R06 decision cursor without creating
+        # StrategySignal/EntryDecision/EntryExecutionRequest. This future-only
+        # financial baseline prevents SOURCE_ONLY backlog replay after ARM.
+        try:
+            sync_r06_financial_disarmed_baseline(
+                connection,
+                trading_account_id=route.trading_account_id,
+                account_connector_id=route.account_connector_id,
+                loaded_release_commit=LOADED_RELEASE_COMMIT,
+                now=current,
+            )
+        except R06FinancialPromotionBlocked as exc:
+            return "R06_FINANCIAL_BASELINE_NOT_READY:" + str(exc)
+        except psycopg.Error as exc:
+            return "R06_FINANCIAL_BASELINE_NOT_READY:PG_" + type(exc).__name__
         # Reconciliation is an account-scoped mutation and is deliberately
         # unreachable until the exact process/account connector route above
         # has been proven.  It is also unnecessary while NEW-Entry is armed.
@@ -1672,6 +1720,25 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     if not safety_ready:
         return "ACCOUNT_ENTRY_SAFETY_NOT_READY:" + ",".join(safety_reasons)
     row = _next_request(connection, route=route)
+    promotion_result: str | None = None
+    if row is None:
+        # R06 remains SOURCE_ONLY. The separate account-scoped Universal Entry
+        # stage may now promote only a post-baseline R06 signal through ordinary
+        # admission. Existing queued requests always retain priority.
+        try:
+            promotion_result = promote_next_r06_financial_signal(
+                connection,
+                trading_account_id=route.trading_account_id,
+                account_connector_id=route.account_connector_id,
+                loaded_release_commit=LOADED_RELEASE_COMMIT,
+                now=current,
+            )
+        except R06FinancialPromotionBlocked as exc:
+            return "BLOCKED:R06_FINANCIAL_PROMOTION:" + str(exc)
+        except psycopg.Error as exc:
+            return "BLOCKED:R06_FINANCIAL_PROMOTION:PG_" + type(exc).__name__
+        if promotion_result.startswith("PROMOTED_REQUEST:"):
+            row = _next_request(connection, route=route)
     if row is None:
         # Ordinary production requests retain priority. Only after the exact
         # process/account route and account safety checks passed, and no normal
@@ -1691,7 +1758,10 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         if diagnostic_result:
             row = _next_request(connection, route=route)
         if row is None:
-            return diagnostic_result or "NO_REQUEST"
+            idle_promotion = (
+                None if promotion_result in {None, "NOT_APPLICABLE"} else promotion_result
+            )
+            return diagnostic_result or idle_promotion or "NO_REQUEST"
     request = _request_from_row(row)
     reservation_state = row.get("capital_reservation_state")
     if (

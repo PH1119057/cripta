@@ -42,5 +42,5 @@ Repo root: DEV §50.0; MAP §19.1; cleanup=COMPLETE.
 CHECKED HERE ≠ NOT CHECKED HERE, FINDING ≠ CANON, IMPLEMENTED ≠ DEPLOYED, RUNTIME LIVENESS VERIFIED ≠ RUNTIME BEHAVIOR VERIFIED. Service active ≠ behavior proof. Точный отказ показывать вместо общего «нельзя». Общение — русский; exact технические identifiers — English. Итог торговых расчётов после комиссий, обязательный полный ENTRY/EXIT/COST/FILTERS/DATASET/POSITION report contract WORK §12.1.
 
 
-## 12. R11 15.11.2026
-BTC/ETH=MAYAK; P90=5. Replay: provider-time/stream; cross=receive order; publication monotonic. OBS §4.12/INDEX §84; LIVE same.
+## 12. R11/R06
+R11: BTC/ETH=MAYAK, P90=5; OBS §4.12/INDEX §84. R06=no-order; finance=account-scoped Universal Entry future-only; ARCH §60.5.3.

@@ -544,6 +544,7 @@ def test_worker_retries_conflict_with_fresh_proof_only_before_commit(monkeypatch
     monkeypatch.setattr(mod.psycopg, "connect", lambda *_args, **_kw: next(connections))
     monkeypatch.setattr(mod, "_bundles", lambda *_args: ())
     monkeypatch.setattr(mod, "_engines", lambda *_args: {})
+    monkeypatch.setattr(mod, "_has_durable_decision_checkpoint", lambda *_args: False)
     monkeypatch.setattr(mod, "_require_no_exposure_or_requests", safety)
     monkeypatch.setattr(mod, "_one_pin", one_pin)
     monkeypatch.setattr(mod, "_checkpoints", checkpoints)

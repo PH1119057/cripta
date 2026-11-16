@@ -30,6 +30,7 @@ from bybit_workbench.universal_entry.p90_r06_no_order_state import (
     dump_symbol,
     restore_symbol,
 )
+from bybit_workbench.universal_entry.r06_financial_promotion import encode_candidate_fact
 from bybit_workbench.universal_entry.p90l90_crossing_fact import p90l90_crossing_fact
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
@@ -328,13 +329,14 @@ def _observe_one(
                     "INSERT INTO strategy_entry.p90_r06_publication_observations "
                     "(strategy_id,strategy_version,source_session_id,"
                     "frame_number,frame_index,native_exec_id,publication_id,"
-                    "signal_id,symbol,direction,event_at) "
-                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                    "signal_id,symbol,direction,event_at,candidate_fact) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) "
                     "ON CONFLICT DO NOTHING",
                     (name, VERSION, pin.source_session_id,
                      event.frame_number,event.frame_index,event.exec_id,
                      publication_id,item.signal.signal_id,sym,
-                     item.signal.direction.value,event.event_at),
+                     item.signal.direction.value,event.event_at,
+                     encode_candidate_fact(signal_fact)),
                 )
                 new_count += 1
     consumed = consume_pinned_entry_native_batch(
@@ -383,7 +385,10 @@ def _process_publication(
     signals = 0
     blocked: dict[str, str] = {}
     with writer.transaction():
-        _require_no_exposure_or_requests(writer)
+        # R06 remains SOURCE_ONLY/NO-ORDER, but after its future-only cursor is
+        # established it must coexist with the separate Universal Entry
+        # financial owner. The no-arm/no-exposure requirement is a cutover
+        # gate, not a permanent prohibition on downstream Entry lifecycle.
         for bundle in bundles:
             name = bundle.card.strategy_id
             symbols = tuple(sorted(ALLOWED_SYMBOLS[name]))
@@ -413,6 +418,21 @@ def _process_publication(
                 engine=engines[name], loaded=loaded, at=at,
             )
     return signals, blocked
+
+
+def _has_durable_decision_checkpoint(writer: Any) -> bool:
+    row = writer.execute(
+        "SELECT count(*) FROM strategy_entry.p90_scoped_native_consumer_checkpoints "
+        "WHERE strategy_id=ANY(%s) AND strategy_version=%s",
+        (list(_STRATEGIES), VERSION),
+    ).fetchone()
+    if (
+        row is None
+        or type(row[0]) is not int
+        or row[0] < 0
+    ):
+        raise R06PublishedEntryBlocked("R06_DECISION_CHECKPOINT_EXISTENCE_UNVERIFIED")
+    return row[0] > 0
 
 
 def _runtime_actor_verified() -> bool:
@@ -478,16 +498,17 @@ def run_pg_only(
             bundles = _bundles(writer)
             engines = _engines(bundles)
             original_scope = tuple(_exact_scope_identity(b) for b in bundles)
-            _require_no_exposure_or_requests(writer)
             ttls = entry_native_ttls(
                 Path(__file__).with_name("required_public_feeds.json"), FIVE,
             )
             prior_pub = 0
             last_status = 0.0
             first_cursor_accepted = False
+            bootstrap_requires_safety = not _has_durable_decision_checkpoint(writer)
             while not stopping:
                 at = datetime.now(UTC)
-                _require_no_exposure_or_requests(writer)
+                if not first_cursor_accepted and bootstrap_requires_safety:
+                    _require_no_exposure_or_requests(writer)
                 if tuple(_exact_scope_identity(b) for b in _bundles(writer)) != original_scope:
                     raise R06PublishedEntryBlocked("R06_ACTIVATION_OR_PLAN_IDENTITY_DRIFT")
                 try:
@@ -499,7 +520,8 @@ def run_pg_only(
                     if (
                         first_cursor_accepted
                         or not _bootstrap_transient_retryable(
-                            exc,detached_at=detached_at,observed_at=at,
+                            exc,detached_at=detached_at,
+                            observed_at=datetime.now(UTC),
                         )
                     ):
                         raise
@@ -509,6 +531,13 @@ def run_pg_only(
                     writer,pin=pin,allow_new_epoch=not first_cursor_accepted,
                 )
                 if not checkpoints:
+                    # The no-arm/no-exposure gate is required only when a new
+                    # future-only R06 decision epoch is being bootstrapped.
+                    # An existing durable checkpoint survives process restarts
+                    # and may coexist with downstream financial lifecycle.
+                    if not bootstrap_requires_safety:
+                        bootstrap_requires_safety = True
+                        _require_no_exposure_or_requests(writer)
                     # A single owner process replaces old WS/REST after the
                     # service manager stopped its preceding ExecStart; the
                     # NEXT fully closed 5m after process start is mandatory.
@@ -534,7 +563,8 @@ def run_pg_only(
                         R06FreshCutoverBlocked, psycopg.errors.SerializationFailure,
                     ) as exc:
                         if not _bootstrap_transient_retryable(
-                            exc,detached_at=detached_at,observed_at=at,
+                            exc,detached_at=detached_at,
+                            observed_at=datetime.now(UTC),
                         ):
                             raise
                         time.sleep(1.0)
@@ -556,7 +586,8 @@ def run_pg_only(
                         R06FreshCutoverBlocked, psycopg.errors.SerializationFailure,
                     ) as exc:
                         if not _bootstrap_transient_retryable(
-                            exc,detached_at=detached_at,observed_at=at,
+                            exc,detached_at=detached_at,
+                            observed_at=datetime.now(UTC),
                         ):
                             raise
                         time.sleep(1.0)

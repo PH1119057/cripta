@@ -972,6 +972,13 @@ case "$ROADMAP470_STAGE" in
     ;;
 esac
 case "$ROADMAP470_STAGE" in
+  ""|R12|R13|R13_REPAIR)
+    # #642 account-scoped Universal Entry financial promotion after R06
+    # SOURCE_ONLY. Additive only; no gate/permission/LIVE-arm mutation.
+    migration_files+=(operations/sql/20261116_r12_r06_financial_promotion.sql)
+    ;;
+esac
+case "$ROADMAP470_STAGE" in
   ""|R13|R13_REPAIR)
     migration_files+=(operations/sql/20261115_r13_opportunity_source_checkpoint.sql)
     ;;
