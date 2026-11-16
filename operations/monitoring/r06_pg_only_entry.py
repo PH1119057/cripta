@@ -79,7 +79,7 @@ def _worker_block_code(exc: BaseException) -> str:
     if isinstance(exc, psycopg.errors.SerializationFailure):
         return "R06_PG_SERIALIZATION_CONFLICT"
     code = str(exc).split(":", 1)[0]
-    if re.fullmatch(r"(?:R06|P90)_[A-Z0-9_]{1,100}", code) is None:
+    if re.fullmatch(r"(?:R06|P90|P90L90)_[A-Z0-9_]{1,100}", code) is None:
         return "R06_UNCLASSIFIED_RUNTIME_EXCEPTION"
     return code
 
@@ -314,6 +314,7 @@ def _observe_one(
             )
             evaluations = engine.process(
                 signal_fact, proven_p90_native_cursor=cursor,
+                p90_source_only_candidate=True,
                 allow_new_signals=True, account_ref="BYBIT:UNIFIED",
             )
             for item in evaluations:

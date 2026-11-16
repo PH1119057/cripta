@@ -208,6 +208,71 @@ def test_real_card_cannot_ride_paper_native_path() -> None:
         )
 
 
+def test_real_card_has_explicit_source_only_candidate_path_without_finance() -> None:
+    engine, activation, plan = _engine(real=True)
+    fact, cursor = _native_fact(plan)
+
+    result = engine.process(
+        fact,
+        proven_p90_native_cursor=cursor,
+        p90_source_only_candidate=True,
+        allow_new_signals=True,
+        account_ref="BYBIT:UNIFIED",
+    )
+
+    assert len(result) == 1
+    item = result[0]
+    assert item.signal.strategy_activation_id == activation
+    assert item.signal.fact_id == fact.fact_id
+    assert item.decision is None
+    assert item.execution_request is None
+    assert item.notifications == ()
+    assert item.account_outcomes == ()
+
+    # The generic REAL path remains fail-closed without account admission.
+    other, _, other_plan = _engine(real=True)
+    other_fact, other_cursor = _native_fact(other_plan)
+    with pytest.raises(RuntimeError, match="PRECOMPUTED_REAL_ADMISSION_FORBIDDEN"):
+        other.process(other_fact, proven_p90_native_cursor=other_cursor)
+
+
+def test_source_only_candidate_rejects_any_financial_admission_input() -> None:
+    engine, activation, plan = _engine(real=True)
+    fact, cursor = _native_fact(plan)
+
+    with pytest.raises(RuntimeError, match="SOURCE_ONLY_FINANCIAL_INPUT_FORBIDDEN"):
+        engine.process(
+            fact,
+            proven_p90_native_cursor=cursor,
+            p90_source_only_candidate=True,
+            real_admission_required_for=frozenset({activation}),
+        )
+    with pytest.raises(RuntimeError, match="SOURCE_ONLY_FINANCIAL_INPUT_FORBIDDEN"):
+        engine.process(
+            fact,
+            proven_p90_native_cursor=cursor,
+            p90_source_only_candidate=True,
+            account_admissions=_admissions(activation),
+        )
+
+
+def test_source_only_real_candidate_still_validates_initial_tp_geometry() -> None:
+    engine, _, plan = _engine(real=True)
+    fact, cursor = _native_fact(plan)
+    attrs = fact.attributes.to_dict()
+    nested = dict(attrs["p90l90"])
+    nested["opposite_raw_l53_target"] = "80"
+    attrs["p90l90"] = nested
+    tampered = replace(fact, attributes=FrozenPolicy.from_mapping(attrs))
+
+    with pytest.raises(RuntimeError, match="REAL_NATIVE_TP_FACT_INVALID"):
+        engine.process(
+            tampered,
+            proven_p90_native_cursor=cursor,
+            p90_source_only_candidate=True,
+        )
+
+
 def test_historical_paper_v2_never_upgrades_to_real_entry() -> None:
     engine, activation, plan = _engine(real=False)
     fact, cursor = _native_fact(plan)
