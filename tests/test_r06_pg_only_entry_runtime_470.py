@@ -300,6 +300,7 @@ def test_any_financial_effect_blocks_before_no_order_state_commit(
         (mod.R06FreshCutoverBlocked("R06_NEW_PUBLICATION_UNVERIFIED"), True),
         (mod.R06FreshCutoverBlocked("R06_START_PUBLICATION_STALE_OR_CHANGED"), True),
         (mod.R06FreshCutoverBlocked("R06_FUTURE_CLOSED_BOUNDARY_NOT_REACHED"), True),
+        (mod.R06FreshCutoverBlocked("R06_5M_CLOSED_BOUNDARY_NOT_COMMON"), True),
         (mod.R06FreshCutoverBlocked("R06_BOOTSTRAP_CONTRACT_INVALID"), False),
         (ValueError("program defect"), False),
     ],
