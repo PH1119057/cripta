@@ -96,6 +96,11 @@ def _bootstrap_transient_retryable(
         return False
     if isinstance(exc, (EntryPublicationUnavailable, psycopg.errors.SerializationFailure)):
         return True
+    if (
+        isinstance(exc, R06PublishedEntryBlocked)
+        and str(exc) == "R06_SOURCE_EPOCH_AMBIGUOUS"
+    ):
+        return True
     return (
         isinstance(exc, R06FreshCutoverBlocked)
         and str(exc) in {
@@ -105,6 +110,21 @@ def _bootstrap_transient_retryable(
             "R06_5M_CLOSED_BOUNDARY_NOT_COMMON",
         }
     )
+
+def _worker_exit_status(exc: BaseException) -> int:
+    """Return a bounded systemd-restart status only for current-source loss.
+
+    Exit 42 remains terminal/fail-closed.  Exit 43 is deliberately recoverable
+    by the unit's finite StartLimit and causes a fresh process to re-run the
+    full no-order bootstrap against the next ACTIVE MarketSource epoch.
+    """
+    if (
+        isinstance(exc, R06PublishedEntryBlocked)
+        and _worker_block_code(exc) == "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT"
+    ):
+        return 43
+    return 42
+
 
 def _bundles(connection: Any) -> tuple[Any, ...]:
     rows = tuple(
@@ -471,7 +491,8 @@ def run_pg_only(
                 try:
                     pin, history, commits = _one_pin(reader,at=at,loaded=loaded_commit)
                 except (
-                    EntryPublicationUnavailable, psycopg.errors.SerializationFailure,
+                    EntryPublicationUnavailable, R06PublishedEntryBlocked,
+                    psycopg.errors.SerializationFailure,
                 ) as exc:
                     if (
                         first_cursor_accepted
@@ -593,4 +614,4 @@ def run_pg_only(
             reason="R06_PG_ONLY_BLOCKED:"+type(exc).__name__+":"+code,
             sensor_status={"native_pg_delivery_scope":"R06_BLOCKED_NO_ORDERS"},
         )
-        raise SystemExit(42) from exc
+        raise SystemExit(_worker_exit_status(exc)) from exc
