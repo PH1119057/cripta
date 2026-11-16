@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -301,6 +302,8 @@ def test_any_financial_effect_blocks_before_no_order_state_commit(
         (mod.R06FreshCutoverBlocked("R06_START_PUBLICATION_STALE_OR_CHANGED"), True),
         (mod.R06FreshCutoverBlocked("R06_FUTURE_CLOSED_BOUNDARY_NOT_REACHED"), True),
         (mod.R06FreshCutoverBlocked("R06_5M_CLOSED_BOUNDARY_NOT_COMMON"), True),
+        (mod.R06PublishedEntryBlocked("R06_SOURCE_EPOCH_AMBIGUOUS"), True),
+        (mod.R06PublishedEntryBlocked("R06_PLAN_SCOPE_UNVERIFIED"), False),
         (mod.R06FreshCutoverBlocked("R06_BOOTSTRAP_CONTRACT_INVALID"), False),
         (ValueError("program defect"), False),
     ],
@@ -327,6 +330,31 @@ def test_pre_cursor_transient_must_expire_at_existing_10_minute_budget(err):
         err, detached_at=BASE, observed_at=BASE - timedelta(seconds=1),
     )
 
+
+
+def test_runtime_current_source_loss_is_the_only_recoverable_worker_exit():
+    assert mod._worker_exit_status(
+        mod.R06PublishedEntryBlocked(
+            "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT:scope"
+        )
+    ) == 43
+    assert mod._worker_exit_status(
+        mod.R06PublishedEntryBlocked("R06_SOURCE_EPOCH_AMBIGUOUS")
+    ) == 42
+    assert mod._worker_exit_status(
+        mod.R06FreshCutoverBlocked("R06_START_PUBLICATION_STALE_OR_CHANGED")
+    ) == 42
+
+
+def test_observer_systemd_recovery_is_finite_and_terminal_42_stays_blocked():
+    unit = (
+        Path(__file__).resolve().parents[1]
+        / "operations/systemd/cripta-universal-entry-observer.service"
+    ).read_text(encoding="utf-8")
+    assert "Restart=on-failure" in unit
+    assert "RestartPreventExitStatus=42" in unit
+    assert "StartLimitIntervalSec=300" in unit
+    assert "StartLimitBurst=3" in unit
 
 
 def test_worker_failure_classification_never_leaks_private_exception_detail():

@@ -2,6 +2,10 @@
 Description=Cripta Universal Entry multi-Strategy production observer
 After=network-online.target postgresql.service
 Wants=network-online.target
+# R06 current-source loss exits 43 and may restart only within this finite
+# window. Terminal fail-closed exit 42 remains explicitly non-restartable.
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
