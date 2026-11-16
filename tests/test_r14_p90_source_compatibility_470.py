@@ -15,9 +15,10 @@ import pytest
 from bybit_workbench.universal_entry import p90l90_real_source_compatibility as compat
 
 
-def test_r14_r06_origin_accepts_only_exact_reviewed_three_file_delta() -> None:
+def test_r14_r06_origin_accepts_only_exact_reviewed_four_file_delta() -> None:
     expected = compat._REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256
     assert set(expected) == {
+        "universal_entry/engine.py",
         "universal_entry/p90l90_real_contract_v3.py",
         "universal_entry/r06_financial_promotion.py",
         "universal_entry/r07_publication_provenance.py",

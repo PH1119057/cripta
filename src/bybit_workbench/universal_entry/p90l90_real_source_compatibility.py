@@ -151,16 +151,21 @@ _REVIEWED_20261108_EXIT_IPC_SHA256 = {
         "5bf3fab7a9d4fb3efa347d704a65083d3eac978701413aa65476bcb58239d5db",
 }
 
-# R14 final-release preparation can encounter the still-ACTIVE R06 physical
+# R14/follow-up release preparation can encounter the still-ACTIVE R06 physical
 # source epoch while the loaded consumer inventory already contains the exact
-# R06 financial-promotion handoff, R07 provenance fence and R10 PG-publication
-# execution contract accepted in #470/#642. Bind that historical origin only
-# to these immutable reviewed bytes. This is compatibility evidence, not
-# Strategy/Entry/Exit permission.
+# R06 financial-promotion handoff, R07 provenance fence, R10 PG-publication
+# execution contract and the #795 explicit R06 REAL source-only candidate path
+# accepted in #470/#642. Bind that historical origin only to these immutable
+# reviewed bytes. This is compatibility evidence, not Strategy/Entry/Exit
+# permission.
 _REVIEWED_R06_SOURCE_ORIGIN = (
     "99a1ba4c16edbe5cb32022addf6c52888574716d"
 )
 _REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256 = {
+    # #795: explicit R06 source-only REAL candidate validation preserves the
+    # generic financial-admission prohibition and emits no decision/request.
+    "universal_entry/engine.py":
+        "4ee56b05d03d440f2b0cd36264411fd3f2294f53f78f37b9b53b585336889797",
     "universal_entry/p90l90_real_contract_v3.py":
         "2bdd80448ae7cc6274078939f8b41ebd706b09e089824ec69c99052416395ac7",
     # #642: account-scoped R06 financial promotion is a reviewed Universal
