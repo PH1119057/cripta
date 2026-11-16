@@ -19,6 +19,10 @@ from pathlib import Path
 from typing import Any, cast
 
 from bybit_workbench.account_entry_readiness import real_entry_account_state
+from bybit_workbench.account_state_generation import (
+    AccountStateGenerationUnavailable,
+    current_complete_account_state_generation,
+)
 from bybit_workbench.live_arm_readiness import (
     evaluate_live_arm,
     scope_for_check,
@@ -39,6 +43,9 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
 from bybit_workbench.universal_entry.p90l90_real_second48 import (
     P90RealSecond48Unverified,
     read_real_second48,
+)
+from bybit_workbench.universal_entry.p90l90_real_source_epoch_start import (
+    P90RealSignedFlatAccount,
 )
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
@@ -65,7 +72,10 @@ _P90_PARITY_MODULES = (
 
 _MAIN_ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
 _SUB_ACCOUNT = "ta-853ac5fcd58185697396d33cd57459fa"
+_MAIN_CONNECTOR = "ac-ed73de20410548d6841aeafa5f196f70"
+_SUB_CONNECTOR = "ac-ec57819f875f1bfd929a382d6dc8a125"
 _ACCOUNT_BY_STRATEGY = {MAIN_ID: _MAIN_ACCOUNT, SUB_ID: _SUB_ACCOUNT}
+_CONNECTOR_BY_STRATEGY = {MAIN_ID: _MAIN_CONNECTOR, SUB_ID: _SUB_CONNECTOR}
 _EVIDENCE_SOURCE = "p90l90-real-v3:technical-prearm-evidence"
 _SERVICE_UNITS = tuple(
     spec.unit for spec in p90_real_v3_service_specs(sub_account_id=_SUB_ACCOUNT)
@@ -435,8 +445,45 @@ def prepare_p90l90_real_v3_prearm_evidence(
     for unit in _SERVICE_UNITS:
         _service_active(unit)
 
-    # All DB-derived evidence below must come from one serializable snapshot.
-    # External release/service proofs above perform no PostgreSQL reads.
+    # Credential-local signed flat proofs are intentionally collected before
+    # the authoritative DB snapshot.  Their account/connector identities are
+    # fixed by the exact owner-approved P90 scope; the active DB bindings are
+    # re-read and verified against these identities inside the snapshot below.
+    signed_private_proofs: dict[str, P90RealSignedFlatAccount] = {}
+    for strategy_id in (MAIN_ID, SUB_ID):
+        account_id = _ACCOUNT_BY_STRATEGY[strategy_id]
+        connector_id = _CONNECTOR_BY_STRATEGY[strategy_id]
+        proof = P90PrivateProofClient(
+            account=account_id,
+            connector=connector_id,
+            timeout_seconds=private_proof_timeout,
+        ).read_flat_account()
+        proof_checked_at = datetime.now(UTC)
+        _require(
+            proof.trading_account_id == account_id
+            and proof.source_ref == "bybit:signed-flat-linear-usdt:exact-account"
+            and proof.open_positions == 0
+            and proof.open_orders == 0
+            and proof.pending_commands == 0
+            and 0 <= (proof_checked_at - proof.observed_at).total_seconds() <= 15,
+            strategy_id + " signed private flat proof invalid/stale",
+        )
+        signed_private_proofs[strategy_id] = proof
+
+    # The first signed proof must still be fresh when the authoritative DB
+    # snapshot starts; otherwise retry the whole evidence pass instead of
+    # combining an old external proof with a new database generation.
+    private_snapshot_at = datetime.now(UTC)
+    for strategy_id, proof in signed_private_proofs.items():
+        _require(
+            0 <= (private_snapshot_at - proof.observed_at).total_seconds() <= 15,
+            strategy_id + " signed private flat proof expired before DB snapshot",
+        )
+
+    # All authoritative DB-derived evidence below comes from one fresh
+    # SERIALIZABLE snapshot.  No slow Exchange/private IPC call occurs after
+    # this point, so current AccountStateGeneration cannot be made stale by the
+    # evidence producer itself.
     connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
 
     report("market", "services")
@@ -538,6 +585,12 @@ def prepare_p90l90_real_v3_prearm_evidence(
         connection, release_commit=release_commit, now=current
     )
     _require(len(contexts) == 5 and len(routes) == 2, "exact five contexts/two routes missing")
+    for strategy_id, (_binding, account_id, connector_id) in routes.items():
+        _require(
+            str(account_id) == _ACCOUNT_BY_STRATEGY[strategy_id]
+            and str(connector_id) == _CONNECTOR_BY_STRATEGY[strategy_id],
+            strategy_id + " account/connector route outside delegated P90 scope",
+        )
     consumer_health: dict[str, dict[str, object]] = {}
     for strategy_id, (_binding, account_id, connector_id) in routes.items():
         _require(
@@ -654,63 +707,34 @@ def prepare_p90l90_real_v3_prearm_evidence(
     account_evidence: dict[str, dict[str, object]] = {}
     position_modes: dict[tuple[str, str], tuple[object, ...]] = {}
     for strategy_id, (_binding, account_id, connector_id) in routes.items():
-        proof = P90PrivateProofClient(
-            account=account_id,
-            connector=connector_id,
-            timeout_seconds=private_proof_timeout,
-        ).read_flat_account()
-        proof_checked_at = datetime.now(UTC)
+        proof = signed_private_proofs[strategy_id]
+        try:
+            generation = current_complete_account_state_generation(
+                connection,
+                account_ref="BYBIT:UNIFIED",
+                trading_account_id=account_id,
+                acquire_account_lock=True,
+            )
+        except AccountStateGenerationUnavailable as exc:
+            raise P90PrearmEvidenceBlocked(
+                "P90 REAL v3 PREARM: "
+                + strategy_id
+                + " account generation unavailable: "
+                + str(exc)
+            ) from exc
+
+        available = generation.available_balance
         _require(
-            proof.trading_account_id == account_id
-            and proof.source_ref == "bybit:signed-flat-linear-usdt:exact-account"
-            and proof.open_positions == 0
-            and proof.open_orders == 0
-            and proof.pending_commands == 0
-            and 0 <= (proof_checked_at - proof.observed_at).total_seconds() <= 15,
-            strategy_id + " signed private flat proof invalid/stale",
-        )
-        generation = connection.execute(
-            """SELECT generation_id,state,completed_at,available_balance,
-                      positions_count,active_orders_count,identity_status
-                 FROM runtime.account_state_generations
-                WHERE trading_account_id=%s
-                  AND state='COMPLETE'
-                  AND identity_status='PROVEN'
-                  AND completed_at IS NOT NULL
-                ORDER BY completed_at DESC LIMIT 1""",
-            (account_id,),
-        ).fetchone()
-        generation_checked_at = datetime.now(UTC)
-        _require(generation is not None, strategy_id + " account generation missing")
-        completed = _aware(generation[2], strategy_id + " generation")
-        available = Decimal(str(generation[3]))
-        _require(
-            str(generation[1]) == "COMPLETE"
-            and str(generation[6]) == "PROVEN"
-            and int(generation[4]) == 0
-            and int(generation[5]) == 0
+            generation.trading_account_id == account_id
+            and generation.account_ref == "BYBIT:UNIFIED"
+            and generation.account_type == "UNIFIED"
+            and generation.positions_count == 0
+            and generation.active_orders_count == 0
             and available.is_finite()
-            and available >= REQUESTED_USDT
-            and 0 <= (generation_checked_at - completed).total_seconds() <= 15,
-            strategy_id + " account generation not fresh/flat/capable of one 10 USDT Entry",
+            and available >= REQUESTED_USDT,
+            strategy_id + " current account generation not flat/capable of one 10 USDT Entry",
         )
-        reconciliation = connection.execute(
-            """SELECT id,finished_at_epoch_ms,ok,positions,orders,identity_status
-                 FROM runtime.reconciliation_runs
-                WHERE trading_account_id=%s
-                ORDER BY id DESC LIMIT 1""",
-            (account_id,),
-        ).fetchone()
-        reconciliation_checked_ms = int(datetime.now(UTC).timestamp() * 1000)
-        _require(
-            reconciliation is not None
-            and bool(reconciliation[2])
-            and int(reconciliation[3]) == 0
-            and int(reconciliation[4]) == 0
-            and str(reconciliation[5]) == "PROVEN"
-            and 0 <= reconciliation_checked_ms - int(reconciliation[1]) <= 15_000,
-            strategy_id + " reconciliation missing/stale/non-flat",
-        )
+
         outstanding = Decimal(str(connection.execute(
             """SELECT coalesce(sum(requested_amount),0)
                  FROM runtime.capital_reservations
@@ -724,46 +748,54 @@ def prepare_p90l90_real_v3_prearm_evidence(
             and outstanding + REQUESTED_USDT <= cap,
             strategy_id + " Strategy capital envelope has no next 10 USDT slot",
         )
-        pm_rows = connection.execute(
-            """SELECT DISTINCT ON (instrument)
-                      instrument,account_ref,product_category,position_mode,position_idx,
-                      observed_at,fresh_until,identity_status
-                 FROM runtime.position_mode_states
-                WHERE trading_account_id=%s
-                  AND instrument=ANY(%s)
-                ORDER BY instrument,observed_at DESC""",
-            (account_id, sorted(ALLOWED_SYMBOLS[strategy_id])),
-        ).fetchall()
-        position_mode_checked_at = datetime.now(UTC)
-        _require(
-            len(pm_rows) == len(ALLOWED_SYMBOLS[strategy_id]),
-            strategy_id + " position-mode cohort incomplete",
-        )
-        for row in pm_rows:
-            symbol = str(row[0])
+
+        for symbol in sorted(ALLOWED_SYMBOLS[strategy_id]):
+            state_ref = generation.position_mode_refs.get(symbol)
             _require(
-                symbol in ALLOWED_SYMBOLS[strategy_id]
+                bool(state_ref),
+                strategy_id + "/" + symbol
+                + " current generation has no position-mode proof",
+            )
+            row = connection.execute(
+                """SELECT instrument,account_ref,product_category,position_mode,
+                          position_idx,observed_at,fresh_until,identity_status
+                     FROM runtime.position_mode_states
+                    WHERE position_mode_state_ref=%s
+                      AND trading_account_id=%s
+                      AND account_connector_id=%s""",
+                (state_ref, account_id, connector_id),
+            ).fetchone()
+            _require(
+                row is not None
+                and str(row[0]) == symbol
                 and str(row[1]) == "BYBIT:UNIFIED"
                 and str(row[2]) == "LINEAR"
                 and str(row[3]) == "ONE_WAY"
                 and int(row[4]) == 0
-                and str(row[7]) == "PROVEN"
-                and _aware(row[6], strategy_id + "/" + symbol + " position mode")
-                >= position_mode_checked_at,
-                strategy_id + "/" + symbol + " position mode invalid/stale",
+                and str(row[7]) == "PROVEN",
+                strategy_id + "/" + symbol
+                + " generation position-mode proof invalid",
             )
-            position_modes[(strategy_id, symbol)] = tuple(row)
-        # Same predicate as the first real candidate, without financial ARM.
-        # Prearm must not PASS while candidate admission has a hidden veto.
-        for symbol in sorted(ALLOWED_SYMBOLS[strategy_id]):
+            _aware(row[5], strategy_id + "/" + symbol + " position mode observed")
+            _aware(row[6], strategy_id + "/" + symbol + " position mode fresh_until")
+            position_modes[(strategy_id, symbol)] = tuple(row) + (str(state_ref),)
+
+            # Same canonical generation-backed predicate as the first real
+            # candidate.  It rechecks latest terminal generation under the same
+            # account lock; no independent reconciliation/wallet/mode age veto
+            # is allowed on the production generation-backed path.
             candidate_readiness, _capacity = real_entry_account_state(
-                connection, symbol=symbol, observed_at=datetime.now(UTC),
+                connection,
+                symbol=symbol,
+                observed_at=datetime.now(UTC),
                 trading_account_id=account_id,
             )
             _require(
                 candidate_readiness.ready,
-                strategy_id + "/" + symbol + " Entry admission: " + candidate_readiness.reason,
+                strategy_id + "/" + symbol
+                + " Entry admission: " + candidate_readiness.reason,
             )
+
         account_evidence[strategy_id] = {
             "trading_account_id": account_id,
             "connector_id": connector_id,
@@ -771,11 +803,13 @@ def prepare_p90l90_real_v3_prearm_evidence(
             "private_generation_id": proof.private_generation_id,
             "private_source_ref": proof.source_ref,
             "private_observed_at": proof.observed_at.isoformat(),
-            "account_generation_id": str(generation[0]),
-            "account_generation_completed_at": completed.isoformat(),
+            "account_generation_id": generation.generation_id,
+            "account_generation_completed_at": generation.completed_at.isoformat(),
+            "account_generation_positions_count": generation.positions_count,
+            "account_generation_active_orders_count": generation.active_orders_count,
+            "account_generation_position_mode_refs": dict(generation.position_mode_refs),
             "available_balance_usdt": str(available),
-            "reconciliation_id": int(reconciliation[0]),
-            "reconciliation_finished_at_epoch_ms": int(reconciliation[1]),
+            "reconciliation_authority": "CURRENT_COMPLETE_ACCOUNT_STATE_GENERATION",
             "strategy_committed_usdt": str(outstanding),
             "strategy_cap_usdt": str(cap),
         }
@@ -1009,6 +1043,9 @@ def prepare_p90l90_real_v3_prearm_evidence(
                     "position_mode": str(pm[3]),
                     "observed_at": _aware(pm[5], "position mode observed").isoformat(),
                     "fresh_until": _aware(pm[6], "position mode fresh").isoformat(),
+                    "position_mode_state_ref": str(pm[8]),
+                    "account_state_generation_id": account["account_generation_id"],
+                    "freshness_authority": "CURRENT_COMPLETE_ACCOUNT_STATE_GENERATION",
                 },
             ),
             (

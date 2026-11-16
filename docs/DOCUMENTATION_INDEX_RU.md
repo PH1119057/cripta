@@ -1987,3 +1987,27 @@ Exact routes:
 - current implementation/deploy evidence: MAP §39 and Issue #642.
 
 No current document set/path/routing change: Project Source stays at 11 files. Root README, AGENTS and derived Project Instructions/bootstrap are synchronized in this cycle with the same R06 no-order -> account-scoped Universal Entry pointer. No LIVE/mainnet/execution permission is granted by the documentation changeset.
+
+
+## 86. Development-delegated P90 OWNER ARM stabilization rail — OWNER DECISION 2026-11-16 (Issue #642)
+
+Owner explicitly directed ChatGPT to run the exact current P90 REAL v3 LIVE
+cycle itself during the present stabilization/development work, repair blockers,
+re-arm after verified releases and verify a sustained healthy window instead of
+requiring a new browser click after every defect. This changes the prior
+Dashboard-only authentication-source contract, so it is incorporated through a
+protected cross-contour canon+implementation changeset rather than a direct SQL
+or maintenance bypass.
+
+Canonical owners: TC §4.15.1 (scope/workflow/expiry), ARCH §54.4
+(authorization-source boundary), DEV §51.4.1 (systemd/SentinelX actor/release
+rail and disarmed private-runtime -> observer startup barrier), SECURITY
+(least-privilege auth boundary), GLOSSARY §40 (term). MAP holds dated
+implementation/deploy/runtime evidence. Exact current Strategy symbols,
+10 USDT Entry, isolated 1x and 20/30 USDT caps are unchanged. The rail has no
+parameter surface for broader risk and expires on owner revocation, completion
+of this stabilization cycle or any Strategy/version/account/risk scope change.
+
+Project Source remains 11 files; no paths, mandatory pre-read or routing
+change. README, AGENTS and the derived Project Instructions bootstrap are
+synchronized only as pointers to this exact exception.

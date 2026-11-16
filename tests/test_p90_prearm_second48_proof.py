@@ -147,7 +147,7 @@ def _exercise_delivery_prearm(
         if "universal_entry_observer" in str(path):
             return {
                 "updated_at": at.isoformat(), "state": "RUNNING",
-                "observer_ready": True, "source_commit": "release",
+                "observer_ready": True, "source_commit": "a" * 40,
                 "active_strategies": 2,
                 "symbols": list(set().union(*prearm.ALLOWED_SYMBOLS.values())),
                 "active_entry_plans": ["entry-main", "entry-sub"],
@@ -162,13 +162,31 @@ def _exercise_delivery_prearm(
             return {"state": "VERIFIED_ACCOUNT_SCAN", "trading_rights": "NONE"}
         return {"state": "SAMPLED_PARTIAL", "trading_rights": "NONE"}
 
+    class PrivateClient:
+        def __init__(self, *, account: str, connector: str, timeout_seconds: float):
+            self.account = account
+            self.connector = connector
+
+        def read_flat_account(self):
+            return SimpleNamespace(
+                trading_account_id=self.account,
+                signed_uid="1",
+                private_generation_id="private-generation",
+                source_ref="bybit:signed-flat-linear-usdt:exact-account",
+                observed_at=at,
+                open_positions=0,
+                open_orders=0,
+                pending_commands=0,
+            )
+
     monkeypatch.setattr(prearm, "_read_json", read_status)
     monkeypatch.setattr(prearm, "_release_and_parity_evidence", lambda **_kw: ({}, {}))
+    monkeypatch.setattr(prearm, "P90PrivateProofClient", PrivateClient)
     monkeypatch.setattr(prearm, "_SERVICE_UNITS", ())
     expected = prearm.P90PrearmEvidenceBlocked if active_faults else ReachedCurrentChecks
     with pytest.raises(expected):
         prearm.prepare_p90l90_real_v3_prearm_evidence(
-            Connection(), release_commit="release", now=at,
+            Connection(), release_commit="a" * 40, now=at,
         )
     # No manufactured ACK/resolve/delivery PASS.
     assert critical == {"configured": False, "pending_or_unacknowledged": pending}

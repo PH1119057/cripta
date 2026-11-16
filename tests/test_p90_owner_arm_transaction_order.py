@@ -12,8 +12,13 @@ import pytest
 def _handler(connect, *, fail_final=False, fail_wait=False):
     source = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
-    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
-                and n.name == "_u6_p90_real_v3_arm")
+    node = next(
+        n for n in tree.body
+        if (
+            isinstance(n, ast.FunctionDef)
+            and n.name == "_execute_p90_real_v3_owner_arm"
+        )
+    )
     calls = []
 
     def phase(connection, request_id, value):
@@ -32,7 +37,6 @@ def _handler(connect, *, fail_final=False, fail_wait=False):
     namespace = {
         "psycopg": SimpleNamespace(connect=connect), "datetime": datetime,
         "UTC": UTC, "LOADED_RELEASE_COMMIT": "test-release",
-        "_u6_financial_account_same_origin": lambda _: True,
         "_u6_prepare_p90_real_v3_readiness": lambda **_: {
             "state": "READY_FOR_OWNER_ARM"},
         "_wait_p90_real_v3_technical_evidence": lambda **_: None,
@@ -43,11 +47,10 @@ def _handler(connect, *, fail_final=False, fail_wait=False):
         "_u6_wait_p90_real_v3_stage_ready": lambda **_: (not fail_wait, "blocked"),
         "_u6_p90_real_v3_stage_ready": lambda: (True, "ready"),
         "disarm_p90l90_real_v3": lambda *_, **kw: calls.append("disarm"),
-        "_u6_json": lambda _, status, result: calls.append(result),
     }
     exec(compile(ast.Module(body=[node], type_ignores=[]), "dashboard-arm", "exec"),
          namespace)
-    return namespace["_u6_p90_real_v3_arm"], calls
+    return namespace["_execute_p90_real_v3_owner_arm"], calls
 
 
 class Connection:
@@ -78,18 +81,17 @@ class Connection:
 def test_dashboard_financial_transactions_start_before_any_progress_query(failure):
     handler, calls = _handler(lambda _: Connection(), fail_wait=failure == "wait",
                               fail_final=failure == "final")
-    owner = SimpleNamespace(session_user=lambda: "test-owner")
-    request = {"enabled": True, "confirmed": True, "request_id": "test-request"}
     if failure:
         with pytest.raises(ValueError):
-            handler(owner, request)
+            handler(operator="test-owner", request_id="test-request")
         assert calls[-1] == "disarm"
         assert "opened" not in calls
         assert {"gate_enabled": True} not in calls
     else:
-        handler(owner, request)
+        result = handler(operator="test-owner", request_id="test-request")
         assert calls == ["arming_closed_gate", "stage", "finalizing", "finalize",
-                         "opened", {"gate_enabled": True}]
+                         "opened"]
+        assert result == {"gate_enabled": True}
 
 
 @pytest.mark.skipif(not os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN"),
@@ -110,13 +112,12 @@ def test_dashboard_phase_order_on_actual_postgresql():
         handler, calls = _handler(lambda _: psycopg.connect(dsn),
                                   fail_wait=failure == "wait",
                                   fail_final=failure == "final")
-        owner = SimpleNamespace(session_user=lambda: "test-owner")
-        request = {"enabled": True, "confirmed": True, "request_id": "pg-test"}
         if failure:
             with pytest.raises(ValueError):
-                handler(owner, request)
+                handler(operator="test-owner", request_id="pg-test")
             assert calls[-1] == "disarm"
             assert "opened" not in calls
         else:
-            handler(owner, request)
-            assert calls[-2:] == ["opened", {"gate_enabled": True}]
+            result = handler(operator="test-owner", request_id="pg-test")
+            assert calls[-1] == "opened"
+            assert result == {"gate_enabled": True}

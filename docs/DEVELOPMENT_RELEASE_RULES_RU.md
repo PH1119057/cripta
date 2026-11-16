@@ -2153,9 +2153,44 @@ The authenticated Dashboard must disable duplicate submit while active and show 
 
 Preparation, broker starts, daemon startup, reconnect and deploy never create/extend StrategyActivation, execution permissions, generic/account LIVE arms or mainnet gate. After `READY_FOR_OWNER_ARM`, the same owner-approved UI flow MAY immediately invoke the existing exact OWNER ARM transaction only because the owner explicitly clicked the action; final arm must re-check freshness atomically and fail closed. No persisted readiness is durable financial approval.
 
+### 51.4.1 Development-delegated P90 OWNER ARM rail — OWNER DECISION 2026-11-16
+
+TRADING_CONTOUR §4.15.1 authorizes one temporary exact P90 management rail for
+the current stabilization cycle. Implementation constraints are mandatory:
+
+- two separate static oneshot units, ARM and DISARM; they are installed by
+  exact verified full release but never enabled or added to managed services;
+- runtime actor is cripta; no root trading workflow, no arbitrary shell and no
+  Service Start Broker privilege expansion;
+- the control program accepts zero CLI arguments and no Strategy/symbol/account/
+  stake/leverage/cap input;
+- before importing the financial workflow it verifies cripta UID/GID, exact
+  unit cgroup, exact owner-decision marker, /srv/cripta/runtime/current
+  release identity and /var/lib/cripta/release/INSTALLED_COMMIT;
+- direct invocation outside the exact systemd unit is fail-closed;
+- ARM calls the same staged/final owner workflow as Dashboard; DISARM calls the
+  same canonical disarm owner; no duplicate gate/permission SQL is introduced;
+- SentinelX/tool authorization to start these exact units remains an independent
+  external security gate. Generic systemctl, shell or other unit start is not
+  authorized by this canon;
+- every invocation has a durable request/operator identity and is reconciled
+  after transport timeout before retry.
+
+Any scope/risk/account/version change invalidates this rail. It cannot be used
+to authorize another Strategy or future product behavior without a new owner
+decision.
+
+Для disarmed P90 release действует обязательный startup dependency barrier:
+сначала восстанавливаются все previously-active MAIN/SUB private runtimes,
+затем release ждёт новые после старта COMPLETE/PROVEN flat generations и
+credential-local signed private proof обоих аккаунтов, и только после этого
+запускает Universal Entry observer. Барьер read-only и не создаёт ARM,
+permission, gate или Exchange mutation. При фактически открытом LIVE он не
+подменяет существующий restart/recovery contract и не требует flat state.
+
 ### 51.5 Tests and release
 
-Required before first production use: allowlist/argument-injection tests; dependency/cycle tests; inactive->start->behavior-ready; active/no-restart; failed/wrong-release/unknown/missing -> BLOCKED; permission denial without escalation; duplicate/concurrent IDs; browser refresh/disconnect; coordinator crash/stale operation recovery; multiple TradingAccounts; existing exposure + preserved Exit; degraded DISARM; no automatic OWNER authorization or fresh OWNER ARM. Technical resume of an already owner-authorized exact scope is a separate §53 contract and is not implemented by this Service Start Broker. Full quality + disposable PostgreSQL + lifecycle CI must pass. Install uses the verified release process; deploy does not arm. Production verification distinguishes service liveness from behavior and records exact release composition.
+Required before first production use: allowlist/argument-injection tests; dependency/cycle tests; inactive->start->behavior-ready; active/no-restart; failed/wrong-release/unknown/missing -> BLOCKED; permission denial without escalation; duplicate/concurrent IDs; browser refresh/disconnect; coordinator crash/stale operation recovery; multiple TradingAccounts; existing exposure + preserved Exit; degraded DISARM; no automatic OWNER authorization or fresh OWNER ARM except the exact temporary delegated rail in §51.4.1. Technical resume of an already owner-authorized exact scope is a separate §53 contract and is not implemented by this Service Start Broker. Full quality + disposable PostgreSQL + lifecycle CI must pass. Install uses the verified release process; deploy does not arm. Production verification distinguishes service liveness from behavior and records exact release composition.
 
 ## 52. Surgical Change Rule и защита Stable Control Core — OWNER DECISION 2026-11-04 (Issue #413)
 

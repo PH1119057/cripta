@@ -1986,6 +1986,47 @@ Entry (кроме применимого SECOND48 по §4.13.5). Unknown/nonter
 account-state predicate; нельзя иметь PASS prearm при ином скрытом predicate
 первого кандидата.
 
+### 4.15.1 Development-delegated P90 OWNER ARM — OWNER DECISION 2026-11-16
+
+На время текущего P90 REAL v3 stabilization/development cycle владелец явно
+делегирует ChatGPT право самостоятельно повторять полный OWNER ARM / DISARM
+цикл после исправления технических дефектов, не требуя нового browser click
+между каждым repair/release. Это **не** generic server-maintenance право и не
+изменение Strategy economics.
+
+Делегация действительна только для exact current scope:
+
+    strategy_version = 2.0-p90l90-real-main-sub-20261028
+    MAIN              = p90l90_legacy_main_ltc_inj / LTCUSDT,INJUSDT
+    SUB               = p90l90_legacy_sub_dot_arb_apt / DOTUSDT,ARBUSDT,APTUSDT
+    Entry stake        = 10 USDT
+    leverage           = isolated 1x
+    MAIN cap           = 20 USDT
+    SUB cap            = 30 USDT
+
+Допустимы только два exact inert management entrypoint: development delegated
+ARM и DISARM, установленные из protected Git release как static systemd
+units и вызванные через connected SentinelX owner-management rail. Они не
+принимают Strategy/symbol/account/stake/leverage/cap arguments и обязаны
+проверять exact systemd cgroup, current installed release и immutable
+owner-decision marker. Обычный shell/process от cripta, Service Start Broker,
+Release Controller, readiness coordinator, SQL console или произвольный
+SentinelX command **не** являются OWNER authorization.
+
+Delegated ARM использует тот же единственный workflow §4.15:
+preparation -> fresh technical evidence -> staged CLOSED gate -> stage-ready
+readback -> final check -> finalize/open. Он не имеет отдельного financial
+writer и не может ослабить freshness, account, source, protection, Exit,
+reconciliation или release gates. После post-stage failure выполняется exact
+DISARM cleanup. После deploy/release identity change новый delegated ARM
+разрешён только после нового полного readiness/evidence PASS.
+
+Делегация прекращается при owner revocation, завершении текущего stabilization
+cycle либо любом изменении Strategy/version/fingerprint, TradingAccount/
+Connector scope, symbols, stake, leverage или caps. Такое изменение требует
+нового OWNER DECISION и обычного canon/release path. Dashboard same-origin/
+session OWNER ARM остаётся действующим параллельным rail.
+
 ## 4.16 Gateway-ready release acceptance — OWNER DECISION 2026-11-05
 
 Execute the approved five-step plan: final closed data, bounded preparation retry,

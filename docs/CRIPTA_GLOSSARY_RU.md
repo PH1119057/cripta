@@ -1033,6 +1033,14 @@ position/pending/reconciliation gates. Старый checkpoint сохраняе�
 
 **REAL preparation operation** — idempotent owner-initiated technical operation from `REQUESTED` through checking/start/reconciliation/validation to `READY_FOR_OWNER_ARM` or `BLOCKED`. `READY_FOR_OWNER_ARM` retains the existing GLOSSARY meaning: technical status only, not trading authorization.
 
+**Development-delegated OWNER ARM** — временный owner-approved authentication
+source только для exact P90 REAL v3 stabilization scope: connected SentinelX
+starts one reviewed static systemd ARM unit, which reuses the canonical
+staged/final OWNER ARM workflow after fresh readiness. It is not readiness,
+automatic resume, generic Unix permission, generic SentinelX permission or a
+new financial transition owner. Exact scope/expiry: TRADING_CONTOUR §4.15.1;
+physical rail: DEVELOPMENT_RELEASE §51.4.1.
+
 ## 41. Stable Control Core / Surgical Change terminology — OWNER DECISION 2026-11-04 (Issue #413)
 
 **Stable Control Core** — защищённый детерминированный внутренний control-plane

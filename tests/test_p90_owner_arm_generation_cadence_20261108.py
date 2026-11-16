@@ -1,5 +1,6 @@
-"""Regression: P90 owner ARM may wait for the next *fresh* generation.
+"""Regression: P90 owner ARM may retry a transient signed-private proof.
 
+AccountStateGeneration currentness is generation-backed, not wall-clock TTL.
 The strict signed/private 15s proof TTL remains unchanged. Mocked calls only,
 no production DB, Exchange requests, or financial gate operations.
 """
@@ -15,7 +16,7 @@ import pytest
 from operations.dashboard import app
 
 
-def test_owner_arm_recheck_waits_for_next_generation_without_widening_ttl(
+def test_owner_arm_recheck_waits_for_next_signed_proof_without_widening_ttl(
     monkeypatch,
 ):
     class DB:
@@ -38,12 +39,11 @@ def test_owner_arm_recheck_waits_for_next_generation_without_widening_ttl(
 
     def evidence(*_args, **_kwargs):
         calls.append(clock.value)
-        # The previous COMPLETE/PROVEN generation has aged past the 15s TTL.
-        # The independent account runtime publishes the next one at t=17s.
+        # The credential-local signed proof can expire independently of the
+        # generation-backed DB state. A later recheck receives a fresh proof.
         if clock.value < 17.0:
             raise app.P90PrearmEvidenceBlocked(
-                "p90l90_legacy_main_ltc_inj account generation "
-                "not fresh/flat/capable of one 10 USDT Entry"
+                "p90l90_legacy_main_ltc_inj signed private flat proof invalid/stale"
             )
         return {"status": "PREARM_TECHNICAL_READY"}
 
@@ -52,10 +52,11 @@ def test_owner_arm_recheck_waits_for_next_generation_without_widening_ttl(
     assert result["status"] == "PREARM_TECHNICAL_READY"
     assert clock.value == 17
     assert len(calls) == 18
-    assert "0 <= (generation_checked_at - completed).total_seconds() <= 15" in (
-        Path("src/bybit_workbench/p90l90_real_prearm_evidence.py")
-        .read_text(encoding="utf-8")
-    )
+    source = Path(
+        "src/bybit_workbench/p90l90_real_prearm_evidence.py"
+    ).read_text(encoding="utf-8")
+    assert "0 <= (proof_checked_at - proof.observed_at).total_seconds() <= 15" in source
+    assert "0 <= (generation_checked_at - completed).total_seconds() <= 15" not in source
 
 
 def _arm_handler_with_failed_second_proof(exc):
@@ -63,7 +64,10 @@ def _arm_handler_with_failed_second_proof(exc):
     tree = ast.parse(code)
     node = next(
         n for n in tree.body
-        if isinstance(n, ast.FunctionDef) and n.name == "_u6_p90_real_v3_arm"
+        if (
+            isinstance(n, ast.FunctionDef)
+            and n.name == "_execute_p90_real_v3_owner_arm"
+        )
     )
     calls = []
 
@@ -86,7 +90,6 @@ def _arm_handler_with_failed_second_proof(exc):
         "P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC": (
             app.P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC
         ),
-        "_u6_financial_account_same_origin": lambda _: True,
         "_u6_prepare_p90_real_v3_readiness": lambda **_: {
             "state": "READY_FOR_OWNER_ARM",
         },
@@ -99,7 +102,7 @@ def _arm_handler_with_failed_second_proof(exc):
         compile(ast.Module(body=[node], type_ignores=[]), "arm", "exec"),
         namespace,
     )
-    return namespace["_u6_p90_real_v3_arm"], calls
+    return namespace["_execute_p90_real_v3_owner_arm"], calls
 
 
 @pytest.mark.parametrize(
@@ -112,9 +115,8 @@ def _arm_handler_with_failed_second_proof(exc):
 )
 def test_second_proof_failure_is_durable_and_cannot_stage(failure, retry_allowed):
     arm, calls = _arm_handler_with_failed_second_proof(failure)
-    owner = SimpleNamespace(session_user=lambda: "owner")
     with pytest.raises(type(failure)):
-        arm(owner, {"enabled": True, "confirmed": True, "request_id": "once"})
+        arm(operator="owner", request_id="once")
     assert calls[0] == ("recheck", 30.0)
     assert len(calls) == 2
     detail = calls[1][1]
@@ -126,8 +128,8 @@ def test_second_proof_failure_is_durable_and_cannot_stage(failure, retry_allowed
 
 def test_recheck_precedes_all_financial_controls_and_retains_exact_ttl():
     code = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
-    arm = code.split("def _u6_p90_real_v3_arm(", 1)[1].split(
-        "\ndef _u6_financial_account_catalog", 1,
+    arm = code.split("def _execute_p90_real_v3_owner_arm(", 1)[1].split(
+        "\ndef _execute_p90_real_v3_owner_disarm", 1,
     )[0]
     assert arm.index("_wait_p90_real_v3_technical_evidence(") < arm.index(
         "stage_p90l90_real_v3("

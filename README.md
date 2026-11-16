@@ -189,3 +189,10 @@ R11 causal replay — OWNER DECISION 2026-11-15: provider-time monotonicity
 детерминированно по durable receiver order, а MarketPublication/snapshot clock
 остаётся глобально монотонным. Same-stream regression fail-closed; arbitrary
 holdback запрещён. Canon: OBS §4.12, INDEX §84 / Issue #470.
+
+
+## P90 development-delegated OWNER ARM — OWNER DECISION 2026-11-16
+Только для текущего exact P90 REAL v3 stabilization scope ChatGPT может
+использовать reviewed static SentinelX/systemd ARM/DISARM rail вместо повторного
+browser click; это не generic LIVE permission. Exact scope/expiry: TC §4.15.1;
+auth/architecture: ARCH §54.4; actor/release + private→observer startup barrier: DEV §51.4.1; INDEX §86.

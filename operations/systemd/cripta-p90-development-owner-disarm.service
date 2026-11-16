@@ -1,0 +1,33 @@
+[Unit]
+Description=Cripta exact development-delegated P90 REAL v3 OWNER DISARM
+After=network-online.target postgresql.service cripta-dashboard.service
+Requires=postgresql.service
+ConditionPathExists=/srv/cripta/runtime/current/operations/management/p90_development_owner_control.py
+ConditionPathExists=/var/lib/cripta/release/INSTALLED_COMMIT
+
+[Service]
+Type=oneshot
+User=cripta
+Group=cripta
+UMask=0077
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current
+EnvironmentFile=/etc/cripta/release.env
+Environment=CRIPTA_P90_OWNER_DECISION=P90_DEVELOPMENT_DELEGATION_20261116_V1
+Environment=CRIPTA_P90_DELEGATED_ACTION=DISARM
+WorkingDirectory=/srv/cripta/runtime/current
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/management/p90_development_owner_control.py
+TimeoutStartSec=300
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+ReadOnlyPaths=/srv/cripta/runtime/current
+ReadOnlyPaths=/var/lib/cripta/release

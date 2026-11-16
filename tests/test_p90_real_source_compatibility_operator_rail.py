@@ -36,8 +36,9 @@ def test_installer_prepares_compatibility_before_resuming_managed_consumers():
     )
     assert source.count(spec) == 1
     preparation = source.index("--register --release-preparation")
-    resume = source.index('if [[ "${was_active[$service]}" == "1" ]]; then systemctl start')
-    assert preparation < resume
+    barrier = source.index("p90_release_private_barrier=0", preparation)
+    resume = source.index("for service in", barrier)
+    assert preparation < barrier < resume
     assert "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=BLOCKED_OBSERVER_NOT_READY" in source
     # The bounded operator unit remains inert; installer invokes its CLI as cripta.
     assert "systemctl start cripta-p90-source-compatibility-register.service" not in source

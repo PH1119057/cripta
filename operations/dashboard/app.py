@@ -6241,61 +6241,51 @@ def _p90_arm_phase(connection, request_id, phase):
         raise ValueError("P90_REAL_ARM_PROGRESS_IDENTITY_INVALID")
 
 
-def _u6_p90_real_v3_arm(
-    handler: object, request: dict[str, object]
-) -> None:
-    enabled = request.get("enabled")
-    if not isinstance(enabled, bool):
-        raise ValueError("P90 REAL v3 ARM enabled must be boolean")
-    if enabled and request.get("confirmed") is not True:
-        raise ValueError("P90 REAL v3 OWNER ARM requires explicit confirmation")
-    if enabled and not _u6_financial_account_same_origin(handler):
-        raise ValueError("P90_REAL_OWNER_ARM_ORIGIN_UNVERIFIED")
-    operator = handler.session_user() or "UNKNOWN"
-    request_id = str(request.get("request_id") or secrets.token_hex(12))
-    if enabled:
-        preparation = _u6_prepare_p90_real_v3_readiness(
-            operator=operator,
-            request_id=request_id,
+def _execute_p90_real_v3_owner_arm(
+    *,
+    operator: str,
+    request_id: str,
+) -> dict[str, object]:
+    """One financial OWNER ARM workflow shared by authenticated owner rails."""
+    if not operator or not request_id:
+        raise ValueError("P90_REAL_OWNER_ARM_AUDIT_IDENTITY_INVALID")
+    preparation = _u6_prepare_p90_real_v3_readiness(
+        operator=operator,
+        request_id=request_id,
+    )
+    if preparation.get("state") != "READY_FOR_OWNER_ARM":
+        raise ValueError(
+            "P90_REAL_PREPARATION_BLOCKED:"
+            + str(preparation.get("blocker_code") or "UNKNOWN")
+            + ":"
+            + str(preparation.get("blocker_detail") or "")
         )
-        if preparation.get("state") != "READY_FOR_OWNER_ARM":
-            raise ValueError(
-                "P90_REAL_PREPARATION_BLOCKED:"
-                + str(preparation.get("blocker_code") or "UNKNOWN")
-                + ":"
-                + str(preparation.get("blocker_detail") or "")
-            )
-        # READY_FOR_OWNER_ARM is technical state only. Re-run exact evidence
-        # immediately before staged/final OWNER ARM. A COMPLETE/PROVEN account
-        # generation can be briefly older than the strict 15s age limit while
-        # private runtime publishes the next one. Wait a bounded interval for
-        # fresh *independent proof*; do not broaden its age/capacity predicates.
-        # Mark a failed second check durably, rather than leaving READY in UI.
-        try:
-            _wait_p90_real_v3_technical_evidence(timeout_seconds=30.0)
-        except (P90PrearmEvidenceBlocked, P90PrivateIpcUnverified) as exc:
-            _mark_p90_readiness_blocked(
-                request_id=request_id,
-                code="OWNER_ARM_FINAL_TECHNICAL_RECHECK_BLOCKED",
-                detail=type(exc).__name__ + ":" + str(exc),
-                retry_eligible=(
-                    not isinstance(exc, P90PrivateIpcUnverified)
-                    or str(exc) in P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC
-                ),
-            )
-            raise
-    if not enabled:
-        with psycopg.connect(
-            "dbname=cripta user=cripta host=/var/run/postgresql"
-        ) as connection:
-            result = disarm_p90l90_real_v3(
-                connection,
-                now=datetime.now(UTC),
-                operator=operator,
-                request_id=request_id,
-            )
-        _u6_json(handler, 200, result)
-        return
+    # A prior explicit technical preparation may already own the one terminal
+    # READY operation for this exact release/scope. Reuse its durable request
+    # identity rather than inventing a second readiness operation.
+    arm_request_id = str(preparation.get("request_id") or request_id)
+    if not arm_request_id:
+        raise ValueError("P90_REAL_OWNER_ARM_READINESS_IDENTITY_MISSING")
+
+    # READY_FOR_OWNER_ARM is technical state only. Re-run exact evidence
+    # immediately before staged/final OWNER ARM. A COMPLETE/PROVEN account
+    # generation can be briefly older than the strict 15s age limit while
+    # private runtime publishes the next one. Wait a bounded interval for
+    # fresh *independent proof*; do not broaden its age/capacity predicates.
+    # Mark a failed second check durably, rather than leaving READY in UI.
+    try:
+        _wait_p90_real_v3_technical_evidence(timeout_seconds=30.0)
+    except (P90PrearmEvidenceBlocked, P90PrivateIpcUnverified) as exc:
+        _mark_p90_readiness_blocked(
+            request_id=arm_request_id,
+            code="OWNER_ARM_FINAL_TECHNICAL_RECHECK_BLOCKED",
+            detail=type(exc).__name__ + ":" + str(exc),
+            retry_eligible=(
+                not isinstance(exc, P90PrivateIpcUnverified)
+                or str(exc) in P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC
+            ),
+        )
+        raise
 
     staged = False
     try:
@@ -6305,13 +6295,13 @@ def _u6_p90_real_v3_arm(
             # Commit progress before the financial owner starts its own
             # SERIALIZABLE transaction; a prior UPDATE would start READ COMMITTED.
             with connection.transaction():
-                _p90_arm_phase(connection, request_id, "arming_closed_gate")
+                _p90_arm_phase(connection, arm_request_id, "arming_closed_gate")
             stage_p90l90_real_v3(
                 connection,
                 release_commit=LOADED_RELEASE_COMMIT,
                 now=datetime.now(UTC),
                 operator=operator,
-                request_id=request_id,
+                request_id=arm_request_id,
                 confirmed=True,
                 observer_ready=_u6_multi_strategy_observer_ready(),
             )
@@ -6338,17 +6328,18 @@ def _u6_p90_real_v3_arm(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
             with connection.transaction():
-                _p90_arm_phase(connection, request_id, "finalizing")
+                _p90_arm_phase(connection, arm_request_id, "finalizing")
             result = finalize_p90l90_real_v3(
                 connection,
                 release_commit=LOADED_RELEASE_COMMIT,
                 now=datetime.now(UTC),
                 operator=operator,
-                request_id=request_id,
+                request_id=arm_request_id,
                 observer_stage_ready=True,
             )
-            _p90_arm_phase(connection, request_id, "opened")
+            _p90_arm_phase(connection, arm_request_id, "opened")
         staged = False
+        return result
     except Exception:
         if staged:
             try:
@@ -6359,7 +6350,7 @@ def _u6_p90_real_v3_arm(
                         cleanup_connection,
                         now=datetime.now(UTC),
                         operator=operator,
-                        request_id=request_id,
+                        request_id=arm_request_id,
                     )
             except Exception as cleanup_exc:
                 raise RuntimeError(
@@ -6368,6 +6359,48 @@ def _u6_p90_real_v3_arm(
                 ) from cleanup_exc
         raise
 
+
+def _execute_p90_real_v3_owner_disarm(
+    *,
+    operator: str,
+    request_id: str,
+) -> dict[str, object]:
+    """One safe P90 disarm owner shared by Dashboard and delegated rail."""
+    if not operator or not request_id:
+        raise ValueError("P90_REAL_OWNER_DISARM_AUDIT_IDENTITY_INVALID")
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        return disarm_p90l90_real_v3(
+            connection,
+            now=datetime.now(UTC),
+            operator=operator,
+            request_id=request_id,
+        )
+
+
+def _u6_p90_real_v3_arm(
+    handler: object, request: dict[str, object]
+) -> None:
+    enabled = request.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("P90 REAL v3 ARM enabled must be boolean")
+    if enabled and request.get("confirmed") is not True:
+        raise ValueError("P90 REAL v3 OWNER ARM requires explicit confirmation")
+    if enabled and not _u6_financial_account_same_origin(handler):
+        raise ValueError("P90_REAL_OWNER_ARM_ORIGIN_UNVERIFIED")
+    operator = handler.session_user() or "UNKNOWN"
+    request_id = str(request.get("request_id") or secrets.token_hex(12))
+    if enabled:
+        result = _execute_p90_real_v3_owner_arm(
+            operator=operator,
+            request_id=request_id,
+        )
+    else:
+        result = _execute_p90_real_v3_owner_disarm(
+            operator=operator,
+            request_id=request_id,
+        )
     _u6_json(handler, 200, result)
 
 

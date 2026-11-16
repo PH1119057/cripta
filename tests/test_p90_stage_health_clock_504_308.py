@@ -32,13 +32,13 @@ def test_owner_arm_stage_keeps_bounded_full_runtime_rebuild_budget() -> None:
     helper = APP[helper_start:helper_end]
     assert "timeout_seconds: float = 120.0" in helper
 
-    handler_start = APP.index("def _u6_p90_real_v3_arm(")
-    handler_end = APP.index("\ndef _u6_financial_account_catalog", handler_start)
-    handler = APP[handler_start:handler_end]
-    assert "timeout_seconds=120.0" in handler
-    assert "P90_REAL_OWNER_ARM_STAGE_TIMEOUT:" in handler
-    assert "if staged:" in handler
-    assert "disarm_p90l90_real_v3(" in handler
+    owner_start = APP.index("def _execute_p90_real_v3_owner_arm(")
+    owner_end = APP.index("\ndef _execute_p90_real_v3_owner_disarm", owner_start)
+    owner = APP[owner_start:owner_end]
+    assert "timeout_seconds=120.0" in owner
+    assert "P90_REAL_OWNER_ARM_STAGE_TIMEOUT:" in owner
+    assert "if staged:" in owner
+    assert "disarm_p90l90_real_v3(" in owner
 
 
 def test_owner_arm_timeout_hierarchy_covers_full_request_not_only_stage_wait() -> None:
