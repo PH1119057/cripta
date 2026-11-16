@@ -243,17 +243,15 @@ def test_p90_prearm_live_freshness_uses_post_read_clock() -> None:
     source = PREARM_EVIDENCE.read_text()
     assert "observer_checked_at = datetime.now(UTC)" in source
     assert "proof_checked_at = datetime.now(UTC)" in source
-    assert "generation_checked_at = datetime.now(UTC)" in source
-    assert (
-        "reconciliation_checked_ms = int(datetime.now(UTC).timestamp() * 1000)"
-        in source
-    )
-    assert "position_mode_checked_at = datetime.now(UTC)" in source
+    assert "private_snapshot_at = datetime.now(UTC)" in source
+    assert "generation_checked_at = datetime.now(UTC)" not in source
+    assert "reconciliation_checked_ms" not in source
+    assert "position_mode_checked_at" not in source
     assert "(current - observer_at.astimezone(UTC)).total_seconds()" not in source
     assert "(current - proof.observed_at).total_seconds()" not in source
-    assert "(current - completed).total_seconds()" not in source
-    assert "now_ms - int(reconciliation[1])" not in source
-    assert 'position mode") >= current' not in source
+    assert "FROM runtime.reconciliation_runs" not in source
+    assert "fresh_until >= position_mode_checked_at" not in source
+    assert "CURRENT_COMPLETE_ACCOUNT_STATE_GENERATION" in source
 
 
 def test_p90_portal_micro_live_waiver_is_scoped_and_release_migrated() -> None:
@@ -277,13 +275,16 @@ def test_p90_portal_micro_live_waiver_is_scoped_and_release_migrated() -> None:
     assert "20261030_p90_portal_micro_live_waiver.sql" in installer
 
 
-def test_p90_prearm_uses_latest_completed_proven_account_generation() -> None:
+def test_p90_prearm_uses_canonical_current_complete_account_generation() -> None:
     source = PREARM_EVIDENCE.read_text()
-    assert "AND state='COMPLETE'" in source
-    assert "AND identity_status='PROVEN'" in source
-    assert "AND completed_at IS NOT NULL" in source
-    assert "ORDER BY completed_at DESC LIMIT 1" in source
-    assert "ORDER BY started_at DESC LIMIT 1" not in source
+    generation = (
+        ROOT / "src/bybit_workbench/account_state_generation.py"
+    ).read_text(encoding="utf-8")
+    assert "current_complete_account_state_generation(" in source
+    assert "acquire_account_lock=True" in source
+    assert "FROM runtime.reconciliation_runs" not in source
+    assert "ORDER BY started_at DESC" in generation
+    assert "state IN ('COMPLETE','FAILED')" in generation
 
 
 def test_p90_prearm_evidence_deduplicates_shared_strategy_scope() -> None:
