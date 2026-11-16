@@ -365,6 +365,11 @@ def test_pinned_oldest_gap_session_does_not_block_next_session(
         when=old + timedelta(minutes=10, seconds=1),
     )
 
+    with c.transaction():
+        c.execute("SET TRANSACTION READ ONLY")
+        check = MODULE.collect_check(c, cutoff, 100)
+        assert check.rows["gap_source_events_next_batch"] == 1
+
     result = MODULE.run_apply(c, cutoff, 100)
     assert result.rows["gap_source_events_deleted"] == 1
     assert set(c.execute(
