@@ -46,7 +46,6 @@ from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
 from bybit_workbench.universal_entry.r06_financial_promotion import (
     R06FinancialPromotionBlocked,
     require_disarmed_baseline,
-    sync_disarmed_baseline,
 )
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
@@ -792,22 +791,13 @@ def prepare_p90l90_real_v3_prearm_evidence(
         ) from exc
     _require(bool(rollback_ref), "rollback reference missing")
 
-    # Establish the future-only financial handoff only after all slower
-    # technical/private checks have completed. _r06_checkpoint(lock=True)
-    # then holds R06's mutable decision checkpoint only across this final
-    # evidence-write section, never across the multi-minute prearm probe.
-    # This baseline write creates no StrategySignal/EntryDecision/request,
-    # slot claim, capital reservation or Exchange mutation.
+    # The disarmed account consumers are the sole writers of the future-only
+    # financial promotion baselines. Technical evidence verifies their exact
+    # R06 position inside this one SERIALIZABLE snapshot; it must not race the
+    # consumers by becoming a second writer after the slower readiness checks.
     financial_promotion_baselines: dict[str, dict[str, object]] = {}
-    for strategy_id, (_binding, account_id, connector_id) in routes.items():
+    for strategy_id, (_binding, account_id, _connector_id) in routes.items():
         try:
-            sync_disarmed_baseline(
-                connection,
-                trading_account_id=str(account_id),
-                account_connector_id=str(connector_id),
-                loaded_release_commit=release_commit,
-                now=current,
-            )
             financial_promotion_baselines[strategy_id] = require_disarmed_baseline(
                 connection,
                 trading_account_id=str(account_id),
