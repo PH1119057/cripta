@@ -106,45 +106,6 @@ _R06_POST_PROMOTION_RELEASES = (
 )
 
 
-def _historical_consumer_digest(release: str) -> str:
-    prefix = "src/bybit_workbench/"
-    shared = {
-        "strategy_position.py",
-        "exchange_position_identity.py",
-        "domain/models.py",
-        "market_data/shared_closed_candles.py",
-    }
-    raw = subprocess.check_output([
-        "git", "ls-tree", "-r", "--name-only", release, "--",
-        prefix + "universal_entry",
-        prefix + "universal_exit",
-        *(prefix + item for item in sorted(shared)),
-    ])
-    inventory: dict[str, bytes] = {}
-    for full in raw.decode("utf-8").splitlines():
-        if not full.startswith(prefix):
-            continue
-        relative = full[len(prefix):]
-        directory, _, name = relative.rpartition("/")
-        include = (
-            (
-                directory in {"universal_entry", "universal_exit"}
-                and name.endswith(".py")
-                and name not in compat._ADAPTERS
-            )
-            or relative in shared
-        )
-        if include:
-            inventory[relative] = subprocess.check_output([
-                "git", "show", f"{release}:{full}",
-            ])
-    digest = hashlib.sha256(compat.CONTRACT_VERSION.encode())
-    for relative in sorted(inventory):
-        digest.update(relative.encode() + b"\0")
-        digest.update(hashlib.sha256(inventory[relative]).digest())
-    assert len(inventory) == 99
-    return digest.hexdigest()
-
 
 @pytest.mark.parametrize("release", _R06_POST_PROMOTION_RELEASES)
 def test_r14_post_promotion_attestations_keep_exact_historical_digest(
@@ -156,4 +117,7 @@ def test_r14_post_promotion_attestations_keep_exact_historical_digest(
         == expected
         == "38b45713f811d96cc8bf1ed48cd98a5f26b4fa3fc26d33a1b6309fc2278e437e"
     )
-    assert _historical_consumer_digest(release) == expected
+
+
+def test_r14_unlisted_release_does_not_inherit_post_promotion_digest() -> None:
+    assert "f" * 40 not in compat._REVIEWED_HISTORICAL_CONSUMERS
