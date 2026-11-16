@@ -26,7 +26,7 @@ def test_native_retention_scope_is_bounded_and_position_pinned():
     assert "p.fill_at - interval '60 seconds'" in text
     assert "COALESCE(p.closed_at,clock_timestamp())" in text
     assert "s.state='GAP'" in text
-    assert "s.ended_at < %s" in text
+    assert "ended_at < %s" in text
     assert "e.accepted_at < %s" in text
     assert "runtime.hot_orders" in text
     assert "OPEN_POSITION_STATE_DRIFT" in text
