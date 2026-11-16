@@ -100,7 +100,7 @@ def test_mayak_cursor_decoder_requires_exact_digest_and_two_products():
         raise AssertionError("corrupt MAYAK state accepted")
 
 
-def test_raw_predicate_caps_unconsumed_tail_and_prunes_consumed_prefix():
+def test_raw_predicate_keeps_unconsumed_tail_and_prunes_consumed_prefix():
     active = ("a" * 32, "b" * 40)
     cutoff = object()
     predicate, params = MODULE._raw_delete_predicate(
@@ -111,9 +111,9 @@ def test_raw_predicate_caps_unconsumed_tail_and_prunes_consumed_prefix():
         }),
         cutoff,
     )
-    assert "r.committed_at < %s" in predicate
+    assert "r.committed_at < %s" not in predicate
     assert "source_frame_number < %s" not in predicate
-    assert params == ["a" * 32, "a" * 32, cutoff]
+    assert params == ["a" * 32]
 
     predicate, params = MODULE._raw_delete_predicate(
         active,
@@ -123,8 +123,9 @@ def test_raw_predicate_caps_unconsumed_tail_and_prunes_consumed_prefix():
         }),
         cutoff,
     )
-    assert "r.committed_at < %s" in predicate
+    assert "r.committed_at < %s" not in predicate
     assert "source_frame_number < %s" in predicate
+    assert params[0] == "a" * 32
     assert params[-1] == 20
 
 

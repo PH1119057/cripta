@@ -431,15 +431,19 @@ def _raw_delete_predicate(
     head: tuple[str, str, dict[str, tuple[str, int]]] | None,
     cutoff: datetime,
 ) -> tuple[str, list[object]]:
-    """Bound raw originals by age; consumed frames may expire even sooner."""
+    """Keep the ACTIVE unconsumed tail; prune only a proved consumed prefix.
+
+    A raw ORDERBOOK delta is not independently replayable after its transport
+    epoch's initial snapshot is gone.  Therefore age alone can never expire
+    rows from the ACTIVE source session while MAYAK has no matching checkpoint.
+    Closed/GAP sessions remain reclaimable, and an exact matching MAYAK cursor
+    may release only frames strictly before its retained physical anchor.
+    """
     if active is None:
         return "TRUE", []
     active_session, active_release = active
-    clauses = [
-        "r.source_session_id <> %s",
-        "(r.source_session_id=%s AND r.committed_at < %s)",
-    ]
-    params: list[object] = [active_session, active_session, cutoff]
+    clauses = ["r.source_session_id <> %s"]
+    params: list[object] = [active_session]
     if head is not None and head[0:2] == (active_session, active_release):
         cursors = head[2]
         for product in ("SPOT", "LINEAR"):
