@@ -84,5 +84,9 @@ def test_gap_cleanup_uses_session_pk_not_global_gap_sort():
     assert "def _eligible_gap_sessions(" in text
     assert "WHERE e.source_session_id=%s" in text
     assert "ORDER BY s.ended_at,s.source_session_id" not in text
-    assert "JOIN analytics.native_public_trade_source_events e\n                  USING(source_session_id)" not in text
+    assert (
+        "JOIN analytics.native_public_trade_source_events e\n"
+        "                  USING(source_session_id)"
+        not in text
+    )
 
