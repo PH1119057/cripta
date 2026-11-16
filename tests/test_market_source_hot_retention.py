@@ -222,3 +222,4 @@ def test_native_cutover_inline_status_python_compiles():
     assert len(snippets) == 2
     for index, snippet in enumerate(snippets):
         compile(snippet, f"native-status-inline-{index}", "exec")
+
