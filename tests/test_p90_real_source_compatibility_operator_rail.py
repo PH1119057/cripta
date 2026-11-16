@@ -21,6 +21,8 @@ def test_registration_unit_is_inert_cripta_oneshot_without_filesystem_write():
 
 def test_registration_cli_derives_only_exact_current_release_and_one_active_epoch():
     source = SCRIPT.read_text(encoding="utf-8")
+    assert 'ROOT = Path(__file__).resolve().parents[2]' in source
+    assert 'ROOT = Path("/srv/cripta/runtime/current")' not in source
     assert 'release.add_argument("--current-release", action="store_true")' in source
     assert 'epoch.add_argument("--active-epoch", action="store_true")' in source
     assert "WHERE status='ACTIVE' ORDER BY opened_at,epoch_id" in source
