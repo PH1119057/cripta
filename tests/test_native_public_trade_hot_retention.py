@@ -90,3 +90,13 @@ def test_gap_cleanup_uses_session_pk_not_global_gap_sort():
         not in text
     )
 
+def test_parent_cleanup_uses_fk_not_source_table_rescan():
+    text = SOURCE.read_text()
+    start = text.index("def _delete_unowned_parents(")
+    end = text.index("\n\ndef _inline_point_exclusion(", start)
+    block = text[start:end]
+    assert "cursor_owned AS MATERIALIZED" in block
+    assert "FROM analytics.native_public_trade_source_events" not in block
+    assert "PARENT_SOURCE_EVENT_FK_INVALID" in text
+    assert "_validate_parent_fk(connection)" in text
+

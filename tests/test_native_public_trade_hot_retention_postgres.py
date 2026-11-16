@@ -377,3 +377,47 @@ def test_pinned_oldest_gap_session_does_not_block_next_session(
              FROM analytics.native_public_trade_source_events"""
     ).fetchall()) == {(pinned, 1)}
 
+def test_parent_fk_blocks_unexpected_second_source_owner(
+    database, monkeypatch,
+):
+    import psycopg
+
+    c = database
+    _actor(monkeypatch)
+    now = datetime.now(UTC).replace(microsecond=0)
+    cutoff = now - timedelta(minutes=15)
+    old = now - timedelta(hours=2)
+    release = "f" * 40
+    first = "x" * 32
+    second = "y" * 32
+
+    _session(c, first, release, "GAP", old, old + timedelta(minutes=1))
+    _session(
+        c, second, release, "GAP",
+        old + timedelta(minutes=2), old + timedelta(minutes=3),
+    )
+    _parent(
+        c, symbol="LTCUSDT", seq=777, exec_id="shared-parent",
+        when=old + timedelta(seconds=1),
+    )
+    for session, frame, accepted in (
+        (first, 1, old + timedelta(seconds=1)),
+        (second, 1, old + timedelta(minutes=2, seconds=1)),
+    ):
+        c.execute(
+            """INSERT INTO analytics.native_public_trade_source_events
+               VALUES(%s,%s,0,'ms','inst-LTCUSDT','LTCUSDT',777,
+                      'shared-parent',%s,%s)""",
+            (session, frame, accepted, accepted),
+        )
+
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        MODULE.run_apply(c, cutoff, 1)
+
+    assert c.execute(
+        "SELECT count(*) FROM analytics.native_public_trade_source_events"
+    ).fetchone()[0] == 2
+    assert c.execute(
+        "SELECT count(*) FROM analytics.native_public_trade_events"
+    ).fetchone()[0] == 1
+

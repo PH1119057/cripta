@@ -198,6 +198,46 @@ def _validate_point_pins(connection: Any) -> None:
     _need(cursor_bad == 0, "CURRENT_CURSOR_SOURCE_EVENT_DANGLING")
 
 
+def _validate_parent_fk(connection: Any) -> None:
+    rows = connection.execute(
+        """SELECT f.convalidated,f.condeferrable,
+                  array_agg(local_col.attname ORDER BY local_key.ord),
+                  array_agg(remote_col.attname ORDER BY local_key.ord)
+             FROM pg_constraint f
+             JOIN LATERAL unnest(f.conkey) WITH ORDINALITY
+               AS local_key(attnum,ord) ON TRUE
+             JOIN LATERAL unnest(f.confkey) WITH ORDINALITY
+               AS remote_key(attnum,ord)
+               ON remote_key.ord=local_key.ord
+             JOIN pg_attribute local_col
+               ON local_col.attrelid=f.conrelid
+              AND local_col.attnum=local_key.attnum
+             JOIN pg_attribute remote_col
+               ON remote_col.attrelid=f.confrelid
+              AND remote_col.attnum=remote_key.attnum
+            WHERE f.contype='f'
+              AND f.conrelid=
+                  'analytics.native_public_trade_source_events'::regclass
+              AND f.confrelid=
+                  'analytics.native_public_trade_events'::regclass
+            GROUP BY f.oid,f.convalidated,f.condeferrable"""
+    ).fetchall()
+    expected = [
+        "market_source_id",
+        "instrument_id",
+        "exchange_sequence",
+        "exec_id",
+    ]
+    _need(
+        len(rows) == 1
+        and rows[0][0] is True
+        and rows[0][1] is False
+        and list(rows[0][2]) == expected
+        and list(rows[0][3]) == expected,
+        "PARENT_SOURCE_EVENT_FK_INVALID",
+    )
+
+
 def _create_retained_points(connection: Any) -> None:
     connection.execute(
         """CREATE TEMP TABLE retained_native_points(
@@ -376,11 +416,24 @@ def _delete_gap_batch(
 
 
 def _delete_unowned_parents(connection: Any) -> int:
+    # source_events -> parent is an exact validated, non-deferrable FK verified
+    # before mutation. If an unexpected second source-event still owns one of
+    # these parents, PostgreSQL rejects this DELETE and the whole retention
+    # transaction rolls back. Do not rescan the multi-million-row source table.
     return int(connection.execute(
-        """WITH keys AS (
+        """WITH keys AS MATERIALIZED (
              SELECT DISTINCT market_source_id,instrument_id,
                              exchange_sequence,exec_id
                FROM deleted_native_keys
+           ), cursor_owned AS MATERIALIZED (
+             SELECT DISTINCT c.market_source_id,c.instrument_id,
+                             c.exchange_sequence,c.exec_id
+               FROM analytics.native_public_trade_source_cursors c
+               JOIN keys k
+                 ON (k.market_source_id,k.instrument_id,
+                     k.exchange_sequence,k.exec_id)
+                  =(c.market_source_id,c.instrument_id,
+                    c.exchange_sequence,c.exec_id)
            )
            DELETE FROM analytics.native_public_trade_events n
            USING keys k
@@ -390,15 +443,7 @@ def _delete_unowned_parents(connection: Any) -> int:
                   k.exchange_sequence,k.exec_id)
              AND NOT EXISTS (
                SELECT 1
-                 FROM analytics.native_public_trade_source_events e
-                WHERE (e.market_source_id,e.instrument_id,
-                       e.exchange_sequence,e.exec_id)
-                     =(n.market_source_id,n.instrument_id,
-                       n.exchange_sequence,n.exec_id)
-             )
-             AND NOT EXISTS (
-               SELECT 1
-                 FROM analytics.native_public_trade_source_cursors c
+                 FROM cursor_owned c
                 WHERE (c.market_source_id,c.instrument_id,
                        c.exchange_sequence,c.exec_id)
                      =(n.market_source_id,n.instrument_id,
@@ -503,6 +548,7 @@ def _next_candidate_counts(
 def collect_check(connection: Any, cutoff: datetime, limit: int) -> Result:
     _financial_consistency(connection)
     _validate_point_pins(connection)
+    _validate_parent_fk(connection)
     active = _active_source(connection)
     frontier = _active_frontier(connection, active)
     gap_sessions = _eligible_gap_sessions(connection, cutoff=cutoff)
@@ -553,6 +599,7 @@ def run_apply(connection: Any, cutoff: datetime, limit: int) -> Result:
 
         _financial_consistency(connection)
         _validate_point_pins(connection)
+        _validate_parent_fk(connection)
         active = _active_source(connection)
         frontier = _active_frontier(connection, active)
         gap_sessions = _eligible_gap_sessions(connection, cutoff=cutoff)
