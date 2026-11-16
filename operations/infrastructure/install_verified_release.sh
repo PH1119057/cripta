@@ -15,7 +15,8 @@ CONTROL_CHECKPOINT="${CRIPTA_RELEASE_CONTROL_CHECKPOINT:-0}"
 CONTROL_REASON="${CRIPTA_RELEASE_CONTROL_REASON:-}"
 STAGED_OFFLINE="${CRIPTA_STAGED_OFFLINE_CUTOVER:-0}"
 # Only the separately owner-approved controller purpose supplies this switch.
-# Ordinary exact releases must keep the independent native producer running.
+# Ordinary exact releases preserve the independent native producer's exact
+# active/inactive state. Only an approved producer-ABI cutover may start it.
 NATIVE_SOURCE_CUTOVER="${CRIPTA_NATIVE_SOURCE_CUTOVER:-0}"
 # One-off #470 staged physical acceptance. The value is never caller-selected
 # freely: the dedicated no-argument roadmap rail derives it from INSTALLED_COMMIT.
@@ -925,6 +926,9 @@ migration_files=(
   operations/sql/20261108_native_public_trade_source_sessions.sql
   # Immutable provider WS frame order: required for scoped native P90 reading.
   operations/sql/20261109_native_public_trade_source_event_order.sql
+  # Reorder the existing five-column UNIQUE index (no second permanent copy)
+  # so its parent-identity prefix also serves FK enforcement during retention.
+  operations/sql/20261116_native_public_trade_parent_fk_index_order.sql
   operations/sql/20261109_p90_scoped_native_consumer_checkpoint.sql
   # Inert shared public-data publication schema: no consumers or writer
   # switch until independently approved MarketSource source/capability cutover.
@@ -1195,38 +1199,47 @@ else
     echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=BLOCKED_OBSERVER_NOT_READY" >&2
   fi
   
-  # Native writer starts independently BEFORE the read-only Observer.
-  # This is market-data-only (no credentials/Exchange controls/OWNER ARM).
-  # A source that never records accepted provider cursors cannot be considered
-  # healthy merely because systemd says active.
-  # A stale ACTIVE status/session is not a fresh five-symbol source proof.
-  native_probe_started_at="$(sql_scalar "SELECT clock_timestamp()")"
-  systemctl enable cripta-native-public-trade-source.service >/dev/null
-  systemctl start cripta-native-public-trade-source.service
-  native_source_ready=0
-  for _attempt in {1..60}; do
-    source_active_state="$(systemctl show cripta-native-public-trade-source.service --value --property=ActiveState 2>/dev/null || true)"
-    case "$source_active_state" in
-      active) ;;
-      activating|reloading)
-        sleep 1
-        continue
-        ;;
-      inactive|failed|deactivating|"")
-        die "native MarketSource writer not active during source cutover: ${source_active_state:-unknown}"
-        ;;
-      *)
-        sleep 1
-        continue
-        ;;
-    esac
-    # Read only the current source process's exact advertised ACTIVE session.
-    # A stale ACTIVE row left by a killed old process cannot prove readiness.
-    # A transient runuser/PAM wrapper failure while the freshly started
-    # Source is still publishing its status is retryable inside this bounded
-    # 60-second readiness loop. Invalid/missing identity still cannot PASS.
-    source_session=""
-    if ! source_session="$(runuser -u cripta -- python3 -c '
+  # Preserve exact pre-release Source liveness on ordinary releases.
+  # A real producer ABI cutover must start a fresh writer; an already-running
+  # byte-identical writer stays running and is re-proved; an inactive writer
+  # stays inactive. Release must never turn Source ON merely to install code.
+  if [[ "$native_code_changed" == "1" ||
+        "$native_source_was_active" == "1" ]]; then
+    native_probe_started_at="$(sql_scalar "SELECT clock_timestamp()")"
+    if [[ "$native_code_changed" == "1" ]]; then
+      systemctl enable cripta-native-public-trade-source.service >/dev/null
+      systemctl start cripta-native-public-trade-source.service
+    else
+      systemctl is-active --quiet cripta-native-public-trade-source.service ||
+        die "native MarketSource changed state during ordinary release"
+    fi
+
+    # A source that never records accepted provider cursors cannot be considered
+    # healthy merely because systemd says active. A stale ACTIVE status/session
+    # is not a fresh five-symbol source proof.
+    native_source_ready=0
+    for _attempt in {1..60}; do
+      source_active_state="$(systemctl show cripta-native-public-trade-source.service --value --property=ActiveState 2>/dev/null || true)"
+      case "$source_active_state" in
+        active) ;;
+        activating|reloading)
+          sleep 1
+          continue
+          ;;
+        inactive|failed|deactivating|"")
+          die "native MarketSource writer not active during release proof: ${source_active_state:-unknown}"
+          ;;
+        *)
+          sleep 1
+          continue
+          ;;
+      esac
+      # Read only the current source process's exact advertised ACTIVE session.
+      # A stale ACTIVE row left by a killed old process cannot prove readiness.
+      # A transient runuser/PAM wrapper failure is retryable only inside this
+      # bounded 60-second readiness loop.
+      source_session=""
+      if ! source_session="$(runuser -u cripta -- python3 -c '
 import json,sys
 try:
     v=json.load(open(sys.argv[1],encoding="utf-8"))
@@ -1235,18 +1248,18 @@ except Exception:
     sid=""
 print(sid if isinstance(sid,str) else "")
   ' /var/lib/cripta/native_public_trade_source/status.json)"; then
-      source_session=""
-    fi
-    if [[ ! "$source_session" =~ ^[0-9a-f]{32}$ ]]; then
-      sleep 1
-      continue
-    fi
-    if [[ "$native_code_changed" == "1" ]]; then
-      # A reused status file, stale PID or old session cannot approve the new
-      # source. Exact loaded release must match the installed candidate.
-      source_pid="$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)"
-      source_commit_seen=""
-      if ! source_commit_seen="$(runuser -u cripta -- python3 -c '
+        source_session=""
+      fi
+      if [[ ! "$source_session" =~ ^[0-9a-f]{32}$ ]]; then
+        sleep 1
+        continue
+      fi
+      if [[ "$native_code_changed" == "1" ]]; then
+        # A reused status file, stale PID or old session cannot approve the new
+        # source. Exact loaded release must match the installed candidate.
+        source_pid="$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)"
+        source_commit_seen=""
+        if ! source_commit_seen="$(runuser -u cripta -- python3 -c '
 import json,sys
 try:
     v=json.load(open(sys.argv[1],encoding="utf-8"))
@@ -1254,54 +1267,62 @@ try:
 except Exception:
     print("")
   ' /var/lib/cripta/native_public_trade_source/status.json)"; then
-        source_commit_seen=""
+          source_commit_seen=""
+        fi
+        if [[ "$source_pid" == "$producer_old_pid" ||
+              "$source_commit_seen" != "$RELEASE_COMMIT" ||
+              "$source_session" == "$producer_old_session" ]]; then
+          sleep 1
+          continue
+        fi
       fi
-      if [[ "$source_pid" == "$producer_old_pid" ||
-            "$source_commit_seen" != "$RELEASE_COMMIT" ||
-            "$source_session" == "$producer_old_session" ]]; then
-        sleep 1
-        continue
+      source_cursor_count="$(sql_scalar "SELECT count(DISTINCT c.external_symbol)
+        FROM analytics.native_public_trade_source_cursors c
+        JOIN analytics.native_public_trade_source_sessions s
+          ON s.source_session_id=c.source_session_id
+        WHERE s.source_session_id='$source_session'
+          AND s.state='ACTIVE'
+          AND s.market_source_id='ms-bybit-mainnet-public-v1'
+          AND s.last_accepted_at >= now() - interval '10 seconds'
+          AND c.external_symbol IN (
+            'APTUSDT','ARBUSDT','DOTUSDT','INJUSDT','LTCUSDT'
+          )
+          AND c.accepted_at >= '$native_probe_started_at'::timestamptz
+          AND c.event_at >= '$native_probe_started_at'::timestamptz
+                                - interval '5 seconds'
+          AND c.event_at >= now() - interval '3 minutes'")"
+      if [[ "$source_cursor_count" == "5" ]]; then
+        native_source_ready=1
+        break
       fi
+      sleep 1
+    done
+    [[ "$native_source_ready" == "1" ]] ||
+      die "independent native source five-symbol fresh cursor proof missing"
+    echo "INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS"
+
+    if [[ "$native_code_changed" == "1" ]]; then
+      new_source_status="$(sql_scalar "SELECT state FROM
+        analytics.native_public_trade_source_sessions
+        WHERE source_session_id='$source_session'
+          AND producer_release_commit='$RELEASE_COMMIT'")"
+      [[ "$new_source_status" == "ACTIVE" ]] ||
+        die "NATIVE_SOURCE_NEW_SESSION_IDENTITY_UNVERIFIED"
+      old_source_status="$(sql_scalar "SELECT state FROM
+        analytics.native_public_trade_source_sessions
+        WHERE source_session_id='$producer_old_session'")"
+      [[ "$old_source_status" == "GAP" ]] ||
+        die "NATIVE_SOURCE_OLD_GAP_LOST"
+      echo "NATIVE_SOURCE_EXACT_CODE_CUTOVER=PASS old:$producer_loaded_commit new:$RELEASE_COMMIT"
+    else
+      echo "INDEPENDENT_NATIVE_MARKET_SOURCE=PRESERVED_ACTIVE"
     fi
-    source_cursor_count="$(sql_scalar "SELECT count(DISTINCT c.external_symbol)
-      FROM analytics.native_public_trade_source_cursors c
-      JOIN analytics.native_public_trade_source_sessions s
-        ON s.source_session_id=c.source_session_id
-      WHERE s.source_session_id='$source_session'
-        AND s.state='ACTIVE'
-        AND s.market_source_id='ms-bybit-mainnet-public-v1'
-        AND s.last_accepted_at >= now() - interval '10 seconds'
-        AND c.external_symbol IN (
-          'APTUSDT','ARBUSDT','DOTUSDT','INJUSDT','LTCUSDT'
-        )
-        AND c.accepted_at >= '$native_probe_started_at'::timestamptz
-        AND c.event_at >= '$native_probe_started_at'::timestamptz
-                              - interval '5 seconds'
-        AND c.event_at >= now() - interval '3 minutes'")"
-    if [[ "$source_cursor_count" == "5" ]]; then
-      native_source_ready=1
-      break
-    fi
-    sleep 1
-  done
-  [[ "$native_source_ready" == "1" ]] ||
-    die "independent native source five-symbol fresh cursor proof missing"
-  echo "INDEPENDENT_NATIVE_MARKET_SOURCE=ACTIVE_FIVE_SYMBOLS"
-  if [[ "$native_code_changed" == "1" ]]; then
-    new_source_status="$(sql_scalar "SELECT state FROM
-      analytics.native_public_trade_source_sessions
-      WHERE source_session_id='$source_session'
-        AND producer_release_commit='$RELEASE_COMMIT'")"
-    [[ "$new_source_status" == "ACTIVE" ]] ||
-      die "NATIVE_SOURCE_NEW_SESSION_IDENTITY_UNVERIFIED"
-    old_source_status="$(sql_scalar "SELECT state FROM
-      analytics.native_public_trade_source_sessions
-      WHERE source_session_id='$producer_old_session'")"
-    [[ "$old_source_status" == "GAP" ]] ||
-      die "NATIVE_SOURCE_OLD_GAP_LOST"
-    echo "NATIVE_SOURCE_EXACT_CODE_CUTOVER=PASS old:$producer_loaded_commit new:$RELEASE_COMMIT"
+  else
+    ! systemctl is-active --quiet cripta-native-public-trade-source.service ||
+      die "ordinary release unexpectedly started inactive native MarketSource"
+    echo "INDEPENDENT_NATIVE_MARKET_SOURCE=PRESERVED_INACTIVE"
   fi
-  
+
   for service in "${managed_services[@]}"; do
     if [[ "$service" == "cripta-real-service-broker.service" ||
           "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
