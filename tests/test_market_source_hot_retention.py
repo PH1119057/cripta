@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
-import re
 import sys
 import zlib
 from pathlib import Path
