@@ -302,7 +302,8 @@ def test_any_financial_effect_blocks_before_no_order_state_commit(
         (mod.R06FreshCutoverBlocked("R06_START_PUBLICATION_STALE_OR_CHANGED"), True),
         (mod.R06FreshCutoverBlocked("R06_FUTURE_CLOSED_BOUNDARY_NOT_REACHED"), True),
         (mod.R06FreshCutoverBlocked("R06_5M_CLOSED_BOUNDARY_NOT_COMMON"), True),
-        (mod.R06PublishedEntryBlocked("R06_SOURCE_EPOCH_AMBIGUOUS"), True),
+        (mod.R06PublishedEntryBlocked("R06_SOURCE_EPOCH_UNAVAILABLE"), True),
+        (mod.R06PublishedEntryBlocked("R06_SOURCE_EPOCH_AMBIGUOUS"), False),
         (mod.R06PublishedEntryBlocked("R06_PLAN_SCOPE_UNVERIFIED"), False),
         (mod.R06FreshCutoverBlocked("R06_BOOTSTRAP_CONTRACT_INVALID"), False),
         (ValueError("program defect"), False),
@@ -317,6 +318,7 @@ def test_pre_cursor_transient_retries_only_preapproved_source_wait(error, expect
 @pytest.mark.parametrize("err", [
     mod.EntryPublicationUnavailable("PUBLICATION_STALE"),
     mod.psycopg.errors.SerializationFailure("PG_CONFLICT"),
+    mod.R06PublishedEntryBlocked("R06_SOURCE_EPOCH_UNAVAILABLE"),
 ])
 def test_pre_cursor_transient_must_expire_at_existing_10_minute_budget(err):
     assert mod._bootstrap_transient_retryable(
@@ -332,11 +334,14 @@ def test_pre_cursor_transient_must_expire_at_existing_10_minute_budget(err):
 
 
 
-def test_runtime_current_source_loss_is_the_only_recoverable_worker_exit():
+def test_runtime_current_source_loss_or_zero_active_gap_is_recoverable():
     assert mod._worker_exit_status(
         mod.R06PublishedEntryBlocked(
             "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT:scope"
         )
+    ) == 43
+    assert mod._worker_exit_status(
+        mod.R06PublishedEntryBlocked("R06_SOURCE_EPOCH_UNAVAILABLE")
     ) == 43
     assert mod._worker_exit_status(
         mod.R06PublishedEntryBlocked("R06_SOURCE_EPOCH_AMBIGUOUS")
