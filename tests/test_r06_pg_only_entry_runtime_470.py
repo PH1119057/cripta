@@ -219,7 +219,13 @@ def test_source_only_native_callback_and_cursor_share_publication_atomic_state(
         decision=None,execution_request=None,notifications=(),
         account_outcomes=(),signal=signal,
     )
-    engine=SimpleNamespace(process=lambda *_a,**_kw:(evaluated,))
+    calls = []
+
+    def source_only_process(*args, **kwargs):
+        calls.append((args, kwargs))
+        return (evaluated,)
+
+    engine=SimpleNamespace(process=source_only_process)
     # Source-only test has no real execution side effects, just audit records.
     count=mod._observe_one(
         writer,pin=pin,history=scoped_history(history),
@@ -227,6 +233,11 @@ def test_source_only_native_callback_and_cursor_share_publication_atomic_state(
         at=BOUNDARY+timedelta(seconds=3),
     )
     assert count==1
+    assert len(calls) == 1
+    assert calls[0][1]["p90_source_only_candidate"] is True
+    assert calls[0][1]["allow_new_signals"] is True
+    assert "real_admission_required_for" not in calls[0][1]
+    assert "account_admissions" not in calls[0][1]
     assert writer.last_pub==45
     assert writer.state["by_symbol"][SYMBOL]["seen"]==["LONG"]
     assert sum(
@@ -377,6 +388,9 @@ def test_worker_failure_classification_never_leaks_private_exception_detail():
             "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT:private-name"
         ),
     ) == "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT"
+    assert mod._worker_block_code(
+        RuntimeError("P90L90_PRECOMPUTED_REAL_ADMISSION_FORBIDDEN"),
+    ) == "P90L90_PRECOMPUTED_REAL_ADMISSION_FORBIDDEN"
 
 
 @pytest.mark.parametrize("legacy", [False, True])
