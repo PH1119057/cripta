@@ -55,7 +55,7 @@ def _gate_enabled(connection: Any) -> bool:
     if row is None:
         raise R06FinancialPromotionBlocked("R06_FINANCIAL_MAINNET_GATE_MISSING")
     value = row.get("enabled") if isinstance(row, Mapping) else row[0]
-    if type(value) not in (bool, int) or int(value) not in (0, 1):
+    if type(value) not in (bool, int) or value not in (0, 1):
         raise R06FinancialPromotionBlocked("R06_FINANCIAL_MAINNET_GATE_INVALID")
     return bool(value)
 
