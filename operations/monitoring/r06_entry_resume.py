@@ -16,7 +16,10 @@ from typing import Any
 from bybit_workbench.market_data.source_required_feed_manifest import RequiredPublicFeed
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS
-from operations.monitoring.r06_entry_publication_shadow_probe import EXISTING_P90_COLD_COUNTS
+from operations.monitoring.r06_entry_publication_shadow_probe import (
+    EXISTING_P90_COLD_COUNTS,
+    FIVE,
+)
 from operations.monitoring.r06_fresh_entry_boundary import _require_no_exposure_or_requests
 
 APPROVED_BASELINE = "b47aa43d9333083fb83bb16f191e16e1ff97bd33"
@@ -269,10 +272,14 @@ def scope_waits_at_bootstrap(connection: Any, *, pin: Any, strategy: str,
         "SELECT source_session_id,producer_release_commit,native_watermarks "
         "FROM analytics.market_publications WHERE publication_id=%s", (bootstrap_id,),
     ).fetchone()
+    bootstrap_watermarks = bootstrap[2] if bootstrap is not None else None
     if (bootstrap is None or bootstrap[:2] != (pin.source_session_id,
                                               pin.producer_release_commit)
             or pin.publication_id < bootstrap_id
-            or cursor != maximum(bootstrap[2], tuple(bootstrap[2]))
-            or cursor > maximum(pin.native_watermarks, tuple(pin.native_watermarks))):
+            or not isinstance(bootstrap_watermarks, dict)
+            or not set(FIVE) <= set(bootstrap_watermarks)
+            or not set(FIVE) <= set(pin.native_watermarks)
+            or cursor != maximum(bootstrap_watermarks, FIVE)
+            or cursor > maximum(pin.native_watermarks, FIVE)):
         raise R06ResumeBlocked("R06_BOOTSTRAP_SCOPE_FENCE_UNVERIFIED")
     return True
