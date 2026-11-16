@@ -97,3 +97,19 @@ def test_real_entry_account_state_uses_generation_not_wall_clock_age() -> None:
     ).read_text(encoding="utf-8")
     assert "_real_entry_account_state(" in observer
     assert "fresh account wallet state is required" not in observer
+
+
+def test_p90_prearm_uses_current_generation_not_reconciliation_wall_clock_gate() -> None:
+    source = (
+        ROOT / "src/bybit_workbench/p90l90_real_prearm_evidence.py"
+    ).read_text(encoding="utf-8")
+    block = source[source.index("def prepare_p90l90_real_v3_prearm_evidence("):]
+    assert block.index("signed_private_proofs") < block.index(
+        'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE'
+    )
+    assert "current_complete_account_state_generation(" in block
+    assert "real_entry_account_state(" in block
+    assert "FROM runtime.reconciliation_runs" not in block
+    assert "account generation not fresh/flat/capable" not in block
+    assert "fresh_until >= position_mode_checked_at" not in block
+    assert "CURRENT_COMPLETE_ACCOUNT_STATE_GENERATION" in block
