@@ -7,6 +7,8 @@ from typing import Any, cast
 
 import pytest
 
+from bybit_workbench.market_identity import bybit_instrument_id
+
 import operations.monitoring.r11_mayak_pg_observation as observation
 from bybit_workbench.mayak.seven_publication_observation_candidate import (
     R11SevenMayakReplayCheckpoint,
@@ -42,20 +44,43 @@ class DB:
         *,
         backlog: list[tuple[object, ...]],
         latest: tuple[object, ...],
+        bootstrap: list[tuple[object, ...]] | None = None,
     ) -> None:
         self.backlog = backlog
         self.latest = latest
+        self.bootstrap = [] if bootstrap is None else bootstrap
 
     def execute(self, sql: str, _params: object = None) -> Result:
         if sql == "SHOW transaction_isolation":
             return Result(("repeatable read",))
         if sql == "SHOW transaction_read_only":
             return Result(("on",))
+        if "rest_field_coverage" in sql:
+            return Result(many=self.bootstrap)
         if "ORDER BY p.as_of_second,p.publication_id" in sql:
             return Result(many=self.backlog)
         if "ORDER BY p.as_of_second DESC,p.publication_id DESC" in sql:
             return Result(self.latest)
         raise AssertionError(sql)
+
+
+def complete_bootstrap_row(
+    publication_id: int, at: datetime,
+) -> tuple[object, ...]:
+    rest: dict[str, dict[str, dict[str, str]]] = {}
+    for symbol in observation._SEVEN:
+        rest[bybit_instrument_id("spot", symbol)] = {
+            "INSTRUMENT_INFO": {"status": "OBSERVED"},
+        }
+        rest[bybit_instrument_id("linear", symbol)] = {
+            "INSTRUMENT_INFO": {"status": "OBSERVED"},
+            "ACCOUNT_RATIO": {"status": "OBSERVED"},
+        }
+    refs = {"SPOT": {"source_frame_number": 1},
+            "LINEAR": {"source_frame_number": 2}}
+    coverage = {"SPOT": "PHYSICAL_FRAME_REF_ONLY",
+                "LINEAR": "PHYSICAL_FRAME_REF_ONLY"}
+    return publication_id, at, rest, refs, coverage
 
 
 def replay_at(
@@ -138,15 +163,51 @@ def test_head_is_checked_for_wall_clock_staleness_only_after_backlog() -> None:
         )
 
 
-def test_bootstrap_requires_fresh_latest_publication() -> None:
+def test_bootstrap_uses_first_complete_publication_while_head_is_fresh() -> None:
+    incomplete = list(complete_bootstrap_row(6, AT - timedelta(seconds=1)))
+    incomplete[2] = {}
     db = DB(
         backlog=[],
-        latest=(7, AT, SESSION, RELEASE),
+        latest=(9, AT + timedelta(seconds=2), SESSION, RELEASE),
+        bootstrap=[tuple(incomplete), complete_bootstrap_row(7, AT),
+                   complete_bootstrap_row(8, AT + timedelta(seconds=1))],
     )
     replay = R11MayakPublicationReplay()
     assert observation._next_publication(
-        db, replay=replay, now=AT + timedelta(seconds=1),
+        db, replay=replay, now=AT + timedelta(seconds=3),
     ) == (7, AT)
+
+
+def test_bootstrap_waits_until_full_rest_and_optional_scope_exists() -> None:
+    incomplete = list(complete_bootstrap_row(7, AT))
+    incomplete[4] = {"SPOT": "PHYSICAL_FRAME_REF_ONLY"}
+    db = DB(
+        backlog=[], latest=(7, AT, SESSION, RELEASE),
+        bootstrap=[tuple(incomplete)],
+    )
+    with pytest.raises(
+        observation.R11MayakPGSourceUnavailable,
+        match="BOOTSTRAP_PUBLICATION_NOT_READY",
+    ):
+        observation._next_publication(
+            db, replay=R11MayakPublicationReplay(),
+            now=AT + timedelta(seconds=1),
+        )
+
+
+def test_bootstrap_still_requires_fresh_current_head() -> None:
+    db = DB(
+        backlog=[], latest=(7, AT, SESSION, RELEASE),
+        bootstrap=[complete_bootstrap_row(7, AT)],
+    )
+    with pytest.raises(
+        observation.R11MayakPGSourceUnavailable,
+        match="PUBLICATION_STREAM_STALE",
+    ):
+        observation._next_publication(
+            db, replay=R11MayakPublicationReplay(),
+            now=AT + timedelta(seconds=31),
+        )
 
 
 def test_backlog_replay_uses_publication_causal_clock(
