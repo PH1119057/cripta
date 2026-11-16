@@ -102,6 +102,32 @@ def test_verified_release_installs_broker_and_durable_state_but_does_not_arm():
     assert 'for service in "${managed_services[@]}"' in recovery
 
 
+def test_verified_release_normalizes_dependency_pulled_inactive_services():
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    marker = "ORDINARY_RELEASE_DEPENDENCY_STATE_NORMALIZED=PASS"
+    assert marker in installer
+    normalize = installer.index(marker)
+    start = installer.rfind(
+        'if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi',
+        0,
+        normalize,
+    )
+    verify = installer.index(
+        'elif [[ "${was_active[$service]}" == "1" ]]; then',
+        normalize,
+    )
+    block = installer[start:verify]
+    assert 'if [[ "$native_code_changed" == "0" ]]' in block
+    assert '[[ "${was_active[$service]}" != "1" ]]' in block
+    assert 'systemctl is-active --quiet "$service"' in block
+    assert 'systemctl stop "$service"' in block
+    assert "cripta-real-service-broker.service" in block
+    assert "cripta-runtime-recovery-supervisor.service" in block
+    assert start < normalize < verify
+
+
 def test_readiness_migration_has_no_trading_effect_writes():
     migration = (
         ROOT / "operations/sql/20261102_real_readiness_operations.sql"

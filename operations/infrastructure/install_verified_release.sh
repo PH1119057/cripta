@@ -1330,6 +1330,26 @@ except Exception:
     fi
     if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
   done
+
+  # systemd may pull an intentionally inactive managed unit through Wants=/Requires=
+  # while restoring another unit that was active before the release. On an
+  # ordinary byte-compatible release the contract is exact pre-release liveness,
+  # so normalize those dependency pulls back to OFF before strict verification.
+  # Native producer ABI cutover has separate source/timer semantics below.
+  if [[ "$native_code_changed" == "0" ]]; then
+    for service in "${managed_services[@]}"; do
+      if [[ "$service" == "cripta-real-service-broker.service" ||
+            "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
+        continue
+      fi
+      if [[ "${was_active[$service]}" != "1" ]] &&
+         systemctl is-active --quiet "$service"; then
+        systemctl stop "$service"
+      fi
+    done
+    echo "ORDINARY_RELEASE_DEPENDENCY_STATE_NORMALIZED=PASS"
+  fi
+
   for service in "${managed_services[@]}"; do
     if [[ "$service" == "cripta-real-service-broker.service" ||
           "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
