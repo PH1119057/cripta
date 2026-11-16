@@ -8,6 +8,7 @@ Type=oneshot
 User=postgres
 Group=postgres
 ExecStart=/usr/bin/python3 -B /usr/local/libexec/cripta-market-source-hot-retention.py --apply --batch-limit 50000
+ExecStart=/usr/bin/python3 -B /usr/local/libexec/cripta-native-public-trade-hot-retention.py --apply --batch-limit 50000
 ExecStart=/usr/bin/python3 -B /usr/local/libexec/cripta-market-hot-retention.py --apply --batch-limit 5000
 TimeoutStartSec=240
 NoNewPrivileges=true
