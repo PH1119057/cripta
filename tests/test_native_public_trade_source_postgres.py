@@ -517,3 +517,69 @@ def test_r03_autocommit_refuses_to_erase_a_dirty_outer_transaction() -> None:
             _enable_source_union_autocommit(writer)
         assert writer.autocommit is False
         writer.rollback()
+
+def test_pg_parent_fk_unique_reorder_is_idempotent_and_writer_compatible() -> None:
+    from pathlib import Path
+
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "operations/sql/20261116_native_public_trade_parent_fk_index_order.sql"
+    ).read_text(encoding="utf-8")
+    expected = [
+        "market_source_id",
+        "instrument_id",
+        "exchange_sequence",
+        "exec_id",
+        "source_session_id",
+    ]
+    constraint = (
+        "native_public_trade_source_ev_source_session_id_market_sour_key"
+    )
+
+    with _db() as conn:
+        def columns() -> list[str]:
+            rows = conn.execute(
+                """SELECT a.attname
+                     FROM pg_constraint c
+                     CROSS JOIN LATERAL unnest(c.conkey) WITH ORDINALITY
+                       AS k(attnum,ord)
+                     JOIN pg_attribute a
+                       ON a.attrelid=c.conrelid AND a.attnum=k.attnum
+                    WHERE c.conrelid=
+                          'analytics.native_public_trade_source_events'::regclass
+                      AND c.conname=%s
+                      AND c.contype='u'
+                    ORDER BY k.ord""",
+                (constraint,),
+            ).fetchall()
+            return [str(row[0]) for row in rows]
+
+        assert columns() == expected
+
+        # Re-running the migration must be a no-op.
+        conn.execute(migration)
+        assert columns() == expected
+        assert conn.execute(
+            """SELECT count(*) FROM pg_constraint
+                WHERE conrelid=
+                      'analytics.native_public_trade_source_events'::regclass
+                  AND contype='u'"""
+        ).fetchone() == (1,)
+
+        # Writer-style ON CONFLICT lists the same column set in the historical
+        # order. PostgreSQL must still infer the reordered UNIQUE index.
+        session = uuid4().hex
+        evidence = _event("ci-reordered-parent-ux-" + uuid4().hex)
+        _session_start(conn, session)
+        _persist_frame(
+            conn, session=session, frame_number=1, facts=(evidence,),
+        )
+        _persist_frame(
+            conn, session=session, frame_number=2, facts=(evidence,),
+        )
+        assert conn.execute(
+            """SELECT count(*) FROM analytics.native_public_trade_source_events
+                WHERE source_session_id=%s""",
+            (session,),
+        ).fetchone() == (1,)
+

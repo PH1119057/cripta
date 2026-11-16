@@ -180,7 +180,7 @@ def test_native_cutover_waits_for_transitional_source_and_records_exact_failure(
     ) in installer
     assert "activating|reloading)" in installer
     assert (
-        "native MarketSource writer not active during source cutover:"
+        "native MarketSource writer not active during release proof:"
         in installer
     )
     assert "LAST_FAILED_RELEASE" in installer
