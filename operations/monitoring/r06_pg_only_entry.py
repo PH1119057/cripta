@@ -520,7 +520,8 @@ def run_pg_only(
                     if (
                         first_cursor_accepted
                         or not _bootstrap_transient_retryable(
-                            exc,detached_at=detached_at,observed_at=at,
+                            exc,detached_at=detached_at,
+                            observed_at=datetime.now(UTC),
                         )
                     ):
                         raise
@@ -562,7 +563,8 @@ def run_pg_only(
                         R06FreshCutoverBlocked, psycopg.errors.SerializationFailure,
                     ) as exc:
                         if not _bootstrap_transient_retryable(
-                            exc,detached_at=detached_at,observed_at=at,
+                            exc,detached_at=detached_at,
+                            observed_at=datetime.now(UTC),
                         ):
                             raise
                         time.sleep(1.0)
@@ -584,7 +586,8 @@ def run_pg_only(
                         R06FreshCutoverBlocked, psycopg.errors.SerializationFailure,
                     ) as exc:
                         if not _bootstrap_transient_retryable(
-                            exc,detached_at=detached_at,observed_at=at,
+                            exc,detached_at=detached_at,
+                            observed_at=datetime.now(UTC),
                         ):
                             raise
                         time.sleep(1.0)

@@ -9,7 +9,7 @@ durable baseline may enter ordinary Universal Entry admission.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -165,25 +165,43 @@ def _restore_candidate_fact(raw: object) -> MarketFactEnvelope:
     )
 
 
+def _tuple_rows(connection: Any) -> Any:
+    """Adapt mapping-row callers to runtime_loader's positional row contract."""
+
+    class Cursor:
+        def __init__(self, inner: Any) -> None:
+            self._inner = inner
+
+        def fetchall(self) -> list[tuple[object, ...]]:
+            rows = self._inner.fetchall()
+            return [
+                tuple(row.values()) if isinstance(row, Mapping) else tuple(row)
+                for row in rows
+            ]
+
+    class Connection:
+        def execute(self, statement: str, parameters: Sequence[object] = ()) -> Cursor:
+            return Cursor(connection.execute(statement, parameters))
+
+    return Connection()
+
+
+def _row_value(row: Any, index: int, name: str) -> object:
+    return row[name] if isinstance(row, Mapping) else row[index]
+
+
 def _route_bundle(
     connection: Any,
     *,
     trading_account_id: str,
     now: datetime,
 ) -> tuple[Any, StrategyExecutionBindingRef] | None:
-    bundles = {
-        cast(Any, bundle).activation.activation_id: cast(Any, bundle)
-        for bundle in load_active_strategy_bundles(connection)
-        if (
-            cast(Any, bundle).card.strategy_id in _P90_IDS
-            and cast(Any, bundle).card.strategy_version == VERSION
-        )
-    }
-    if not bundles:
-        return None
+    # Reject non-P90 accounts before materializing the Strategy registry.
+    # Generic Universal Entry lifecycle/reconciliation must remain independent.
     rows = connection.execute(
         """SELECT b.strategy_execution_binding_id,b.strategy_activation_id,
-                  b.execution_leg,b.trading_account_id,b.allocation_mode
+                  b.execution_leg,b.trading_account_id,b.allocation_mode,
+                  a.strategy_id,a.strategy_version
              FROM strategy_entry.strategy_execution_bindings b
              JOIN strategy_entry.strategy_activations a
                ON a.activation_id=b.strategy_activation_id
@@ -194,29 +212,43 @@ def _route_bundle(
               AND b.effective_from<=%s
               AND (b.effective_to IS NULL OR b.effective_to>%s)
               AND a.enabled=true
+              AND a.strategy_id=ANY(%s)
+              AND a.strategy_version=%s
             ORDER BY b.strategy_execution_binding_id""",
-        (trading_account_id, now, now),
+        (trading_account_id, now, now, list(_P90_IDS), VERSION),
     ).fetchall()
+    if not rows:
+        return None
+    bundles = {
+        cast(Any, bundle).activation.activation_id: cast(Any, bundle)
+        for bundle in load_active_strategy_bundles(_tuple_rows(connection))
+        if (
+            cast(Any, bundle).card.strategy_id in _P90_IDS
+            and cast(Any, bundle).card.strategy_version == VERSION
+        )
+    }
     matches: list[tuple[Any, StrategyExecutionBindingRef]] = []
     for row in rows:
-        activation_id = str(row[1])
+        activation_id = str(_row_value(row, 1, "strategy_activation_id"))
         bundle = bundles.get(activation_id)
         if bundle is None:
             continue
         if not real_binding_allocation_allowed(
             strategy_id=bundle.card.strategy_id,
             strategy_version=bundle.card.strategy_version,
-            allocation_mode=str(row[4]),
+            allocation_mode=str(_row_value(row, 4, "allocation_mode")),
         ):
             continue
         matches.append(
             (
                 bundle,
                 StrategyExecutionBindingRef(
-                    strategy_execution_binding_id=str(row[0]),
+                    strategy_execution_binding_id=str(
+                        _row_value(row, 0, "strategy_execution_binding_id")
+                    ),
                     strategy_activation_id=activation_id,
-                    execution_leg=str(row[2]),
-                    trading_account_id=str(row[3]),
+                    execution_leg=str(_row_value(row, 2, "execution_leg")),
+                    trading_account_id=str(_row_value(row, 3, "trading_account_id")),
                 ),
             )
         )

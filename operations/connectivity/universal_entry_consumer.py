@@ -1758,7 +1758,10 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         if diagnostic_result:
             row = _next_request(connection, route=route)
         if row is None:
-            return diagnostic_result or promotion_result or "NO_REQUEST"
+            idle_promotion = (
+                None if promotion_result in {None, "NOT_APPLICABLE"} else promotion_result
+            )
+            return diagnostic_result or idle_promotion or "NO_REQUEST"
     request = _request_from_row(row)
     reservation_state = row.get("capital_reservation_state")
     if (

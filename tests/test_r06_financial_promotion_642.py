@@ -1,5 +1,4 @@
 """Issue #642: R06 SOURCE_ONLY -> Universal Entry financial promotion regressions."""
-
 from __future__ import annotations
 
 import inspect
@@ -413,3 +412,35 @@ def test_execution_permission_must_predate_candidate_event():
         bundle=bundle,
         event_at=EVENT,
     )
+
+
+def test_mapping_row_adapter_preserves_runtime_loader_column_order():
+    class Inner:
+        def fetchall(self):
+            return [{"first": "a", "second": "b"}]
+
+    class Connection:
+        def execute(self, _sql, _params=()):
+            return Inner()
+
+    rows = promotion._tuple_rows(Connection()).execute("SELECT 1").fetchall()
+    assert rows == [("a", "b")]
+
+
+def test_non_p90_account_is_rejected_before_registry_materialization(monkeypatch):
+    class Result:
+        def fetchall(self):
+            return []
+
+    class Connection:
+        def execute(self, _sql, _params=()):
+            return Result()
+
+    monkeypatch.setattr(
+        promotion,
+        "load_active_strategy_bundles",
+        lambda *_args, **_kwargs: pytest.fail("non-P90 route must not load registry"),
+    )
+    assert promotion._route_bundle(
+        Connection(), trading_account_id="ta-generic", now=EVENT
+    ) is None
