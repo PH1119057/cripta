@@ -136,7 +136,7 @@ def test_one_published_signal_is_proven_for_arbitrary_independent_account_scopes
     ({"checkpoint_frame_number": 99}, "INVARIANT"),
     ({"event_at": EVENT - timedelta(seconds=5)}, "TIME_OR_FRESHNESS"),
     ({"original_event_at": EVENT + timedelta(seconds=1)}, "TIME_OR_FRESHNESS"),
-    ({"published_at": AT + timedelta(seconds=1)}, "TIME_OR_FRESHNESS"),
+    ({"published_at": EVENT + timedelta(seconds=6)}, "TIME_OR_FRESHNESS"),
     ({"accepted_at": AT + timedelta(seconds=1)}, "TIME_OR_FRESHNESS"),
     ({"as_of_second": AT + timedelta(seconds=1)}, "TIME_OR_FRESHNESS"),
     ({"event_at": "not-timestamp"}, "TIME_INVALID"),
