@@ -337,13 +337,14 @@ def test_consumer_existing_requests_keep_priority_over_r06_promotion():
     assert "sync_r06_financial_disarmed_baseline(" in source
 
 
-def test_prearm_accepts_exact_r06_source_only_and_requires_financial_baseline():
+def test_prearm_verifies_r06_baseline_without_becoming_second_writer():
     source = (
         ROOT / "src/bybit_workbench/p90l90_real_prearm_evidence.py"
     ).read_text(encoding="utf-8")
     assert '"R06_PG_NO_ORDER_SOURCE_ONLY"' in source
-    assert "sync_disarmed_baseline(" in source
+    assert "sync_disarmed_baseline(" not in source
     assert "require_disarmed_baseline(" in source
+    assert "sole writers" in source
     assert '"financial_promotion_baselines"' in source
 
 
