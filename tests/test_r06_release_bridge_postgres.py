@@ -258,7 +258,12 @@ def test_real_pg_quiet_scope_waits_at_exact_global_bootstrap_fence(db):
     admin.execute('ALTER TABLE analytics.market_publications ADD native_watermarks jsonb')
     watermarks = {'LTCUSDT': {'frame_number': 99, 'frame_index': 0},
                   'INJUSDT': {'frame_number': 98, 'frame_index': 0},
-                  'APTUSDT': {'frame_number': 100, 'frame_index': 2}}
+                  'APTUSDT': {'frame_number': 100, 'frame_index': 2},
+                  'ARBUSDT': {'frame_number': 97, 'frame_index': 0},
+                  'DOTUSDT': {'frame_number': 96, 'frame_index': 0},
+                  # R11 reference symbols may be ahead but are not R06 Entry.
+                  'BTCUSDT': {'frame_number': 105, 'frame_index': 4},
+                  'ETHUSDT': {'frame_number': 104, 'frame_index': 1}}
     admin.execute('UPDATE analytics.market_publications SET native_watermarks=%s::jsonb',
                   (json.dumps(watermarks),))
     admin.execute('UPDATE strategy_entry.p90_scoped_native_consumer_checkpoints '

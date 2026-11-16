@@ -157,7 +157,10 @@ def test_semantic_bridge_refuses_unapproved_release_or_changed_engine(monkeypatc
 @pytest.mark.parametrize('defect', [None, 'cursor', 'epoch', 'producer', 'older_pub', 'nonempty'])
 def test_quiet_bootstrap_wait_requires_exact_untouched_original_fence(defect):
     watermarks = {'LTCUSDT': {'frame_number': 98, 'frame_index': 0},
-                  'APTUSDT': {'frame_number': 100, 'frame_index': 2}}
+                  'INJUSDT': {'frame_number': 99, 'frame_index': 0},
+                  'APTUSDT': {'frame_number': 100, 'frame_index': 2},
+                  'ARBUSDT': {'frame_number': 97, 'frame_index': 0},
+                  'DOTUSDT': {'frame_number': 96, 'frame_index': 0}}
     saved = [100, 2, 10, {'version': 1, 'by_symbol': {}}]
     original = ['session', 'producer', watermarks]
     pin = SimpleNamespace(source_session_id='session', producer_release_commit='producer',
