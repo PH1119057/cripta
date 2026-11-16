@@ -98,7 +98,7 @@ def _bootstrap_transient_retryable(
         return True
     if (
         isinstance(exc, R06PublishedEntryBlocked)
-        and str(exc) == "R06_SOURCE_EPOCH_AMBIGUOUS"
+        and str(exc) == "R06_SOURCE_EPOCH_UNAVAILABLE"
     ):
         return True
     return (
@@ -118,10 +118,10 @@ def _worker_exit_status(exc: BaseException) -> int:
     by the unit's finite StartLimit and causes a fresh process to re-run the
     full no-order bootstrap against the next ACTIVE MarketSource epoch.
     """
-    if (
-        isinstance(exc, R06PublishedEntryBlocked)
-        and _worker_block_code(exc) == "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT"
-    ):
+    if isinstance(exc, R06PublishedEntryBlocked) and _worker_block_code(exc) in {
+        "R06_PUBLISHED_NATIVE_SOURCE_NOT_CURRENT",
+        "R06_SOURCE_EPOCH_UNAVAILABLE",
+    }:
         return 43
     return 42
 
@@ -182,6 +182,8 @@ def _one_pin(readonly: Any, *, at: datetime, loaded: str) -> tuple[
             "ORDER BY subscribed_at DESC LIMIT 2",
             (_SOURCE,),
         ).fetchall()
+        if not sessions:
+            raise R06PublishedEntryBlocked("R06_SOURCE_EPOCH_UNAVAILABLE")
         if len(sessions) != 1:
             raise R06PublishedEntryBlocked("R06_SOURCE_EPOCH_AMBIGUOUS")
         accepted = verify_native_producer_code_compatibility(
