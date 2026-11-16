@@ -90,7 +90,8 @@ def test_systemd_unit_is_nontrading_postgres_only_and_bounded():
         "ExecStart=/usr/bin/python3 -B /usr/local/libexec/cripta-market-hot-retention.py"
         in service
     )
-    assert 'OnUnitActiveSec=60s' in timer
+    assert 'OnUnitActiveSec=30s' in timer
+    assert 15_000 * (60 // 30) == 30_000
     assert 'Unit=cripta-market-hot-retention.service' in timer
 
 
