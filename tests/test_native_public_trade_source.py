@@ -275,11 +275,17 @@ def test_out_of_order_source_frame_never_appends_or_acknowledges(
     assert writes == []
 
 
-def test_releases_never_stop_native_source_as_trading_managed_service() -> None:
+def test_releases_preserve_native_source_state_outside_producer_cutover() -> None:
     from pathlib import Path
+
     installer = Path(
         "operations/infrastructure/install_verified_release.sh"
     ).read_text(encoding="utf-8")
     managed = installer.split("managed_services=(", 1)[1].split(")", 1)[0]
     assert "cripta-native-public-trade-source.service" not in managed
+    assert 'if [[ "$native_code_changed" == "1" ||' in installer
+    assert '"$native_source_was_active" == "1" ]]; then' in installer
     assert "systemctl start cripta-native-public-trade-source.service" in installer
+    assert "INDEPENDENT_NATIVE_MARKET_SOURCE=PRESERVED_ACTIVE" in installer
+    assert "INDEPENDENT_NATIVE_MARKET_SOURCE=PRESERVED_INACTIVE" in installer
+    assert "ordinary release unexpectedly started inactive native MarketSource" in installer
