@@ -78,3 +78,11 @@ def test_systemd_and_installer_wire_exact_helper():
     assert f"/usr/local/libexec/{helper}" in installer
     assert "native_public_trade_hot_retention.py" in installer
     assert "native publicTrade retention actor path bytes differ" in installer
+
+def test_gap_cleanup_uses_session_pk_not_global_gap_sort():
+    text = SOURCE.read_text()
+    assert "def _eligible_gap_sessions(" in text
+    assert "WHERE e.source_session_id=%s" in text
+    assert "ORDER BY s.ended_at,s.source_session_id" not in text
+    assert "JOIN analytics.native_public_trade_source_events e\n                  USING(source_session_id)" not in text
+
