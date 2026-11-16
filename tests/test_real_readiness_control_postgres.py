@@ -208,6 +208,33 @@ def test_readiness_progress_ready_and_blocked_are_durable() -> None:
         assert ready["progress_json"] == {"services_active": 1}
         assert ready["completed_at"] is not None
 
+        mark_blocked(
+            connection,
+            request_id=ready_id,
+            code="OWNER_ARM_FINAL_TECHNICAL_RECHECK_BLOCKED",
+            detail="fresh final proof failed",
+            retry_eligible=True,
+            now=now + timedelta(seconds=3),
+            progress={"services_active": 1},
+        )
+        revoked = latest_operation(connection, scope_key=ready_scope)
+        assert revoked is not None
+        assert revoked["state"] == "BLOCKED"
+        assert revoked["blocker_code"] == "OWNER_ARM_FINAL_TECHNICAL_RECHECK_BLOCKED"
+        assert revoked["retry_eligible"] is True
+        with pytest.raises(
+            RealReadinessControlError,
+            match="READINESS_BLOCK_TRANSITION_INVALID",
+        ):
+            mark_blocked(
+                connection,
+                request_id=ready_id,
+                code="SECOND_BLOCK",
+                detail="terminal remains terminal",
+                retry_eligible=True,
+                now=now + timedelta(seconds=4),
+            )
+
         blocked_scope = "blocked-scope-" + token
         blocked_id = "ready-blocked-" + token
         _begin(
