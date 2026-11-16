@@ -4589,19 +4589,17 @@ def package_project() -> dict[str, object]:
 
 # U6_STRATEGY_API_BEGIN
 def _u6_multi_strategy_observer_ready() -> bool:
+    """Use the single canonical pre-arm observer readiness predicate."""
     try:
-        payload = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
-        updated = datetime.fromisoformat(str(payload.get("updated_at") or ""))
+        payload = json.loads(
+            UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8")
+        )
     except (OSError, ValueError, json.JSONDecodeError):
         return False
-    if updated.tzinfo is None:
-        return False
-    age = (datetime.now(UTC) - updated.astimezone(UTC)).total_seconds()
-    return (
-        -1.0 <= age <= 10.0
-        and payload.get("runtime_mode") == "MULTI_STRATEGY_OBSERVER"
-        and bool(payload.get("observer_ready"))
-        and payload.get("state") in {"IDLE", "WARMUP", "RUNNING", "RELOADING"}
+    return observer_arm_ready(
+        payload,
+        LOADED_RELEASE_COMMIT,
+        datetime.now(UTC),
     )
 
 def _u6_p90_real_v3_stage_ready() -> tuple[bool, str]:

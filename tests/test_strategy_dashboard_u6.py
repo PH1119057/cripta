@@ -1170,8 +1170,14 @@ def test_strategy_ui_has_independent_monitor_and_execution_controls() -> None:
 def test_strategy_api_reads_real_observer_state_and_has_separate_execution_permission() -> None:
     app = APP.read_text(encoding="utf-8")
     scope = app[app.index("# U6_STRATEGY_API_BEGIN") : app.index("# U6_STRATEGY_API_END")]
+    helper = scope[
+        scope.index("def _u6_multi_strategy_observer_ready()")
+        : scope.index("def _u6_p90_real_v3_stage_ready()")
+    ]
     assert "_u6_multi_strategy_observer_ready()" in scope
-    assert 'runtime_mode") == "MULTI_STRATEGY_OBSERVER"' in scope
+    assert "observer_arm_ready(" in helper
+    assert "LOADED_RELEASE_COMMIT" in helper
+    assert '"IDLE", "WARMUP", "RUNNING", "RELOADING"' not in helper
     assert "activate_exact_strategy(" in scope
     assert "enforce_readiness=True" in scope
     assert 'U6_STRATEGY_EXECUTION_PERMISSION_PATH = "/api/strategies/execution-permission"' in scope
