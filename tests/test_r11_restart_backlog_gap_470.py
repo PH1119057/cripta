@@ -7,9 +7,8 @@ from typing import Any, cast
 
 import pytest
 
-from bybit_workbench.market_identity import bybit_instrument_id
-
 import operations.monitoring.r11_mayak_pg_observation as observation
+from bybit_workbench.market_identity import bybit_instrument_id
 from bybit_workbench.mayak.seven_publication_observation_candidate import (
     R11SevenMayakReplayCheckpoint,
 )
