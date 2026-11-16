@@ -49,7 +49,10 @@ if TYPE_CHECKING:
     from operations.monitoring.mayak_v2 import Collector
 
 _MAX_PUBLICATION_LAG_SECONDS = 30
-_MAX_BACKLOG_PUBLICATIONS = 64
+# 10 minutes at the canonical ~1 Hz MarketPublication cadence.  This keeps
+# restart replay bounded while leaving ~5 minutes of recovery headroom inside
+# the 15-minute HOT publication retention window.
+_MAX_BACKLOG_PUBLICATIONS = 600
 
 
 class R11MayakPGSourceUnavailable(RuntimeError):

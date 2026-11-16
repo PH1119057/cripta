@@ -89,6 +89,21 @@ def test_backlog_reads_exact_next_publication_not_latest() -> None:
     assert target == (101, AT + timedelta(seconds=1))
 
 
+def test_observed_65_publication_restart_lag_is_replayable_in_order() -> None:
+    rows = [
+        (101 + index, AT + timedelta(seconds=index + 1))
+        for index in range(65)
+    ]
+    db = DB(
+        backlog=rows,
+        latest=(rows[-1][0], rows[-1][1], SESSION, RELEASE),
+    )
+    assert observation._MAX_BACKLOG_PUBLICATIONS == 600
+    assert observation._next_publication(
+        db, replay=replay_at(), now=AT + timedelta(minutes=2),
+    ) == rows[0]
+
+
 def test_backlog_ceiling_fails_closed_before_skipping() -> None:
     rows = [
         (101 + index, AT + timedelta(seconds=index + 1))
