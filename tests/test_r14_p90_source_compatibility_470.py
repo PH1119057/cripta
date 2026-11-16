@@ -92,3 +92,32 @@ def test_r14_pre_promotion_attestations_keep_exact_historical_digest(
 
 def test_r14_unlisted_release_does_not_inherit_pre_promotion_digest() -> None:
     assert "0" * 40 not in compat._REVIEWED_HISTORICAL_CONSUMERS
+
+
+_R06_POST_PROMOTION_RELEASES = (
+    "4258d34c16b37c33c63016f39d79002e386aee4e",
+    "4f2dca7d2820a4f0474ef32d7135396d35f5153f",
+    "5f841e3709b72c9e5a82892570bd36d63296222f",
+    "9b0ec2f589787babe88e90bccec661a2a648558f",
+    "de7dc6b8646f8f2be1d9a4cd83e1752230e57e27",
+    "e88f8ceb602f28c0e220398c66ead856da83b778",
+    "f68f0e42d389d626a707495e3e39c4625d434676",
+    "f77a074aaf2982dfed881a0efcc80567d449d336",
+)
+
+
+
+@pytest.mark.parametrize("release", _R06_POST_PROMOTION_RELEASES)
+def test_r14_post_promotion_attestations_keep_exact_historical_digest(
+    release: str,
+) -> None:
+    expected = compat._R06_POST_PROMOTION_HISTORICAL_DIGEST
+    assert (
+        compat._REVIEWED_HISTORICAL_CONSUMERS[release]
+        == expected
+        == "38b45713f811d96cc8bf1ed48cd98a5f26b4fa3fc26d33a1b6309fc2278e437e"
+    )
+
+
+def test_r14_unlisted_release_does_not_inherit_post_promotion_digest() -> None:
+    assert "f" * 40 not in compat._REVIEWED_HISTORICAL_CONSUMERS

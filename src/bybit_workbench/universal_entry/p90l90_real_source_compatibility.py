@@ -80,6 +80,27 @@ _REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
     "f61af319084f4d5bf50ec305ae54aa3ba8391be4",
 ), _R06_PRE_PROMOTION_HISTORICAL_DIGEST))
 
+# After the R06 financial-promotion consumer landed, the same ACTIVE physical
+# source epoch accumulated a second exact historical consumer inventory before
+# #795 changed Engine again. These eight append-only attestations were
+# independently reconstructed from immutable Git objects (99 consumer files
+# each) and all hash to this exact contract digest. Preserve their historical
+# bytes; do not relabel old rows as the current release.
+_R06_POST_PROMOTION_HISTORICAL_DIGEST = (
+    "38b45713f811d96cc8bf1ed48cd98a5f26b4fa3fc26d33a1b6309fc2278e437e"
+)
+_REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
+    "4258d34c16b37c33c63016f39d79002e386aee4e",
+    "4f2dca7d2820a4f0474ef32d7135396d35f5153f",
+    "5f841e3709b72c9e5a82892570bd36d63296222f",
+    "9b0ec2f589787babe88e90bccec661a2a648558f",
+    "de7dc6b8646f8f2be1d9a4cd83e1752230e57e27",
+    "e88f8ceb602f28c0e220398c66ead856da83b778",
+    "f68f0e42d389d626a707495e3e39c4625d434676",
+    "f77a074aaf2982dfed881a0efcc80567d449d336",
+), _R06_POST_PROMOTION_HISTORICAL_DIGEST))
+
+
 # These wiring adapters are reviewed in the release diff. All Strategy,
 # Entry/Exit algorithms, codecs, contracts, account and private-proof modules
 # below remain byte-identical to the retained origin release.
