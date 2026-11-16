@@ -586,13 +586,13 @@ def prepare_p90l90_real_v3_prearm_evidence(
             inspect_real_source_identity,
         )
 
-        identity = inspect_real_source_identity(
+        source_identity = inspect_real_source_identity(
             connection, epoch_id=str(epoch_id), loaded_commit=release_commit,
             bundles=tuple(b for b in load_active_strategy_bundles(connection)
                           if b.card.strategy_version == VERSION
                           and b.card.strategy_id in {MAIN_ID, SUB_ID}),
         )
-        approved_checkpoint_writers = set(identity.approved_producers)
+        approved_checkpoint_writers = set(source_identity.approved_producers)
     _require(
         str(market_source) == BYBIT_PUBLIC_MARKET_SOURCE_ID
         and _aware(source_ready, "source WS") <= current
