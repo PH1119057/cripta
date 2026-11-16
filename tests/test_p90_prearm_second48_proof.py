@@ -147,7 +147,7 @@ def _exercise_delivery_prearm(
         if "universal_entry_observer" in str(path):
             return {
                 "updated_at": at.isoformat(), "state": "RUNNING",
-                "observer_ready": True, "source_commit": "release",
+                "observer_ready": True, "source_commit": "a" * 40,
                 "active_strategies": 2,
                 "symbols": list(set().union(*prearm.ALLOWED_SYMBOLS.values())),
                 "active_entry_plans": ["entry-main", "entry-sub"],
