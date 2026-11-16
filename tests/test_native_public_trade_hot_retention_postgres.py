@@ -332,3 +332,43 @@ def test_current_cursor_without_source_event_blocks(database, monkeypatch):
         match="CURRENT_CURSOR_SOURCE_EVENT_DANGLING",
     ):
         MODULE.run_apply(c, now - timedelta(minutes=15), 100)
+
+def test_pinned_oldest_gap_session_does_not_block_next_session(
+    database, monkeypatch,
+):
+    c = database
+    _actor(monkeypatch)
+    now = datetime.now(UTC).replace(microsecond=0)
+    cutoff = now - timedelta(minutes=15)
+    old = now - timedelta(hours=3)
+    release = "9" * 40
+    pinned = "p" * 32
+    later = "q" * 32
+
+    _session(c, pinned, release, "GAP", old, old + timedelta(minutes=1))
+    _session(
+        c, later, release, "GAP",
+        old + timedelta(minutes=10), old + timedelta(minutes=11),
+    )
+    _source(
+        c, session=pinned, frame=1, symbol="LTCUSDT",
+        seq=901, exec_id="pinned-oldest", when=old + timedelta(seconds=1),
+    )
+    c.execute(
+        """INSERT INTO analytics.native_public_trade_observer_delivery
+           VALUES(%s,1,0)""",
+        (pinned,),
+    )
+    _source(
+        c, session=later, frame=1, symbol="APTUSDT",
+        seq=902, exec_id="later-disposable",
+        when=old + timedelta(minutes=10, seconds=1),
+    )
+
+    result = MODULE.run_apply(c, cutoff, 100)
+    assert result.rows["gap_source_events_deleted"] == 1
+    assert set(c.execute(
+        """SELECT source_session_id,frame_number
+             FROM analytics.native_public_trade_source_events"""
+    ).fetchall()) == {(pinned, 1)}
+
