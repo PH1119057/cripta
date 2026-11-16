@@ -318,7 +318,12 @@ def bootstrap_future_entry_checkpoints(
             or publication[:3] != (
                 pin.source_session_id,pin.producer_release_commit,pin.as_of_second
             )
-            or publication[3] != pin.native_watermarks
+            or not isinstance(publication[3], dict)
+            or set(pin.native_watermarks) != set(FIVE)
+            or any(
+                publication[3].get(s) != pin.native_watermarks[s]
+                for s in FIVE
+            )
             or any(
                 not isinstance(publication[4].get(s), dict)
                 or any(publication[4][s].get(k) != v
