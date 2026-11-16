@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from bybit_workbench.market_identity import (
-    BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
 )
 from bybit_workbench.universal_entry import r06_financial_promotion as promotion
 from bybit_workbench.universal_entry.contracts import (
