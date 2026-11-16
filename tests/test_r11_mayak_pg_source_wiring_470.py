@@ -148,6 +148,44 @@ def test_pg_mode_waits_fail_closed_when_source_is_temporarily_absent(
     ]
 
 
+
+def test_pg_mode_retries_incomplete_cold_bootstrap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Stop:
+        calls = 0
+        def is_set(self) -> bool:
+            return self.calls > 0
+        def wait(self, seconds: float) -> None:
+            assert seconds == 1.0
+            self.calls += 1
+
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def execute(self, sql: str):
+            assert sql == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            return None
+
+    errors: list[str] = []
+    stop = Stop()
+    collector = SimpleNamespace(
+        stop=stop,
+        _write_error=lambda _market, exc: errors.append(str(exc)),
+    )
+    monkeypatch.setattr(pg.psycopg, "connect", lambda *_a, **_k: Connection())
+    monkeypatch.setattr(
+        pg, "_restore_or_reset_replay",
+        lambda _db: (_ for _ in ()).throw(
+            pg.R11MayakPGSourceUnavailable(
+                "R11_MAYAK_PG_BOOTSTRAP_PUBLICATION_NOT_READY"
+            )
+        ),
+    )
+    pg.run_r11_pg_observation(collector)
+    assert errors == ["R11_MAYAK_PG_BOOTSTRAP_PUBLICATION_NOT_READY"]
+    assert stop.calls == 1
+
 def test_pg_mode_keeps_nonavailability_integrity_failures_hard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
