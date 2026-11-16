@@ -15,6 +15,9 @@ on:
       - "tests/test_market_hot_retention_postgres.py"
       - "tests/test_market_source_hot_retention.py"
       - "tests/test_market_source_hot_retention_postgres.py"
+      - "operations/monitoring/native_public_trade_hot_retention.py"
+      - "tests/test_native_public_trade_hot_retention.py"
+      - "tests/test_native_public_trade_hot_retention_postgres.py"
       - ".github/workflows/mayak-dispatcher-hot-retention-postgres.yml"
 
 permissions:
@@ -51,4 +54,6 @@ jobs:
             tests/test_market_hot_retention.py \
             tests/test_market_hot_retention_postgres.py \
             tests/test_market_source_hot_retention.py \
-            tests/test_market_source_hot_retention_postgres.py
+            tests/test_market_source_hot_retention_postgres.py \
+            tests/test_native_public_trade_hot_retention.py \
+            tests/test_native_public_trade_hot_retention_postgres.py
