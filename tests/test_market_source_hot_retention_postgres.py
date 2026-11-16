@@ -255,9 +255,63 @@ def test_active_source_prunes_only_processed_raw_prefix(database, monkeypatch):
     with c.transaction():
         c.execute("SET TRANSACTION READ ONLY")
         check = MODULE.collect_check(c, now - timedelta(minutes=15))
-        assert check.rows[MODULE.RAW] == 2
+        assert check.rows[MODULE.RAW] == 1
     result = MODULE.run_apply(c, now - timedelta(minutes=15), 100)
-    assert result.rows[MODULE.RAW] == 2
+    assert result.rows[MODULE.RAW] == 1
     assert set(r[0] for r in c.execute(
         "SELECT source_frame_number FROM analytics.public_source_original_event_frames"
-    )) == {1, 4}
+    )) == {1, 3, 4}
+
+
+def test_active_source_with_stale_mayak_head_keeps_old_raw_tail(
+    database, monkeypatch,
+):
+    c = database
+    _actor(monkeypatch)
+    now = datetime.now(UTC).replace(microsecond=0)
+    old = now - timedelta(hours=1)
+    stale_session = "e" * 32
+    stale_release = "f" * 40
+    active_session = "a" * 32
+    active_release = "b" * 40
+
+    _insert_pub(c, 20, old, stale_session, 1)
+    c.execute(
+        "INSERT INTO analytics.native_public_trade_source_sessions VALUES(%s,%s,'GAP',%s)",
+        (stale_session, stale_release, old),
+    )
+    c.execute(
+        "INSERT INTO analytics.native_public_trade_source_sessions VALUES(%s,%s,'ACTIVE',%s)",
+        (active_session, active_release, old),
+    )
+    c.execute(
+        "INSERT INTO mayak_v2.r11_consumer_commit VALUES(%s,%s,%s,%s,20)",
+        (
+            MODULE._CONSUMER_ID,
+            stale_session,
+            stale_release,
+            _state(stale_session, stale_release, 3),
+        ),
+    )
+    for frame in (10, 11):
+        c.execute(
+            """INSERT INTO analytics.public_source_original_event_frames
+               VALUES(%s,%s,'LINEAR',%s,%s)""",
+            (active_session, "2" * 32, frame, old + timedelta(seconds=frame)),
+        )
+
+    with c.transaction():
+        c.execute("SET TRANSACTION READ ONLY")
+        check = MODULE.collect_check(c, now - timedelta(minutes=15))
+        # The stale session may be reclaimed, but the ACTIVE raw bootstrap tail
+        # must not be age-expired before MAYAK owns a matching checkpoint.
+        assert check.rows[MODULE.RAW] == 0
+
+    result = MODULE.run_apply(c, now - timedelta(minutes=15), 100)
+    assert result.rows[MODULE.RAW] == 0
+    assert set(r[0] for r in c.execute(
+        """SELECT source_frame_number
+             FROM analytics.public_source_original_event_frames
+            WHERE source_session_id=%s""",
+        (active_session,),
+    )) == {10, 11}
