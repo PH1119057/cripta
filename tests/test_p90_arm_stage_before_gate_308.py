@@ -32,21 +32,21 @@ def test_finalize_is_the_only_staged_path_that_opens_gate() -> None:
     assert "OWNER_ARM_OPEN_GATE_REASON" in finalize
 
 
-def test_dashboard_waits_for_exact_stage_and_disarms_on_failure() -> None:
-    handler = APP[
-        APP.index("def _u6_p90_real_v3_arm("):
-        APP.index("\ndef _u6_financial_account_catalog")
+def test_owner_workflow_waits_for_exact_stage_and_disarms_on_failure() -> None:
+    owner = APP[
+        APP.index("def _execute_p90_real_v3_owner_arm("):
+        APP.index("\ndef _execute_p90_real_v3_owner_disarm(")
     ]
-    assert "stage_p90l90_real_v3(" in handler
-    assert "_u6_wait_p90_real_v3_stage_ready(" in handler
-    assert "timeout_seconds=120.0" in handler
-    assert "final_stage_ready" in handler
-    assert "finalize_p90l90_real_v3(" in handler
-    assert "if staged:" in handler
-    assert "disarm_p90l90_real_v3(" in handler
-    assert handler.index("stage_p90l90_real_v3(") < handler.index(
+    assert "stage_p90l90_real_v3(" in owner
+    assert "_u6_wait_p90_real_v3_stage_ready(" in owner
+    assert "timeout_seconds=120.0" in owner
+    assert "final_stage_ready" in owner
+    assert "finalize_p90l90_real_v3(" in owner
+    assert "if staged:" in owner
+    assert "disarm_p90l90_real_v3(" in owner
+    assert owner.index("stage_p90l90_real_v3(") < owner.index(
         "_u6_wait_p90_real_v3_stage_ready("
-    ) < handler.index("finalize_p90l90_real_v3(")
+    ) < owner.index("finalize_p90l90_real_v3(")
 
 
 def test_stage_readiness_reuses_canonical_observer_readiness_and_stage_contract() -> None:

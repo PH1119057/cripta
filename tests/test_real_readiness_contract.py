@@ -87,10 +87,8 @@ def test_verified_release_installs_broker_and_durable_state_but_does_not_arm():
     assert "systemctl start cripta-real-service-broker.service" in installer
     assert "REAL_SERVICE_BROKER=ACTIVE" in installer
     broker_start = installer.index("systemctl start cripta-real-service-broker.service")
-    dashboard_restore = installer.index(
-        'if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi'
-    )
-    assert broker_start < dashboard_restore
+    private_barrier = installer.index("p90_release_private_barrier=0")
+    assert broker_start < private_barrier
     assert "REAL_SERVICE_BROKER_SOURCE_PREFLIGHT=PASS" in installer
     assert "/usr/local/libexec/cripta-real-service-broker" in installer
     assert '"$broker_staged"' in installer
@@ -135,12 +133,12 @@ def test_verified_release_normalizes_dependency_pulled_inactive_services():
     assert marker in installer
     normalize = installer.index(marker)
     start = installer.rfind(
-        'if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi',
+        'if [[ "$native_code_changed" == "0" ]]; then',
         0,
         normalize,
     )
     verify = installer.index(
-        'elif [[ "${was_active[$service]}" == "1" ]]; then',
+        'for service in "',
         normalize,
     )
     block = installer[start:verify]

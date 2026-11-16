@@ -81,11 +81,11 @@ def test_dashboard_recovery_failure_cannot_advance_to_owner_arm():
     ]
     prepare = app[
         app.index("def _u6_prepare_p90_real_v3_readiness("):
-        app.index("def _u6_p90_real_v3_arm(")
+        app.index("def _execute_p90_real_v3_owner_arm(")
     ]
-    arm = app[
-        app.index("def _u6_p90_real_v3_arm("):
-        app.index("def _u6_financial_account_catalog(")
+    owner = app[
+        app.index("def _execute_p90_real_v3_owner_arm("):
+        app.index("def _execute_p90_real_v3_owner_disarm(")
     ]
     assert 'code = "P90_ACCOUNT_WS_RECOVERY_UNCLASSIFIED"' in recovery
     assert "if candidate in safe_codes:" in recovery
@@ -97,8 +97,8 @@ def test_dashboard_recovery_failure_cannot_advance_to_owner_arm():
         < prepare.index("mark_real_readiness_ready(")
     )
     assert (
-        arm.index('if preparation.get("state") != "READY_FOR_OWNER_ARM":')
-        < arm.index("stage_p90l90_real_v3(")
+        owner.index('if preparation.get("state") != "READY_FOR_OWNER_ARM":')
+        < owner.index("stage_p90l90_real_v3(")
     )
     assert "exchange_mutation" in recovery
     assert "gate_mutation" in recovery

@@ -63,7 +63,10 @@ def _arm_handler_with_failed_second_proof(exc):
     tree = ast.parse(code)
     node = next(
         n for n in tree.body
-        if isinstance(n, ast.FunctionDef) and n.name == "_u6_p90_real_v3_arm"
+        if (
+            isinstance(n, ast.FunctionDef)
+            and n.name == "_execute_p90_real_v3_owner_arm"
+        )
     )
     calls = []
 
@@ -86,7 +89,6 @@ def _arm_handler_with_failed_second_proof(exc):
         "P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC": (
             app.P90_REAL_READINESS_TRANSIENT_PRIVATE_IPC
         ),
-        "_u6_financial_account_same_origin": lambda _: True,
         "_u6_prepare_p90_real_v3_readiness": lambda **_: {
             "state": "READY_FOR_OWNER_ARM",
         },
@@ -99,7 +101,7 @@ def _arm_handler_with_failed_second_proof(exc):
         compile(ast.Module(body=[node], type_ignores=[]), "arm", "exec"),
         namespace,
     )
-    return namespace["_u6_p90_real_v3_arm"], calls
+    return namespace["_execute_p90_real_v3_owner_arm"], calls
 
 
 @pytest.mark.parametrize(
@@ -112,9 +114,8 @@ def _arm_handler_with_failed_second_proof(exc):
 )
 def test_second_proof_failure_is_durable_and_cannot_stage(failure, retry_allowed):
     arm, calls = _arm_handler_with_failed_second_proof(failure)
-    owner = SimpleNamespace(session_user=lambda: "owner")
     with pytest.raises(type(failure)):
-        arm(owner, {"enabled": True, "confirmed": True, "request_id": "once"})
+        arm(operator="owner", request_id="once")
     assert calls[0] == ("recheck", 30.0)
     assert len(calls) == 2
     detail = calls[1][1]
@@ -126,8 +127,8 @@ def test_second_proof_failure_is_durable_and_cannot_stage(failure, retry_allowed
 
 def test_recheck_precedes_all_financial_controls_and_retains_exact_ttl():
     code = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
-    arm = code.split("def _u6_p90_real_v3_arm(", 1)[1].split(
-        "\ndef _u6_financial_account_catalog", 1,
+    arm = code.split("def _execute_p90_real_v3_owner_arm(", 1)[1].split(
+        "\ndef _execute_p90_real_v3_owner_disarm", 1,
     )[0]
     assert arm.index("_wait_p90_real_v3_technical_evidence(") < arm.index(
         "stage_p90l90_real_v3("
