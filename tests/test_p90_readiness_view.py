@@ -7,9 +7,13 @@ from bybit_workbench.p90_readiness_view import observer_arm_ready, technical_pre
 NOW = datetime(2026, 11, 4, 18, 0, tzinfo=UTC)
 
 
-def observer():
-    return dict(state="RUNNING", observer_ready=True, source_commit="release",
+def observer(state="RUNNING"):
+    return dict(state=state, observer_ready=True, source_commit="release",
                 runtime_mode="MULTI_STRATEGY_OBSERVER", updated_at=NOW.isoformat())
+
+
+def test_r06_source_only_observer_is_arm_ready_when_exact_and_fresh():
+    assert observer_arm_ready(observer("R06_PG_NO_ORDER_SOURCE_ONLY"), "release", NOW)
 
 
 @pytest.mark.parametrize("change", [
