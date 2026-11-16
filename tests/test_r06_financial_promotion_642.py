@@ -1,4 +1,5 @@
 """Issue #642: R06 SOURCE_ONLY -> Universal Entry financial promotion regressions."""
+
 from __future__ import annotations
 
 import inspect
