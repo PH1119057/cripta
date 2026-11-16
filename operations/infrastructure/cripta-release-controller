@@ -624,27 +624,39 @@ def _select_scoped_purpose(
     """Classify only exact verified source differences; never silently swap a writer."""
     if not SHA.fullmatch(target) or not SHA.fullmatch(runtime_baseline):
         raise ControllerError("RELEASE_SCOPE_IDENTITY_INVALID")
-    # A changed producer must be stopped by the dedicated GAP/rollback rail.
-    status = json.loads(
-        Path("/var/lib/cripta/native_public_trade_source/status.json")
-        .read_text(encoding="utf-8")
+    # An inactive Source must not block an ordinary release that leaves the
+    # installed producer ABI byte-for-byte unchanged. Only a real producer
+    # delta requires proving the currently loaded writer before GAP/cutover.
+    installed_source_delta = _git(
+        "diff", "--name-only", runtime_baseline, target, "--",
+        *PRODUCER_ABI_PATHS,
     )
-    old_commit = status.get("source_commit")
-    if (
-        status.get("state") != "ACTIVE"
-        or not isinstance(old_commit, str)
-        or SHA.fullmatch(old_commit) is None
-        or re.fullmatch(r"[0-9a-f]{32}", str(status.get("session") or "")) is None
-        or _run(["/usr/bin/systemctl", "is-active",
-                 "cripta-native-public-trade-source.service"]) != "active"
-    ):
-        raise ControllerError("NATIVE_SOURCE_BASELINE_NOT_PROVEN")
-    _git("cat-file", "-e", old_commit + "^{commit}")
-    source_delta = _git(
-        "diff", "--name-only", old_commit, target, "--", *PRODUCER_ABI_PATHS
-    )
-    if source_delta:
-        return NATIVE_CUTOVER_PURPOSE, True
+    if installed_source_delta:
+        status = json.loads(
+            Path("/var/lib/cripta/native_public_trade_source/status.json")
+            .read_text(encoding="utf-8")
+        )
+        old_commit = status.get("source_commit")
+        if (
+            status.get("state") != "ACTIVE"
+            or not isinstance(old_commit, str)
+            or SHA.fullmatch(old_commit) is None
+            or re.fullmatch(
+                r"[0-9a-f]{32}", str(status.get("session") or "")
+            ) is None
+            or _run([
+                "/usr/bin/systemctl", "is-active",
+                "cripta-native-public-trade-source.service",
+            ]) != "active"
+        ):
+            raise ControllerError("NATIVE_SOURCE_BASELINE_NOT_PROVEN")
+        _git("cat-file", "-e", old_commit + "^{commit}")
+        source_delta = _git(
+            "diff", "--name-only", old_commit, target, "--",
+            *PRODUCER_ABI_PATHS,
+        )
+        if source_delta:
+            return NATIVE_CUTOVER_PURPOSE, True
     # Dashboard scope is checked a second time by the existing read-only
     # verifier before any asset installation. An uncertain scope stays FULL.
     if dashboard_baseline is not None and dashboard_baseline != target:
