@@ -140,10 +140,15 @@ def test_systemd_contract_starts_retention_with_source():
         ROOT / "operations/systemd/cripta-market-hot-retention.timer"
     ).read_text()
     assert "cripta-market-hot-retention.timer" in source
-    assert "cripta-market-source-hot-retention.py --apply --batch-limit 50000" in service
+    assert "cripta-market-source-hot-retention.py --apply --batch-limit 15000" in service
     assert "User=postgres" in service
     assert "PartOf=cripta-native-public-trade-source.service" in timer
-    assert "OnUnitActiveSec=60s" in timer
+    assert "OnUnitActiveSec=30s" in timer
+    # Keep enough steady-state delete capacity for the observed optional-frame
+    # rate without repeating the 50k-row WAL/IO spike that starved MarketSource.
+    batch = 15_000
+    cadence_seconds = 30
+    assert batch * (60 // cadence_seconds) == 30_000
 
 def test_native_cutover_accepts_source_coupled_retention_runtime_state():
     installer = (

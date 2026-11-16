@@ -71,7 +71,7 @@ def test_systemd_and_installer_wire_exact_helper():
     ).read_text()
     helper = "cripta-native-public-trade-hot-retention.py"
     assert (
-        f"/usr/local/libexec/{helper} --apply --batch-limit 50000"
+        f"/usr/local/libexec/{helper} --apply --batch-limit 15000"
         in service
     )
     assert "User=postgres" in service
