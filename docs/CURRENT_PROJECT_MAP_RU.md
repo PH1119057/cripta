@@ -5317,3 +5317,38 @@ DEPLOYED=NO
 RUNTIME_BEHAVIOR_VERIFIED=NO
 LIVE_CHANGE=NO
 ```
+
+
+# 40. P90 development-delegated OWNER ARM rail — CHECKED HERE 2026-11-16 (Issue #642)
+
+**Owner decision / authority:** owner explicitly delegated repeated P90 REAL v3
+ARM/DISARM to ChatGPT for the current stabilization cycle. Pre-change protected
+GitHub/source/installed release was `f77a074aaf2982dfed881a0efcc80567d449d336`.
+At the decision checkpoint, native source PID 806824/session
+`665d34849d9846339ca42419719be542` and R06 SOURCE_ONLY observer were healthy,
+technical readiness was `READY_FOR_OWNER_ARM`, while mainnet gate, enabled
+execution permissions and generic/account arm sessions remained zero.
+
+**Prepared implementation:** one shared Dashboard/delegated owner-arm
+orchestrator plus exact static systemd ARM/DISARM units. Browser same-origin/
+session checks remain on the Dashboard handler; delegated units require exact
+systemd cgroup, current installed release and owner-decision marker and accept no
+trading parameters. Installer installs them inert and does not manage/enable
+them. The same changeset adds the missing disarmed release dependency barrier:
+all previously-active MAIN/SUB private runtimes must produce new post-start
+COMPLETE/PROVEN flat generations and both signed IPC proofs before observer
+start. Read-only production smoke on installed 22af6687 proved this barrier
+against live MAIN/SUB providers: PASS for 2 strategies / 2 accounts in 3 polls;
+no gate/permission/ARM/Exchange mutation.
+
+    CANON_CONFLICT=RESOLVED_AFTER_PROTECTED_MERGE
+    OWNER_DECISION=YES
+    IMPLEMENTED=SOURCE_PREPARED
+    TESTED=LOCAL_COMPILE_NEGATIVE_CGROUP_AND_RELEASE_BARRIER_SMOKE_PASS_CI_PENDING
+    DEPLOYED=NO
+    DELEGATED_ARM_USED=NO
+    LIVE_CHANGE=NO
+
+Runtime deployment/ARM/soak evidence must be recorded separately after protected
+CI/merge and exact verified release; this source checkpoint does not itself
+authorize a broader Strategy/account/risk scope.

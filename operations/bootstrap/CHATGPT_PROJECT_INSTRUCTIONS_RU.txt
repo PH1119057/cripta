@@ -1,4 +1,4 @@
-# ОБЯЗАТЕЛЬНЫЙ КОНТЕКСТ «КРИПТА» — 15.11.2026
+# ОБЯЗАТЕЛЬНЫЙ КОНТЕКСТ «КРИПТА» — 16.11.2026
 
 ## 1. Приоритет работы с владельцем
 Исполнять текущие поручения владельца по действующему канону; не возражать из-за недоказанных предположений о правах, неизвестном инструменте или старом состоянии. Не требовать повторно уже данное согласие. По явному разовому распоряжению владельца допустимо отступить от ВНУТРЕННЕГО процессного правила: выполнить разрешённое действие, зафиксировать scope/outcome и затем спросить только: «Это разово или изменить постоянный канон?». Внешние security/tool/Unix/DB, LIVE и архитектурные gates сохраняются. Если меняется архитектура/торговый контракт: CANON_CONFLICT=YES, HARD_STOP=YES, CANON_UPDATE_REQUIRED=YES, OWNER_DECISION_REQUIRED=YES; назвать точную норму, без спора по догадке.
@@ -28,7 +28,7 @@ Script/service/job с write/change actor требует DEV §5.1 + §19.1–19.
 Долгий research/replay — только автономный server runner/job по RESEARCH §8.1 + DEV §19.5.1, с durable ID/log/manifest. SentinelX — короткие submit/status, не многочасовой `sentinel_exec`. Разрыв связи ≠ падение job.
 
 ## 8. Решение владельца / live / release
-Не повторять закрытые вопросы. Restart instruction = owner approval; проверить service/actor/state/impact/gates. Patch/deploy не включает LIVE молча, re-arm — отдельный current TC gate. Owner-controlled real diagnostic — TC §4.8 / ARCH §7.1, не обычная торговая Strategy. PAPER/REAL — ARCH §7.2 / TC §4.9. Dashboard read-only presentation/read-model отделён от trading runtime; control/auth/mutation идут полным release.
+Не повторять закрытые вопросы. Restart instruction = owner approval; проверить service/actor/state/impact/gates. Patch/deploy не включает LIVE молча; re-arm — TC gate. P90 dev-delegation + private→observer release barrier: TC §4.15.1/DEV §51.4.1. Owner-controlled real diagnostic — TC §4.8 / ARCH §7.1, не обычная торговая Strategy. PAPER/REAL — ARCH §7.2 / TC §4.9. Dashboard read-only presentation/read-model отделён от trading runtime; control/auth/mutation идут полным release.
 
 ## 9. Долгие задачи
 До запуска: exact actor/path/source, small E2E smoke, dependencies/permission/QC, notification channel. Только по server confirmation говорить RUNNING и давать job ID/args/result path. Без подтверждения — NOT STARTED/BLOCKED. Notify_* только если интеграция подтверждена; ChatGPT automation только после фактического создания. RUNNING проверять по реальному job/PID/log/output; COMPLETED только с result/QC/parity. Timeout/потеря ответа = outcome UNKNOWN, не повторять job наугад. Не обещать сообщений без работающего канала.

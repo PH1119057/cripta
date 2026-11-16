@@ -1507,6 +1507,32 @@ rewrite запрещён.
 Статус §54: `OWNER_DECISION=YES`; `CANON=YES`; `IMPLEMENTED=NO`; `DEPLOYED=NO`;
 `RUNTIME_VERIFIED=NO`; `LIVE_CHANGE=NO`.
 
+### 54.4 Development-delegated OWNER authorization — OWNER DECISION 2026-11-16
+
+Для exact P90 REAL v3 scope из TRADING_CONTOUR §4.15.1 на время текущего
+stabilization cycle owner authorization может быть создана не только
+authenticated Dashboard click, но и **exact owner-delegated management
+invocation** SentinelX -> reviewed static systemd ARM unit. Это дополнительный
+authentication source для того же financial transition owner, а не второй
+transition owner и не автоматическое technical resume.
+
+Архитектурные инварианты:
+- readiness/service recovery/release сами по себе OWNER authorization не создают;
+- delegated unit не принимает торговые параметры и не может расширить scope;
+- process обязан доказать exact installed release + exact systemd execution
+  scope до импорта financial workflow;
+- ARM переиспользует тот же staged/final transaction path, что Dashboard;
+- отдельный exact delegated DISARM остаётся fail-safe action;
+- generic Unix user, shell, SQL, broker или arbitrary SentinelX invocation не
+  получают OWNER rights;
+- любое изменение Strategy/account/risk scope или завершение/отзыв делегации
+  возвращает правило: новый explicit OWNER authorization нужен обычным
+  authenticated owner rail.
+
+Следовательно OWNER_AUTHORIZED остаётся отдельным durable financial фактом;
+меняется только допустимый authenticated source для указанного временного
+development scope.
+
 ## 55. Scoped Entry admission и независимая история дефектов — OWNER DECISION 2026-11-04
 
 Точный trading contract: TRADING_CONTOUR §4.13. Нельзя выводить финансовый

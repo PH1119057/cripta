@@ -480,6 +480,9 @@ unit_specs=(
   "operations/systemd/cripta-release-controller.service|cripta-release-controller.service|runtime"
   # Inert explicit P90 source-compatibility registration; DB append only, no Exchange/ARM.
   "operations/systemd/cripta-p90-source-compatibility-register.service|cripta-p90-source-compatibility-register.service|runtime"
+  # Inert exact development owner-delegation rails. Never enable/manage automatically.
+  "operations/systemd/cripta-p90-development-owner-arm.service|cripta-p90-development-owner-arm.service|runtime"
+  "operations/systemd/cripta-p90-development-owner-disarm.service|cripta-p90-development-owner-disarm.service|runtime"
   # Generic management-plane broker. It may start only source-allowlisted CRIPTA units.
   "operations/systemd/cripta-real-service-broker.service|cripta-real-service-broker.service|runtime"
   # Exact SUB WS technical recovery, no restart broker and no OWNER/LIVE rights.
@@ -1330,13 +1333,53 @@ except Exception:
     echo "INDEPENDENT_NATIVE_MARKET_SOURCE=PRESERVED_INACTIVE"
   fi
 
+  p90_release_private_barrier=0
+  if [[ "$pre_gate" == "0" &&
+        "$pre_permissions" == "0" &&
+        "$pre_sessions" == "0" &&
+        "$pre_account_sessions" == "0" &&
+        "${was_active[cripta-universal-entry-observer.service]:-0}" == "1" &&
+        "${was_active[cripta-private-runtime.service]:-0}" == "1" ]]; then
+    p90_release_private_barrier=1
+  fi
+
+  private_runtime_started_at=""
+  if [[ "$p90_release_private_barrier" == "1" ]]; then
+    private_runtime_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    for service in "${managed_services[@]}"; do
+      if [[ "$service" == "cripta-private-runtime.service" ||
+            "$service" =~ ^cripta-private-runtime@[A-Za-z0-9_.-]+\.service$ ]]; then
+        if [[ "${was_active[$service]}" == "1" ]]; then
+          systemctl start "$service"
+        fi
+      fi
+    done
+    runuser -u cripta -- env \
+      PYTHONPATH="$RUNTIME_ROOT/current/src:$RUNTIME_ROOT/current" \
+      CRIPTA_RELEASE_COMMIT="$RELEASE_COMMIT" \
+      CRIPTA_RELEASE_PRIVATE_RUNTIME_NOT_BEFORE="$private_runtime_started_at" \
+      "$RUNTIME_ROOT/current/.venv/bin/python" \
+      "$RUNTIME_ROOT/current/operations/implementation/wait_p90_private_runtime_ready.py" ||
+      die "P90_RELEASE_PRIVATE_RUNTIME_BARRIER_FAILED"
+  fi
+
   for service in "${managed_services[@]}"; do
     if [[ "$service" == "cripta-real-service-broker.service" ||
           "$service" == "cripta-runtime-recovery-supervisor.service" ]]; then
       continue
     fi
-    if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
+    if [[ "$p90_release_private_barrier" == "1" &&
+          ( "$service" == "cripta-private-runtime.service" ||
+            "$service" =~ ^cripta-private-runtime@[A-Za-z0-9_.-]+\.service$ ) ]]; then
+      continue
+    fi
+    if [[ "${was_active[$service]}" == "1" ]]; then
+      systemctl start "$service"
+    fi
   done
+  if [[ "$p90_release_private_barrier" == "1" ]]; then
+    echo "P90_RELEASE_PRIVATE_RUNTIME_START_ORDER=PASS"
+  fi
 
   # systemd may pull an intentionally inactive managed unit through Wants=/Requires=
   # while restoring another unit that was active before the release. On an

@@ -102,6 +102,31 @@ def test_verified_release_installs_broker_and_durable_state_but_does_not_arm():
     assert 'for service in "${managed_services[@]}"' in recovery
 
 
+def test_disarmed_release_starts_private_owners_before_observer():
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    barrier = "P90_RELEASE_PRIVATE_RUNTIME_BARRIER_FAILED"
+    marker = "P90_RELEASE_PRIVATE_RUNTIME_START_ORDER=PASS"
+    assert barrier in installer
+    assert marker in installer
+    assert "wait_p90_private_runtime_ready.py" in installer
+    block_start = installer.index("p90_release_private_barrier=0")
+    block_end = installer.index(marker, block_start)
+    block = installer[block_start:block_end]
+    assert block.index('systemctl start "$service"') < block.index(
+        "wait_p90_private_runtime_ready.py"
+    )
+    assert block.index("wait_p90_private_runtime_ready.py") < block.rindex(
+        'systemctl start "$service"'
+    )
+    assert "cripta-private-runtime@" in block
+    assert '"$pre_gate" == "0"' in block
+    assert '"$pre_permissions" == "0"' in block
+    assert '"$pre_sessions" == "0"' in block
+    assert '"$pre_account_sessions" == "0"' in block
+
+
 def test_verified_release_normalizes_dependency_pulled_inactive_services():
     installer = (
         ROOT / "operations/infrastructure/install_verified_release.sh"

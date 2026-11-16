@@ -94,3 +94,18 @@ Before any multi-user rollout, all private balances, orders, positions, fee/P&L 
 Self-service UI/Telegram-bot enrollment requires authenticated session ownership and a verified encrypted API Key/API Secret enrollment path to the existing approved secret store. Do not solicit plaintext API secrets through normal Telegram messages, ChatGPT chats, logs or GitHub. A bot may coordinate enrollment and display owner-scoped statistics, but does not acquire trading permission or disable LIVE gates. Credential and read/trade permission checks remain venue-specific; withdrawal/transfer privileges are not issued by default.
 
 CONCEPT ONLY: no user registry, tenancy isolation, bot, DB migration, key change, deploy or LIVE permission is claimed.
+
+
+## Development-delegated P90 OWNER ARM security boundary — OWNER DECISION 2026-11-16
+
+For the temporary exact P90 REAL v3 stabilization delegation defined by
+TRADING_CONTOUR §4.15.1, a connected SentinelX invocation of the two reviewed
+static systemd units may act as the owner's delegated authentication source.
+This does not expose browser cookies/tokens and does not make SentinelX,
+cripta, root shell, SQL or Service Start Broker generally authorized for LIVE.
+
+The delegated executable must accept no trading parameters, verify exact
+systemd cgroup + release + decision marker before financial imports, run the
+ordinary staged/final ARM/DISARM owners, and remain fail-closed on tool,
+identity, release or runtime ambiguity. Secrets and credential material remain
+inside existing private runtime stores; the rail receives none.

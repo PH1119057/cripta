@@ -17,6 +17,15 @@ INSTALLER = ROOT / "operations/infrastructure/install_verified_release.sh"
 P90_PORTAL_WAIVER_SQL = (
     ROOT / "operations/sql/20261030_p90_portal_micro_live_waiver.sql"
 )
+DELEGATED_CONTROL = (
+    ROOT / "operations/management/p90_development_owner_control.py"
+)
+DELEGATED_ARM_UNIT = (
+    ROOT / "operations/systemd/cripta-p90-development-owner-arm.service"
+)
+DELEGATED_DISARM_UNIT = (
+    ROOT / "operations/systemd/cripta-p90-development-owner-disarm.service"
+)
 
 
 def test_p90_control_db_rail_is_narrow_and_never_opens_mainnet() -> None:
@@ -102,42 +111,85 @@ def test_p90_private_flat_failure_publishes_only_stable_local_reason() -> None:
     assert "return result" in block
 
 
-def test_p90_technical_evidence_and_staged_owner_arm_are_separate_actions() -> None:
+def test_p90_technical_evidence_and_owner_arm_workflow_remain_separate() -> None:
     source = DASH.read_text()
     evidence_handler = source.index("def _u6_p90_real_v3_prearm_evidence(")
-    prepare_helper = source.index("def _u6_prepare_p90_real_v3_readiness(", evidence_handler)
-    arm_handler = source.index("def _u6_p90_real_v3_arm(", prepare_helper)
+    prepare_helper = source.index(
+        "def _u6_prepare_p90_real_v3_readiness(", evidence_handler
+    )
+    shared_arm = source.index("def _execute_p90_real_v3_owner_arm(", prepare_helper)
+    arm_handler = source.index("def _u6_p90_real_v3_arm(", shared_arm)
     catalog_handler = source.index("def _u6_financial_account_catalog", arm_handler)
     evidence_block = source[evidence_handler:prepare_helper]
-    prepare_block = source[prepare_helper:arm_handler]
-    arm_block = source[arm_handler:catalog_handler]
+    prepare_block = source[prepare_helper:shared_arm]
+    shared_block = source[shared_arm:arm_handler]
+    handler_block = source[arm_handler:catalog_handler]
 
     assert "prepare_p90l90_real_v3_prearm_evidence(" in evidence_block
     assert "stage_p90l90_real_v3(" not in evidence_block
     assert "finalize_p90l90_real_v3(" not in evidence_block
 
-    # Generic technical preparation may recover inactive services, but it
-    # cannot stage or finalize the trading authorization.
+    # Generic technical preparation remains non-financial.
     assert "_wait_p90_real_v3_technical_evidence(" in prepare_block
     assert "broker_start_services(" in prepare_block
     assert "mark_real_readiness_ready(" in prepare_block
     assert "stage_p90l90_real_v3(" not in prepare_block
     assert "finalize_p90l90_real_v3(" not in prepare_block
 
-    # Explicit owner click prepares first, renews fresh evidence, then stages
-    # with gate CLOSED and only after runtime readiness performs final arm.
-    assert "_u6_prepare_p90_real_v3_readiness(" in arm_block
-    assert "_wait_p90_real_v3_technical_evidence(" in arm_block
-    assert "stage_p90l90_real_v3(" in arm_block
-    assert "_u6_wait_p90_real_v3_stage_ready(" in arm_block
-    assert "finalize_p90l90_real_v3(" in arm_block
-    assert arm_block.index("_u6_prepare_p90_real_v3_readiness(") < (
-        arm_block.index("_wait_p90_real_v3_technical_evidence(")
-    ) < arm_block.index("stage_p90l90_real_v3(") < (
-        arm_block.index("_u6_wait_p90_real_v3_stage_ready(")
-    ) < arm_block.index("finalize_p90l90_real_v3(")
-    assert "OWNER ARM requires explicit confirmation" in arm_block
-    assert "P90_REAL_OWNER_ARM_ORIGIN_UNVERIFIED" in arm_block
+    # Both authenticated owner rails reuse exactly one staged/final workflow.
+    assert "_u6_prepare_p90_real_v3_readiness(" in shared_block
+    assert "_wait_p90_real_v3_technical_evidence(" in shared_block
+    assert "stage_p90l90_real_v3(" in shared_block
+    assert "_u6_wait_p90_real_v3_stage_ready(" in shared_block
+    assert "finalize_p90l90_real_v3(" in shared_block
+    assert shared_block.index("_u6_prepare_p90_real_v3_readiness(") < (
+        shared_block.index("_wait_p90_real_v3_technical_evidence(")
+    ) < shared_block.index("stage_p90l90_real_v3(") < (
+        shared_block.index("_u6_wait_p90_real_v3_stage_ready(")
+    ) < shared_block.index("finalize_p90l90_real_v3(")
+
+    # Browser owner auth is not weakened by the delegated management rail.
+    assert "OWNER ARM requires explicit confirmation" in handler_block
+    assert "P90_REAL_OWNER_ARM_ORIGIN_UNVERIFIED" in handler_block
+    assert "_execute_p90_real_v3_owner_arm(" in handler_block
+
+
+def test_p90_development_owner_delegation_is_exact_inert_and_non_parameterized() -> None:
+    control = DELEGATED_CONTROL.read_text()
+    arm_unit = DELEGATED_ARM_UNIT.read_text()
+    disarm_unit = DELEGATED_DISARM_UNIT.read_text()
+    installer = INSTALLER.read_text()
+
+    assert "P90_DEVELOPMENT_DELEGATION_20261116_V1" in control
+    assert "P90_DELEGATED_OWNER_ARGUMENTS_FORBIDDEN" in control
+    assert "/proc/self/cgroup" in control
+    assert "/system.slice/{expected}" in control
+    assert "_execute_p90_real_v3_owner_arm" in control
+    assert "_execute_p90_real_v3_owner_disarm" in control
+    assert "requested_amount" not in control
+    assert "leverage" not in control
+    assert "symbols" not in control
+    assert "cap" not in control.lower()
+
+    for source, action in ((arm_unit, "ARM"), (disarm_unit, "DISARM")):
+        assert "Type=oneshot" in source
+        assert "User=cripta" in source
+        assert "Group=cripta" in source
+        assert "NoNewPrivileges=true" in source
+        assert "ProtectSystem=strict" in source
+        assert "RestrictAddressFamilies=AF_UNIX" in source
+        assert (
+            f"Environment=CRIPTA_P90_DELEGATED_ACTION={action}" in source
+        )
+        assert "[Install]" not in source
+
+    assert "cripta-p90-development-owner-arm.service" in installer
+    assert "cripta-p90-development-owner-disarm.service" in installer
+    managed = installer[installer.index("managed_services=("):]
+    assert "cripta-p90-development-owner-arm.service" not in managed
+    assert "cripta-p90-development-owner-disarm.service" not in managed
+
+
 
 def test_p90_prearm_operator_script_cannot_owner_arm_or_open_gate() -> None:
     source = PREARM_SCRIPT.read_text()
