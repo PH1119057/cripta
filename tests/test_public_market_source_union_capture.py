@@ -34,12 +34,55 @@ from operations.monitoring.public_market_source_union_capture import (
     _closed_repair_windows,
     _ClosedRepairTask,
     _connect_subscribe,
+    _enqueue_source_frame,
     _fetch_repair_task,
     _last_settled_close,
+    _next_source_frame,
     parse_explicit_source_manifest,
 )
 
 P90 = ("APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT")
+
+
+def test_required_and_optional_source_queues_are_physically_isolated() -> None:
+    required: queue.Queue[tuple[str, str, dict[str, object], datetime]] = (
+        queue.Queue(maxsize=1)
+    )
+    optional: queue.Queue[tuple[str, str, dict[str, object], datetime]] = (
+        queue.Queue(maxsize=1)
+    )
+    now = datetime.now(UTC)
+    required_frame = ("LINEAR", "required", {"topic": "publicTrade.APTUSDT"}, now)
+    optional_frame = ("LINEAR", "optional", {"topic": "orderbook.50.BTCUSDT"}, now)
+
+    assert _enqueue_source_frame(
+        required, optional, optional_frame, required=False,
+    )
+    assert not _enqueue_source_frame(
+        required, optional, optional_frame, required=False,
+    )
+    assert required.empty()
+
+    assert _enqueue_source_frame(
+        required, optional, required_frame, required=True,
+    )
+    assert _next_source_frame(required, optional) == required_frame
+    assert _next_source_frame(required, optional) == optional_frame
+
+
+def test_required_source_queue_overflow_remains_fatal() -> None:
+    required: queue.Queue[tuple[str, str, dict[str, object], datetime]] = (
+        queue.Queue(maxsize=1)
+    )
+    optional: queue.Queue[tuple[str, str, dict[str, object], datetime]] = (
+        queue.Queue(maxsize=1)
+    )
+    now = datetime.now(UTC)
+    frame = ("LINEAR", "required", {"topic": "publicTrade.APTUSDT"}, now)
+    required.put_nowait(frame)
+
+    with pytest.raises(queue.Full):
+        _enqueue_source_frame(required, optional, frame, required=True)
 
 
 def test_required_linear_transport_failure_reason_is_bounded_and_machine_safe() -> None:

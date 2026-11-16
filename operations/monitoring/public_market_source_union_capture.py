@@ -96,6 +96,9 @@ _REPAIR_PROVIDER_SPACING_SECONDS = 0.30
 _REPAIR_PROVIDER_SETTLE_SECONDS = 10
 
 
+_SourceFrame = tuple[str, str, dict[str, object], datetime]
+
+
 def _linear_transport_failure_reason(exc: Exception) -> str:
     """Stable public-only evidence for a fatal required LINEAR reader exit."""
     message = str(exc).strip()
@@ -108,6 +111,47 @@ def _linear_transport_failure_reason(exc: Exception) -> str:
     else:
         suffix = type(exc).__name__.upper()
     return ("PUBLIC_LINEAR_TRANSPORT_FATAL_" + suffix)[:127]
+
+
+def _enqueue_source_frame(
+    required_pipe: queue.Queue[_SourceFrame],
+    optional_pipe: queue.Queue[_SourceFrame],
+    frame: _SourceFrame,
+    *,
+    required: bool,
+) -> bool:
+    """Keep optional backpressure from consuming required zero-drop capacity."""
+    if required:
+        required_pipe.put(frame, timeout=0.25)
+        return True
+    try:
+        optional_pipe.put_nowait(frame)
+    except queue.Full:
+        return False
+    return True
+
+
+def _next_source_frame(
+    required_pipe: queue.Queue[_SourceFrame],
+    optional_pipe: queue.Queue[_SourceFrame],
+) -> _SourceFrame | None:
+    """Prefer required causal input; optional telemetry uses spare writer capacity."""
+    try:
+        return required_pipe.get_nowait()
+    except queue.Empty:
+        pass
+    try:
+        return optional_pipe.get_nowait()
+    except queue.Empty:
+        pass
+    try:
+        return required_pipe.get(timeout=0.05)
+    except queue.Empty:
+        pass
+    try:
+        return optional_pipe.get_nowait()
+    except queue.Empty:
+        return None
 
 
 def r11_optional_original_frames_enabled() -> bool:
@@ -711,9 +755,13 @@ def run_source_union(
         reason="PUBLIC_LINEAR_SUBSCRIPTIONS_ACKED",
     )
 
-    pipe: queue.Queue[
-        tuple[str, str, dict[str, object], datetime]
-    ] = queue.Queue(maxsize=_MAX_QUEUE)
+    required_pipe: queue.Queue[_SourceFrame] = queue.Queue(maxsize=_MAX_QUEUE)
+    optional_pipe: queue.Queue[_SourceFrame] = queue.Queue(maxsize=_MAX_QUEUE)
+    required_topics = frozenset(
+        (item.product, item.dataset_topic)
+        for item in union.websocket_topics
+        if item.required
+    )
     # Network workers cannot write PG, so the source session/PG advisory lock
     # remains the single writer across public WS and REST.
     rest_pipe: queue.Queue[PublicMarketRestFact] = queue.Queue(maxsize=256)
@@ -846,11 +894,23 @@ def run_source_union(
                             # No stale book delta/old socket frame may satisfy
                             # a new snapshot requirement.
                             continue
-                        pipe.put(
-                            (product, transport_epochs[product],
-                             item, datetime.now(UTC)),
-                            timeout=0.25,
+                        frame = (
+                            product, transport_epochs[product],
+                            item, datetime.now(UTC),
                         )
+                        frame_required = (product, topic) in required_topics
+                        if not _enqueue_source_frame(
+                            required_pipe, optional_pipe, frame,
+                            required=frame_required,
+                        ):
+                            note_quality(
+                                product=product, topic=topic,
+                                symbol=topic.rsplit(".", 1)[-1],
+                                quality="UNKNOWN",
+                                reason="PUBLIC_OPTIONAL_QUEUE_BACKPRESSURE",
+                                epoch=transport_epochs[product],
+                            )
+                            continue
                         if recovery is not None:
                             # Only the source writer may assert verified
                             # snapshot after decoding + applying this frame.
@@ -1123,12 +1183,13 @@ def run_source_union(
                     request_book_snapshot(
                         book_product, book_topic, received_at=since,
                     )
-            try:
-                product, frame_epoch, item, received = pipe.get(timeout=0.10)
-            except queue.Empty:
+            frame = _next_source_frame(required_pipe, optional_pipe)
+            if frame is None:
                 product, frame_epoch, item, received = (
                     "", "", {}, datetime.now(UTC),
                 )
+            else:
+                product, frame_epoch, item, received = frame
             if product:
                 # Buffered frames from an already disconnected SPOT epoch
                 # cannot populate the new transport's current read-model.
