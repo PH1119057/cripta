@@ -72,7 +72,10 @@ _P90_PARITY_MODULES = (
 
 _MAIN_ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
 _SUB_ACCOUNT = "ta-853ac5fcd58185697396d33cd57459fa"
+_MAIN_CONNECTOR = "ac-ed73de20410548d6841aeafa5f196f70"
+_SUB_CONNECTOR = "ac-ec57819f875f1bfd929a382d6dc8a125"
 _ACCOUNT_BY_STRATEGY = {MAIN_ID: _MAIN_ACCOUNT, SUB_ID: _SUB_ACCOUNT}
+_CONNECTOR_BY_STRATEGY = {MAIN_ID: _MAIN_CONNECTOR, SUB_ID: _SUB_CONNECTOR}
 _EVIDENCE_SOURCE = "p90l90-real-v3:technical-prearm-evidence"
 _SERVICE_UNITS = tuple(
     spec.unit for spec in p90_real_v3_service_specs(sub_account_id=_SUB_ACCOUNT)
@@ -442,25 +445,14 @@ def prepare_p90l90_real_v3_prearm_evidence(
     for unit in _SERVICE_UNITS:
         _service_active(unit)
 
-    # Resolve the exact account/connector routes before the slow signed private
-    # proofs.  This discovery transaction is deliberately closed before those
-    # external IPC reads; the routes are re-read and compared inside the final
-    # authoritative SERIALIZABLE snapshot below.
-    _preproof_contexts, preproof_routes = p90l90_real_v3_contexts_and_routes(
-        connection, release_commit=release_commit, now=current
-    )
-    _require(
-        len(_preproof_contexts) == 5 and len(preproof_routes) == 2,
-        "exact five preproof contexts/two routes missing",
-    )
-    preproof_route_identity = {
-        strategy_id: (str(binding), str(account_id), str(connector_id))
-        for strategy_id, (binding, account_id, connector_id) in preproof_routes.items()
-    }
-    connection.rollback()
-
+    # Credential-local signed flat proofs are intentionally collected before
+    # the authoritative DB snapshot.  Their account/connector identities are
+    # fixed by the exact owner-approved P90 scope; the active DB bindings are
+    # re-read and verified against these identities inside the snapshot below.
     signed_private_proofs: dict[str, P90RealSignedFlatAccount] = {}
-    for strategy_id, (_binding, account_id, connector_id) in preproof_routes.items():
+    for strategy_id in (MAIN_ID, SUB_ID):
+        account_id = _ACCOUNT_BY_STRATEGY[strategy_id]
+        connector_id = _CONNECTOR_BY_STRATEGY[strategy_id]
         proof = P90PrivateProofClient(
             account=account_id,
             connector=connector_id,
@@ -593,14 +585,12 @@ def prepare_p90l90_real_v3_prearm_evidence(
         connection, release_commit=release_commit, now=current
     )
     _require(len(contexts) == 5 and len(routes) == 2, "exact five contexts/two routes missing")
-    final_route_identity = {
-        strategy_id: (str(binding), str(account_id), str(connector_id))
-        for strategy_id, (binding, account_id, connector_id) in routes.items()
-    }
-    _require(
-        final_route_identity == preproof_route_identity,
-        "account/connector route changed during signed private proof",
-    )
+    for strategy_id, (_binding, account_id, connector_id) in routes.items():
+        _require(
+            str(account_id) == _ACCOUNT_BY_STRATEGY[strategy_id]
+            and str(connector_id) == _CONNECTOR_BY_STRATEGY[strategy_id],
+            strategy_id + " account/connector route outside delegated P90 scope",
+        )
     consumer_health: dict[str, dict[str, object]] = {}
     for strategy_id, (_binding, account_id, connector_id) in routes.items():
         _require(
