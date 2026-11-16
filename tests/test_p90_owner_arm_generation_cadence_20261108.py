@@ -1,5 +1,6 @@
-"""Regression: P90 owner ARM may wait for the next *fresh* generation.
+"""Regression: P90 owner ARM may retry a transient signed-private proof.
 
+AccountStateGeneration currentness is generation-backed, not wall-clock TTL.
 The strict signed/private 15s proof TTL remains unchanged. Mocked calls only,
 no production DB, Exchange requests, or financial gate operations.
 """
@@ -15,7 +16,7 @@ import pytest
 from operations.dashboard import app
 
 
-def test_owner_arm_recheck_waits_for_next_generation_without_widening_ttl(
+def test_owner_arm_recheck_waits_for_next_signed_proof_without_widening_ttl(
     monkeypatch,
 ):
     class DB:
@@ -38,12 +39,11 @@ def test_owner_arm_recheck_waits_for_next_generation_without_widening_ttl(
 
     def evidence(*_args, **_kwargs):
         calls.append(clock.value)
-        # The previous COMPLETE/PROVEN generation has aged past the 15s TTL.
-        # The independent account runtime publishes the next one at t=17s.
+        # The credential-local signed proof can expire independently of the
+        # generation-backed DB state. A later recheck receives a fresh proof.
         if clock.value < 17.0:
             raise app.P90PrearmEvidenceBlocked(
-                "p90l90_legacy_main_ltc_inj account generation "
-                "not fresh/flat/capable of one 10 USDT Entry"
+                "p90l90_legacy_main_ltc_inj signed private flat proof invalid/stale"
             )
         return {"status": "PREARM_TECHNICAL_READY"}
 
@@ -52,10 +52,11 @@ def test_owner_arm_recheck_waits_for_next_generation_without_widening_ttl(
     assert result["status"] == "PREARM_TECHNICAL_READY"
     assert clock.value == 17
     assert len(calls) == 18
-    assert "0 <= (generation_checked_at - completed).total_seconds() <= 15" in (
-        Path("src/bybit_workbench/p90l90_real_prearm_evidence.py")
-        .read_text(encoding="utf-8")
-    )
+    source = Path(
+        "src/bybit_workbench/p90l90_real_prearm_evidence.py"
+    ).read_text(encoding="utf-8")
+    assert "0 <= (proof_checked_at - proof.observed_at).total_seconds() <= 15" in source
+    assert "0 <= (generation_checked_at - completed).total_seconds() <= 15" not in source
 
 
 def _arm_handler_with_failed_second_proof(exc):
