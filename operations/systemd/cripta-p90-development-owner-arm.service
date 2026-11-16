@@ -28,6 +28,6 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
-RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ReadOnlyPaths=/srv/cripta/runtime/current
 ReadOnlyPaths=/var/lib/cripta/release
