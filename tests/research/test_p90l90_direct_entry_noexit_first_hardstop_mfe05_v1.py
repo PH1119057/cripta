@@ -42,6 +42,10 @@ def fixture(tmp_path, monkeypatch, strict0=False):
             "event_id": ident, "side": side, "PREV7D": True,
             "depth_pct": depth,
         })
+    # Approved historical raw roots may be stable symlinks to /data/cripta.
+    actual = raw / (filename + ".actual")
+    csv_path.rename(actual)
+    csv_path.symlink_to(actual)
     events_file = events / "candidates_LTCUSDT.jsonl"
     events_file.write_text("".join(json.dumps(x) + "\n" for x in es))
     manifest = {
