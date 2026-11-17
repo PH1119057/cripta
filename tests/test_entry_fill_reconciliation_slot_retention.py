@@ -54,6 +54,8 @@ class DB:
             return Rows([(None,)])
         if "FROM runtime.executions" in sql:
             return Rows([])
+        if "INSERT INTO runtime.position_lifecycle_events" in sql:
+            return Rows([])
         if "UPDATE runtime.position_ownership" in sql:
             return Rows([(1,)])
         raise AssertionError("unexpected query in synthetic test: " + sql[:120])
@@ -93,9 +95,10 @@ def test_regression_does_not_weaken_exact_close_release() -> None:
     source = private_runtime.__file__
     with open(source, encoding="utf-8") as handle:
         text = handle.read()
-    assert text.count("release_position_capital_reservation(") == 1
+    assert text.count("release_position_capital_reservation(") == 2
     exact = text.split("close_link_status='EXACT'", 1)[1]
     assert "release_position_capital_reservation(" in exact
+    assert "EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING" in text
 
 
 @pytest.mark.parametrize("account", ("ta-main", "ta-sub"))
@@ -117,3 +120,67 @@ def test_rest_generation_cannot_overwrite_a_later_confirmed_fill(account, new_fi
             private_runtime._require_inventory_not_overtaken_by_fill(
                 InventoryDB(), started_ms=1793790909059,
             )
+
+
+def test_complete_account_flat_closes_physical_owner_without_inventing_accounting() -> None:
+    connection = DB()
+    unresolved = SimpleNamespace(
+        status="UNRESOLVED_EXACT_LINK", exit_order_id=None,
+    )
+    with (
+        patch.object(private_runtime, "TRADING_ACCOUNT_ID", ACCOUNT),
+        patch.object(private_runtime, "resolve_exchange_position_close",
+                     return_value=unresolved),
+        patch.object(private_runtime, "release_position_capital_reservation") as release,
+    ):
+        private_runtime.reconcile_position_ownership(
+            connection,
+            position_list=[],
+            now=1793790920000,
+            account_generation_id="acctgen-complete-flat",
+            inventory_started_ms=1793790919000,
+        )
+    updates = [
+        statement for statement in connection.statements
+        if "UPDATE runtime.position_ownership" in statement
+    ]
+    assert len(updates) == 1
+    assert "state='CLOSED'" in updates[0]
+    assert "close_link_status='UNRESOLVED_EXACT_LINK'" in updates[0]
+    assert any(
+        "EXTERNAL_FLAT_OBSERVED" in statement
+        for statement in connection.statements
+    )
+    release.assert_called_once_with(
+        connection,
+        position_id=POSITION,
+        entry_execution_request_id="request-entry-ltc",
+        reason="EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING",
+    )
+
+
+def test_complete_flat_cannot_close_fill_created_after_inventory_started() -> None:
+    connection = DB()
+    unresolved = SimpleNamespace(
+        status="UNRESOLVED_EXACT_LINK", exit_order_id=None,
+    )
+    with (
+        patch.object(private_runtime, "TRADING_ACCOUNT_ID", ACCOUNT),
+        patch.object(private_runtime, "resolve_exchange_position_close",
+                     return_value=unresolved),
+        patch.object(private_runtime, "release_position_capital_reservation") as release,
+    ):
+        private_runtime.reconcile_position_ownership(
+            connection,
+            position_list=[],
+            now=1793790920000,
+            account_generation_id="acctgen-stale-against-new-fill",
+            inventory_started_ms=1793790909000,
+        )
+    updates = [
+        statement for statement in connection.statements
+        if "UPDATE runtime.position_ownership" in statement
+    ]
+    assert len(updates) == 1
+    assert "state='CLOSED'" not in updates[0]
+    release.assert_not_called()
