@@ -151,6 +151,8 @@ Exact ChatGPT UI Project Instructions template:
 `operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt`.
 Это derived bootstrap artifact, не Project Source и не отдельный authority.
 
+**Owner decision 2026-11-17 (#511):** for current positions/orders take complete signed Bybit Private per-account inventory as truth, not stale PostgreSQL `OPEN`; Strategy provenance requires exact matching IDs. Manual external changes are reconciled without invented fills/PnL; `PRE_SEND_PROVEN_DENIED` is distinct from `SENT_OUTCOME_UNKNOWN`. Keep fail-closed protection, audit and no automatic ARM. See ARCH §59.1 / TC §4.17.1 / INDEX §17.1.6; physical implementation remains a separate gate.
+
 ## Recovery implementation route
 
 Recovery/reconnect tasks require ARCH + TRADING_CONTOUR + GLOSSARY + DEVELOPMENT_RELEASE pre-read. Must verify idempotent Exchange-to-DB state projection, paginated snapshots, exact historical execution IDs, 60-position restart/recovery tests and no replay of uncertain Exchange mutations. Do not confuse canonical approval with deployed implementation.

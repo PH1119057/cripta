@@ -1658,6 +1658,23 @@ order, entire account-local execution quantity and fresh FLAT proof are
 mandatory; TC §4.17 exclusively owns admissibility. No new Exchange writer,
 owner/consumer transfer, StopLoss/unknown waiver, safety bypass or ARM.
 
+### 59.1 Exchange-current inventory and independent attribution — OWNER DECISION 2026-11-17 (#511)
+
+**Authority split (per TradingAccount, including MAIN and SUB):**
+- **Current exposure/position/order truth:** a fresh, complete, credential-local signed Bybit Private snapshot, with account/connector/UID, full pages, position sizes/sides, active/conditional orders, pending commands and source evidence. A historical local `OPEN` row can never fabricate a currently open Exchange position. An incomplete/failed/stale snapshot is UNKNOWN, **not** FLAT.
+- **Strategy ownership and historical truth:** durable original CRIPTA execution, orderLinkId/orderId/execId, StrategyVersion, account, symbol, side, filled quantity and ExitPlan. Match only exact proven identities; coincident symbol/price/size does not assign strategy ownership. Exchange-sourced unmatched/manual positions remain account-visible, externally owned and **not** attached to a CRIPTA Strategy or auto-managed by Universal Exit.
+- **Mutation outcome truth:** separate immutable request/sent/ack/fill/unknown lifecycle; an incomplete or uncertain sent operation cannot be cleared by a later flat snapshot alone. Signed current FLAT does not prove historical order non-delivery.
+
+**Startup/restart/resume:** per-account serialized reconciliation first acquires complete signed Exchange inventory, then matches durable local identities and produces an auditable atomic projection of current exposure + owned/unowned position state + pending/unknown outcomes. Manual closure or long outage is normal external state change, not inherently fatal. When local `OPEN` but fresh complete Bybit says FLAT, reconcile ownership and exact fills/close orders before closing accounting lineage; without those proofs mark history `EXTERNAL_CLOSED_UNATTRIBUTED` / `CLOSE_ACCOUNTING_PENDING` (semantic state, actual schema remains implementation work), never invent close price, commission, PnL, hard-stop or Exit event. The operator sees **no fake open position**, while historical unresolved attribution stays auditable.
+
+Manual/unmatched currently OPEN positions must count in account-wide exposure/capital/slot/conflicting-symbol prevention. They are not subject to Strategy Exit logic without explicit, independently proven strategy ownership; unknown protection/Exit capability blocks only the truly exposed scope. This rule does not authorize cancel/close/adopt operations against external positions.
+
+**Typed safety taxonomy:** proven pre-send denial (`mutation_sent=False`, exact durable attempted command plus producer evidence) is not sent-unknown. It may pause scoped new Entry pending fresh account/connector/position/Exit proof; it must not be classified as permanent ambiguous mutation solely because a preflight check failed. Post-send/ACK-unknown/partial-fill, missing lineage, incomplete paginated snapshot, mismatched identity or unresolved protection remain fail-closed under the existing durable latch. Existing recovery SQL is not widened by this document.
+
+**Owners/capabilities:** signed Bybit private producer = inventory authority; account-scoped reconciliation owner = atomic current projection; Execution = immutable order/fill linkage; Universal Exit = proven strategy-owned open position management; Control = authorized exact recovery and audit; Dashboard = read-only status; Observer/R06 = source only. No second Exchange writer, no automatic OWNER ARM, no change in Strategy thresholds or live rights.
+
+**Migration/verification gate:** current DB schema and stale `OPEN` rows must be inventoried before migration; additive versioned schema / authorized migration actor, strict account lock, historical audit retention, independent signed snapshot, idempotent replay and fail-closed negative tests (manual open/close, restart hours later, partial fill, unknown send, pagination, interleaving and MAIN/SUB isolation). `OWNER_DECISION=YES`; `CANON=YES_AFTER_MERGE`; `IMPLEMENTED=NO`; `DEPLOYED=NO`; `LIVE_CHANGE=NO`.
+
 ## 60. PostgreSQL-first Observer и scoped восстановление Entry/Exit — OWNER DECISION 2026-11-07 (Issue #470)
 
 **Решение владельца / приоритет:** Observer является обслуживающим

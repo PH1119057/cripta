@@ -2086,6 +2086,21 @@ no altered fault/history state, Strategy/SECOND48 change, Exchange mutation,
 permission or ARM. Financial reopening remains a separate explicit owner step.
 This does not widen diagnostic v3 §4.8 or the WS-only recovery contracts.
 
+### 4.17.1 Manual Bybit operations and pre-send denial recovery — OWNER DECISION 2026-11-17 (#511)
+
+ARCH §59.1 owns the account/exchange truth boundary. The ordinary signed complete Bybit inventory is authoritative for **currently** open positions and orders; PostgreSQL is authoritative only for exact Strategy provenance, immutable trade history and local command status. A fresh signed FLAT snapshot does not retroactively erase Execution records or prove an uncertain request was never sent.
+
+After restart, external manual close must disappear from the Strategy **open-position** display once fresh independent flat proof is accepted. Reconciliation records external closure with exact owner/execution evidence where available; if fill/fee/close ID is not independently proven, report unresolved PnL/fees/close cause, preserve original position and audit, and do not fabricate hard-stop/TP/SL. Manual new position without CRIPTA identifiers remains unowned (visible in account inventory, not any Strategy), uses account capacity and blocks conflicting new Entry only in its exposed scope; it never receives automatic Strategy Exit/cancel/close operations.
+
+**Three disjoint technical outcomes:**
+1. `PRE_SEND_PROVEN_DENIED`: no exchange mutation sent; exact command and private producer's no-send proof. Transient scoped new-entry inhibit and bounded fresh signed inventory/reconciliation recheck, with durable audit; no automatic ARM, no legacy ambiguous-sent recovery function.
+2. `SENT_OUTCOME_UNKNOWN` / partial fill / protection or Exit uncertainty: preserve current durable account/position block; reconcile matching exchange order/exec IDs, not from clock/DB assumptions. No bypass on flat snapshot alone.
+3. `EXTERNAL_POSITION_CHANGE`: fresh complete signed current Bybit inventory differs from old DB; project actual open state and preserve historical provenance separately. Unmatched manual positions do not become Strategy positions. Missing/contradictory evidence is `UNKNOWN`, not `READY`.
+
+An exact pre-send recovery contract must separately require account/connector/UID, original command/no-send proof, matching latch epoch, fresh complete generation+signed FLAT/known OPEN inventory, no pending/unknown commands, current scoped Exit/protection health, safe account reservations and serialization; preserve concurrent relatch. Any needed new SECURITY DEFINER/migration and audited Control action must be reviewed independently under DEV §13 and SECURITY. It does **not** reuse §4.17 `recover_closed_p90_mutation_safety` or the full-contour diagnostic recovery for a different evidence class. On recovery new Entry stays gated by existing OWNER permission; no auto re-arm.
+
+**Acceptance:** replay manual-close-after-downtime; manual external open and ID mismatch; exact CRIPTA matching; pre-send denied versus ACK-unknown; partial fills and pending orders; stale/incomplete snapshots; missing close execution/fees; concurrent latch epoch; 60-position pagination; per-account isolation; restart/crash; repeated retries; release equivalence; never fabricate PnL or owner. `IMPLEMENTED=NO`, `LIVE_CHANGE=NO` until verified release/runtime proof.
+
 ## 4.18 PostgreSQL-first Entry/Exit и ответственность Observer — OWNER DECISION 2026-11-07
 
 **Exact owner:** Strategy Materializer создаёт неизменяемые `EntryPlan` и
