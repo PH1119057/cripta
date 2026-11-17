@@ -193,8 +193,12 @@ _REVIEWED_20261108_SOURCE_ORIGIN = (
     "6dc3c362d45edc09450323ba080ab0b55c9ffdc2"
 )
 _REVIEWED_20261108_EXIT_IPC_SHA256 = {
+    # #824 preserves the same fail-closed execution contract but moves the
+    # exact account advisory lock ahead of position-dependent writes. This
+    # reviewed byte change fixes a DB lock-order deadlock; it grants no new
+    # Exit action, permission, account, symbol or Strategy behavior.
     "universal_exit/p90l90_real_exit_execution.py":
-        "a66fd0c468f4f5c3088e7f5e4704cac1af0ed7d45509891e4f53df6c44a69d55",
+        "a31cd9c03de6187483b6eb78598b12faeb258ac55221da625d00caec0b3c3358",
     "universal_exit/p90l90_real_private_ipc.py":
         "5bf3fab7a9d4fb3efa347d704a65083d3eac978701413aa65476bcb58239d5db",
 }
@@ -241,9 +245,25 @@ _REVIEWED_R06_PROTECTED_EXIT_RECOVERY_SHA256 = {
 }
 
 
+# #824 adds one reviewed orchestration-only consumer byte to the same
+# physically accepted R06 source origin. The only semantic change is lock
+# acquisition order: exact account advisory lock before any position-dependent
+# Exit persistence. Trading policy and requested mutations are unchanged.
+_REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256 = {
+    **_REVIEWED_R06_PROTECTED_EXIT_RECOVERY_SHA256,
+    "universal_exit/p90l90_real_exit_execution.py":
+        "a31cd9c03de6187483b6eb78598b12faeb258ac55221da625d00caec0b3c3358",
+}
+
+
 def _reviewed_delta_for_origin(
     changed: set[str], *, origin_commit: str,
 ) -> dict[str, str]:
+    if (
+        origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
+        and changed == set(_REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256)
+    ):
+        return _REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256
     if (
         origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
         and changed == set(_REVIEWED_R06_PROTECTED_EXIT_RECOVERY_SHA256)

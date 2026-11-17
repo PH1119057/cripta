@@ -40,6 +40,8 @@ class CandidateConnection:
                     "position_id": "p90-protected-real-position",
                     "fill_at": self.protected_at - timedelta(seconds=1),
                     "initial_protection_confirmed_at": self.protected_at,
+                    "trading_account_id": "ta-" + "a" * 32,
+                    "symbol": "LTCUSDT",
                 }
             )
             return SimpleNamespace(fetchone=lambda: row)
@@ -157,6 +159,8 @@ class ExitConnection(CandidateConnection):
                 "position_id": "p90-protected-real-position",
                 "fill_at": AT - timedelta(seconds=3),
                 "initial_protection_confirmed_at": AT - timedelta(seconds=2),
+                "trading_account_id": "ta-" + "a" * 32,
+                "symbol": "LTCUSDT",
             })
         if "SELECT epoch_id FROM strategy_entry.p90l90_real_source_epochs" in sql:
             return SimpleNamespace(fetchall=lambda: [("p90-real-epoch-"+"b"*40,)])

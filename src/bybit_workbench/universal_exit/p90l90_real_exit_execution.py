@@ -42,6 +42,22 @@ class P90RealExitExecutionUnverified(RuntimeError):
 SafetyPort = Callable[[StrategyPosition, ExitEvaluation, datetime], bool]
 
 
+def lock_p90_exit_account(connection: Any, account_id: str) -> None:
+    """Serialize P90 financial Exit with account-local private reconciliation."""
+    if (
+        not isinstance(account_id, str)
+        or not account_id.startswith("ta-")
+        or len(account_id) != 35
+    ):
+        raise P90RealExitExecutionUnverified(
+            "P90_REAL_EXIT_ACCOUNT_LOCK_IDENTITY_INVALID"
+        )
+    connection.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+        (account_id,),
+    )
+
+
 class P90RealExitExecutionPort:
     """Materialize an accepted REAL Exit decision under one account lock.
 
@@ -98,6 +114,10 @@ class P90RealExitExecutionPort:
                 "P90_REAL_EXIT_DECISION_OR_CLOCK_UNVERIFIED"
             )
         approved = self._accounts.get(position.strategy_id)
+        if approved is None:
+            raise P90RealExitExecutionUnverified(
+                "P90_REAL_EXIT_ACCOUNT_NOT_APPROVED"
+            )
         observation = evaluation.observation
         details = observation.attributes.to_dict().get("p90l90_real")
         if (
@@ -161,10 +181,7 @@ class P90RealExitExecutionPort:
         # exists. Independent, current Exchange-side mutation safety must PASS.
         # The lock protects against parallel commands for the SAME account.
         with self._db.transaction():
-            self._db.execute(
-                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-                (approved,),
-            )
+            lock_p90_exit_account(self._db, approved)
             current, current_plan = load_exit_binding(
                 self._db, strategy_position_id=position.strategy_position_id
             )
