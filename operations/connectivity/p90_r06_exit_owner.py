@@ -59,6 +59,10 @@ from bybit_workbench.universal_entry.r07_publication_provenance import (
 )
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
+from bybit_workbench.universal_exit.execution_bridge import (
+    ExitExecutionBridgeBlockCode,
+    ExitExecutionBridgeBlocked,
+)
 from bybit_workbench.universal_exit.p90l90_real_closed_exit_port import (
     P90RealClosedExitPort,
 )
@@ -96,6 +100,7 @@ _FRAME_RE = re.compile(r"^market-source-frame:(\d+):(\d+)$")
 _SESSION_REF_RE = re.compile(r"^market-source-session:([0-9a-f]{32})$")
 _NO_NATIVE_KIND = "P90L90_REAL_CLOSED_5M_NO_NATIVE_PROVEN"
 _PENDING_CLOSED_KIND = "P90L90_REAL_CLOSED_5M_PENDING_MUTATION_PROCESSED"
+_STALE_CLOSED_KIND = "P90L90_REAL_CLOSED_5M_STALE_DECISION_SKIPPED"
 _EXIT_CLAIM_CONSUMER_ID = "universal-exit-shadow-v1"
 _FIRSTFILL_TERMINAL_MISS = "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED"
 
@@ -338,8 +343,13 @@ def _last_closed_boundary(connection: Any, position: StrategyPosition) -> dateti
         """SELECT max(event_at) AS closed_at
              FROM strategy_exit.exit_observations
             WHERE strategy_position_id=%s
-              AND event_kind IN ('P90L90_REAL_CLOSED_5M',%s,%s)""",
-        (position.strategy_position_id, _NO_NATIVE_KIND, _PENDING_CLOSED_KIND),
+              AND event_kind IN ('P90L90_REAL_CLOSED_5M',%s,%s,%s)""",
+        (
+            position.strategy_position_id,
+            _NO_NATIVE_KIND,
+            _PENDING_CLOSED_KIND,
+            _STALE_CLOSED_KIND,
+        ),
     ).fetchone()
     value = None if row is None else row.get("closed_at")
     if value is None:
@@ -725,6 +735,59 @@ def _refresh_exit_claim(
             "mode": "P90_R06_INDEPENDENT_EXIT",
         },
     )
+
+
+def _record_stale_closed_boundary(
+    connection: Any,
+    *,
+    scope: _RuntimeScope,
+    position: StrategyPosition,
+    snapshot: _SourceSnapshot,
+    boundary: datetime,
+) -> None:
+    """Advance verified catch-up without replaying an expired historical mutation."""
+    observation_id = "p90-r06-stale-closed-" + fingerprint({
+        "position_id": position.strategy_position_id,
+        "boundary": boundary,
+        "publication_id": snapshot.pin.publication_id,
+        "session": snapshot.pin.source_session_id,
+    })[:32]
+    refs = (
+        f"market-source-session:{snapshot.pin.source_session_id}",
+        f"market-publication:{snapshot.pin.publication_id}",
+        f"closed-candle:{position.symbol}:5:{boundary.isoformat()}",
+    )
+    attrs = FrozenPolicy.from_mapping({
+        "source_session_id": snapshot.pin.source_session_id,
+        "publication_id": snapshot.pin.publication_id,
+        "closed_boundary_processed": True,
+        "retroactive_exit_mutation_skipped": True,
+        "execution_block_code": ExitExecutionBridgeBlockCode.REQUEST_EXPIRED.value,
+    })
+    with connection.transaction():
+        _lock_source(
+            connection, scope=scope, snapshot=snapshot, position=position,
+        )
+        connection.execute(
+            """INSERT INTO strategy_exit.exit_observations(
+                   observation_id,strategy_position_id,exit_plan_fingerprint,
+                   symbol,event_kind,event_at,observed_at,received_at,
+                   attributes,source_refs)
+               VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)
+               ON CONFLICT(observation_id) DO NOTHING""",
+            (
+                observation_id,
+                position.strategy_position_id,
+                position.exit_plan_fingerprint,
+                position.symbol,
+                _STALE_CLOSED_KIND,
+                boundary,
+                boundary,
+                datetime.now(UTC),
+                attrs.payload_json,
+                canonical_json(refs),
+            ),
+        )
 
 
 def _record_pending_closed_boundary(
@@ -1191,14 +1254,29 @@ def run_p90_r06_exit_once(
             )
             results.append(f"P90_R06_EXIT_NO_NATIVE_BOUNDARY:{position.symbol}")
             continue
-        closed_result = _process_closed(
-            connection,
-            scope=scope,
-            position=position,
-            snapshot=snapshot,
-            boundary=expected,
-            now=datetime.now(UTC),
-        )
+        try:
+            closed_result = _process_closed(
+                connection,
+                scope=scope,
+                position=position,
+                snapshot=snapshot,
+                boundary=expected,
+                now=datetime.now(UTC),
+            )
+        except ExitExecutionBridgeBlocked as exc:
+            if exc.code is not ExitExecutionBridgeBlockCode.REQUEST_EXPIRED:
+                raise
+            # Historical CLOSED facts remain historical. Restart recovery may
+            # restore their geometry/causal order, but must never refresh an
+            # expired ExitDecision and replay it as a new Exchange mutation.
+            _record_stale_closed_boundary(
+                connection,
+                scope=scope,
+                position=position,
+                snapshot=snapshot,
+                boundary=expected,
+            )
+            closed_result = "P90_R06_EXIT_CLOSED_STALE_DECISION_SKIPPED"
         if closed_result == "P90_R06_EXIT_CLOSED_BLOCKED":
             # The only non-exception BLOCKED result is the explicit
             # pending-private-mutation path. Existing Exchange protection
