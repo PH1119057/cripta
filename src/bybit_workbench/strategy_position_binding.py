@@ -426,16 +426,25 @@ def persist_universal_strategy_position(
     )
 
 
+_POSITION_RELEASE_REASONS = frozenset({
+    "CONFIRMED_POSITION_CLOSE",
+    "EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING",
+})
+
+
 def release_position_capital_reservation(
     connection: ConnectionLike,
     *,
     position_id: str,
     entry_execution_request_id: str | None,
+    reason: str = "CONFIRMED_POSITION_CLOSE",
 ) -> None:
+    if reason not in _POSITION_RELEASE_REASONS:
+        raise ValueError("unsupported position capital release reason")
     if not entry_execution_request_id:
         return
     row = connection.execute(
-        """SELECT c.reservation_id,c.state,c.strategy_position_id,
+        """SELECT c.reservation_id,c.state,c.strategy_position_id,c.state_reason,
                   r.exchange_position_slot_claim_id
              FROM strategy_entry.execution_requests r
              JOIN runtime.capital_reservations c
@@ -446,25 +455,49 @@ def release_position_capital_reservation(
     ).fetchone()
     if row is None:
         return
-    reservation_id, state, bound_position, slot_claim_id = (
+    reservation_id, state, bound_position, state_reason, slot_claim_id = (
         str(row[0]),
         str(row[1]),
         None if row[2] is None else str(row[2]),
         None if row[3] is None else str(row[3]),
+        None if row[4] is None else str(row[4]),
     )
     if bound_position != position_id:
         raise RuntimeError("capital reservation/StrategyPosition close binding mismatch")
     if state == "RELEASED":
+        if (
+            reason == "CONFIRMED_POSITION_CLOSE"
+            and state_reason == "EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING"
+        ):
+            connection.execute(
+                """UPDATE runtime.capital_reservations
+                      SET state_reason='CONFIRMED_POSITION_CLOSE'
+                    WHERE reservation_id=%s AND state='RELEASED'
+                      AND state_reason='EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING'
+                      AND strategy_position_id=%s""",
+                (reservation_id, position_id),
+            )
+            if slot_claim_id:
+                connection.execute(
+                    """UPDATE runtime.exchange_position_slot_claims
+                          SET release_reason='CONFIRMED_POSITION_CLOSE',
+                              updated_at=%s
+                        WHERE exchange_position_slot_claim_id=%s
+                          AND claim_state='RELEASED'
+                          AND release_reason=
+                              'EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING'""",
+                    (datetime.now(UTC), slot_claim_id),
+                )
         return
     if state != "CONSUMED":
         raise RuntimeError(f"cannot release capital reservation from state {state}")
     updated = connection.execute(
         """UPDATE runtime.capital_reservations
-              SET state='RELEASED',state_reason='CONFIRMED_POSITION_CLOSE'
+              SET state='RELEASED',state_reason=%s
             WHERE reservation_id=%s
               AND state='CONSUMED'
               AND strategy_position_id=%s""",
-        (reservation_id, position_id),
+        (reason, reservation_id, position_id),
     )
     if updated.rowcount != 1:
         raise RuntimeError("capital reservation release race")
@@ -474,5 +507,5 @@ def release_position_capital_reservation(
             exchange_position_slot_claim_id=slot_claim_id,
             state=SlotClaimState.RELEASED,
             at=datetime.now(UTC),
-            reason="CONFIRMED_POSITION_CLOSE",
+            reason=reason,
         )
