@@ -46,13 +46,17 @@ def fixture(tmp_path, monkeypatch, strict0=False):
     events_file.write_text("".join(json.dumps(x) + "\n" for x in es))
     manifest = {
         "symbol": "LTCUSDT",
-        "events": len(es), "candidate_only": True,
+        "candidate_only": True,
         "events_sha256": hashlib.sha256(events_file.read_bytes()).hexdigest(),
         "inputs": [
             {"file": filename, "rows": len(prices),
              "sha256": hashlib.sha256(csv_path.read_bytes()).hexdigest()}
         ],
     }
+    if strict0:
+        manifest["events"] = len(es)
+    else:
+        manifest["counts"] = {"raw_crossing": len(es)}
     (events / "manifest.json").write_text(json.dumps(manifest))
     monkeypatch.setattr(sut, "baseline_hardstops", lambda cfg, symbol: {"B"})
     config = {
