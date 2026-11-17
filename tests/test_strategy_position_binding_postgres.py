@@ -693,6 +693,80 @@ def test_confirmed_close_releases_bound_reservation() -> None:
         assert state == ("RELEASED",)
 
 
+def test_external_flat_releases_capacity_as_pending_then_exact_close_upgrades_reason() -> None:
+    assert DSN is not None
+    prefix = "external-flat-" + uuid4().hex
+    with psycopg.connect(DSN) as connection:
+        ids = _seed_request(
+            connection, prefix, reservation_state="DISPATCHED",
+            dispatched=True, symbol="XRPUSDT",
+        )
+        lineage = load_universal_entry_lineage(
+            connection, command_id=ids["command_id"],
+            command_payload=_payload(ids),
+        )
+        assert lineage is not None
+        position_id = f"{prefix}-position"
+        persist_universal_strategy_position(
+            connection,
+            lineage=lineage,
+            position_id=position_id,
+            trade_id=f"{prefix}-trade",
+            entry_command_id=ids["command_id"],
+            symbol="XRPUSDT",
+            side="Buy",
+            actual_avg_fill=Decimal("8.50"),
+            actual_qty=Decimal("1"),
+            fill_at=NOW,
+            exchange_order_ids=(f"{prefix}-order",),
+            client_order_ids=(ids["command_id"],),
+            execution_ids=(f"{prefix}-exec",),
+            position_idx=0,
+        )
+        release_position_capital_reservation(
+            connection,
+            position_id=position_id,
+            entry_execution_request_id=ids["request_id"],
+            reason="EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING",
+        )
+        assert connection.execute(
+            """SELECT state,state_reason FROM runtime.capital_reservations
+                 WHERE reservation_id=%s""",
+            (ids["reservation_id"],),
+        ).fetchone() == (
+            "RELEASED",
+            "EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING",
+        )
+        assert connection.execute(
+            """SELECT claim_state,release_reason
+                 FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_slot_claim_id=%s""",
+            (ids["slot_claim_id"],),
+        ).fetchone() == (
+            "RELEASED",
+            "EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING",
+        )
+
+        # A later exact execution backfill upgrades accounting provenance
+        # without reopening capital or the physical slot.
+        release_position_capital_reservation(
+            connection,
+            position_id=position_id,
+            entry_execution_request_id=ids["request_id"],
+        )
+        assert connection.execute(
+            """SELECT state,state_reason FROM runtime.capital_reservations
+                 WHERE reservation_id=%s""",
+            (ids["reservation_id"],),
+        ).fetchone() == ("RELEASED", "CONFIRMED_POSITION_CLOSE")
+        assert connection.execute(
+            """SELECT claim_state,release_reason
+                 FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_slot_claim_id=%s""",
+            (ids["slot_claim_id"],),
+        ).fetchone() == ("RELEASED", "CONFIRMED_POSITION_CLOSE")
+
+
 
 def test_first_fill_survives_unlinked_flat_inventory_in_postgres(monkeypatch) -> None:
     """Exercise real persisted ownership/resources; never contact Exchange."""
