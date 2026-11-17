@@ -116,8 +116,24 @@ def test_r14_historical_d9a9_digest_recomputes_from_git_when_object_available(
     release: str,
 ) -> None:
     repo = Path.cwd()
+    if not (repo / ".git").is_dir():
+        worktrees = subprocess.check_output(
+            ["git", "worktree", "list", "--porcelain"],
+            text=True,
+        ).splitlines()
+        roots = [
+            Path(line.removeprefix("worktree "))
+            for line in worktrees
+            if line.startswith("worktree ")
+        ]
+        repo = next(
+            (root for root in roots if (root / ".git").is_dir()),
+            repo,
+        )
+    if not (repo / ".git").is_dir():
+        pytest.skip("full Git checkout unavailable")
     probe = subprocess.run(
-        ["git", "cat-file", "-e", f"{release}^{{commit}}"],
+        ["git", "-C", str(repo), "cat-file", "-e", f"{release}^{{commit}}"],
         capture_output=True,
         check=False,
     )
