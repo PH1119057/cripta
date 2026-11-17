@@ -128,6 +128,19 @@ _REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
 ), _R06_PRE_PROTECTED_EXIT_RECOVERY_HISTORICAL_DIGEST))
 
 
+# #820/#823 share the next exact 99-file consumer inventory. Once #824
+# changes p90l90_real_exit_execution.py, these append-only rows become
+# historical and must retain THEIR Git-reconstructed b070... digest. This is
+# provenance compatibility only; it grants no Strategy, Exit, LIVE or ARM right.
+_R06_PRE_ACCOUNT_LOCK_ORDER_HISTORICAL_DIGEST = (
+    "b0707d2a116e6b725c2c27fa82dc62b997477bf5657d110eaab367e6282bb11e"
+)
+_REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
+    "d11dc60b3be541bd0dc6c3a5a45d65fbb0e182ae",
+    "bcd8a0a7b465619c4ef2c7128d85b8564b79e64f",
+), _R06_PRE_ACCOUNT_LOCK_ORDER_HISTORICAL_DIGEST))
+
+
 # These wiring adapters are reviewed in the release diff. All Strategy,
 # Entry/Exit algorithms, codecs, contracts, account and private-proof modules
 # below remain byte-identical to the retained origin release.
