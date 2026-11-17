@@ -7,48 +7,6 @@ from types import SimpleNamespace
 import pytest
 
 
-def test_terminal_miss_requires_exact_audit_and_no_trailing_history() -> None:
-    from operations.connectivity import p90_r06_exit_owner as owner
-
-    class DB:
-        def __init__(self, row):
-            self.row = row
-            self.sql = ""
-
-        def execute(self, sql, _params=()):
-            self.sql = sql
-            return SimpleNamespace(fetchone=lambda: self.row)
-
-    position = SimpleNamespace(
-        trading_account_id="ta-" + "a" * 32,
-        strategy_position_id="POS-exact",
-    )
-    assert owner._firstfill_trail035_terminal_miss_proven(
-        DB({
-            "terminal_miss": True,
-            "trailing_decision": False,
-            "trailing_request": False,
-        }),
-        position=position,
-    )
-    assert not owner._firstfill_trail035_terminal_miss_proven(
-        DB({
-            "terminal_miss": True,
-            "trailing_decision": True,
-            "trailing_request": False,
-        }),
-        position=position,
-    )
-    assert not owner._firstfill_trail035_terminal_miss_proven(
-        DB({
-            "terminal_miss": False,
-            "trailing_decision": False,
-            "trailing_request": False,
-        }),
-        position=position,
-    )
-
-
 def test_r06_refreshes_stable_logical_exit_claim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -83,17 +41,6 @@ def test_r06_refreshes_claim_before_processing_open_position() -> None:
 
     body = inspect.getsource(owner.run_p90_r06_exit_once)
     assert body.index("_refresh_exit_claim(") < body.index("_latest_mfe(")
-
-
-def test_closed_port_propagates_only_boolean_terminal_miss_fact() -> None:
-    from bybit_workbench.universal_exit import p90l90_real_closed_exit_port as port
-
-    source = inspect.getsource(port.P90RealClosedExitPort.__call__)
-    assert (
-        'real["missed_firstfill_trail035_proven"] = (\n'
-        '                raw.get("missed_firstfill_trail035_proven") is True\n'
-        '            )'
-    ) in source
 
 
 def test_status_preserves_safe_nested_policy_reason_only() -> None:

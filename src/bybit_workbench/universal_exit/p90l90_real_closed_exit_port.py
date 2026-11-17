@@ -161,9 +161,6 @@ class P90RealClosedExitPort:
                 )
             real["opposite_raw_l53_target"] = str(target)
             real["closed_geometry_proven"] = True
-            real["missed_firstfill_trail035_proven"] = (
-                raw.get("missed_firstfill_trail035_proven") is True
-            )
             observation = ExitObservation(
                 observation_id="p90-real-closed-" + fingerprint({
                     "position_id": position.strategy_position_id,

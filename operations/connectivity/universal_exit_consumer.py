@@ -65,6 +65,20 @@ def _safe_r06_error(exc: Exception) -> str:
     return code[:120] if code.startswith(("P90_", "R06_", "R09_")) else type(exc).__name__
 
 
+def _p90_result_status(result: str) -> tuple[str, str | None]:
+    """Keep degraded protected exposure distinct from READY and hard failure."""
+    if "P90_R06_EXIT_CLOSED_DEGRADED_PROTECTION_ONLY" in result:
+        return (
+            "P90_R06_EXIT_OWNER_DEGRADED",
+            "P90_R06_EXIT_DEGRADED_PROTECTION_ONLY",
+        )
+    if result.startswith("P90_R06_FIRSTFILL_OWNER_BLOCKED|"):
+        return "P90_R06_EXIT_OWNER_BLOCKED", "P90_R06_FIRSTFILL_OWNER_BLOCKED"
+    if result.endswith("P90_R06_EXIT_OWNER_READY_FLAT"):
+        return "P90_R06_EXIT_OWNER_READY_FLAT", None
+    return "P90_R06_EXIT_OWNER_RUNNING", None
+
+
 def _stop(_signum: int, _frame: object) -> None:
     global running
     running = False
@@ -382,20 +396,8 @@ def main() -> int:
                     else run_once(connection)
                 )
                 connection.commit()
-                if result.startswith("P90_R06_FIRSTFILL_OWNER_BLOCKED|"):
-                    _p90_status(
-                        state="P90_R06_EXIT_OWNER_BLOCKED",
-                        result=result,
-                        error="P90_R06_FIRSTFILL_OWNER_BLOCKED",
-                    )
-                    time.sleep(POLL_SECONDS)
-                    continue
-                state = (
-                    "P90_R06_EXIT_OWNER_READY_FLAT"
-                    if result.endswith("P90_R06_EXIT_OWNER_READY_FLAT")
-                    else "P90_R06_EXIT_OWNER_RUNNING"
-                )
-                _p90_status(state=state, result=result)
+                state, error = _p90_result_status(result)
+                _p90_status(state=state, result=result, error=error)
             except Exception as exc:
                 connection.rollback()
                 if source_connection is not None:

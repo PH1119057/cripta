@@ -229,7 +229,7 @@ def test_postfill_trailing_requires_independent_source_and_real_fill_execution(
         ("SHORT", "99", "99.1", "110", "90", "91"),
     ],
 )
-def test_closed_5m_rejects_missing_exchange_trail_without_terminal_miss_proof(
+def test_closed_5m_rejects_missing_exchange_trail_even_with_valid_tp(
     side: str, best: str, last: str, stop: str, tp: str, target: str,
 ) -> None:
     position, plan = _scope(side=side)
@@ -245,38 +245,6 @@ def test_closed_5m_rejects_missing_exchange_trail_without_terminal_miss_proof(
     assert blocked.status is ExitEvaluationStatus.BLOCKED
     assert blocked.decision is None
 
-
-@pytest.mark.parametrize(
-    ("side", "best", "last", "stop", "tp", "target"),
-    [
-        ("LONG", "101", "100.8", "90", "110", "109"),
-        ("SHORT", "99", "99.1", "110", "90", "91"),
-    ],
-)
-def test_closed_5m_proven_terminal_trail_miss_continues_raw_tp_only(
-    side: str, best: str, last: str, stop: str, tp: str, target: str,
-) -> None:
-    position, plan = _scope(side=side)
-    fact = _observation(
-        position, best=best, price=last, stop=stop, tp=tp,
-        target=target, kind="P90L90_REAL_CLOSED_5M", trailing="0",
-    )
-    attrs = fact.attributes.to_dict()
-    attrs["p90l90_real"]["missed_firstfill_trail035_proven"] = True
-    fact = replace(fact, attributes=FrozenPolicy.from_mapping(attrs))
-
-    result = project_p90l90_real_exit(position, plan, fact)
-    assert result is not None
-    kind, mutation, rule_id = result
-    assert kind is ExitActionKind.SET_TP
-    assert kind is not ExitActionKind.SET_TRAILING
-    assert mutation["take_profit_price"] == target
-    assert rule_id == "P90L90_REAL_DYNAMIC_RAW_L53_TP"
-
-    evaluated = UniversalExitEngine().evaluate(position, plan, fact)
-    assert evaluated.status is ExitEvaluationStatus.DECISION_CREATED
-    assert evaluated.decision is not None
-    assert evaluated.decision.action_kind is ExitActionKind.SET_TP
 
 
 @pytest.mark.parametrize(

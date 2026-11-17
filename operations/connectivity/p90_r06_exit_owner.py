@@ -61,6 +61,9 @@ from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 from bybit_workbench.universal_exit.p90l90_real_closed_exit_port import (
     P90RealClosedExitPort,
 )
+from bybit_workbench.universal_exit.p90l90_real_closed_geometry import (
+    P90RealClosedGeometryUnverified,
+)
 from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
     P90RealExitExecutionPort,
 )
@@ -94,8 +97,12 @@ _FRAME_RE = re.compile(r"^market-source-frame:(\d+):(\d+)$")
 _SESSION_REF_RE = re.compile(r"^market-source-session:([0-9a-f]{32})$")
 _NO_NATIVE_KIND = "P90L90_REAL_CLOSED_5M_NO_NATIVE_PROVEN"
 _PENDING_CLOSED_KIND = "P90L90_REAL_CLOSED_5M_PENDING_MUTATION_PROCESSED"
+_DEGRADED_CLOSED_KIND = "P90L90_REAL_CLOSED_5M_DEGRADED_PROTECTION_ONLY"
+_MISSED_TRAIL_CLOSED_DENIAL = (
+    "P90_REAL_CLOSED_5M_EXIT_POLICY_DENIED:"
+    "P90_REAL_CLOSED_5M_BYBIT_TRAILING_NOT_ARMED"
+)
 _EXIT_CLAIM_CONSUMER_ID = "universal-exit-shadow-v1"
-_FIRSTFILL_TERMINAL_MISS = "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED"
 
 
 class P90R06ExitBlocked(RuntimeError):
@@ -336,8 +343,13 @@ def _last_closed_boundary(connection: Any, position: StrategyPosition) -> dateti
         """SELECT max(event_at) AS closed_at
              FROM strategy_exit.exit_observations
             WHERE strategy_position_id=%s
-              AND event_kind IN ('P90L90_REAL_CLOSED_5M',%s,%s)""",
-        (position.strategy_position_id, _NO_NATIVE_KIND, _PENDING_CLOSED_KIND),
+              AND event_kind IN ('P90L90_REAL_CLOSED_5M',%s,%s,%s)""",
+        (
+            position.strategy_position_id,
+            _NO_NATIVE_KIND,
+            _PENDING_CLOSED_KIND,
+            _DEGRADED_CLOSED_KIND,
+        ),
     ).fetchone()
     value = None if row is None else row.get("closed_at")
     if value is None:
@@ -649,58 +661,6 @@ def _record_no_native_boundary(
         )
 
 
-def _firstfill_trail035_terminal_miss_proven(
-    connection: Any,
-    *,
-    position: StrategyPosition,
-) -> bool:
-    """Exact durable proof that TRAIL035 was missed, never silently removed.
-
-    This is intentionally narrower than "trailingStop == 0". A closed-5m
-    dynamic RAW exit may continue only when the independent first-fill owner
-    durably recorded terminal window expiry for this exact position/account
-    and no trailing decision/request was ever published.
-    """
-    row = connection.execute(
-        """SELECT
-               EXISTS(
-                   SELECT 1
-                     FROM runtime.connection_events e
-                    WHERE e.channel='exit'
-                      AND e.event='P90_FIRST_FILL_EXIT_UNVERIFIED'
-                      AND e.trading_account_id=%s
-                      AND e.identity_status='PROVEN'
-                      AND e.details_json::jsonb->>'position_id'=%s
-                      AND e.details_json::jsonb->>'reason_code'=%s
-               ) AS terminal_miss,
-               EXISTS(
-                   SELECT 1
-                     FROM strategy_exit.exit_decisions d
-                    WHERE d.strategy_position_id=%s
-                      AND d.action_kind='SET_TRAILING'
-               ) AS trailing_decision,
-               EXISTS(
-                   SELECT 1
-                     FROM strategy_exit.execution_requests r
-                    WHERE r.strategy_position_id=%s
-                      AND r.action_kind='SET_TRAILING'
-               ) AS trailing_request""",
-        (
-            position.trading_account_id,
-            position.strategy_position_id,
-            _FIRSTFILL_TERMINAL_MISS,
-            position.strategy_position_id,
-            position.strategy_position_id,
-        ),
-    ).fetchone()
-    return bool(
-        row is not None
-        and row.get("terminal_miss") is True
-        and row.get("trailing_decision") is False
-        and row.get("trailing_request") is False
-    )
-
-
 def _refresh_exit_claim(
     connection: Any,
     *,
@@ -723,6 +683,69 @@ def _refresh_exit_claim(
             "mode": "P90_R06_INDEPENDENT_EXIT",
         },
     )
+
+
+def _record_degraded_closed_boundary(
+    connection: Any,
+    *,
+    scope: _RuntimeScope,
+    position: StrategyPosition,
+    snapshot: _SourceSnapshot,
+    boundary: datetime,
+) -> None:
+    """Record one causally processed boundary without changing Exit policy.
+
+    The immutable P90 projection has already rejected the exact missed
+    Bybit-native TRAIL035 condition. This marker creates no ExitDecision,
+    ExecutionRequest, trade command, or Exchange mutation. Existing signed
+    Exchange SL/TP remain the only active protection while reconciliation stays
+    live and PREARM remains unavailable.
+    """
+    observation_id = "p90-r06-degraded-closed-" + fingerprint({
+        "position_id": position.strategy_position_id,
+        "boundary": boundary,
+        "publication_id": snapshot.pin.publication_id,
+        "session": snapshot.pin.source_session_id,
+        "reason": "P90_REAL_CLOSED_5M_BYBIT_TRAILING_NOT_ARMED",
+    })[:32]
+    refs = (
+        f"market-source-session:{snapshot.pin.source_session_id}",
+        f"market-publication:{snapshot.pin.publication_id}",
+        f"closed-candle:{position.symbol}:5:{boundary.isoformat()}",
+    )
+    attrs = FrozenPolicy.from_mapping({
+        "source_session_id": snapshot.pin.source_session_id,
+        "publication_id": snapshot.pin.publication_id,
+        "closed_boundary_processed": True,
+        "degraded_protection_only": True,
+        "reason_code": "P90_REAL_CLOSED_5M_BYBIT_TRAILING_NOT_ARMED",
+        "exchange_mutation": False,
+        "existing_exchange_protection_preserved": True,
+    })
+    with connection.transaction():
+        _lock_source(
+            connection, scope=scope, snapshot=snapshot, position=position,
+        )
+        connection.execute(
+            """INSERT INTO strategy_exit.exit_observations(
+                   observation_id,strategy_position_id,exit_plan_fingerprint,
+                   symbol,event_kind,event_at,observed_at,received_at,
+                   attributes,source_refs)
+               VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)
+               ON CONFLICT(observation_id) DO NOTHING""",
+            (
+                observation_id,
+                position.strategy_position_id,
+                position.exit_plan_fingerprint,
+                position.symbol,
+                _DEGRADED_CLOSED_KIND,
+                boundary,
+                boundary,
+                datetime.now(UTC),
+                attrs.payload_json,
+                canonical_json(refs),
+            ),
+        )
 
 
 def _record_pending_closed_boundary(
@@ -1017,11 +1040,6 @@ def _process_closed(
             "low": str(candle.low),
             "close": str(candle.close),
             "volume": str(candle.volume),
-            "missed_firstfill_trail035_proven": (
-                _firstfill_trail035_terminal_miss_proven(
-                    connection, position=position,
-                )
-            ),
         }),
     )
     with connection.transaction():
@@ -1140,14 +1158,26 @@ def run_p90_r06_exit_once(
             )
             results.append(f"P90_R06_EXIT_NO_NATIVE_BOUNDARY:{position.symbol}")
             continue
-        closed_result = _process_closed(
-            connection,
-            scope=scope,
-            position=position,
-            snapshot=snapshot,
-            boundary=expected,
-            now=datetime.now(UTC),
-        )
+        try:
+            closed_result = _process_closed(
+                connection,
+                scope=scope,
+                position=position,
+                snapshot=snapshot,
+                boundary=expected,
+                now=datetime.now(UTC),
+            )
+        except P90RealClosedGeometryUnverified as exc:
+            if str(exc) != _MISSED_TRAIL_CLOSED_DENIAL:
+                raise
+            _record_degraded_closed_boundary(
+                connection,
+                scope=scope,
+                position=position,
+                snapshot=snapshot,
+                boundary=expected,
+            )
+            closed_result = "P90_R06_EXIT_CLOSED_DEGRADED_PROTECTION_ONLY"
         if closed_result == "P90_R06_EXIT_CLOSED_BLOCKED":
             # The only non-exception BLOCKED result is the explicit
             # pending-private-mutation path. Existing Exchange protection
