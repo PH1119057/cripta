@@ -5352,3 +5352,11 @@ no gate/permission/ARM/Exchange mutation.
 Runtime deployment/ARM/soak evidence must be recorded separately after protected
 CI/merge and exact verified release; this source checkpoint does not itself
 authorize a broader Strategy/account/risk scope.
+
+# 41. Bybit-current account inventory versus local Strategy lineage — OWNER DECISION / CHECKED HERE 2026-11-17 (#511)
+
+Authority at this checkpoint: GitHub main `fe03b8d247ae0186b224b1c65e09091150b8049c`, source and installed equal; current owner decision requests Exchange-current truth, separate Strategy ID attribution, normal manual close/open reconciliation and typed pre-send denial, never automatic ARM.
+
+READ-ONLY evidence before docs mutation: mainnet gate CLOSED, SUB has durable `PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED` latch. Earlier exact `PRE_MUTATION_SAFETY_BLOCK` command evidence is preserved in Issue #511; historical account `OPEN` rows are **not** independent Exchange exposure proof. This snapshot does not assert that new reconciler or recovery exists. Existing SUB recovery routines do not match an independently proven pre-send denial case. No local position/command/latch SQL mutation, no Exchange mutation, no permission change performed.
+
+Decision route: ARCH §59.1, TC §4.17.1; implementation task Issue #511. `CANON_UPDATE=PREPARED`, `IMPLEMENTED=NO`, `DEPLOYED=NO`, `RUNTIME_BEHAVIOR_VERIFIED=NO`, `LIVE_CHANGE=NO`.
