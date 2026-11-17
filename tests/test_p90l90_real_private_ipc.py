@@ -47,6 +47,7 @@ def _request(account: str) -> dict[str, object]:
         "symbol": "LTCUSDT",
         "kind": "TRADE",
         "event_at": datetime.now(UTC).isoformat(),
+        "request_at": datetime.now(UTC).isoformat(),
         "seq": 101,
         "exec_id": "bybit-native-101",
     }
@@ -115,7 +116,19 @@ def test_request_wrong_identity_or_cursor_denied(key: str, bad: object) -> None:
         )
 
 
-def test_request_cannot_replay_old_or_future_source_event() -> None:
+def test_request_cannot_replay_old_or_future_request_timestamp() -> None:
+    account = _account()
+    request = _request(account)
+    for shift in (timedelta(minutes=-1), timedelta(minutes=1)):
+        request["request_at"] = (datetime.now(UTC) + shift).isoformat()
+        with pytest.raises(P90PrivateIpcUnverified, match="REQUEST_STALE"):
+            checked_request(
+                request, expected_account=account,
+                expected_connector=CONNECTOR,
+            )
+
+
+def test_trade_event_still_cannot_be_old_or_future() -> None:
     account = _account()
     request = _request(account)
     for shift in (timedelta(minutes=-1), timedelta(minutes=1)):
@@ -125,6 +138,26 @@ def test_request_cannot_replay_old_or_future_source_event() -> None:
                 request, expected_account=account,
                 expected_connector=CONNECTOR,
             )
+
+
+def test_closed_boundary_accepts_bounded_historical_causal_time() -> None:
+    account = _account()
+    request = _request(account)
+    request["kind"] = "CLOSED"
+    request["seq"] = None
+    request["exec_id"] = None
+    request["event_at"] = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
+    parsed = checked_request(
+        request, expected_account=account, expected_connector=CONNECTOR,
+    )
+    assert parsed[2] == "CLOSED"
+    assert timedelta(minutes=29) < datetime.now(UTC) - parsed[3] < timedelta(minutes=31)
+
+    request["event_at"] = (datetime.now(UTC) - timedelta(hours=7)).isoformat()
+    with pytest.raises(P90PrivateIpcUnverified, match="OUTSIDE_RECOVERY_HORIZON"):
+        checked_request(
+            request, expected_account=account, expected_connector=CONNECTOR,
+        )
 
 
 def test_closed_boundary_requires_absence_of_native_trade_cursor() -> None:

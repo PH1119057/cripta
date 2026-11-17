@@ -258,9 +258,16 @@ def run_once(
         "P90_EXIT_TRAIL035_REQUEST_PUBLISHED",
         "P90_EXIT_NO_MUTATION_PROVED",
     }
-    if P90_R06_OWNER == "ENABLED" and p90 not in p90_success:
-        raise RuntimeError("P90_R06_FIRSTFILL_OWNER_BLOCKED:" + p90)
+    p90_firstfill_blocked = (
+        P90_R06_OWNER == "ENABLED" and p90 not in p90_success
+    )
+    # A first-fill denial is durable safety evidence. Commit it BEFORE the
+    # independent continuous owner runs, so a later source/private transient
+    # cannot erase the exact reason by rolling back this cycle.
+    if p90_firstfill_blocked:
+        connection.commit()
 
+    continuous = ""
     if P90_R06_OWNER == "ENABLED":
         if source_connection is None:
             raise RuntimeError("P90_R06_EXIT_OWNER_SOURCE_CONNECTION_REQUIRED")
@@ -276,6 +283,11 @@ def run_once(
             now=current,
         ))
         if not run_generic:
+            if p90_firstfill_blocked:
+                return (
+                    "P90_R06_FIRSTFILL_OWNER_BLOCKED|FIRSTFILL="
+                    + p90 + "|CONTINUOUS=" + continuous
+                )
             return (
                 p90 + "|" + continuous
                 if p90 == "P90_EXIT_TRAIL035_REQUEST_PUBLISHED"
@@ -291,11 +303,18 @@ def run_once(
     if run_generic:
         materialized = materialize_once(connection, now=current)
         if materialized.startswith("REQUEST_CREATED:"):
-            return materialized
-        if materialized.startswith("DECISION_BLOCKED:"):
+            generic = materialized
+        elif materialized.startswith("DECISION_BLOCKED:"):
             dispatched = dispatch_once(connection, now=current)
-            return dispatched if dispatched != "NO_REQUEST" else materialized
-        return dispatch_once(connection, now=current)
+            generic = dispatched if dispatched != "NO_REQUEST" else materialized
+        else:
+            generic = dispatch_once(connection, now=current)
+        if p90_firstfill_blocked:
+            return (
+                "P90_R06_FIRSTFILL_OWNER_BLOCKED|FIRSTFILL="
+                + p90 + "|CONTINUOUS=" + continuous + "|GENERIC=" + generic
+            )
+        return generic
 
     return p90
 
@@ -348,6 +367,14 @@ def main() -> int:
                     else run_once(connection)
                 )
                 connection.commit()
+                if result.startswith("P90_R06_FIRSTFILL_OWNER_BLOCKED|"):
+                    _p90_status(
+                        state="P90_R06_EXIT_OWNER_BLOCKED",
+                        result=result,
+                        error="P90_R06_FIRSTFILL_OWNER_BLOCKED",
+                    )
+                    time.sleep(POLL_SECONDS)
+                    continue
                 state = (
                     "P90_R06_EXIT_OWNER_READY_FLAT"
                     if result.endswith("P90_R06_EXIT_OWNER_READY_FLAT")

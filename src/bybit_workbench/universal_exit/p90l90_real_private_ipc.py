@@ -17,7 +17,7 @@ import socket
 import struct
 import sys
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from bybit_workbench.strategy_position import StrategyPosition
@@ -37,6 +37,8 @@ _ACCOUNT = re.compile(r"ta-[a-f0-9]{32}\Z")
 _NONCE = re.compile(r"[a-f0-9]{32}\Z")
 _MAX_BYTES = 32_768
 _VERSION = 1
+_REQUEST_FRESHNESS = timedelta(seconds=15)
+_CLOSED_CAUSAL_RECOVERY_HORIZON = timedelta(hours=6)
 _AF_UNIX = getattr(socket, "AF_UNIX", -1)
 P90_ACCOUNT_PROOF_TIMEOUT_SECONDS = 15.0
 
@@ -147,16 +149,31 @@ def checked_request(
     ):
         raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_REQUEST_IDENTITY_INVALID")
     at = _timestamp(raw.get("event_at"))
+    requested_at = _timestamp(raw.get("request_at", raw.get("event_at")))
     now = datetime.now(UTC)
-    if not 0 <= (now - at).total_seconds() <= 15:
-        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_EVENT_STALE")
+    request_age = now - requested_at
+    if not timedelta(0) <= request_age <= _REQUEST_FRESHNESS:
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_REQUEST_STALE")
     kind = str(raw["kind"])
+    event_age = now - at
     seq, exec_id = raw.get("seq"), raw.get("exec_id")
     if kind == "TRADE":
+        if not timedelta(0) <= event_age <= _REQUEST_FRESHNESS:
+            raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_EVENT_STALE")
         if type(seq) is not int or seq < 0 or not isinstance(exec_id, str) or not exec_id:
             raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_CURSOR_INVALID")
-    elif seq is not None or exec_id is not None:
-        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_CLOSED_CURSOR_INVALID")
+    elif kind == "CLOSED":
+        if not timedelta(0) <= event_age <= _CLOSED_CAUSAL_RECOVERY_HORIZON:
+            raise P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_CLOSED_EVENT_OUTSIDE_RECOVERY_HORIZON"
+            )
+        if seq is not None or exec_id is not None:
+            raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_CLOSED_CURSOR_INVALID")
+    else:
+        if not timedelta(0) <= event_age <= _REQUEST_FRESHNESS:
+            raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_EVENT_STALE")
+        if seq is not None or exec_id is not None:
+            raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_CLOSED_CURSOR_INVALID")
     return (
         str(raw["position_id"]), str(raw["symbol"]), kind, at,
         seq if isinstance(seq, int) else None,
@@ -533,6 +550,7 @@ class P90PrivateProofClient:
             "version": _VERSION, "account": self._account,
             "connector": self._connector, "position_id": position.strategy_position_id,
             "symbol": position.symbol, "kind": kind, "event_at": at.isoformat(),
+            "request_at": datetime.now(UTC).isoformat(),
             "seq": seq, "exec_id": exec_id, "nonce": nonce,
         }
         try:
