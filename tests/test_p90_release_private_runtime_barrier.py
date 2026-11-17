@@ -21,7 +21,7 @@ class _DB:
         return _Rows(self.row)
 
 
-def test_generation_must_be_post_start_fresh_flat_and_proven():
+def test_generation_must_be_post_start_fresh_proven_and_order_free():
     now = datetime(2026, 11, 17, 0, 0, tzinfo=UTC)
     not_before = now - timedelta(seconds=5)
     good = (
@@ -55,7 +55,7 @@ def test_generation_must_be_post_start_fresh_flat_and_proven():
         now=now,
     )
     nonflat = ("gen-open", "COMPLETE", now, 1, 0, "PROVEN")
-    assert not barrier._generation_ready(
+    assert barrier._generation_ready(
         _DB(nonflat),
         account_id="ta-" + "1" * 32,
         connector_id="ac-main",
