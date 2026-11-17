@@ -124,10 +124,18 @@ def test_unproven_flat_snapshot_keeps_last_proven_owner_visible_to_exit() -> Non
     unresolved_branch = source.split(
         'if close.status != "EXACT" or close.exit_order_id is None:', 1
     )[1].split("protection_rows =", 1)[0]
-    # OWNER correction: absence in a snapshot is not an exact close fact.
-    # Exit/restart readers must retain the last proven OPEN owner.
-    assert "state='CLOSED'" not in unresolved_branch
-    assert "close_link_status='UNRESOLVED_EXACT_LINK'" in unresolved_branch
+    # Only a complete generation that started after the durable fill can
+    # establish current physical FLAT. Direct/stale snapshots retain OPEN.
+    assert "complete_flat_observation = (" in unresolved_branch
+    assert "fill_ms < inventory_started_ms" in unresolved_branch
+    assert "position_id != verified_first_fill_position_id" in unresolved_branch
+    assert "state='CLOSED'" in unresolved_branch
+    assert "EXTERNAL_FLAT_OBSERVED" in unresolved_branch
+    assert "close_accounting" in unresolved_branch
+    assert "PENDING" in unresolved_branch
+    fallback = unresolved_branch.split("Race guard:", 1)[1]
+    assert "state='CLOSED'" not in fallback
+    assert "close_link_status='UNRESOLVED_EXACT_LINK'" in fallback
 
 
 def test_live_dashboard_request_does_not_run_schema_ddl() -> None:

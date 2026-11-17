@@ -4711,6 +4711,8 @@ def reconcile_position_ownership(
     key: str | None = None,
     secret: str | None = None,
     verified_first_fill_position_id: str | None = None,
+    account_generation_id: str | None = None,
+    inventory_started_ms: int | None = None,
 ) -> None:
     """Reconcile durable ownership from exact Bybit position inventory and IDs."""
     global _f01_inventory_cache
@@ -4727,7 +4729,7 @@ def reconcile_position_ownership(
         """SELECT position_id,trade_id,symbol,side,actual_avg_fill,actual_qty,
                   extract(epoch from fill_at)*1000,position_idx,entry_command_id,
                   entry_execution_request_id,exchange_position_key,
-                  strategy_id,strategy_version
+                  strategy_id,strategy_version,state,close_link_status
            FROM runtime.position_ownership
            WHERE (state IN ('OPEN','RECONCILIATION_REQUIRED')
                   OR close_link_status='UNRESOLVED_EXACT_LINK')
@@ -4742,8 +4744,14 @@ def reconcile_position_ownership(
         position_id, trade_id, symbol, side = map(str, row[:4])
         position_idx = int(row[7] or 0)
         current = current_positions.get((symbol, position_idx))
+        historical_external_flat = (
+            len(row) >= 15
+            and str(row[13]) == "CLOSED"
+            and str(row[14]) == "UNRESOLVED_EXACT_LINK"
+        )
         current_matches = (
-            current is not None
+            not historical_external_flat
+            and current is not None
             and latest_by_key.get((symbol, position_idx)) == position_id
             and str(current.get("side") or "") == side
         )
@@ -4874,6 +4882,13 @@ def reconcile_position_ownership(
             executions=executions,
         )
         if close.status != "EXACT" or close.exit_order_id is None:
+            if historical_external_flat:
+                # A later manual/new Exchange position at the same symbol/index
+                # is a different physical cycle. Never resurrect or re-attribute
+                # the already-flat historical StrategyPosition. It remains
+                # CLOSED/accounting-pending until exact old close evidence is
+                # eventually backfilled.
+                continue
             if identity_unproven:
                 # Keep the original Entry/filled quantity and protection facts.
                 # Do not authorize Exit on a different current physical cycle.
@@ -4884,13 +4899,79 @@ def reconcile_position_ownership(
                        WHERE position_id=%s""", (position_id,),
                 )
                 continue
-            # An in-flight Exchange snapshot can be flat before a newly
-            # confirmed fill is reflected (Entry vs periodic reconciliation).
-            # Without exact close executions there is NO confirmed close:
-            # retain the physical slot and consumed capital reservation.
-            # Keep the last proven OPEN owner visible to Exit and restart
-            # readers. An absent snapshot is not a terminal close fact.
-            # Signed position proof still gates every Exit mutation.
+            complete_flat_observation = (
+                current is None
+                and account_generation_id is not None
+                and inventory_started_ms is not None
+                and fill_ms < inventory_started_ms
+                and position_id != verified_first_fill_position_id
+            )
+            if complete_flat_observation:
+                # Current complete Bybit inventory is authoritative for
+                # physical exposure. The StrategyPosition is no longer OPEN,
+                # even if historical close executions/fees are not yet locally
+                # available (manual close / server downtime). Do not invent a
+                # close time, price, fee, owner or PnL: accounting lineage
+                # remains UNRESOLVED and can be upgraded by a later execution
+                # backfill. This transition is in the same transaction as the
+                # account generation COMPLETE publication.
+                event_id = "PLE-" + hashlib.sha256(
+                    f"{position_id}|EXTERNAL_FLAT_OBSERVED".encode()
+                ).hexdigest()[:32]
+                connection.execute(
+                    """INSERT INTO runtime.position_lifecycle_events(
+                        lifecycle_event_id,position_id,trade_id,event_type,
+                        occurred_at,exact_ids,payload,provenance)
+                       VALUES(%s,%s,%s,'EXTERNAL_FLAT_OBSERVED',
+                              to_timestamp(%s/1000.0),%s,%s,%s)
+                       ON CONFLICT(lifecycle_event_id) DO NOTHING""",
+                    (
+                        event_id,
+                        position_id,
+                        trade_id,
+                        now,
+                        json.dumps({
+                            "account_generation_id": account_generation_id,
+                            "trading_account_id": TRADING_ACCOUNT_ID,
+                            "symbol": symbol,
+                            "position_idx": position_idx,
+                        }),
+                        json.dumps({
+                            "physical_exposure": "FLAT",
+                            "close_accounting": "PENDING",
+                            "close_time": None,
+                            "exit_order_ids": [],
+                            "exit_execution_ids": [],
+                        }),
+                        json.dumps({
+                            "source": "complete_bybit_account_inventory",
+                            "exchange_mutation": False,
+                            "inventory_started_at_epoch_ms": inventory_started_ms,
+                        }),
+                    ),
+                )
+                connection.execute(
+                    """UPDATE runtime.position_ownership
+                       SET state='CLOSED',
+                           close_link_status='UNRESOLVED_EXACT_LINK'
+                       WHERE position_id=%s
+                         AND state IN ('OPEN','RECONCILIATION_REQUIRED')""",
+                    (position_id,),
+                )
+                release_position_capital_reservation(
+                    connection,
+                    position_id=position_id,
+                    entry_execution_request_id=(
+                        None if row[9] is None else str(row[9])
+                    ),
+                    reason="EXCHANGE_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING",
+                )
+                continue
+
+            # Race guard: a direct/synthetic call without a complete account
+            # generation, or an inventory that started before a new confirmed
+            # fill, cannot use absence as FLAT. Keep the last proven owner
+            # fail-closed until a later complete generation or exact close.
             connection.execute(
                 """UPDATE runtime.position_ownership
                    SET close_link_status='UNRESOLVED_EXACT_LINK'
@@ -5659,8 +5740,15 @@ def reconcile(
                 upsert_exchange_order_history(connection, item, now)
             upsert_wallet(connection, account, now)
             reconcile_position_ownership(
-                connection, position_list, now, order_history, key=key, secret=secret,
+                connection,
+                position_list,
+                now,
+                order_history,
+                key=key,
+                secret=secret,
                 verified_first_fill_position_id=verified_first_fill_position_id,
+                account_generation_id=generation_id,
+                inventory_started_ms=started,
             )
             reconcile_orphan_closed_entry_cycles(
                 connection, generation_id=generation_id, now_ms=now
