@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -777,6 +778,30 @@ def _record_pending_closed_boundary(
         )
 
 
+_PRIVATE_RECHECK_STABLE_FIELDS = (
+    "symbol",
+    "side",
+    "positionIdx",
+    "size",
+    "avgPrice",
+    "stopLoss",
+    "takeProfit",
+    "trailingStop",
+)
+
+
+def _stable_private_position(
+    raw: Mapping[str, object],
+) -> tuple[object, ...] | None:
+    """Identity/protection snapshot; Bybit market telemetry is intentionally volatile."""
+    if (
+        not isinstance(raw, Mapping)
+        or any(field not in raw for field in _PRIVATE_RECHECK_STABLE_FIELDS)
+    ):
+        return None
+    return tuple(raw[field] for field in _PRIVATE_RECHECK_STABLE_FIELDS)
+
+
 class _MutationSafety:
     def __init__(
         self,
@@ -832,12 +857,16 @@ class _MutationSafety:
             "strategy_execution_binding_id", "exchange_position_key",
             "symbol", "position_idx",
         )
+        prior_position = _stable_private_position(prior.position)
+        again_position = _stable_private_position(again.position)
         if (
             again.signed_provider_uid != route.registered_exchange_uid
             or any(getattr(again, field) != getattr(prior, field) for field in fields)
             or again.pending_exit_mutation is not False
             or again.observed_at < prior.observed_at
-            or again.position != prior.position
+            or prior_position is None
+            or again_position is None
+            or again_position != prior_position
         ):
             self.last_denial_code = "P90_R06_EXIT_PRIVATE_RECHECK_DRIFT"
             return False
