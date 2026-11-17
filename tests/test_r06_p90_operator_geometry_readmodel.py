@@ -68,7 +68,10 @@ def test_projection_persisted_atomically_without_changing_recovery_state():
     assert '"operator_geometry": operator_geometry' in OBSERVER
     assert '"by_symbol": {sym: dump_symbol(state)' in OBSERVER
     assert '"version": 1' in OBSERVER
-    assert "SET causal_state=%s::jsonb,last_publication_id=%s,checked_at=clock_timestamp()" in OBSERVER
+    assert (
+        "SET causal_state=%s::jsonb,last_publication_id=%s,checked_at=clock_timestamp()"
+        in OBSERVER
+    )
     assert "R06_FINANCIAL_OR_CROSS_PLAN_EFFECT_FORBIDDEN" in OBSERVER
 
 
@@ -87,7 +90,8 @@ def test_dashboard_consumes_only_exact_current_source_and_fingerprint():
 
 
 def test_legacy_stale_data_cannot_become_current_without_r06():
-    assert 'checkpoint = live_checkpoint or p90_checkpoints.get(symbol)' in APP
+    assert 'legacy_checkpoint = p90_checkpoints.get(symbol)' in APP
+    assert 'checkpoint = live_checkpoint or legacy_checkpoint' in APP
     assert 'entry = checkpoint.get("entry", {}) if checkpoint and geometry_fresh else {}' in APP
     assert 'state = "STALE"' in APP
     assert 'if position_payload is not None:' in APP
