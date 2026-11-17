@@ -113,3 +113,15 @@ def test_without_fresh_signed_generation_ui_never_claims_flat_or_open() -> None:
     assert "UNKNOWN — не FLAT и не OPEN" in unknown
     assert "Исторические позиции не показаны как текущие" in unknown
     assert "return " in unknown
+
+
+def test_generic_open_positions_do_not_adopt_manual_by_symbol_only() -> None:
+    # Both the five-symbol rail and the generic account workspace must apply
+    # the same strict unique-owner predicate.
+    assert APP.count("matches_reconciled_strategy_cycle(") >= 2
+    assert "ownership_candidates.setdefault(candidate_key, []).append(owner)" in APP
+    assert "owner = candidates[0] if len(candidates) == 1 else None" in APP
+    assert "current_quantity=row[3]" in APP
+    assert "current_avg_fill=row[4]" in APP
+    assert "o.actual_avg_fill,o.actual_qty" in APP
+    assert "o.close_link_status='OPEN'" in APP
