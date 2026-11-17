@@ -28,6 +28,16 @@ def test_registration_cli_derives_only_exact_current_release_and_one_active_epoc
     assert "P90_REAL_COMPATIBILITY_ACTIVE_EPOCH_UNVERIFIED" in source
 
 
+def test_registration_script_binds_candidate_root_not_runtime_current_symlink():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "ROOT = Path(__file__).resolve().parents[2]" in source
+    assert 'RUNTIME_RELEASES = Path("/srv/cripta/runtime/releases")' in source
+    assert 'ROOT = Path("/srv/cripta/runtime/current")' not in source
+    assert "ROOT.resolve().parent != RUNTIME_RELEASES.resolve()" in source
+    installer = INSTALLER.read_text(encoding="utf-8")
+    assert '--release-commit "$RELEASE_COMMIT" --active-epoch --register --release-preparation' in installer
+
+
 def test_installer_prepares_compatibility_before_cutover_and_consumers():
     source = INSTALLER.read_text(encoding="utf-8")
     spec = (
