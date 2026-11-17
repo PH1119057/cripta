@@ -14,7 +14,11 @@ import pwd
 import sys
 from pathlib import Path
 
-ROOT = Path("/srv/cripta/runtime/current")
+# Bind imports and evidence to the immutable release that owns THIS script,
+# not to /runtime/current. Verified release preparation executes the candidate
+# before cutover, while the old runtime symlink must remain untouched.
+ROOT = Path(__file__).resolve().parents[2]
+RUNTIME_RELEASES = Path("/srv/cripta/runtime/releases")
 SOURCE_CHECKOUT = Path("/srv/cripta/source_checkout")
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -42,6 +46,7 @@ def perform(
     if release_preparation and not (active_epoch and register):
         raise RuntimeError("P90_REAL_COMPATIBILITY_RELEASE_PREPARATION_MODE_INVALID")
     if (os.geteuid() != pwd.getpwnam("cripta").pw_uid
+            or ROOT.resolve().parent != RUNTIME_RELEASES.resolve()
             or ROOT.resolve().name != release_commit
             or Path(sys.prefix).resolve() != (ROOT / ".venv").resolve()
             or Path(__file__).resolve() != (ROOT / "operations/implementation/"
@@ -92,8 +97,9 @@ def perform(
                 if c.execute(
                     "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'",
                 ).fetchone() != (0,):
-                    print("P90_REAL_SOURCE_COMPATIBILITY=DEFERRED_ENTRY_GATE_NOT_OFF")
-                    return
+                    raise RuntimeError(
+                        "P90_REAL_COMPATIBILITY_RELEASE_PREPARATION_ENTRY_GATE_NOT_OFF"
+                    )
             else:
                 print("P90_REAL_SOURCE_COMPATIBILITY=PASS ALREADY_VERIFIED=1")
                 return
