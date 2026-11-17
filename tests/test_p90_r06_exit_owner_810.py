@@ -208,6 +208,7 @@ def test_cycle_holds_boundary_trade_until_closed_bar_is_available(
 
     monkeypatch.setattr(owner, "_runtime_scope", lambda *_a, **_k: scope)
     monkeypatch.setattr(owner, "_open_positions", lambda *_a, **_k: (position,))
+    monkeypatch.setattr(owner, "_refresh_exit_claim", lambda *_a, **_k: None)
     monkeypatch.setattr(owner, "_latest_mfe", lambda *_a, **_k: object())
     monkeypatch.setattr(owner, "_last_closed_boundary", lambda *_a, **_k: None)
     monkeypatch.setattr(owner, "_source_snapshot", lambda *_a, **_k: snapshot)
