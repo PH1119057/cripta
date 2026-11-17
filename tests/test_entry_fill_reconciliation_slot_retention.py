@@ -184,3 +184,64 @@ def test_complete_flat_cannot_close_fill_created_after_inventory_started() -> No
     assert len(updates) == 1
     assert "state='CLOSED'" not in updates[0]
     release.assert_not_called()
+
+
+def test_closed_external_flat_cycle_is_never_resurrected_by_manual_reopen() -> None:
+    class HistoricalDB(DB):
+        def execute(self, sql: str, _params: object = ()) -> Rows:
+            self.statements.append(sql)
+            if "FROM runtime.position_ownership" in sql and "ORDER BY fill_at" in sql:
+                return Rows([(
+                    POSITION, "trade-entry-ltc", "LTCUSDT", "Sell",
+                    "104.5", "0.1", 1793790910007, 0,
+                    "ue-entry-ltc", "request-entry-ltc",
+                    f"BYBIT:{ACCOUNT}:LINEAR:USDT:LTCUSDT:0",
+                    "strategy-ltc", "2.0", "CLOSED", "UNRESOLVED_EXACT_LINK",
+                )])
+            if "SELECT extract(epoch from min(fill_at))" in sql:
+                return Rows([(None,)])
+            if "FROM runtime.executions" in sql:
+                return Rows([])
+            raise AssertionError("unexpected query in synthetic test: " + sql[:120])
+
+    connection = HistoricalDB()
+    unresolved = SimpleNamespace(
+        status="UNRESOLVED_EXACT_LINK", exit_order_id=None,
+    )
+    manual_reopen = [{
+        "symbol": "LTCUSDT",
+        "positionIdx": 0,
+        "side": "Sell",
+        "size": "0.2",
+        "avgPrice": "110.0",
+    }]
+    with (
+        patch.object(private_runtime, "TRADING_ACCOUNT_ID", ACCOUNT),
+        patch.object(private_runtime, "resolve_exchange_position_close",
+                     return_value=unresolved),
+        patch.object(private_runtime, "release_position_capital_reservation") as release,
+    ):
+        private_runtime.reconcile_position_ownership(
+            connection,
+            position_list=manual_reopen,
+            now=1793791920000,
+            account_generation_id="acctgen-manual-reopen",
+            inventory_started_ms=1793791919000,
+        )
+    assert not any(
+        "UPDATE runtime.position_ownership" in statement
+        for statement in connection.statements
+    )
+    release.assert_not_called()
+
+
+def test_production_reconcile_binds_flat_projection_to_same_generation_transaction() -> None:
+    source = Path(private_runtime.__file__).read_text(encoding="utf-8")
+    caller = source.split(
+        "_require_inventory_not_overtaken_by_fill(connection, started_ms=started)", 1
+    )[1].split("return len(position_list), len(order_list)", 1)[0]
+    assert "account_generation_id=generation_id" in caller
+    assert "inventory_started_ms=started" in caller
+    assert caller.index("reconcile_position_ownership(") < caller.index(
+        "SET state='COMPLETE'"
+    )
