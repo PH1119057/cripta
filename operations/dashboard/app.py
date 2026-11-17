@@ -5870,9 +5870,14 @@ P90_REAL_MAIN_CONNECTOR_ID = "ac-ed73de20410548d6841aeafa5f196f70"
 P90_REAL_SUB_ACCOUNT_ID = "ta-853ac5fcd58185697396d33cd57459fa"
 P90_REAL_SUB_CONNECTOR_ID = "ac-ec57819f875f1bfd929a382d6dc8a125"
 P90_REAL_WS_RECOVERY_REASON = "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN"
+P90_REAL_PRE_SEND_RECOVERY_REASON = "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED"
 P90_REAL_WS_RECOVERY_SCRIPT = Path(
     "/srv/cripta/runtime/current/operations/implementation/"
     "recover_p90_account_ws_safety.py"
+)
+P90_REAL_PRE_SEND_RECOVERY_SCRIPT = Path(
+    "/srv/cripta/runtime/current/operations/implementation/"
+    "recover_p90_pre_send_safety.py"
 )
 P90_REAL_WS_RECOVERY_PYTHON = Path(
     "/srv/cripta/runtime/current/.venv/bin/python"
@@ -5974,6 +5979,111 @@ def _wait_p90_real_v3_technical_evidence(
             if time.monotonic() >= deadline:
                 raise
             time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
+
+
+def _recover_p90_real_pre_send_safety_if_needed(
+    *,
+    request_id: str,
+) -> list[dict[str, object]]:
+    """Clear only an exact legacy no-mutation P90 latch with signed proof."""
+    routes = {
+        P90_REAL_MAIN_ACCOUNT_ID: P90_REAL_MAIN_CONNECTOR_ID,
+        P90_REAL_SUB_ACCOUNT_ID: P90_REAL_SUB_CONNECTOR_ID,
+    }
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        rows = connection.execute(
+            """SELECT trading_account_id,account_connector_id
+                 FROM runtime.account_entry_safety_blocks
+                WHERE trading_account_id=ANY(%s)
+                  AND reason=%s
+                ORDER BY trading_account_id""",
+            (list(routes), P90_REAL_PRE_SEND_RECOVERY_REASON),
+        ).fetchall()
+
+    unexpected = [
+        (str(account), str(connector))
+        for account, connector in rows
+        if routes.get(str(account)) != str(connector)
+    ]
+    if unexpected:
+        raise RuntimeError(
+            "P90_REAL_PRE_SEND_RECOVERY_IDENTITY_DRIFT:"
+            + json.dumps(unexpected, separators=(",", ":"))
+        )
+
+    recovered: list[dict[str, object]] = []
+    for account, connector in rows:
+        account_id = str(account)
+        connector_id = str(connector)
+        recovery_request_id = (
+            request_id[:92]
+            + "-pre-"
+            + ("main" if account_id == P90_REAL_MAIN_ACCOUNT_ID else "sub")
+        )
+        env = os.environ.copy()
+        env["PYTHONPATH"] = "/srv/cripta/runtime/current/src"
+        result = subprocess.run(
+            [
+                str(P90_REAL_WS_RECOVERY_PYTHON),
+                str(P90_REAL_PRE_SEND_RECOVERY_SCRIPT),
+                "--account", account_id,
+                "--connector", connector_id,
+                "--operator", "owner",
+                "--request-id", recovery_request_id,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+            env=env,
+        )
+        if result.returncode != 0:
+            safe_codes = {
+                "P90_PRE_SEND_RECOVERY_OWNER_REQUIRED",
+                "P90_PRE_SEND_RECOVERY_REQUEST_ID_INVALID",
+                "P90_PRE_SEND_RECOVERY_ACCOUNT_SCOPE_INVALID",
+                "P90_PRE_SEND_RECOVERY_RELEASE_IDENTITY_UNVERIFIED",
+                "P90_PRE_SEND_RECOVERY_LATCH_MISSING",
+                "P90_PRE_SEND_RECOVERY_REASON_NOT_APPROVED",
+                "P90_PRE_SEND_RECOVERY_COMMAND_EPOCH_AMBIGUOUS",
+                "P90_PRE_SEND_RECOVERY_PRIVATE_PROOF_INVALID",
+                "P90_PRE_SEND_RECOVERY_RESULT_INVALID",
+                "P90_PRE_SEND_RECOVERY_DB_REJECTED",
+                "P90_PRE_SEND_RECOVERY_PROOF_OR_RUNTIME_ERROR",
+            }
+            code = "P90_PRE_SEND_RECOVERY_UNCLASSIFIED"
+            for line in result.stderr.splitlines():
+                prefix = "P90_PRE_SEND_RECOVERY_ERROR="
+                if line.startswith(prefix):
+                    candidate = line[len(prefix):].strip()
+                    if candidate in safe_codes:
+                        code = candidate
+                    break
+            raise RuntimeError(
+                "P90_REAL_PRE_SEND_RECOVERY_FAILED:"
+                + account_id + ":rc=" + str(result.returncode) + ":code=" + code
+            )
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "P90_REAL_PRE_SEND_RECOVERY_OUTPUT_INVALID:" + account_id
+            ) from exc
+        if (
+            payload.get("status") not in {"RECOVERED", "ALREADY_CLEAR"}
+            or payload.get("trading_account_id") != account_id
+            or payload.get("account_connector_id") != connector_id
+            or payload.get("exchange_mutation") is not False
+            or payload.get("gate_mutation") is not False
+            or payload.get("owner_arm") is not False
+        ):
+            raise RuntimeError(
+                "P90_REAL_PRE_SEND_RECOVERY_RESULT_INVALID:" + account_id
+            )
+        recovered.append(payload)
+    return recovered
 
 
 def _recover_p90_real_ws_safety_if_needed(
@@ -6324,6 +6434,9 @@ def _u6_prepare_p90_real_v3_readiness(
         # Account-local recovery requires its private-runtime IPC owner to be
         # active first. Never fail on a missing transport before the bounded
         # Service Start Broker has had a chance to restore an inactive owner.
+        pre_send_recovery = _recover_p90_real_pre_send_safety_if_needed(
+            request_id=request_id,
+        )
         ws_recovery = _recover_p90_real_ws_safety_if_needed(
             request_id=request_id,
         )
@@ -6341,6 +6454,10 @@ def _u6_prepare_p90_real_v3_readiness(
                     "services_active": len(specs),
                     "requested_starts": list(plan.starts),
                     "broker_result": broker_result,
+                    "pre_send_safety_recovered": [
+                        item.get("trading_account_id")
+                        for item in pre_send_recovery
+                    ],
                     "ws_safety_recovered": [
                         item.get("trading_account_id")
                         for item in ws_recovery
@@ -6363,6 +6480,10 @@ def _u6_prepare_p90_real_v3_readiness(
                     "services_active": len(specs),
                     "requested_starts": list(plan.starts),
                     "broker_result": broker_result,
+                    "pre_send_safety_recovered": [
+                        item.get("trading_account_id")
+                        for item in pre_send_recovery
+                    ],
                     "ws_safety_recovered": [
                         item.get("trading_account_id")
                         for item in ws_recovery
