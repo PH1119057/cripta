@@ -4,15 +4,21 @@ This is a mocked private worker test: no Exchange, production DB or LIVE rights.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from operations.connectivity import private_runtime
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "research/server/connectivity"))
+sys.path.insert(0, str(ROOT / "operations/connectivity"))
 
-SOURCE = (Path(__file__).resolve().parents[1] /
-          "operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+import private_runtime  # noqa: E402
+
+SOURCE = (ROOT / "operations/connectivity/private_runtime.py").read_text(
+    encoding="utf-8"
+)
 
 
 class DB:
