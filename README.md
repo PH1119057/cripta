@@ -147,6 +147,8 @@ safety/financial/recovery obligations. Любое более долгое, гл�
 horizon/cutoff, storage budget и purge/compaction rule. Канон: ARCH §61;
 маршрут: INDEX §80.
 
+Owner-approved Exchange-current reconciliation contract (2026-11-17, Issue #511): a complete signed Bybit Private account snapshot owns **currently open exposure**; PostgreSQL retains Strategy ID attribution and immutable execution history. Manual positions never auto-adopt Strategy ownership; unresolved sent-unknown operations remain fail-closed. Route: ARCH §59.1 / TRADING_CONTOUR §4.17.1 / INDEX §17.1.6. Canon approval is not deployed recovery.
+
 ## Routine restart recovery
 
 The canonical recovery requirements are defined in ARCH, TRADING_CONTOUR, GLOSSARY, DEVELOPMENT_RELEASE and DOCUMENTATION_INDEX. Exchange snapshots are authoritative for current positions, while durable local history must be preserved. A canonical decision is not deployed implementation.
