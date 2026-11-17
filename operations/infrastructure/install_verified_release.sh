@@ -308,41 +308,71 @@ install -d -o root -g root -m 0700 "$RELEASE_CONTROLLER_STATE_ROOT/used"
 runtime_release="$RUNTIME_ROOT/releases/$RELEASE_COMMIT"
 tooling_release="$RESEARCH_TOOLING_ROOT/releases/$RELEASE_COMMIT"
 
-# A failed #470 pre-backup attempt may leave only an immutable candidate tree.
-# It is not an installed release until INSTALLED_COMMIT exists and current points
-# to it. Rebuild that exact target from Git instead of trusting partial bytes.
-if [[ -n "$ROADMAP470_STAGE" ]]; then
-  roadmap470_reset_incomplete_candidate() {
-    local candidate="$1"
-    local current_link="$2"
-    local expected_parent="$3"
-    local label="$4"
-    local current_target=""
+# A release directory name or marker is not proof of its bytes. Any target
+# that is not the current immutable runtime/tooling baseline is an expendable
+# build candidate and is rebuilt from exact Git on every attempt.
+reset_release_candidate() {
+  local candidate="$1"
+  local current_link="$2"
+  local expected_parent="$3"
+  local label="$4"
+  local current_target=""
 
-    [[ "$candidate" == "$expected_parent/$RELEASE_COMMIT" ]] ||
-      die "ROADMAP470_INCOMPLETE_CANDIDATE_SCOPE_INVALID:$label"
-    if [[ -d "$candidate" && ! -f "$candidate/INSTALLED_COMMIT" ]]; then
-      [[ ! -L "$candidate" ]] ||
-        die "ROADMAP470_INCOMPLETE_CANDIDATE_SYMLINK:$label"
-      current_target="$(readlink -f "$current_link" 2>/dev/null || true)"
-      [[ "$current_target" != "$candidate" ]] ||
+  [[ "$candidate" == "$expected_parent/$RELEASE_COMMIT" ]] ||
+    die "RELEASE_TARGET_CANDIDATE_SCOPE_INVALID:$label"
+  if [[ -e "$candidate" || -L "$candidate" ]]; then
+    [[ -d "$candidate" && ! -L "$candidate" ]] ||
+      die "RELEASE_TARGET_CANDIDATE_TYPE_INVALID:$label"
+    current_target="$(readlink -f "$current_link" 2>/dev/null || true)"
+    if [[ "$current_target" == "$candidate" ]]; then
+      if [[ -n "$ROADMAP470_STAGE" ]]; then
         die "ROADMAP470_INCOMPLETE_CANDIDATE_IS_CURRENT:$label"
-      rm -rf --one-file-system -- "$candidate"
+      fi
+      die "RELEASE_TARGET_CANDIDATE_IS_CURRENT:$label"
+    fi
+    rm -rf --one-file-system -- "$candidate"
+    echo "RELEASE_TARGET_CANDIDATE_REBUILT=PASS label:$label target:$RELEASE_COMMIT"
+    if [[ -n "$ROADMAP470_STAGE" ]]; then
       echo "ROADMAP470_INCOMPLETE_CANDIDATE_RESET=PASS label:$label target:$RELEASE_COMMIT"
     fi
-  }
-  roadmap470_reset_incomplete_candidate     "$runtime_release" "$RUNTIME_ROOT/current" "$RUNTIME_ROOT/releases" runtime
-  roadmap470_reset_incomplete_candidate     "$tooling_release" "$RESEARCH_TOOLING_ROOT/current"     "$RESEARCH_TOOLING_ROOT/releases" tooling
-fi
+  fi
+}
 
-if [[ ! -d "$runtime_release" ]]; then
-  as_repo_owner install -d -m 0750 "$runtime_release"
-  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src operations config research/server/backup research/server/connectivity research/server/monitoring research/server/control pyproject.toml     | runuser -u cripta -- tar -xf - -C "$runtime_release"
-fi
-if [[ ! -d "$tooling_release" ]]; then
-  as_repo_owner install -d -m 0750 "$tooling_release"
-  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service     | runuser -u cripta -- tar -xf - -C "$tooling_release"
-fi
+reset_release_candidate \
+  "$runtime_release" "$RUNTIME_ROOT/current" "$RUNTIME_ROOT/releases" runtime
+reset_release_candidate \
+  "$tooling_release" "$RESEARCH_TOOLING_ROOT/current" \
+  "$RESEARCH_TOOLING_ROOT/releases" tooling
+
+as_repo_owner install -d -m 0750 "$runtime_release"
+as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src operations config \
+  research/server/backup research/server/connectivity \
+  research/server/monitoring research/server/control pyproject.toml \
+  | runuser -u cripta -- tar -xf - -C "$runtime_release"
+as_repo_owner install -d -m 0750 "$tooling_release"
+as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service \
+  | runuser -u cripta -- tar -xf - -C "$tooling_release"
+
+# Verify every selected tracked blob and Git executable/symlink mode before
+# .venv, Dashboard overlay, INSTALLED_COMMIT, DB, service, or symlink cutover.
+runuser -u cripta -- /usr/bin/python3 \
+  "$SOURCE/operations/infrastructure/verify_release_candidate_git.py" \
+  --repo "$SOURCE" --commit "$RELEASE_COMMIT" \
+  --candidate "$runtime_release" --label runtime \
+  --path src --path operations --path config \
+  --path research/server/backup --path research/server/connectivity \
+  --path research/server/monitoring --path research/server/control \
+  --path pyproject.toml || die "RELEASE_RUNTIME_GIT_BLOB_VERIFY_FAILED"
+echo "RELEASE_RUNTIME_GIT_BLOB_VERIFY=PASS target:$RELEASE_COMMIT"
+
+runuser -u cripta -- /usr/bin/python3 \
+  "$SOURCE/operations/infrastructure/verify_release_candidate_git.py" \
+  --repo "$SOURCE" --commit "$RELEASE_COMMIT" \
+  --candidate "$tooling_release" --label tooling \
+  --path research/server/jobs --path research/server/dataset \
+  --path research/server/cripta-download-expansion.service ||
+  die "RELEASE_TOOLING_GIT_BLOB_VERIFY_FAILED"
+echo "RELEASE_TOOLING_GIT_BLOB_VERIFY=PASS target:$RELEASE_COMMIT"
 
 # Fail closed before service/DB mutation if the runtime release retention root
 # contains any unexpected direct child or if current does not resolve to the
