@@ -59,6 +59,26 @@ def test_r14_reviewed_r06_r07_r10_hashes_bind_current_exact_git_bytes() -> None:
         assert hashlib.sha256(blob).hexdigest() == expected
 
 
+def test_r14_r06_origin_accepts_exact_account_lock_order_delta() -> None:
+    reviewed = compat._REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256
+    assert set(reviewed) == {
+        "universal_entry/engine.py",
+        "universal_entry/p90l90_real_contract_v3.py",
+        "universal_entry/r06_financial_promotion.py",
+        "universal_entry/r07_publication_provenance.py",
+        "universal_exit/p90l90_real_closed_exit_port.py",
+        "universal_exit/p90l90_real_v3.py",
+        "universal_exit/p90l90_real_exit_execution.py",
+    }
+    assert reviewed["universal_exit/p90l90_real_exit_execution.py"] == (
+        "a31cd9c03de6187483b6eb78598b12faeb258ac55221da625d00caec0b3c3358"
+    )
+    assert compat._reviewed_delta_for_origin(
+        set(reviewed),
+        origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+    ) == reviewed
+
+
 def test_r14_r06_origin_accepts_exact_protected_exit_recovery_delta() -> None:
     reviewed = compat._REVIEWED_R06_PROTECTED_EXIT_RECOVERY_SHA256
     assert set(reviewed) == {

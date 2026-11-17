@@ -114,6 +114,10 @@ class P90RealExitExecutionPort:
                 "P90_REAL_EXIT_DECISION_OR_CLOCK_UNVERIFIED"
             )
         approved = self._accounts.get(position.strategy_id)
+        if approved is None:
+            raise P90RealExitExecutionUnverified(
+                "P90_REAL_EXIT_ACCOUNT_NOT_APPROVED"
+            )
         observation = evaluation.observation
         details = observation.attributes.to_dict().get("p90l90_real")
         if (
