@@ -1,13 +1,12 @@
 """#837: native moving TRAIL035 vs one-time fixed +0.15 protective-stop sweep."""
 from __future__ import annotations
 
+import importlib
 from decimal import Decimal as D
 
-from scripts.research import (
-    p90l90_exit_90d_v2 as base,
-    p90l90_fixed_stop_sweep_2025_v1 as y25,
-    p90l90_fixed_stop_sweep_2026_v1 as y26,
-)
+base = importlib.import_module("scripts.research.p90l90_exit_90d_v2")
+y25 = importlib.import_module("scripts.research.p90l90_fixed_stop_sweep_2025_v1")
+y26 = importlib.import_module("scripts.research.p90l90_fixed_stop_sweep_2026_v1")
 
 
 CASES = ("FIX_040", "FIX_050", "FIX_060", "FIX_070",
