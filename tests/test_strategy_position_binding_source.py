@@ -15,10 +15,11 @@ def test_private_runtime_uses_exact_universal_position_binding() -> None:
 
 
 def test_private_runtime_releases_bound_capital_only_from_position_close_path() -> None:
-    assert PRIVATE.count("release_position_capital_reservation(") == 1
+    assert PRIVATE.count("release_position_capital_reservation(") == 2
     assert "entry_execution_request_id" in PRIVATE
     assert "close_link_status='UNRESOLVED_EXACT_LINK'" in PRIVATE
     assert "close_link_status='EXACT'" in PRIVATE
+    assert "EXTERNAL_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING" in PRIVATE
 
 
 def test_universal_consumer_revalidates_claim_before_command_publish() -> None:
