@@ -63,6 +63,7 @@ from bybit_workbench.universal_exit.p90l90_real_closed_exit_port import (
 )
 from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
     P90RealExitExecutionPort,
+    lock_p90_exit_account,
 )
 from bybit_workbench.universal_exit.p90l90_real_mfe import (
     P90RealMfeCheckpoint,
@@ -981,6 +982,13 @@ def _process_closed(
             raw=raw,
         )
 
+    account_id = scope.routes.account_by_strategy.get(position.strategy_id)
+    _need(
+        isinstance(account_id, str)
+        and account_id == position.trading_account_id,
+        "P90_R06_EXIT_ACCOUNT_LOCK_SCOPE_UNVERIFIED",
+    )
+
     port = P90RealClosedExitPort(
         position_provider=provider,
         independently_verified_closed_history=closed_history,
@@ -1025,6 +1033,10 @@ def _process_closed(
         }),
     )
     with connection.transaction():
+        # Global P90 lock order: account before source/position-dependent Exit
+        # persistence. This matches private reconciliation and prevents the
+        # account-advisory <-> StrategyPosition FK/row deadlock cycle.
+        lock_p90_exit_account(connection, account_id)
         _lock_source(
             connection, scope=scope, snapshot=snapshot, position=position,
         )

@@ -49,6 +49,7 @@ from bybit_workbench.universal_exit.p90l90_real_observation import (
 from bybit_workbench.universal_exit.loader import load_exit_binding
 from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
     P90RealExitExecutionPort,
+    lock_p90_exit_account,
 )
 from bybit_workbench.universal_exit.p90l90_real_pending import p90_real_exit_no_pending
 from bybit_workbench.universal_exit.p90l90_real_postfill_port import (
@@ -319,6 +320,9 @@ def run_p90_exit_once(
     if candidate is None:
         return "P90_NO_PROTECTED_POSITION_REQUIRING_TRAIL"
     position_id = str(candidate["position_id"])
+    account_id = candidate.get("trading_account_id")
+    if not isinstance(account_id, str):
+        return "P90_REAL_EXIT_FIRST_FILL_ACCOUNT_IDENTITY_UNVERIFIED"
     try:
         _validate_first_fill_age(
             fill_at=candidate["fill_at"],
@@ -334,6 +338,9 @@ def run_p90_exit_once(
         # This short outer transaction is the sole publisher's xact. The
         # source adapter and signed private client supply proofs, not writes.
         with connection.transaction():
+            # Global P90 lock order: account before any StrategyPosition/Exit
+            # row lock. Private reconciliation already owns this exact order.
+            lock_p90_exit_account(connection, account_id)
             connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
                 (position_id,),
