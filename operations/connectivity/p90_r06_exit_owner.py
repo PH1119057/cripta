@@ -520,14 +520,14 @@ def _lock_source(
         "P90_R06_EXIT_SOURCE_SESSION_CHANGED_DURING_COMMIT",
     )
     publication = connection.execute(
-        """SELECT source_session_id,producer_release_commit,publication_status
-             FROM analytics.market_publications
-            WHERE publication_id=%s
-            FOR SHARE""",
+        """SELECT publication_id,source_session_id,
+                  producer_release_commit,publication_status
+             FROM analytics.lock_p90_exit_market_publication(%s)""",
         (snapshot.pin.publication_id,),
     ).fetchone()
     _need(
         publication is not None
+        and publication.get("publication_id") == snapshot.pin.publication_id
         and publication.get("source_session_id") == snapshot.pin.source_session_id
         and publication.get("producer_release_commit")
             == snapshot.pin.producer_release_commit
