@@ -860,13 +860,26 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
   };
   rail.innerHTML=rows.map(item=>{
     const symbol=safe(item.symbol),state=String(item.state||'FAR'),nearest=item.nearest_entry||null;
+    const geometryStale=state==='STALE'||item.geometry_fresh===false;
     const h9Proximity=p90RailH9Proximity(item);
     const visualNear=state==='NEAR'||(state!=='OPEN'&&h9Proximity<0.5);
     const stateClass=state==='OPEN'?'p90-open':visualNear?'p90-near':'p90-far';
-    const stateText=state==='OPEN'?'ОТКРЫТА СДЕЛКА':visualNear?(state==='NEAR'?'БЛИЗКО К ENTRY':'БЛИЗКО К H9'):'ДАЛЕКО ОТ ENTRY';
+    const stateText=state==='OPEN'?'ОТКРЫТА СДЕЛКА':geometryStale?'ГЕОМЕТРИЯ УСТАРЕЛА':visualNear?(state==='NEAR'?'БЛИЗКО К ENTRY':'БЛИЗКО К H9'):'ДАЛЕКО ОТ ENTRY';
     const tone=state==='OPEN'?'open':visualNear?'near':'far';
     const current=price(item.current_price);
     if(state!=='OPEN'){
+      if(geometryStale){
+        const checkpointTime=item.checkpoint_updated_at?new Date(item.checkpoint_updated_at).toLocaleString('ru-RU'):'нет checkpoint';
+        const marketTime=item.current_price_source_time_max?new Date(item.current_price_source_time_max).toLocaleString('ru-RU'):'нет свежей цены';
+        const source=item.current_price_source==='MARKET_PUBLICATION'?'MarketPublication':'текущая цена недоступна';
+        return '<div class="rail-open-position p90-far">'+
+          '<div class="rail-position-summary"><span><span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state far">ГЕОМЕТРИЯ УСТАРЕЛА</small></span>'+
+          '<span class="rail-position-pnl">'+current+'<br><small class="rail-position-meta">'+safe(source)+'</small></span></div>'+
+          '<div class="rail-position-meta">Рыночная цена: '+current+' · источник '+safe(marketTime)+'</div>'+
+          '<div class="rail-position-meta"><b class="loss">Актуальные H9 / L5-3 и расстояние до Entry не подтверждены.</b></div>'+
+          '<div class="rail-position-meta">Последний causal checkpoint: '+safe(checkpointTime)+' · устаревшие уровни скрыты; торговые решения здесь не вычисляются</div>'+
+          '</div>';
+      }
       const h9=item.h9_distances||{},h9Value=value=>value===null||value===undefined||value===''?Number.NaN:Number(value);
       const h9Long=h9Value(h9.long_distance_pct),h9Short=h9Value(h9.short_distance_pct);
       const h9LongValid=Number.isFinite(h9Long)&&h9Long>=0,h9ShortValid=Number.isFinite(h9Short)&&h9Short>=0;
@@ -1880,7 +1893,7 @@ loadStrategies().catch(()=>{});refresh().catch(e=>stamp.textContent='ошибк�
 /* Right rail is a presentation-only view of already evidenced Bybit closures. */
 const railPeriodKey='cripta-workspace-closed-period-v1';
 const railPeriods={day:{ms:86400000,label:'24 часа'},week:{ms:7*86400000,label:'7 дней'},month:{ms:30*86400000,label:'30 дней'}};
-let railPeriod='day',railClosedCache=[],railClosedFetched=false,railRefreshBusy=false;
+let railPeriod='day',railClosedCache=[],railClosedFetched=false,railRefreshBusy=false,railLastFetchedAt=0;
 try{const persisted=localStorage.getItem(railPeriodKey);if(Object.hasOwn(railPeriods,persisted))railPeriod=persisted}catch(_e){}
 function railSafe(v){const x=document.createElement('span');x.textContent=String(v??'');return x.innerHTML}
 function railMoney(v){return(v>0?'+':'')+v.toFixed(4)+' USDT'}
@@ -1913,7 +1926,8 @@ function railRender(){
   document.getElementById('railHardStop').textContent=hard;
   document.getElementById('railClosedList').innerHTML=html||'<p class="rail-muted">У текущей P90 REAL v3 за выбранный период закрытых сделок нет.</p>';
   const note=unknown?' · PnL неизвестен: '+unknown:'';
-  document.getElementById('railDataStatus').textContent='P90 REAL v3 · '+recent.length+' закрытых сделок'+note+(railClosedCache.length>=1000?' · История ограничена 1000 строками; итог может быть неполным':'')+'; hard-stop только по подтверждённой причине';
+  const lastChecked=railLastFetchedAt?' · проверено '+new Date(railLastFetchedAt).toLocaleTimeString('ru-RU'):'';
+  document.getElementById('railDataStatus').textContent='P90 REAL v3 · '+recent.length+' закрытых сделок'+note+lastChecked+(railClosedCache.length>=1000?' · История ограничена 1000 строками; итог может быть неполным':'')+'; hard-stop только по подтверждённой причине';
 }
 document.querySelectorAll('[data-rail-period]').forEach(b=>b.addEventListener('click',()=>{
   railPeriod=b.dataset.railPeriod;
@@ -1932,6 +1946,7 @@ async function railRefresh(){
     if(!Array.isArray(closed))throw Error('Нет данных завершённых сделок P90 REAL v3');
     railClosedCache=closed;
     railClosedFetched=true;
+    railLastFetchedAt=Date.now();
     railRender();
   }catch(e){document.getElementById('railDataStatus').textContent='История временно недоступна: '+String(e.message||e)}
   finally{railRefreshBusy=false}
