@@ -23,6 +23,8 @@ def check_release_arm_invariant(
     require_entry_runtime_health: bool = False,
     entry_source_ready: bool | None = None,
     entry_source_detail: str | None = None,
+    exit_owner_ready: bool | None = None,
+    exit_owner_detail: str | None = None,
     health_max_age_seconds: int = 8,
 ) -> bool:
     """Return True when new Entry may proceed from a release-bound perspective.
@@ -73,6 +75,8 @@ def check_release_arm_invariant(
         "source_detail": entry_source_detail,
         "consumer_accounts": [],
         "consumer_failures": [],
+        "exit_owner_ready": exit_owner_ready,
+        "exit_owner_detail": exit_owner_detail,
     }
     runtime_invalid = False
     runtime_scope_present = bool(gate_open or sessions or permissions)
@@ -139,6 +143,10 @@ def check_release_arm_invariant(
             not account_ids
             or bool(consumer_failures)
             or entry_source_ready is not True
+            or (
+                exit_owner_ready is not None
+                and exit_owner_ready is not True
+            )
         )
 
     invalid = bool(stale) or runtime_invalid or (

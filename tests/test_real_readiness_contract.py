@@ -20,15 +20,15 @@ CONNECTOR = "ac-" + "2" * 32
 def test_p90_profile_is_first_consumer_of_generic_service_contract():
     specs = p90_real_v3_service_specs(sub_account_id=SUB)
     names = {item.unit for item in specs}
-    assert len(specs) == 9
+    assert len(specs) == 10
     assert f"cripta-lifecycle-account@{SUB}.service" in names
     assert f"cripta-account-position@{SUB}.service" in names
     assert "cripta-dashboard.service" not in names
-    # P90 Exit is composed inside the Universal Entry Observer and dispatched
-    # through the account-local private runtimes. The generic legacy Exit
-    # services explicitly exclude P90 REAL v3 and must not become false gates.
+    # R06 replaces only the Entry reader. P90 REAL Exit therefore has an
+    # independent PG/publication owner; generic decision-only shadow remains
+    # outside the LIVE readiness profile.
     assert "cripta-universal-exit-shadow.service" not in names
-    assert "cripta-universal-exit-consumer.service" not in names
+    assert "cripta-universal-exit-consumer.service" in names
 
     snapshots = {
         item.unit: ServiceSnapshot(item.unit, UnitState.INACTIVE, SHA, True)

@@ -445,6 +445,34 @@ def prepare_p90l90_real_v3_prearm_evidence(
     for unit in _SERVICE_UNITS:
         _service_active(unit)
 
+    # R06 physically replaced only Entry.  PREARM must therefore prove the
+    # independent continuous P90 Exit owner itself, not merely loaded ExitPlan
+    # fingerprints inside the source-only Observer.
+    exit_owner = _read_json(
+        Path("/var/lib/cripta-p90-r06-exit/status.json"),
+        "P90 R06 Exit owner status",
+    )
+    try:
+        exit_owner_at = datetime.fromisoformat(
+            str(exit_owner.get("observed_at") or "")
+        ).astimezone(UTC)
+    except (ValueError, TypeError):
+        raise P90PrearmEvidenceBlocked(
+            "P90 REAL v3 PREARM: P90 R06 Exit owner timestamp invalid"
+        ) from None
+    exit_owner_checked_at = datetime.now(UTC)
+    _require(
+        exit_owner.get("service") == "p90_r06_exit_owner"
+        and exit_owner.get("state") == "P90_R06_EXIT_OWNER_READY_FLAT"
+        and exit_owner.get("result") == "P90_R06_EXIT_OWNER_READY_FLAT"
+        and exit_owner.get("release_commit") == release_commit
+        and exit_owner.get("p90_r06_exit_owner") == "ENABLED"
+        and exit_owner.get("generic_consumer") == "DISABLED"
+        and exit_owner.get("error") is None
+        and 0 <= (exit_owner_checked_at - exit_owner_at).total_seconds() <= 5,
+        "P90 R06 independent Exit owner not READY_FLAT/fresh",
+    )
+
     # Credential-local signed flat proofs are intentionally collected before
     # the authoritative DB snapshot.  Their account/connector identities are
     # fixed by the exact owner-approved P90 scope; the active DB bindings are
@@ -1099,5 +1127,6 @@ def prepare_p90l90_real_v3_prearm_evidence(
         "mainnet_gate_enabled": False,
         "execution_permissions": 0,
         "financial_promotion_baselines": financial_promotion_baselines,
+        "p90_r06_exit_owner": exit_owner,
         "exchange_mutation": False,
     }

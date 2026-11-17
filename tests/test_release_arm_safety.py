@@ -32,10 +32,10 @@ class _Connection:
             return _Result([(self.gate,)])
         if "FROM control.live_arm_sessions" in sql:
             return _Result(self.sessions)
-        if "FROM strategy_entry.execution_permissions" in sql:
-            return _Result(self.permissions)
         if "SELECT DISTINCT b.trading_account_id" in sql:
             return _Result([(item,) for item in self.expected_accounts])
+        if "FROM strategy_entry.execution_permissions" in sql:
+            return _Result(self.permissions)
         if "FROM runtime.entry_consumer_health" in sql:
             account_id = params[0]
             row = self.consumer_health.get(account_id)
@@ -220,3 +220,53 @@ def test_runtime_health_incident_remains_blocked_after_gate_is_closed():
     assert "INSERT INTO control.release_arm_incidents" in writes
     assert "UPDATE control.execution_gates" not in writes
     assert "SET state='RESOLVED'" not in writes
+
+
+def test_exit_owner_not_ready_closes_gate_with_entry_runtime_healthy():
+    now = datetime(2026, 11, 17, 5, 0, tzinfo=UTC)
+    c = _Connection(
+        gate=True,
+        sessions=[("p90", "v3", "LTCUSDT", "a" * 40)],
+        permissions=[("p90", "v3")],
+        expected_accounts=["ta-main"],
+        consumer_health={
+            "ta-main": ("ac-main", "a" * 40, "READY", "READY", now),
+        },
+    )
+    assert check_release_arm_invariant(
+        c,
+        loaded_commit="a" * 40,
+        now=now,
+        require_entry_runtime_health=True,
+        entry_source_ready=True,
+        entry_source_detail="READY",
+        exit_owner_ready=False,
+        exit_owner_detail="P90_R06_EXIT_OWNER_BLOCKED",
+    ) is False
+    writes = "\n".join(_writes(c))
+    assert "UPDATE control.execution_gates" in writes
+    assert "INSERT INTO control.release_arm_incidents" in writes
+
+
+def test_exit_owner_ready_preserves_matching_open_gate():
+    now = datetime(2026, 11, 17, 5, 0, tzinfo=UTC)
+    c = _Connection(
+        gate=True,
+        sessions=[("p90", "v3", "LTCUSDT", "a" * 40)],
+        permissions=[("p90", "v3")],
+        expected_accounts=["ta-main"],
+        consumer_health={
+            "ta-main": ("ac-main", "a" * 40, "READY", "READY", now),
+        },
+    )
+    assert check_release_arm_invariant(
+        c,
+        loaded_commit="a" * 40,
+        now=now,
+        require_entry_runtime_health=True,
+        entry_source_ready=True,
+        entry_source_detail="READY",
+        exit_owner_ready=True,
+        exit_owner_detail="P90_R06_EXIT_OWNER_RUNNING",
+    ) is True
+    assert "UPDATE control.execution_gates" not in "\n".join(_writes(c))

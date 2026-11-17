@@ -136,6 +136,43 @@ def _entry_source_health(
     )
 
 
+def _p90_exit_owner_health(
+    *,
+    loaded_commit: str,
+    now: datetime,
+) -> tuple[bool, str]:
+    path = Path("/var/lib/cripta-p90-r06-exit/status.json")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        observed_at = datetime.fromisoformat(str(payload.get("observed_at") or ""))
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        return False, f"P90_EXIT_STATUS_UNREADABLE:{type(exc).__name__}"
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        return False, "P90_EXIT_TIMESTAMP_INVALID"
+    age = (now.astimezone(UTC) - observed_at.astimezone(UTC)).total_seconds()
+    state = str(payload.get("state") or "")
+    ready = (
+        payload.get("service") == "p90_r06_exit_owner"
+        and state in {
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            "P90_R06_EXIT_OWNER_RUNNING",
+        }
+        and str(payload.get("release_commit") or "") == loaded_commit
+        and payload.get("p90_r06_exit_owner") == "ENABLED"
+        and payload.get("generic_consumer") == "DISABLED"
+        and payload.get("error") is None
+        and 0 <= age <= 5
+    )
+    if ready:
+        return True, state
+    return False, (
+        "P90_EXIT_NOT_READY:"
+        + state
+        + ":"
+        + str(payload.get("error") or "")
+    )
+
+
 def _owner_alert_sender(payload: dict[str, object]) -> None:
     if not OWNER_ALERT_WEBHOOK_URL:
         raise RuntimeError("owner alert webhook is not configured")
@@ -370,6 +407,10 @@ def main() -> int:
                     loaded_commit=loaded_commit,
                     now=guard_now,
                 )
+                exit_ready, exit_detail = _p90_exit_owner_health(
+                    loaded_commit=loaded_commit,
+                    now=guard_now,
+                )
                 with connection.transaction():
                     retired_arms = retire_stale_release_arms(
                         connection,
@@ -383,6 +424,8 @@ def main() -> int:
                         require_entry_runtime_health=True,
                         entry_source_ready=source_ready,
                         entry_source_detail=source_detail,
+                        exit_owner_ready=exit_ready,
+                        exit_owner_detail=exit_detail,
                     )
             with connection.transaction():
                 delivery = process_due_deliveries(

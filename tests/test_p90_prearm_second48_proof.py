@@ -144,6 +144,17 @@ def _exercise_delivery_prearm(
     critical = {"configured": False, "pending_or_unacknowledged": pending}
 
     def read_status(path: Path, _label: str):
+        if "cripta-p90-r06-exit" in str(path):
+            return {
+                "service": "p90_r06_exit_owner",
+                "state": "P90_R06_EXIT_OWNER_READY_FLAT",
+                "result": "P90_R06_EXIT_OWNER_READY_FLAT",
+                "release_commit": "a" * 40,
+                "p90_r06_exit_owner": "ENABLED",
+                "generic_consumer": "DISABLED",
+                "observed_at": at.isoformat(),
+                "error": None,
+            }
         if "universal_entry_observer" in str(path):
             return {
                 "updated_at": at.isoformat(), "state": "RUNNING",
