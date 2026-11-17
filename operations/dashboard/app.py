@@ -1695,8 +1695,30 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 if account_id is not None
             }
         )
+        # Each displayed Exchange position requires a fresh terminal signed
+        # Bybit account generation. Missing/FAILED/stale means UNKNOWN, not FLAT.
+        generation_rows = connection.execute(
+            """SELECT DISTINCT ON (trading_account_id)
+                      trading_account_id,state,identity_status,completed_at
+                 FROM runtime.account_state_generations
+                WHERE trading_account_id=ANY(%s)
+                  AND state IN ('COMPLETE','FAILED')
+                ORDER BY trading_account_id,started_at DESC,generation_id DESC""",
+            (p90_accounts,),
+        ).fetchall() if p90_accounts else []
+        inventory_checked_at = datetime.now(UTC)
+        p90_verified_accounts = {
+            str(row[0]) for row in generation_rows
+            if row[1] == "COMPLETE"
+            and row[2] == "PROVEN"
+            and isinstance(row[3], datetime)
+            and row[3].utcoffset() is not None
+            and 0 <= (
+                inventory_checked_at - row[3].astimezone(UTC)
+            ).total_seconds() <= 15
+        }
         p90_position_rows = []
-        if p90_accounts:
+        if p90_verified_accounts:
             p90_position_rows = connection.execute(
                 """SELECT trading_account_id,symbol,position_idx,side,size,entry_price,
                           leverage,refreshed_at_epoch_ms,payload_json
@@ -1705,7 +1727,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                       AND identity_status='PROVEN'
                       AND nullif(size,'')::numeric <> 0
                     ORDER BY trading_account_id,symbol,position_idx""",
-                (p90_accounts,),
+                (sorted(p90_verified_accounts),),
             ).fetchall()
         p90_ownership_rows = connection.execute(
             """SELECT o.trading_account_id,o.symbol,o.position_idx,o.side,
@@ -2014,7 +2036,11 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                         ),
                     }
 
-                if position_payload is not None:
+                if account_id not in p90_verified_accounts:
+                    position_payload = None
+                    state = "ACCOUNT_UNVERIFIED"
+                    rank = 1
+                elif position_payload is not None:
                     state = "OPEN"
                     rank = 0
                 elif symbol in p90_external_symbols:
@@ -2040,15 +2066,22 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                         "binding_ready": account_id is not None,
                         "state": state,
                         "rank": rank,
+                        "account_inventory_verified": (
+                            account_id in p90_verified_accounts
+                        ),
                         "external_position_present": (
                             symbol in p90_external_symbols
                         ),
                         "position_attribution": (
-                            "EXACT_STRATEGY_OWNED" if position_payload is not None
+                            "INVENTORY_UNKNOWN"
+                            if account_id not in p90_verified_accounts
                             else (
-                                "EXCHANGE_UNATTRIBUTED"
-                                if symbol in p90_external_symbols
-                                else "NO_CURRENT_EXCHANGE_POSITION"
+                                "EXACT_STRATEGY_OWNED" if position_payload is not None
+                                else (
+                                    "EXCHANGE_UNATTRIBUTED"
+                                    if symbol in p90_external_symbols
+                                    else "NO_CURRENT_EXCHANGE_POSITION"
+                                )
                             )
                         ),
                         "current_price": (
