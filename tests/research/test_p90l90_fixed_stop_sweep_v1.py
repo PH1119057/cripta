@@ -1,7 +1,6 @@
 """#837: native moving TRAIL035 vs one-time fixed +0.15 protective-stop sweep."""
 from __future__ import annotations
 
-from copy import deepcopy
 from decimal import Decimal as D
 
 from scripts.research import p90l90_exit_90d_v2 as base
