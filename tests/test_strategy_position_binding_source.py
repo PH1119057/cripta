@@ -19,7 +19,8 @@ def test_private_runtime_releases_bound_capital_only_from_position_close_path() 
     assert "entry_execution_request_id" in PRIVATE
     assert "close_link_status='UNRESOLVED_EXACT_LINK'" in PRIVATE
     assert "close_link_status='EXACT'" in PRIVATE
-    assert "EXTERNAL_FLAT_OBSERVED_CLOSE_ACCOUNTING_PENDING" in PRIVATE
+    # Exact external-flat release reason is asserted behaviorally in
+    # test_entry_fill_reconciliation_slot_retention.py and PostgreSQL tests.
 
 
 def test_universal_consumer_revalidates_claim_before_command_publish() -> None:
