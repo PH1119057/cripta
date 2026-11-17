@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import re
 import signal
 import time
 from collections.abc import Mapping
@@ -48,6 +49,20 @@ STATUS_PATH = Path(os.environ.get(
     "/var/lib/cripta-p90-r06-exit/status.json",
 ))
 running = True
+
+
+_SAFE_R06_ERROR = re.compile(
+    r"^(?:(?:P90|R06|R09)_[A-Z0-9_]+)"
+    r"(?::(?:P90|R06|R09)_[A-Z0-9_]+){0,2}$"
+)
+
+
+def _safe_r06_error(exc: Exception) -> str:
+    raw = str(exc)
+    if _SAFE_R06_ERROR.fullmatch(raw) is not None:
+        return raw[:120]
+    code = raw.split(":", 1)[0]
+    return code[:120] if code.startswith(("P90_", "R06_", "R09_")) else type(exc).__name__
 
 
 def _stop(_signum: int, _frame: object) -> None:
@@ -385,13 +400,10 @@ def main() -> int:
                 connection.rollback()
                 if source_connection is not None:
                     source_connection.rollback()
-                code = str(exc).split(":", 1)[0]
-                if not code.startswith(("P90_", "R06_", "R09_")):
-                    code = type(exc).__name__
                 _p90_status(
                     state="P90_R06_EXIT_OWNER_BLOCKED",
                     result="BLOCKED",
-                    error=code[:120],
+                    error=_safe_r06_error(exc),
                 )
                 # A source/private transient may recover. Keep the service
                 # alive but never manufacture READY from an exception.

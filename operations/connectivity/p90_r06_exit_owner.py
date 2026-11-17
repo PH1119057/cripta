@@ -25,6 +25,7 @@ from typing import Any
 from psycopg.rows import tuple_row
 
 from bybit_workbench.domain.models import Candle
+from bybit_workbench.lifecycle_ack import claim_exit_position
 from bybit_workbench.market_data.entry_publication_reader import (
     EntryPublicationPin,
     read_entry_publication_pin,
@@ -93,6 +94,8 @@ _FRAME_RE = re.compile(r"^market-source-frame:(\d+):(\d+)$")
 _SESSION_REF_RE = re.compile(r"^market-source-session:([0-9a-f]{32})$")
 _NO_NATIVE_KIND = "P90L90_REAL_CLOSED_5M_NO_NATIVE_PROVEN"
 _PENDING_CLOSED_KIND = "P90L90_REAL_CLOSED_5M_PENDING_MUTATION_PROCESSED"
+_EXIT_CLAIM_CONSUMER_ID = "universal-exit-shadow-v1"
+_FIRSTFILL_TERMINAL_MISS = "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED"
 
 
 class P90R06ExitBlocked(RuntimeError):
@@ -646,6 +649,82 @@ def _record_no_native_boundary(
         )
 
 
+def _firstfill_trail035_terminal_miss_proven(
+    connection: Any,
+    *,
+    position: StrategyPosition,
+) -> bool:
+    """Exact durable proof that TRAIL035 was missed, never silently removed.
+
+    This is intentionally narrower than "trailingStop == 0". A closed-5m
+    dynamic RAW exit may continue only when the independent first-fill owner
+    durably recorded terminal window expiry for this exact position/account
+    and no trailing decision/request was ever published.
+    """
+    row = connection.execute(
+        """SELECT
+               EXISTS(
+                   SELECT 1
+                     FROM runtime.connection_events e
+                    WHERE e.channel='exit'
+                      AND e.event='P90_FIRST_FILL_EXIT_UNVERIFIED'
+                      AND e.trading_account_id=%s
+                      AND e.identity_status='PROVEN'
+                      AND e.details_json::jsonb->>'position_id'=%s
+                      AND e.details_json::jsonb->>'reason_code'=%s
+               ) AS terminal_miss,
+               EXISTS(
+                   SELECT 1
+                     FROM strategy_exit.exit_decisions d
+                    WHERE d.strategy_position_id=%s
+                      AND d.action_kind='SET_TRAILING'
+               ) AS trailing_decision,
+               EXISTS(
+                   SELECT 1
+                     FROM strategy_exit.execution_requests r
+                    WHERE r.strategy_position_id=%s
+                      AND r.action_kind='SET_TRAILING'
+               ) AS trailing_request""",
+        (
+            position.trading_account_id,
+            position.strategy_position_id,
+            _FIRSTFILL_TERMINAL_MISS,
+            position.strategy_position_id,
+            position.strategy_position_id,
+        ),
+    ).fetchone()
+    return bool(
+        row is not None
+        and row.get("terminal_miss") is True
+        and row.get("trailing_decision") is False
+        and row.get("trailing_request") is False
+    )
+
+
+def _refresh_exit_claim(
+    connection: Any,
+    *,
+    position: StrategyPosition,
+    claimed_at: datetime,
+) -> None:
+    """Keep the one logical Universal Exit ownership claim alive under R06.
+
+    R06 replaced the evaluator process, not the logical Exit Engine identity.
+    Reusing the stable claim identity revives an existing STALE row without
+    changing its immutable claim/position/plan/activation/consumer identity.
+    """
+    claim_exit_position(
+        connection,
+        strategy_position_id=position.strategy_position_id,
+        consumer_instance_id=_EXIT_CLAIM_CONSUMER_ID,
+        claimed_at=claimed_at,
+        payload={
+            "runtime": "p90_r06_exit_owner",
+            "mode": "P90_R06_INDEPENDENT_EXIT",
+        },
+    )
+
+
 def _record_pending_closed_boundary(
     connection: Any,
     *,
@@ -938,6 +1017,11 @@ def _process_closed(
             "low": str(candle.low),
             "close": str(candle.close),
             "volume": str(candle.volume),
+            "missed_firstfill_trail035_proven": (
+                _firstfill_trail035_terminal_miss_proven(
+                    connection, position=position,
+                )
+            ),
         }),
     )
     with connection.transaction():
@@ -985,6 +1069,11 @@ def run_p90_r06_exit_once(
 
     results: list[str] = []
     for position in positions:
+        _refresh_exit_claim(
+            connection,
+            position=position,
+            claimed_at=current,
+        )
         latest = _latest_mfe(
             connection,
             position=position,
