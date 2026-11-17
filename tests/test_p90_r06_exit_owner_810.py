@@ -252,6 +252,7 @@ def test_pending_closed_mutation_advances_only_processed_boundary_marker(
 
     monkeypatch.setattr(owner, "_runtime_scope", lambda *_a, **_k: scope)
     monkeypatch.setattr(owner, "_open_positions", lambda *_a, **_k: (position,))
+    monkeypatch.setattr(owner, "_refresh_exit_claim", lambda *_a, **_k: None)
     # First lookup says MFE exists; second lookup before closed processing too.
     monkeypatch.setattr(owner, "_latest_mfe", lambda *_a, **_k: object())
     monkeypatch.setattr(owner, "_last_closed_boundary", lambda *_a, **_k: None)
