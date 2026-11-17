@@ -743,7 +743,7 @@ class _MutationSafety:
             self.last_denial_code = "P90_R06_EXIT_PENDING_MUTATION"
             return False
         try:
-            again = self._private.for_closed_boundary(position, self._boundary)
+            again = self._private.for_closed_boundary(position, checked_at)
         except Exception:
             self.last_denial_code = "P90_R06_EXIT_PRIVATE_RECHECK_FAILED"
             return False
@@ -839,7 +839,11 @@ def _process_closed(
         subject: StrategyPosition,
         _boundary: datetime,
     ) -> ScopedPrivatePositionEvidence:
-        evidence = private.for_closed_boundary(subject, _boundary)
+        # CLOSED market causality belongs to the verified MarketSource/RAW36
+        # fact. The independent private port proves the CURRENT signed
+        # position/protection immediately before any Exit publication; it must
+        # not replay an old IPC request timestamp during bounded catch-up.
+        evidence = private.for_closed_boundary(subject, datetime.now(UTC))
         route = (
             scope.routes.main
             if subject.strategy_id == scope.routes.main.strategy_id

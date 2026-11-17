@@ -120,12 +120,15 @@ def test_firstfill_window_stays_15_seconds_and_late_arm_remains_forbidden() -> N
     assert "FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED" in source
 
 
-def test_private_closed_ipc_separates_fresh_request_from_historical_boundary() -> None:
+def test_historical_closed_catchup_uses_fresh_current_private_proof() -> None:
+    source = (
+        ROOT / "operations/connectivity/p90_r06_exit_owner.py"
+    ).read_text(encoding="utf-8")
+    assert "private.for_closed_boundary(subject, datetime.now(UTC))" in source
+    assert "self._private.for_closed_boundary(position, checked_at)" in source
+
     ipc = (
         ROOT / "src/bybit_workbench/universal_exit/p90l90_real_private_ipc.py"
     ).read_text(encoding="utf-8")
-    assert '"request_at": datetime.now(UTC).isoformat()' in ipc
-    assert "_REQUEST_FRESHNESS = timedelta(seconds=15)" in ipc
-    assert "_CLOSED_CAUSAL_RECOVERY_HORIZON = timedelta(hours=6)" in ipc
-    assert 'kind == "CLOSED"' in ipc
-    assert "P90_PRIVATE_IPC_CLOSED_EVENT_OUTSIDE_RECOVERY_HORIZON" in ipc
+    assert '"request_at"' not in ipc
+    assert "P90_PRIVATE_IPC_EVENT_STALE" in ipc
