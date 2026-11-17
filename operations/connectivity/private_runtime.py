@@ -2202,7 +2202,27 @@ def handle_pre_mutation_safety_block(
             error="UnsafeBybitClock",
             mutation_sent=False,
         )
+    elif (
+        isinstance(exc, PreMutationSafetyBlock)
+        and str(exc).startswith("R10_P90_ORIGINAL_PUBLICATION_INVALID:")
+    ):
+        # Verified pre-send R10 publication/attached-protection validation
+        # denied this command before the first Exchange POST. Next admission
+        # still requires its own fresh publication, Strategy protection,
+        # current signed account generation, lifecycle and OWNER permission.
+        # Keep a scoped failed-command/audit record, not a sticky account-wide
+        # mutation-unknown veto for unrelated coins.
+        connection.rollback()
+        connection_event(
+            connection,
+            "command",
+            "pre_send_market_publication_blocked",
+            error="R10_P90_ORIGINAL_PUBLICATION_INVALID",
+            mutation_sent=False,
+        )
     else:
+        # Unclassified account identity/protection/Exit uncertainty remains
+        # fail-closed until an independently verified recovery contract.
         disarm_new_entries(connection, error[:500])
     atomic_status(
         "command",
