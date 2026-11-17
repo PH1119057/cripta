@@ -61,12 +61,8 @@ ALTER FUNCTION analytics.lock_p90_exit_market_publication(bigint)
 
 REVOKE CREATE ON SCHEMA analytics
     FROM cripta_p90_exit_publication_locker;
-REVOKE ALL ON FUNCTION
-    analytics.lock_p90_exit_market_publication(bigint)
-    FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION
-    analytics.lock_p90_exit_market_publication(bigint)
-    TO cripta;
+REVOKE ALL ON FUNCTION analytics.lock_p90_exit_market_publication(bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION analytics.lock_p90_exit_market_publication(bigint) TO cripta;
 
 DO $verify$
 DECLARE
