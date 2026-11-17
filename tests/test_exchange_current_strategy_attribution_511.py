@@ -62,6 +62,12 @@ def test_manual_unmatched_and_invalid_positions_never_adopt_strategy(
 
 def test_dashboard_uses_current_exchange_rows_and_exact_owner_filter() -> None:
     assert "FROM runtime.hot_positions" in APP
+    assert "FROM runtime.account_state_generations" in APP
+    assert "state IN ('COMPLETE','FAILED')" in APP
+    assert "p90_verified_accounts" in APP
+    assert "inventory_checked_at - row[3].astimezone(UTC)" in APP
+    assert '"INVENTORY_UNKNOWN"' in APP
+    assert 'state = "ACCOUNT_UNVERIFIED"' in APP
     assert "o.close_link_status='OPEN'" in APP
     assert "o.strategy_version=%s" in APP
     assert "o.identity_status='PROVEN'" in APP
@@ -94,3 +100,16 @@ def test_historical_unresolved_close_is_not_claimed_terminal() -> None:
     assert "close_link_status='UNRESOLVED_EXACT_LINK'" in reconciliation
     assert "resolve_exchange_position_close" in reconciliation
     assert "release_position_capital_reservation(" in reconciliation
+
+
+def test_without_fresh_signed_generation_ui_never_claims_flat_or_open() -> None:
+    body = HTML.split("function renderP90RailPositions(", 1)[1].split(
+        "let livePollTimer=", 1
+    )[0]
+    unknown = body.split("if(inventoryUnknown){", 1)[1].split(
+        "if(external){", 1
+    )[0]
+    assert "BYBIT: СОСТОЯНИЕ НЕ ПОДТВЕРЖДЕНО" in unknown
+    assert "UNKNOWN — не FLAT и не OPEN" in unknown
+    assert "Исторические позиции не показаны как текущие" in unknown
+    assert "return " in unknown
