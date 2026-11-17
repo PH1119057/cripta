@@ -47,10 +47,11 @@ def test_cli_is_exact_scope_and_never_calls_exchange_mutation() -> None:
 
 
 def test_cli_sanitizes_unknown_errors() -> None:
-    module = _load_cli_module()
-    assert "P90_PRE_SEND_RECOVERY_PROOF_OR_RUNTIME_ERROR" in module.__dict__[
-        "_main_with_safe_error"
-    ].__code__.co_consts
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "P90_PRE_SEND_RECOVERY_ERROR=" in source
+    assert "P90_PRE_SEND_RECOVERY_PROOF_OR_RUNTIME_ERROR" in source
+    assert "print(str(exc)" not in source
+    assert "traceback" not in source
 
 
 def test_dashboard_runs_pre_send_recovery_before_ws_and_prearm_ready() -> None:
@@ -104,7 +105,9 @@ def test_migration_is_installed_and_does_not_touch_financial_rights() -> None:
 def test_sql_recovery_cannot_accept_other_safety_classes(error: str) -> None:
     sql = MIGRATION.read_text(encoding="utf-8")
     if error == "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN":
-        assert "v_latch.reason IS DISTINCT FROM "
-        assert "'PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED'" in sql
+        assert (
+            "v_latch.reason IS DISTINCT FROM "
+            "'PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED'"
+        ) in sql
     else:
         assert error not in sql
