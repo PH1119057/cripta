@@ -37,6 +37,9 @@ from bybit_workbench.market_data.r13_analytics_source import (
     read_publication_tickers,
 )
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
+from bybit_workbench.position_supervisor.exchange_attribution import (
+    matches_reconciled_strategy_cycle,
+)
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     evaluate_live_arm,
@@ -1692,8 +1695,30 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 if account_id is not None
             }
         )
+        # Each displayed Exchange position requires a fresh terminal signed
+        # Bybit account generation. Missing/FAILED/stale means UNKNOWN, not FLAT.
+        generation_rows = connection.execute(
+            """SELECT DISTINCT ON (trading_account_id)
+                      trading_account_id,state,identity_status,completed_at
+                 FROM runtime.account_state_generations
+                WHERE trading_account_id=ANY(%s)
+                  AND state IN ('COMPLETE','FAILED')
+                ORDER BY trading_account_id,started_at DESC,generation_id DESC""",
+            (p90_accounts,),
+        ).fetchall() if p90_accounts else []
+        inventory_checked_at = datetime.now(UTC)
+        p90_verified_accounts = {
+            str(row[0]) for row in generation_rows
+            if row[1] == "COMPLETE"
+            and row[2] == "PROVEN"
+            and isinstance(row[3], datetime)
+            and row[3].utcoffset() is not None
+            and 0 <= (
+                inventory_checked_at - row[3].astimezone(UTC)
+            ).total_seconds() <= 15
+        }
         p90_position_rows = []
-        if p90_accounts:
+        if p90_verified_accounts:
             p90_position_rows = connection.execute(
                 """SELECT trading_account_id,symbol,position_idx,side,size,entry_price,
                           leverage,refreshed_at_epoch_ms,payload_json
@@ -1702,10 +1727,11 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                       AND identity_status='PROVEN'
                       AND nullif(size,'')::numeric <> 0
                     ORDER BY trading_account_id,symbol,position_idx""",
-                (p90_accounts,),
+                (sorted(p90_verified_accounts),),
             ).fetchall()
         p90_ownership_rows = connection.execute(
             """SELECT o.trading_account_id,o.symbol,o.position_idx,o.side,
+                      o.strategy_id,o.actual_avg_fill,o.actual_qty,
                       coalesce((
                           SELECT sum(e.exec_fee::numeric)
                             FROM jsonb_array_elements_text(o.execution_ids) AS xid(exec_id)
@@ -1715,25 +1741,46 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                       ),0) AS entry_fee_actual
                  FROM runtime.position_ownership o
                 WHERE o.state='OPEN'
+                  AND o.close_link_status='OPEN'
                   AND o.strategy_id IN (%s,%s)
                   AND o.strategy_version=%s
                   AND o.identity_status='PROVEN'""",
             (P90_MAIN_ID, P90_SUB_ID, P90_REAL_V3_VERSION),
         ).fetchall()
-        p90_ownership_fees = {
-            (
-                str(row[0]),
-                str(row[1]),
-                int(row[2] or 0),
-                str(row[3]),
-            ): float(row[4] or 0)
-            for row in p90_ownership_rows
-        }
+        # A current Exchange position is real, but is not automatically a
+        # StrategyPosition. A unique exact ownership link is required before
+        # the Strategy rail can display it as OPEN or calculate Strategy PnL.
+        p90_ownership_by_key: dict[
+            tuple[str, str, int, str], list[tuple[object, ...]]
+        ] = {}
+        for owner in p90_ownership_rows:
+            owner_key = (
+                str(owner[0]), str(owner[1]), int(owner[2] or 0), str(owner[3])
+            )
+            p90_ownership_by_key.setdefault(owner_key, []).append(owner)
+        p90_ownership_fees: dict[tuple[str, str, int, str], float] = {}
         p90_positions_by_symbol: dict[str, list[tuple[object, ...]]] = {}
+        p90_external_symbols: set[str] = set()
         for row in p90_position_rows:
             symbol = str(row[1])
-            if p90_account_for_symbol.get(symbol) != str(row[0]):
+            account = str(row[0])
+            if p90_account_for_symbol.get(symbol) != account:
                 continue
+            key = (account, symbol, int(row[2] or 0), str(row[3]))
+            exact_owners = p90_ownership_by_key.get(key, [])
+            matched = matches_reconciled_strategy_cycle(
+                owners=exact_owners,
+                expected_strategy=p90_strategy_for_symbol[symbol],
+                current_quantity=row[4],
+                current_avg_fill=row[5],
+            )
+            if not matched:
+                # This may be a manual/unowned Exchange position, or a
+                # partially closed/replaced cycle awaiting exact attribution.
+                # Never adopt it into Strategy from symbol/side alone.
+                p90_external_symbols.add(symbol)
+                continue
+            p90_ownership_fees[key] = float(exact_owners[0][7] or 0)
             p90_positions_by_symbol.setdefault(symbol, []).append(row)
 
         # Presentation-only freshness boundary. The historic causal epoch is
@@ -1989,9 +2036,16 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                         ),
                     }
 
-                if position_payload is not None:
+                if account_id not in p90_verified_accounts:
+                    position_payload = None
+                    state = "ACCOUNT_UNVERIFIED"
+                    rank = 1
+                elif position_payload is not None:
                     state = "OPEN"
                     rank = 0
+                elif symbol in p90_external_symbols:
+                    state = "EXTERNAL"
+                    rank = 1
                 elif not geometry_fresh:
                     state = "STALE"
                     rank = 2
@@ -2012,6 +2066,24 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                         "binding_ready": account_id is not None,
                         "state": state,
                         "rank": rank,
+                        "account_inventory_verified": (
+                            account_id in p90_verified_accounts
+                        ),
+                        "external_position_present": (
+                            symbol in p90_external_symbols
+                        ),
+                        "position_attribution": (
+                            "INVENTORY_UNKNOWN"
+                            if account_id not in p90_verified_accounts
+                            else (
+                                "EXACT_STRATEGY_OWNED" if position_payload is not None
+                                else (
+                                    "EXCHANGE_UNATTRIBUTED"
+                                    if symbol in p90_external_symbols
+                                    else "NO_CURRENT_EXCHANGE_POSITION"
+                                )
+                            )
+                        ),
                         "current_price": (
                             None if current_price is None else str(current_price)
                         ),
@@ -2104,6 +2176,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         if connection.execute("SELECT to_regclass('runtime.position_ownership')").fetchone()[0]:
             ownership_rows = connection.execute(
                 """SELECT o.symbol,o.position_idx,o.side,o.strategy_id,o.strategy_version,c.name,
+                      o.actual_avg_fill,o.actual_qty,
                       coalesce((
                           SELECT sum(e.exec_fee::numeric)
                             FROM jsonb_array_elements_text(o.execution_ids) AS xid(exec_id)
@@ -2120,6 +2193,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                    LEFT JOIN strategy_entry.strategy_cards c
                      ON c.strategy_id=o.strategy_id AND c.strategy_version=o.strategy_version
                    WHERE o.state='OPEN'
+                     AND o.close_link_status='OPEN'
                      AND (
                           (o.trading_account_id=%s AND o.identity_status='PROVEN')
                      )
@@ -2471,15 +2545,14 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
     reserved_for_positions = (
         wallet_raw.get("totalPositionIM") or wallet_usdt.get("totalPositionIM") or "0"
     )
-    ownership_by_position = {
-        (str(row[0]), int(row[1] or 0), str(row[2])): {
-            "strategy_id": str(row[3]),
-            "strategy_version": str(row[4]),
-            "strategy_name": None if row[5] is None else str(row[5]),
-            "entry_fee_actual": float(row[6] or 0),
-        }
-        for row in ownership_rows
-    }
+    ownership_candidates: dict[
+        tuple[str, int, str], list[tuple[object, ...]]
+    ] = {}
+    for owner in ownership_rows:
+        candidate_key = (
+            str(owner[0]), int(owner[1] or 0), str(owner[2])
+        )
+        ownership_candidates.setdefault(candidate_key, []).append(owner)
     strategy_name_by_identity = {
         (str(row[0]), str(row[1])): str(row[2]) for row in strategy_name_rows
     }
@@ -2510,7 +2583,30 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         ticker = tickers.get(str(row[0]), {})
         executable_price = ticker.get("bid_price") if row[2] == "Buy" else ticker.get("ask_price")
         trailing_order, trailing_updated = trailing_by_symbol.get(str(row[0]), ({}, None))
-        ownership = ownership_by_position.get((str(row[0]), int(row[1] or 0), str(row[2])))
+        key = (str(row[0]), int(row[1] or 0), str(row[2]))
+        candidates = ownership_candidates.get(key, [])
+        # A single currently reconciled owner is required. Same symbol/side
+        # alone never adopts a manual or replaced Exchange position.
+        owner = candidates[0] if len(candidates) == 1 else None
+        normalized = [
+            (TRADING_ACCOUNT_ID, owner[0], owner[1], owner[2],
+             owner[3], owner[6], owner[7], owner[8])
+        ] if owner is not None else []
+        ownership = (
+            {
+                "strategy_id": str(owner[3]),
+                "strategy_version": str(owner[4]),
+                "strategy_name": None if owner[5] is None else str(owner[5]),
+                "entry_fee_actual": float(owner[8] or 0),
+            }
+            if owner is not None and matches_reconciled_strategy_cycle(
+                owners=normalized,
+                expected_strategy=str(owner[3]),
+                current_quantity=row[3],
+                current_avg_fill=row[4],
+            )
+            else None
+        )
         entry_price = float(row[4] or 0)
         position_size = float(row[3] or 0)
         executable_value = float(executable_price or ticker.get("last_price") or raw.get("markPrice") or 0)
