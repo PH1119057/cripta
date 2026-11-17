@@ -1601,6 +1601,77 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             for row in p90_checkpoint_rows
         }
 
+        # R06's source-only consumer owns the current exact causal geometry.
+        # Legacy P90 checkpoint rows above remain historical evidence only.
+        # The read-model accepts a projection exclusively when it is bound to
+        # the current native source session, loaded consumer release, exact
+        # symbol automaton fingerprint and fresh immutable causal timestamp.
+        r06_rows = connection.execute(
+            """SELECT cp.strategy_id,cp.checked_at,cp.source_session_id,
+                      cp.last_publication_id,cp.causal_state
+                 FROM strategy_entry.p90_scoped_native_consumer_checkpoints cp
+                 JOIN analytics.native_public_trade_source_sessions src
+                   ON src.source_session_id=cp.source_session_id
+                  AND src.producer_release_commit=cp.producer_release_commit
+                  AND src.state='ACTIVE' AND src.ended_at IS NULL
+                WHERE cp.strategy_id IN (%s,%s)
+                  AND cp.strategy_version=%s
+                  AND cp.consumer_release_commit=%s
+                ORDER BY cp.checked_at DESC""",
+            (P90_MAIN_ID,P90_SUB_ID,P90_REAL_V3_VERSION,LOADED_RELEASE_COMMIT),
+        ).fetchall()
+        now_r06 = datetime.now(UTC)
+        r06_projections: dict[str, dict[str, object]] = {}
+        seen_r06_strategies: set[str] = set()
+        for strategy_id, checked_at, source_session, publication_id, payload in r06_rows:
+            strategy_key = str(strategy_id)
+            if strategy_key in seen_r06_strategies:
+                continue
+            seen_r06_strategies.add(strategy_key)
+            if (
+                not isinstance(checked_at, datetime)
+                or checked_at.utcoffset() is None
+                or not 0 <= (now_r06 - checked_at.astimezone(UTC)).total_seconds() <= 15
+                or not isinstance(payload, dict)
+                or payload.get("version") != 1
+            ):
+                continue
+            by_symbol = payload.get("by_symbol")
+            projections = payload.get("operator_geometry")
+            if not isinstance(by_symbol, dict) or not isinstance(projections, dict):
+                continue
+            for symbol in p90_expected[strategy_key]:
+                state = by_symbol.get(symbol)
+                geometry = projections.get(symbol)
+                if not isinstance(state, dict) or not isinstance(geometry, dict):
+                    continue
+                try:
+                    at = datetime.fromisoformat(str(geometry.get("effective_at")))
+                    previous_at = datetime.fromisoformat(str(state.get("previous_at")))
+                except (ValueError, TypeError):
+                    continue
+                if (
+                    at.utcoffset() != timedelta(0)
+                    or previous_at.utcoffset() != timedelta(0)
+                    or geometry.get("geometry_fingerprint")
+                       != state.get("geometry_fingerprint")
+                    or str(geometry.get("effective_at")) != str(state.get("geometry_at"))
+                    or not 0 <= (now_r06 - at).total_seconds() <= 15 * 60
+                    or not 0 <= (now_r06 - previous_at).total_seconds() <= 15
+                    or p90_decimal(state.get("previous_price")) is None
+                ):
+                    continue
+                r06_projections[symbol] = {
+                    "updated_at": checked_at,
+                    "entry": {
+                        "previous_price": state["previous_price"],
+                        "geometry": geometry,
+                    },
+                    "source_session_id": str(source_session),
+                    "publication_id": publication_id,
+                    "previous_at": state["previous_at"],
+                }
+
         p90_account_for_symbol: dict[str, str | None] = {}
         p90_strategy_for_symbol: dict[str, str] = {}
         for strategy_id, symbols in p90_expected.items():
@@ -1675,7 +1746,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         for strategy_id in (P90_MAIN_ID, P90_SUB_ID):
             for symbol in p90_expected[strategy_id]:
                 account_id = p90_account_for_symbol.get(symbol)
-                checkpoint = p90_checkpoints.get(symbol)
+                legacy_checkpoint = p90_checkpoints.get(symbol)
+                live_checkpoint = r06_projections.get(symbol)
+                checkpoint = live_checkpoint or legacy_checkpoint
                 checkpoint_at = checkpoint.get("updated_at") if checkpoint else None
                 checkpoint_age_seconds: float | None = None
                 if (
@@ -1705,7 +1778,10 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                         entry.get("previous_price") if isinstance(entry, dict) else None
                     )
                     if current_price is not None:
-                        current_price_source = "FRESH_CAUSAL_CHECKPOINT"
+                        current_price_source = (
+                            "R06_NATIVE_PUBLIC_TRADE" if live_checkpoint is not None
+                            else "FRESH_CAUSAL_CHECKPOINT"
+                        )
 
                 candidates: list[dict[str, object]] = []
                 for side, edge_key, depth_key in (
@@ -1954,12 +2030,27 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                         ),
                         "checkpoint_age_seconds": checkpoint_age_seconds,
                         "geometry_fresh": geometry_fresh,
-                        "geometry_source": "P90_CAUSAL_CHECKPOINT",
+                        "geometry_source": (
+                            "R06_EXACT_ATOMIC_CAUSAL_STATE" if live_checkpoint is not None
+                            else "P90_CAUSAL_CHECKPOINT"
+                        ),
                         "current_price_source": current_price_source,
                         "current_price_publication_id": ticker.get("publication_id"),
-                        "current_price_source_time_max": ticker.get("source_time_max"),
+                        "current_price_native_publication_id": (
+                            live_checkpoint.get("publication_id")
+                            if current_price_source == "R06_NATIVE_PUBLIC_TRADE"
+                            and live_checkpoint is not None else None
+                        ),
+                        "current_price_source_time_max": (
+                            live_checkpoint.get("previous_at")
+                            if current_price_source == "R06_NATIVE_PUBLIC_TRADE"
+                            and live_checkpoint is not None
+                            else ticker.get("source_time_max")
+                        ),
                         "source_epoch_id": (
-                            None if p90_epoch is None else str(p90_epoch[0])
+                            live_checkpoint["source_session_id"]
+                            if live_checkpoint is not None
+                            else (None if p90_epoch is None else str(p90_epoch[0]))
                         ),
                         "source_commit": (
                             None if p90_epoch is None else str(p90_epoch[1])

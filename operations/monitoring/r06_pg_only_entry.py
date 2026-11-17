@@ -240,6 +240,36 @@ def _checkpoints(
         raise R06PublishedEntryBlocked("R06_EXISTING_DECISION_EPOCH_MISMATCH")
     return tuple(rows)
 
+def _operator_geometry_projection(automata: dict[str, Any]) -> dict[str, dict[str, object]]:
+    """Exact existing causal state projected for UI; no decision computation.
+
+    This representation is bound to the same fingerprint as by_symbol and is
+    committed together with the source-only automaton, never by Dashboard.
+    """
+    projection: dict[str, dict[str, object]] = {}
+    fields = (
+        "l53_low_raw", "l53_high_raw",
+        "h9_5m_low_raw", "h9_5m_high_raw",
+        "h9_15m_low_raw", "h9_15m_high_raw",
+        "working_width_pct", "previous_seven_day_median",
+        "long_depth_pct", "short_depth_pct",
+    )
+    for symbol, automaton in automata.items():
+        causal = automaton.state
+        if causal is None or automaton.previous_price is None:
+            continue
+        projection[symbol] = {
+            "effective_at": causal.effective_at.isoformat(),
+            "geometry_fingerprint": dump_symbol(automaton)["geometry_fingerprint"],
+            **{
+                field: None if getattr(causal, field) is None
+                else str(getattr(causal, field))
+                for field in fields
+            },
+        }
+    return projection
+
+
 def _observe_one(
     writer: Any, *, pin: EntryPublicationPin, history: dict[str, dict[str, tuple[Any, ...]]],
     source: Any, bundle: Any, engine: UniversalEntryEngine,
@@ -349,7 +379,10 @@ def _observe_one(
         max_evidence_age=timedelta(seconds=30),
         on_publication_trade=evaluate,
     )
+    # A sibling projection preserves version=1 by_symbol recovery semantics.
+    operator_geometry = _operator_geometry_projection(automata)
     serialized = {
+        "operator_geometry": operator_geometry,
         "version": 1,
         "seed_counts_by_symbol": {sym: seed_counts[sym] for sym, state in automata.items()
                                   if state.previous_price is not None},
