@@ -349,7 +349,34 @@ def _observe_one(
         max_evidence_age=timedelta(seconds=30),
         on_publication_trade=evaluate,
     )
+    # Operator-only read-model: publish the *already evaluated* exact causal
+    # state, never recompute H9/L5-3 in Dashboard and never grant Entry rights.
+    # A sibling field preserves the version=1 by_symbol recovery contract.
+    operator_geometry: dict[str, dict[str, object]] = {}
+    for symbol, automaton in automata.items():
+        causal = automaton.state
+        if causal is None or automaton.previous_price is None:
+            continue
+        # Fingerprint must bind the projection to the exact durable automaton.
+        geometry_fingerprint = dump_symbol(automaton)["geometry_fingerprint"]
+        fields = (
+            "l53_low_raw", "l53_high_raw",
+            "h9_5m_low_raw", "h9_5m_high_raw",
+            "h9_15m_low_raw", "h9_15m_high_raw",
+            "working_width_pct", "previous_seven_day_median",
+            "long_depth_pct", "short_depth_pct",
+        )
+        operator_geometry[symbol] = {
+            "effective_at": causal.effective_at.isoformat(),
+            "geometry_fingerprint": geometry_fingerprint,
+            **{
+                field: None if getattr(causal, field) is None
+                else str(getattr(causal, field))
+                for field in fields
+            },
+        }
     serialized = {
+        "operator_geometry": operator_geometry,
         "version": 1,
         "seed_counts_by_symbol": {sym: seed_counts[sym] for sym, state in automata.items()
                                   if state.previous_price is not None},
