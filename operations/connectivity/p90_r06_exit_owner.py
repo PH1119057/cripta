@@ -84,6 +84,10 @@ _MANIFEST = Path(__file__).resolve().parents[1] / "monitoring/required_public_fe
 _SYMBOLS = tuple(sorted(set().union(*ALLOWED_SYMBOLS.values())))
 _MAX_BATCH = 256
 _PUBLICATION_AGE = timedelta(seconds=5)
+_RAW_L53_BARS = 36
+_MAX_CLOSED_CATCHUP_BARS = 72
+_CLOSED_SEED_BARS = _RAW_L53_BARS + _MAX_CLOSED_CATCHUP_BARS
+_MAX_CLOSED_CATCHUP_AGE = timedelta(minutes=5 * _MAX_CLOSED_CATCHUP_BARS)
 _SESSION_RE = re.compile(r"^[0-9a-f]{32}$")
 _FRAME_RE = re.compile(r"^market-source-frame:(\d+):(\d+)$")
 _SESSION_REF_RE = re.compile(r"^market-source-session:([0-9a-f]{32})$")
@@ -381,15 +385,18 @@ def _source_snapshot(
             and pin.producer_release_commit == source.producer_release_commit,
             "P90_R06_EXIT_PUBLICATION_SOURCE_DRIFT",
         )
+        # Read extra VERIFIED history only for bounded causal catch-up after
+        # a technical outage. Strategy geometry still consumes exactly RAW36
+        # ending at each processed 5m boundary.
         seed = read_entry_publication_seed(
             source_connection,
             pin=pin,
             symbol=position.symbol,
-            required_counts={"5": 36},
+            required_counts={"5": _CLOSED_SEED_BARS},
         )
         candles_raw = tuple(seed["5"])
         _need(
-            len(candles_raw) == 36
+            len(candles_raw) == _CLOSED_SEED_BARS
             and all(isinstance(item, Candle) for item in candles_raw),
             "P90_R06_EXIT_RAW36_HISTORY_MISSING",
         )
@@ -736,7 +743,7 @@ class _MutationSafety:
             self.last_denial_code = "P90_R06_EXIT_PENDING_MUTATION"
             return False
         try:
-            again = self._private.for_closed_boundary(position, self._boundary)
+            again = self._private.for_closed_boundary(position, checked_at)
         except Exception:
             self.last_denial_code = "P90_R06_EXIT_PRIVATE_RECHECK_FAILED"
             return False
@@ -757,6 +764,56 @@ class _MutationSafety:
         return True
 
 
+def _closed_history_for_boundary(
+    candles: tuple[Candle, ...],
+    boundary: datetime,
+) -> tuple[Candle, ...]:
+    """Exact RAW36 ending at one verified historical/current 5m boundary."""
+    if boundary.tzinfo is None or boundary.utcoffset() is None:
+        raise P90R06ExitBlocked("P90_R06_EXIT_CLOSED_CLOCK_INVALID")
+    target = boundary.astimezone(UTC)
+    matches = [
+        index for index, candle in enumerate(candles)
+        if candle.closed_at.astimezone(UTC) == target
+    ]
+    if len(matches) != 1:
+        raise P90R06ExitBlocked("P90_R06_EXIT_CLOSED_BOUNDARY_GAP")
+    end = matches[0] + 1
+    start = end - _RAW_L53_BARS
+    if start < 0:
+        raise P90R06ExitBlocked("P90_R06_EXIT_RAW36_HISTORY_MISSING")
+    history = candles[start:end]
+    if (
+        len(history) != _RAW_L53_BARS
+        or history[-1].closed_at.astimezone(UTC) != target
+    ):
+        raise P90R06ExitBlocked("P90_R06_EXIT_RAW36_HISTORY_MISSING")
+    return history
+
+
+def _publication_closed_watermark_at_or_after(
+    snapshot: _SourceSnapshot,
+    *,
+    symbol: str,
+    boundary: datetime,
+    raw: object,
+) -> bool:
+    scoped = raw.get(symbol) if isinstance(raw, dict) else None
+    published = scoped.get("5") if isinstance(scoped, dict) else None
+    pinned = snapshot.pin.closed_refs.get(symbol, {}).get("5")
+    if not isinstance(published, str) or published != pinned:
+        return False
+    try:
+        at = datetime.fromisoformat(published.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return (
+        at.tzinfo is not None
+        and at.utcoffset() is not None
+        and at.astimezone(UTC) >= boundary.astimezone(UTC)
+    )
+
+
 def _process_closed(
     connection: Any,
     *,
@@ -767,14 +824,11 @@ def _process_closed(
     now: datetime,
 ) -> str:
     _need(
-        timedelta(0) <= now - boundary <= timedelta(seconds=5),
+        timedelta(0) <= now - boundary <= _MAX_CLOSED_CATCHUP_AGE,
         "P90_R06_EXIT_CLOSED_BOUNDARY_TOO_OLD",
     )
-    candle = snapshot.candles[-1]
-    _need(
-        getattr(candle, "closed_at", None) == boundary,
-        "P90_R06_EXIT_CLOSED_CANDLE_BOUNDARY_DRIFT",
-    )
+    history = _closed_history_for_boundary(snapshot.candles, boundary)
+    candle = history[-1]
     private = P90RealPrivateEvidenceRouter(
         account_by_strategy=scope.routes.account_by_strategy,
         connector_by_strategy=scope.routes.connector_by_strategy,
@@ -785,7 +839,11 @@ def _process_closed(
         subject: StrategyPosition,
         _boundary: datetime,
     ) -> ScopedPrivatePositionEvidence:
-        evidence = private.for_closed_boundary(subject, _boundary)
+        # CLOSED market causality belongs to the verified MarketSource/RAW36
+        # fact. The independent private port proves the CURRENT signed
+        # position/protection immediately before any Exit publication; it must
+        # not replay an old IPC request timestamp during bounded catch-up.
+        evidence = private.for_closed_boundary(subject, datetime.now(UTC))
         route = (
             scope.routes.main
             if subject.strategy_id == scope.routes.main.strategy_id
@@ -822,7 +880,7 @@ def _process_closed(
 
     def closed_history(symbol: str, at: datetime) -> tuple[Candle, ...]:
         return (
-            snapshot.candles
+            history
             if symbol == position.symbol and at == boundary
             else ()
         )
@@ -837,12 +895,11 @@ def _process_closed(
             (snapshot.pin.publication_id,),
         ).fetchone()
         raw = None if row is None else row.get("closed_candle_watermarks")
-        scoped = raw.get(symbol) if isinstance(raw, dict) else None
-        return (
-            isinstance(scoped, dict)
-            and scoped.get("5") == boundary.isoformat()
-            and snapshot.pin.closed_refs.get(symbol, {}).get("5")
-                == boundary.isoformat()
+        return _publication_closed_watermark_at_or_after(
+            snapshot,
+            symbol=symbol,
+            boundary=boundary,
+            raw=raw,
         )
 
     port = P90RealClosedExitPort(
@@ -944,10 +1001,10 @@ def run_p90_r06_exit_once(
             now=current,
         )
         if snapshot.closed_at > expected:
-            raise P90R06ExitBlocked(
-                "P90_R06_EXIT_CLOSED_BOUNDARY_GAP:"
-                + position.strategy_position_id
-            )
+            # A technical outage may leave one or more CLOSED boundaries
+            # behind the current publication. Process EXACTLY the next durable
+            # boundary from the verified seed; never jump to the newest bar.
+            _closed_history_for_boundary(snapshot.candles, expected)
 
         # Always stop native MFE immediately before the next unprocessed closed
         # 5m boundary. A trade stamped exactly at that boundary belongs after

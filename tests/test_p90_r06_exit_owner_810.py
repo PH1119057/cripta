@@ -274,27 +274,44 @@ def test_pending_closed_mutation_advances_only_processed_boundary_marker(
     assert result.endswith("LTCUSDT:P90_R06_EXIT_CLOSED_BLOCKED")
 
 
-def test_continuous_owner_never_masks_firstfill_trailing_block(
+def test_continuous_owner_preserves_firstfill_block_but_keeps_exit_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from operations.connectivity import p90_r06_exit_owner as continuous
     from operations.connectivity import p90_real_independent_exit as firstfill
     from operations.connectivity import universal_exit_consumer as consumer
 
+    calls: list[str] = []
+    connection = SimpleNamespace(commit=lambda: calls.append("commit"))
+    source = object()
     monkeypatch.setattr(consumer, "P90_R06_OWNER", "ENABLED")
+    monkeypatch.setattr(consumer, "LOADED_COMMIT", "b" * 40)
     monkeypatch.setattr(
         firstfill,
         "run_p90_exit_once",
         lambda *_a, **_k: "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED",
     )
-    monkeypatch.setattr(firstfill, "audit_firstfill_exit_result", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        firstfill,
+        "audit_firstfill_exit_result",
+        lambda *_a, **_k: calls.append("audit"),
+    )
+    monkeypatch.setattr(
+        continuous,
+        "run_p90_r06_exit_once",
+        lambda *_a, **_k: calls.append("continuous")
+        or "P90_R06_EXIT_OWNER_RUNNING|ARBUSDT:P90_R06_EXIT_MFE_AWAITING_CLOSED:0",
+    )
 
-    with pytest.raises(RuntimeError, match="P90_R06_FIRSTFILL_OWNER_BLOCKED"):
-        consumer.run_once(
-            object(),
-            source_connection=object(),
-            run_generic=False,
-            now=datetime(2026, 11, 17, 5, 0, tzinfo=UTC),
-        )
+    result = consumer.run_once(
+        connection,
+        source_connection=source,
+        run_generic=False,
+        now=datetime(2026, 11, 17, 5, 0, tzinfo=UTC),
+    )
+    assert result.startswith("P90_R06_FIRSTFILL_OWNER_BLOCKED|")
+    assert "CONTINUOUS=P90_R06_EXIT_OWNER_RUNNING|" in result
+    assert calls == ["audit", "commit", "continuous"]
 
 
 def test_first_mfe_source_snapshot_rejects_prefill_event_after_anchor() -> None:
