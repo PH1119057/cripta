@@ -398,6 +398,12 @@ Project Source size or Project Instructions bootstrap.
   routed reading, README/AGENTS entrypoints and Project Instructions bootstrap
   are unchanged by this revision.
 
+## 17.1.6 Current Bybit inventory / manual trading / pre-send recovery — OWNER DECISION 2026-11-17 (#511)
+
+Routing: ARCH §59.1 owns Exchange-current inventory, Strategy attribution and capability conservation; TRADING_CONTOUR §4.17.1 owns manual Bybit open/close and pre-send versus sent-unknown recovery semantics; DEV §13/§19/§50 owns SQL migration, protected release and runtime safety. Issue #511 is the existing durable task tracker. Current `main` documentation adopts the owner decision only after merge; code, DB recovery, account latch clearing, LIVE/ARM and exchange actions are separate gated work, not implied by docs.
+
+No new active Source, path, mandatory reading route, actor, DB grant or architecture layer; existing README/AGENTS/bootstrap references remain thin pointers. Preserve old historical records and audit; no fake current `OPEN` from stale DB.
+
 ## 17.2 Нумерация и ссылки
 
 Перед renumber section обязателен search по current tree на все ссылки на
