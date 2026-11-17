@@ -99,7 +99,7 @@ def perform(
                 ).fetchone() != (0,):
                     raise RuntimeError(
                         "P90_REAL_COMPATIBILITY_RELEASE_PREPARATION_ENTRY_GATE_NOT_OFF"
-                    )
+                    ) from exc
             else:
                 print("P90_REAL_SOURCE_COMPATIBILITY=PASS ALREADY_VERIFIED=1")
                 return
