@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.63
-**Дата:** 2026-11-15
+**Версия:** 3.64
+**Дата:** 2026-11-17
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -625,6 +625,21 @@ README + AGENTS + Project Instructions template обновляются в том
 
 Target rule не делает migration `IMPLEMENTED`: MAP обязан отдельно показывать
 legacy/current paths до завершённого deploy/runtime verification.
+## 17.12 Single-task causal repair discipline — OWNER DECISION 2026-11-17 (#829)
+
+Canonical owner: DEVELOPMENT_RELEASE §52.8–52.11. Для CORE mutation
+обязательны одна active task, causal chain до mutation, Fix list / tech debt
+вместо попутных repairs, и serialized completion через exact deploy,
+runtime-behavior verification и stability gate до следующей независимой
+mutation-задачи. Audit обязан отделять proven от not-proven paths; owner-facing
+long-task checkpoints используют Проблема / Что делаю / Ожидаемый результат
+и явный конечный status.
+
+META §17.5 и WORK §13 только маршрутизируют правило; README / AGENTS /
+Project Instructions bootstrap синхронизированы в этом documentation cycle.
+Active 11-file Project Source set, routing, architecture, Strategy, LIVE, DB
+roles и runtime не изменяются.
+
 # 18. Observation contour / capability-conservation revision — 2026-10-02
 
 OWNER DECISION 2026-10-02 is incorporated without adding a new current

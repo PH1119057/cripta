@@ -169,6 +169,15 @@ GitHub PR scope checker проверяет изменённые пути, а з�
 При точном безопасном совпадении продолжает старую работу; при неоднозначности
 останавливает mutation и запрашивает решение владельца. Источник правил:
 `docs/DEVELOPMENT_RELEASE_RULES_RU.md §50.4`.
+## Single-task causal repair
+
+Для CORE mutation действует DEVELOPMENT_RELEASE §52.8–52.11: одна активная
+задача до stable/closed checkpoint; до mutation фиксируется causal chain
+EVENT -> OWNER -> INPUT/IPC/TABLE -> LOCK/GATE -> MUTATION -> EVIDENCE ->
+NEXT OWNER. Попутные findings только в Fix list / tech debt, без кода/PR/
+restart/deploy. Следующая независимая mutation начинается только после exact
+deploy, runtime behavior/stability и закрытия текущей задачи.
+
 ## Git cleanup: CHECKED HERE 2026-10-22
 
 147 исторических GitHub refs удалены и проверены; старые серверные worktrees сохранены и **не блокируют** новые Research/Core/Docs задачи. Новая работа по-прежнему требует task discovery DEVELOPMENT_RELEASE §50.4. Датированный статус: [MAP §38](docs/CURRENT_PROJECT_MAP_RU.md), [INDEX §52](docs/DOCUMENTATION_INDEX_RU.md), [Issue #153](https://github.com/PH1119057/cripta/issues/153). Это не утверждение о текущем runtime.

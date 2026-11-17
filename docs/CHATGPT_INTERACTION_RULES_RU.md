@@ -1,7 +1,7 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.13
-**Дата:** 2026-11-14
+**Версия:** 1.14
+**Дата:** 2026-11-17
 **Статус:** обязательный канонический META-контракт взаимодействия
 
 Этот документ регулирует способ совместной работы владельца проекта и ChatGPT.
@@ -370,3 +370,19 @@ Project Source не является конкурирующим каноном, 
 ## 17.4 Выполнение и статус
 
 Server script/service/job с write или сменой actor: DEV §5.1, §19.1–19.6 и MAP §1.4 до `PREPARED`. Перед новой веткой/worktree/PR/job — DEV §50.4. Указание владельца на restart не требует бессодержательного повторного согласования, но actual service/actor, effects и safety gates нужно доказать. При tool отказе различать OpenAI upstream, SentinelX `command_not_allowed`, Unix `EACCES`, DB grants, GitHub/API error и timeout/unknown outcome. Не заявлять `RUNNING`, `DEPLOYED` или runtime behavior без exact evidence. Research jobs — RESEARCH_COMPUTE; многоэтапные проверки и notification отдельно от обещания background действий.
+
+## 17.5 Одна CORE mutation задача до stable checkpoint — OWNER DECISION 2026-11-17 (#829)
+
+Canonical owner полного процесса — DEVELOPMENT_RELEASE §52.8–52.11.
+ChatGPT не исправляет найденные по дороге соседние defects: они попадают только
+в Fix list / tech debt, пока текущая causal task не прошла merge, exact deploy,
+runtime behavior/stability и не закрыта. До mutation обязательна causal map
+EVENT -> OWNER -> INPUT/IPC/TABLE -> LOCK/GATE -> MUTATION -> EVIDENCE ->
+NEXT OWNER. Safety incident допускает только bounded containment, не второй
+repair.
+
+Для длинной разработки owner-facing checkpoint начинается с
+Проблема / Что делаю / Ожидаемый результат, а заканчивается явным
+Починено / Не починено / Blocker / Следующее разрешённое действие.
+Фраза «всё нормально» недопустима, если relevant E2E path не доказана; audit
+обязан отдельно назвать proven и not-proven paths.
