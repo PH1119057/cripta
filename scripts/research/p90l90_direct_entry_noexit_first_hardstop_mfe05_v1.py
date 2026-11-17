@@ -80,7 +80,10 @@ def freeze_entries(period: str, sym: str, cfg: dict):
         if not e["PREV7D"] or (cfg["strict0"] and D(e["depth_pct"]) != 0):
             continue
         es.append((seq, e))
-    if raw_count != manifest["events"]:
+    expected = manifest.get("events")
+    if expected is None:
+        expected = manifest.get("counts", {}).get("raw_crossing")
+    if expected is None or raw_count != int(expected):
         raise ValueError("candidate count mismatch")
     return manifest, es, p
 
