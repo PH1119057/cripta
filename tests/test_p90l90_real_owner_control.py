@@ -183,6 +183,17 @@ def test_p90_development_owner_delegation_is_exact_inert_and_non_parameterized()
         )
         assert "[Install]" not in source
 
+    # The owner ARM verifies live GitHub main with git ls-remote over
+    # HTTPS; AF_UNIX-only breaks mandatory identity proof. DISARM needs no
+    # network and retains the stricter Unix-socket-only sandbox.
+    source_identity = (
+        ROOT / "src/bybit_workbench/source_live_identity.py"
+    ).read_text()
+    assert '"ls-remote", "origin", "refs/heads/main"' in source_identity
+    assert "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6" in arm_unit
+    assert "RestrictAddressFamilies=AF_UNIX\n" in disarm_unit
+    assert "RestrictAddressFamilies=AF_UNIX AF_INET" not in disarm_unit
+
     assert "cripta-p90-development-owner-arm.service" in installer
     assert "cripta-p90-development-owner-disarm.service" in installer
     managed = installer[installer.index("managed_services=("):]
