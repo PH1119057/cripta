@@ -1665,22 +1665,47 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 continue
             p90_positions_by_symbol.setdefault(symbol, []).append(row)
 
+        # Presentation-only freshness boundary. The historic causal epoch is
+        # not advanced by R06's source-only producer; never show its old H9/L5-3
+        # as a current Entry candidate or substitute an old previous_price for
+        # the current shared MarketPublication ticker.
+        p90_geometry_clock = datetime.now(UTC)
+        p90_geometry_max_age_seconds = 15 * 60
         p90_items: list[dict[str, object]] = []
         for strategy_id in (P90_MAIN_ID, P90_SUB_ID):
             for symbol in p90_expected[strategy_id]:
                 account_id = p90_account_for_symbol.get(symbol)
                 checkpoint = p90_checkpoints.get(symbol)
-                entry = checkpoint.get("entry", {}) if checkpoint else {}
+                checkpoint_at = checkpoint.get("updated_at") if checkpoint else None
+                checkpoint_age_seconds: float | None = None
+                if (
+                    isinstance(checkpoint_at, datetime)
+                    and checkpoint_at.tzinfo is not None
+                    and checkpoint_at.utcoffset() is not None
+                ):
+                    checkpoint_age_seconds = (
+                        p90_geometry_clock - checkpoint_at.astimezone(UTC)
+                    ).total_seconds()
+                geometry_fresh = (
+                    checkpoint_age_seconds is not None
+                    and 0 <= checkpoint_age_seconds <= p90_geometry_max_age_seconds
+                )
+                entry = checkpoint.get("entry", {}) if checkpoint and geometry_fresh else {}
                 geometry = entry.get("geometry") if isinstance(entry, dict) else {}
                 geometry = geometry if isinstance(geometry, dict) else {}
+                ticker = tickers.get(symbol) or {}
                 current_price = p90_decimal(
-                    entry.get("previous_price") if isinstance(entry, dict) else None
+                    ticker.get("last_price") or ticker.get("mark_price")
                 )
-                if current_price is None:
-                    ticker = tickers.get(symbol) or {}
+                current_price_source = (
+                    "MARKET_PUBLICATION" if current_price is not None else "UNAVAILABLE"
+                )
+                if current_price is None and geometry_fresh:
                     current_price = p90_decimal(
-                        ticker.get("last_price") or ticker.get("mark_price")
+                        entry.get("previous_price") if isinstance(entry, dict) else None
                     )
+                    if current_price is not None:
+                        current_price_source = "FRESH_CAUSAL_CHECKPOINT"
 
                 candidates: list[dict[str, object]] = []
                 for side, edge_key, depth_key in (
@@ -1891,6 +1916,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 if position_payload is not None:
                     state = "OPEN"
                     rank = 0
+                elif not geometry_fresh:
+                    state = "STALE"
+                    rank = 2
                 elif (
                     nearest is not None
                     and Decimal(str(nearest["distance_pct"])) < Decimal("0.5")
@@ -1922,10 +1950,14 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                             ),
                         },
                         "checkpoint_updated_at": (
-                            None
-                            if checkpoint is None
-                            else checkpoint["updated_at"].isoformat()
+                            None if checkpoint_at is None else checkpoint_at.isoformat()
                         ),
+                        "checkpoint_age_seconds": checkpoint_age_seconds,
+                        "geometry_fresh": geometry_fresh,
+                        "geometry_source": "P90_CAUSAL_CHECKPOINT",
+                        "current_price_source": current_price_source,
+                        "current_price_publication_id": ticker.get("publication_id"),
+                        "current_price_source_time_max": ticker.get("source_time_max"),
                         "source_epoch_id": (
                             None if p90_epoch is None else str(p90_epoch[0])
                         ),
