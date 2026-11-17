@@ -25,12 +25,12 @@ from typing import Any
 from psycopg.rows import tuple_row
 
 from bybit_workbench.domain.models import Candle
+from bybit_workbench.lifecycle_ack import claim_exit_position
 from bybit_workbench.market_data.entry_publication_reader import (
     EntryPublicationPin,
     read_entry_publication_pin,
     read_entry_publication_seed,
 )
-from bybit_workbench.lifecycle_ack import claim_exit_position
 from bybit_workbench.market_data.source_required_feed_manifest import RequiredPublicFeed
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, MarketFactEnvelope
