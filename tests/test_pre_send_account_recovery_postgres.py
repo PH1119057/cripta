@@ -297,8 +297,8 @@ def test_unknown_or_changed_state_never_clears_latch(recovery_db, failure):
         )
     elif failure == "result":
         admin.execute(
-            f"UPDATE {schema}.trade_commands "
-            "SET result_json='{"result":{"orderId":"observed"}}'"
+            f"UPDATE {schema}.trade_commands SET result_json=%s",
+            (json.dumps({"result": {"orderId": "observed"}}),),
         )
 
     with pytest.raises(psycopg.errors.RaiseException, match="PRE_SEND_RECOVERY_"):
