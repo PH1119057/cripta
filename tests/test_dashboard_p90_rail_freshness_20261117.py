@@ -15,6 +15,12 @@ def test_legacy_geometry_has_explicit_freshness_and_never_drives_stale_entry():
     assert "0 <= checkpoint_age_seconds <= p90_geometry_max_age_seconds" in APP
     assert 'entry = checkpoint.get("entry", {}) if checkpoint and geometry_fresh else {}' in APP
     assert 'state = "STALE"' in APP
+    # Exchange-confirmed OPEN position truth takes precedence over any stale
+    # candidate-only geometry status; never hide an actual open position.
+    live_projection = APP.split("if position_payload is not None:", 1)[1]
+    assert live_projection.index('state = "OPEN"') < live_projection.index(
+        "elif not geometry_fresh:"
+    )
     assert '"geometry_fresh": geometry_fresh' in APP
     assert '"checkpoint_age_seconds": checkpoint_age_seconds' in APP
     assert '"checkpoint_updated_at"' in APP
