@@ -968,6 +968,8 @@ migration_files=(
   # Inert shared public-data publication schema: no consumers or writer
   # switch until independently approved MarketSource source/capability cutover.
   operations/sql/20261110_market_source_publication.sql
+  # Least-privilege row lock for R06 Exit; runtime cripta keeps publication UPDATE revoked.
+  operations/sql/20261117_p90_r06_market_publication_lock.sql
   # Additive compact SPOT+LINEAR public feed facts, inactive until exact
   # producer/retention cutover and no duplicate raw archive.
   operations/sql/20261110_public_source_compact_seconds.sql
