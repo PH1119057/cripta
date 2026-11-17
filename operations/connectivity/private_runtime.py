@@ -4729,7 +4729,7 @@ def reconcile_position_ownership(
         """SELECT position_id,trade_id,symbol,side,actual_avg_fill,actual_qty,
                   extract(epoch from fill_at)*1000,position_idx,entry_command_id,
                   entry_execution_request_id,exchange_position_key,
-                  strategy_id,strategy_version
+                  strategy_id,strategy_version,state,close_link_status
            FROM runtime.position_ownership
            WHERE (state IN ('OPEN','RECONCILIATION_REQUIRED')
                   OR close_link_status='UNRESOLVED_EXACT_LINK')
@@ -4744,8 +4744,14 @@ def reconcile_position_ownership(
         position_id, trade_id, symbol, side = map(str, row[:4])
         position_idx = int(row[7] or 0)
         current = current_positions.get((symbol, position_idx))
+        historical_external_flat = (
+            len(row) >= 15
+            and str(row[13]) == "CLOSED"
+            and str(row[14]) == "UNRESOLVED_EXACT_LINK"
+        )
         current_matches = (
-            current is not None
+            not historical_external_flat
+            and current is not None
             and latest_by_key.get((symbol, position_idx)) == position_id
             and str(current.get("side") or "") == side
         )
@@ -4876,6 +4882,13 @@ def reconcile_position_ownership(
             executions=executions,
         )
         if close.status != "EXACT" or close.exit_order_id is None:
+            if historical_external_flat:
+                # A later manual/new Exchange position at the same symbol/index
+                # is a different physical cycle. Never resurrect or re-attribute
+                # the already-flat historical StrategyPosition. It remains
+                # CLOSED/accounting-pending until exact old close evidence is
+                # eventually backfilled.
+                continue
             if identity_unproven:
                 # Keep the original Entry/filled quantity and protection facts.
                 # Do not authorize Exit on a different current physical cycle.
