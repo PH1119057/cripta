@@ -1746,8 +1746,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         for strategy_id in (P90_MAIN_ID, P90_SUB_ID):
             for symbol in p90_expected[strategy_id]:
                 account_id = p90_account_for_symbol.get(symbol)
+                legacy_checkpoint = p90_checkpoints.get(symbol)
                 live_checkpoint = r06_projections.get(symbol)
-                checkpoint = live_checkpoint or p90_checkpoints.get(symbol)
+                checkpoint = live_checkpoint or legacy_checkpoint
                 checkpoint_at = checkpoint.get("updated_at") if checkpoint else None
                 checkpoint_age_seconds: float | None = None
                 if (
