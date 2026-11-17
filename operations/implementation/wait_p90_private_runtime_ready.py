@@ -24,6 +24,11 @@ from bybit_workbench.universal_entry.p90l90_real_account_routes import (
     read_p90_real_signed_flat_accounts,
 )
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
+from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+    P90RealOpenRestartUnverified,
+    inspect_p90_real_open_restart_epoch,
+    prove_p90_real_open_restart_inventory,
+)
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
 
 DSN = "dbname=cripta user=cripta host=/var/run/postgresql"
@@ -95,7 +100,7 @@ def _generation_ready(
         or row[2].tzinfo is None
         or row[2].utcoffset() is None
         or type(row[3]) is not int
-        or row[3] != 0
+        or not 0 <= row[3] <= 5
         or type(row[4]) is not int
         or row[4] != 0
         or row[5] != "PROVEN"
@@ -155,27 +160,72 @@ def wait_until_ready(
             for route in (routes.main, routes.sub)
         )
         if generation_ready:
-            try:
-                proofs = read_p90_real_signed_flat_accounts(
-                    routes,
-                    timeout_seconds=IPC_ATTEMPT_SECONDS,
+            release_commit = os.environ.get(
+                "CRIPTA_RELEASE_COMMIT", ""
+            ).strip().lower()
+            if (
+                len(release_commit) != 40
+                or any(ch not in "0123456789abcdef" for ch in release_commit)
+            ):
+                raise P90ReleasePrivateRuntimeNotReady(
+                    "P90_RELEASE_PRIVATE_RELEASE_COMMIT_INVALID"
                 )
-            except P90RealAccountRoutesUnverified as exc:
-                if str(exc) != "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING":
-                    raise P90ReleasePrivateRuntimeNotReady(
-                        "P90_RELEASE_PRIVATE_PROOF_UNVERIFIED:" + str(exc)
-                    ) from exc
-            else:
-                if len(proofs) != 2:
-                    raise P90ReleasePrivateRuntimeNotReady(
-                        "P90_RELEASE_PRIVATE_PROOF_COUNT_INVALID"
+            try:
+                open_epoch = inspect_p90_real_open_restart_epoch(
+                    connection,
+                    source_commit=release_commit,
+                    bundles=p90,
+                )
+            except P90RealOpenRestartUnverified as exc:
+                raise P90ReleasePrivateRuntimeNotReady(
+                    "P90_RELEASE_PRIVATE_OPEN_SCOPE_UNVERIFIED:" + str(exc)
+                ) from exc
+            if open_epoch is None:
+                try:
+                    proofs = read_p90_real_signed_flat_accounts(
+                        routes,
+                        timeout_seconds=IPC_ATTEMPT_SECONDS,
                     )
-                return {
-                    "status": "PASS",
-                    "strategies": 2,
-                    "accounts": 2,
-                    "attempts": attempts,
-                }
+                except P90RealAccountRoutesUnverified as exc:
+                    if str(exc) != "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING":
+                        raise P90ReleasePrivateRuntimeNotReady(
+                            "P90_RELEASE_PRIVATE_PROOF_UNVERIFIED:" + str(exc)
+                        ) from exc
+                else:
+                    if len(proofs) != 2:
+                        raise P90ReleasePrivateRuntimeNotReady(
+                            "P90_RELEASE_PRIVATE_PROOF_COUNT_INVALID"
+                        )
+                    return {
+                        "status": "PASS_FLAT",
+                        "strategies": 2,
+                        "accounts": 2,
+                        "positions": 0,
+                        "attempts": attempts,
+                    }
+            else:
+                try:
+                    inventory = prove_p90_real_open_restart_inventory(
+                        connection,
+                        bundles=p90,
+                        source_commit=release_commit,
+                        source_epoch_id=open_epoch,
+                        checked_at=current,
+                        allow_missing_trail035=True,
+                    )
+                except P90RealOpenRestartUnverified:
+                    # Private WS/account recovery may be transient immediately
+                    # after systemd restart. Retry only inside this bounded
+                    # barrier; never infer readiness from DB state.
+                    pass
+                else:
+                    return {
+                        "status": "PASS_OPEN",
+                        "strategies": 2,
+                        "accounts": 2,
+                        "positions": len(inventory.positions),
+                        "attempts": attempts,
+                    }
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise P90ReleasePrivateRuntimeNotReady(
@@ -197,6 +247,8 @@ def main() -> int:
         + str(result["strategies"])
         + " ACCOUNTS="
         + str(result.get("accounts", 0))
+        + " POSITIONS="
+        + str(result.get("positions", 0))
         + " ATTEMPTS="
         + str(result.get("attempts", 0))
     )
