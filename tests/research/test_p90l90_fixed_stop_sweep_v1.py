@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from decimal import Decimal as D
 
-from scripts.research import p90l90_exit_90d_v2 as base
-from scripts.research import p90l90_fixed_stop_sweep_2025_v1 as y25
-from scripts.research import p90l90_fixed_stop_sweep_2026_v1 as y26
+from scripts.research import (
+    p90l90_exit_90d_v2 as base,
+    p90l90_fixed_stop_sweep_2025_v1 as y25,
+    p90l90_fixed_stop_sweep_2026_v1 as y26,
+)
 
 
 CASES = ("FIX_040", "FIX_050", "FIX_060", "FIX_070",
