@@ -162,7 +162,9 @@ def simulate_symbol(period: str, sym: str, cfg: dict, smoke_days: int, out: Path
         if smoke_days and processed_days >= smoke_days:
             break
         p = Path(cfg["root"]) / "inputs" / symbol / "public_trades" / filename
-        if p.is_symlink() or not p.is_file() or sha256(p) != item["sha256"]:
+        if not p.is_file() or not p.resolve().is_relative_to("/data/cripta"):
+            raise ValueError("unapproved raw source path " + str(p))
+        if sha256(p) != item["sha256"]:
             raise ValueError("raw data sha mismatch " + str(p))
         day_count = 0
         with gzip.open(p, "rt", newline="") as stream:
