@@ -181,10 +181,15 @@ def project_p90l90_real_exit(
             "P90L90_REAL_BYBIT_NATIVE_TRAIL035_ARM",
         )
     if observation.event_kind == "P90L90_REAL_CLOSED_5M" and favorable >= Decimal("0.5"):
-        # A previously missed Exchange-native trailing activation cannot be
-        # repaired by a 5m TP update. Fail closed instead of silently
-        # continuing an altered Strategy with TP but no autonomous TRAIL035.
-        if live_trailing != expected_distance:
+        # A terminally missed first-fill TRAIL035 is never repaired late. It
+        # also must not strand the already protected position from the
+        # independently approved closed-5m RAW L5-3 Exit obligation. Accept
+        # trailing=0 only with exact durable terminal-miss proof propagated by
+        # the R06 owner. Any other missing/drifted Exchange trail fails closed.
+        if live_trailing != expected_distance and not (
+            live_trailing == 0
+            and real.get("missed_firstfill_trail035_proven") is True
+        ):
             raise P90RealExitUnverified(
                 "P90_REAL_CLOSED_5M_BYBIT_TRAILING_NOT_ARMED"
             )
