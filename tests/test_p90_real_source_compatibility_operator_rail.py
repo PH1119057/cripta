@@ -35,7 +35,11 @@ def test_registration_script_binds_candidate_root_not_runtime_current_symlink():
     assert 'ROOT = Path("/srv/cripta/runtime/current")' not in source
     assert "ROOT.resolve().parent != RUNTIME_RELEASES.resolve()" in source
     installer = INSTALLER.read_text(encoding="utf-8")
-    assert '--release-commit "$RELEASE_COMMIT" --active-epoch --register --release-preparation' in installer
+    invocation = (
+        '--release-commit "$RELEASE_COMMIT" '
+        "--active-epoch --register --release-preparation"
+    )
+    assert invocation in installer
 
 
 def test_installer_prepares_compatibility_before_cutover_and_consumers():
