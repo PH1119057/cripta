@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.16 · 2026-11-15
+**Версия:** 2.17 · 2026-11-17
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2292,6 +2292,143 @@ owners требует отдельного объяснения dependency до 
 Это правило не запрещает planned architecture migration Stable Core: такая
 миграция выполняется фазами, каждая с отдельным bounded scope и preservation
 tests, без big-bang rewrite.
+
+### 52.8 Single-task causal repair invariant — OWNER DECISION 2026-11-17 (#829)
+
+Для одного исполнителя/ChatGPT в CORE mutation одновременно ведётся **одна
+активная repair/development задача**. Это не запрещает независимые workstreams
+других owners по §47; текущий исполнитель не переключается на второй repair без
+явной reprioritization владельца. До первой source/DB/service mutation
+обязательна task map:
+
+~~~text
+ACTIVE TASK / PRIMARY DEFECT
+ACCEPTANCE CRITERIA
+
+CAUSAL CHAIN
+EVENT
+-> PROCESS / OWNER
+-> INPUT / IPC / TABLE
+-> LOCK / GATE
+-> MUTATION
+-> OUTPUT / EVIDENCE
+-> NEXT OWNER
+
+EXPECTED CHANGED FILES / OBJECTS
+PROTECTED SURFACES = MUST NOT CHANGE
+RUNTIME PROOF REQUIRED
+STABILITY GATE
+~~~
+
+Исполнитель сначала доказывает, **почему** сломан именно этот переход, и только
+затем меняет owner этого перехода. Тест, PREARM, service active или отдельный
+зелёный слой не разрешают говорить «всё работает», если requested end-to-end
+causal chain ещё не доказана.
+
+Расширение текущего patch допустимо только когда новый факт доказывает
+непосредственную root cause / обязательную prerequisite **той же causal chain**,
+без которой исходные acceptance criteria физически не могут быть выполнены.
+Причина расширения и новый protected-surface diff фиксируются **до** mutation.
+Architecture/Strategy/financial contract expansion по-прежнему требует обычный
+CANON_CONFLICT / OWNER DECISION gate и не считается продолжением bugfix.
+
+### 52.9 Запрет попутных исправлений и Fix list / tech debt
+
+Любой второй defect, cleanup, warning, stale service, UI defect, refactor,
+permission smell или иной finding, который **не является доказанной root cause
+текущей causal chain**, в текущей задаче не исправляется.
+
+Максимально допустимое действие:
+
+~~~text
+FIX LIST / TECH DEBT
+- finding
+- evidence
+- impact / risk
+- component / owner
+- suggested next task
+- status: NOT IMPLEMENTED
+~~~
+
+До закрытия текущей задачи для такого finding запрещены:
+- source/SQL/config/systemd edit;
+- отдельный repair commit;
+- новая implementation branch/PR;
+- migration/backfill;
+- restart/release/deploy ради этого finding;
+- «раз уж мы здесь» cleanup.
+
+После COMPLETE текущей задачи owner может выбрать следующий пункт Fix list как
+новую самостоятельную задачу; он проходит новый §52.1/§52.8 scope lock.
+
+**Safety exception:** если попутно найден непосредственный риск открытой
+позиции, необратимой Exchange mutation, credential compromise, corruption/data
+loss или unsafe active writer, разрешён только минимальный bounded containment:
+DISARM/close gate/stop unsafe writer/preserve existing protection/data/evidence.
+Containment не даёт права сразу чинить второй defect; repair идёт следующей
+отдельной задачей после безопасного checkpoint либо по явной reprioritization
+владельца.
+
+### 52.10 Serialized completion: deploy, runtime proof, stability, then next task
+
+Patch/test/merge не закрывают CORE-задачу. Обязательная completion chain
+(это gates задачи, а не замена process-state vocabulary из GLOSSARY §15):
+
+~~~text
+ROOT CAUSE DIAGNOSED
+-> PATCH IMPLEMENTED
+-> TARGETED + IMPACTED TESTS PASS
+-> GITHUB MERGE / REMOTE VERIFIED
+-> DEPLOYED EXACT RELEASE
+-> RUNTIME LIVENESS VERIFIED
+-> RUNTIME BEHAVIOR VERIFIED (если применимо)
+-> STABILITY GATE PASS
+-> COMPLETE / CLOSED
+~~~
+
+STABILITY GATE задаётся до mutation и должен быть проверяемым: relevant
+service/owner health, отсутствие новых scoped faults/deadlocks/errors за
+подходящий bounded cycle/window, выполнение acceptance path и сохранённый
+rollback. Универсальное «подождали N минут» не заменяет event/cycle evidence.
+
+Если behavior proof зависит от будущего события (например первого real fill),
+задача остаётся незакрытой с явной пометкой awaiting runtime evidence.
+Разрешены read-only наблюдение/forensic и safety containment, но **новая
+независимая CORE mutation задача не начинается**, пока текущая не закрыта либо
+владелец явно не прервал/переприоритизировал её.
+
+После stable checkpoint применяется §40: STOP. Следующая разработка начинается
+как новая задача, а не продолжение текущего changeset.
+
+### 52.11 Audit coverage и owner-facing checkpoint
+
+Любой audit/review перед формулировкой «готово», «всё нормально», «все проверки
+пройдены» обязан показать границу покрытия:
+
+~~~text
+PROVEN CAUSAL PATHS
+NOT PROVEN / NOT EXERCISED PATHS
+RUNTIME LIVENESS
+RUNTIME BEHAVIOR
+OPEN BLOCKER / RISK
+FIX LIST / TECH DEBT
+~~~
+
+Нельзя переносить PASS одного слоя на другой. В частности:
+unit/integration/CI не доказывают production behavior; PREARM не доказывает
+first fill/Exit/restart; systemctl active не доказывает service behavior.
+
+Для долгой owner-visible разработки первый checkpoint содержит кратко:
+
+~~~text
+ПРОБЛЕМА
+ЧТО ДЕЛАЮ
+ОЖИДАЕМЫЙ РЕЗУЛЬТАТ
+~~~
+
+Каждый существенный checkpoint и финал обязан отвечать минимум:
+ПОЧИНЕНО / НЕ ПОЧИНЕНО / ТЕКУЩИЙ BLOCKER / СЛЕДУЮЩЕЕ РАЗРЕШЁННОЕ ДЕЙСТВИЕ.
+Промежуточный tool log не заменяет законченный статус.
 
 ## 53. Bounded runtime self-recovery — OWNER DECISION 2026-11-04 (Issue #415)
 

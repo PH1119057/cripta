@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 3.8 · 2026-11-14
+**Версия:** 3.9 · 2026-11-17
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -423,6 +423,12 @@ UNDERSTAND THE ENVIRONMENT ONCE
 
 Long chains of repair/build versions indicate a process defect and require
 forensic/class-wide correction, not more blind iterations.
+
+Для CORE bugfix/recovery дополнительно обязателен DEVELOPMENT_RELEASE
+§52.8–52.11: одна active mutation task, causal chain до mutation, все
+unrelated findings только в Fix list / tech debt, и следующая CORE mutation
+только после exact deploy + runtime behavior/stability + закрытия текущей
+задачи. Green audit обязан явно отделять proven paths от not-proven paths.
 
 ## 14. Continuity across ChatGPT chats — OWNER DECISION 2026-10-22
 

@@ -186,6 +186,14 @@ GitHub branch, registered server worktree и его dirty/untracked state,
 running jobs, effective writer и previous checkpoint. Exact safe match ->
 resume existing branch/worktree, не reset/overwrite; ambiguity -> HARD_STOP
 для mutation и owner decision. Полный контракт: DEVELOPMENT_RELEASE §50.4.
+## Single-task causal repair
+
+CORE mutation следует DEVELOPMENT_RELEASE §52.8–52.11: одна active task,
+causal map до mutation, unrelated findings только Fix list / tech debt, никаких
+попутных repairs. Новый независимый fix запрещён до merge + exact deploy +
+runtime behavior/stability + закрытия текущей задачи; safety exception =
+bounded containment only. Audit показывает proven и not-proven paths.
+
 ## Git housekeeping checkpoint — 2026-10-22
 
 Старые worktrees сохранены как исторические; их физическая уборка **не блокирует** новые scoped задачи. Но DEVELOPMENT_RELEASE §50.4 task discovery и проверка WIP/actor/job остаются обязательными. Датированный checkpoint: CURRENT_PROJECT_MAP §38, DOCUMENTATION_INDEX §52, supporting Issue #153. Исторический код/Strategy rules не переносить в `main` молча.
