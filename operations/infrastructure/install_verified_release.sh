@@ -1049,6 +1049,18 @@ runuser -u cripta -- env \
   "$runtime_release/.venv/bin/python" \
   "$runtime_release/operations/implementation/install_owner_full_contour_diagnostic.py" check
 
+# Prove the candidate's exact consumer bytes against the ACTIVE physical
+# source epoch BEFORE any filesystem/service cutover. This evidence grants no
+# financial permission; failure is fatal so the old runtime/Exit remains current.
+runuser -u cripta -- env \
+  PYTHONDONTWRITEBYTECODE=1 \
+  PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
+  "$runtime_release/.venv/bin/python" \
+  "$runtime_release/operations/implementation/register_p90_real_source_compatibility.py" \
+  --release-commit "$RELEASE_COMMIT" --active-epoch --register --release-preparation
+db_mutation_steps=$((db_mutation_steps + 1))
+echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=PASS_PRE_CUTOVER"
+
 # Installer does not close LIVE-arm sessions or change execution permissions.
 # Post-restart Exchange reconciliation is performed by the private runtime.
 
@@ -1230,18 +1242,9 @@ else
     die "SUB WS technical recovery supervisor failed after deploy"
   echo "SUB_WS_TECHNICAL_RECOVERY_SUPERVISOR=ACTIVE"
   
-  # The approved release explicitly prepares data/code compatibility before the
-  # Observer starts. This only appends independently verified evidence as cripta;
-  # it never relabels history or opens financial controls. Failure must not strand
-  # existing positions with their managed Exit services stopped.
-  if runuser -u cripta -- env PYTHONDONTWRITEBYTECODE=1 \
-    "$runtime_release/.venv/bin/python" \
-    "$runtime_release/operations/implementation/register_p90_real_source_compatibility.py" \
-    --current-release --active-epoch --register --release-preparation; then
-    echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=COMPLETED"
-  else
-    echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=BLOCKED_OBSERVER_NOT_READY" >&2
-  fi
+  # Candidate/source compatibility was already proven and, when applicable,
+  # registered before cutover. Do not create post-cutover compatibility state.
+  echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=PRE_CUTOVER_VERIFIED"
   
   # Preserve exact pre-release Source liveness on ordinary releases.
   # A real producer ABI cutover must start a fresh writer; an already-running

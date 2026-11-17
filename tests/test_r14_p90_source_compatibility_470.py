@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -56,6 +57,94 @@ def test_r14_reviewed_r06_r07_r10_hashes_bind_current_exact_git_bytes() -> None:
             "git", "show", f"HEAD:src/bybit_workbench/{relative}",
         ])
         assert hashlib.sha256(blob).hexdigest() == expected
+
+
+def test_r14_r06_origin_accepts_exact_protected_exit_recovery_delta() -> None:
+    reviewed = compat._REVIEWED_R06_PROTECTED_EXIT_RECOVERY_SHA256
+    assert set(reviewed) == {
+        "universal_entry/engine.py",
+        "universal_entry/p90l90_real_contract_v3.py",
+        "universal_entry/r06_financial_promotion.py",
+        "universal_entry/r07_publication_provenance.py",
+        "universal_exit/p90l90_real_closed_exit_port.py",
+        "universal_exit/p90l90_real_v3.py",
+    }
+    assert compat._reviewed_delta_for_origin(
+        set(reviewed),
+        origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+    ) == reviewed
+    for relative, expected in reviewed.items():
+        blob = subprocess.check_output([
+            "git", "show", f"HEAD:src/bybit_workbench/{relative}",
+        ])
+        assert hashlib.sha256(blob).hexdigest() == expected
+
+
+_R06_PRE_PROTECTED_EXIT_RECOVERY_RELEASES = (
+    "ceff1305195691e3db4d582431a8184947365567",
+    "22af6687f2317756cc29c8563cd482b54a925e18",
+    "41a707f2e936474735c1f3babec3018d574268bc",
+    "7b12a55fd62eb9fd2e935f87cdebf066d303e98f",
+    "a13b782b95f4bcfeb169b1a8795a06cd224b8f40",
+    "b70b1fd05f955ce273538f6a236d842c818913ce",
+    "c4ae9d80ed97260a8e0072c1c20e8f61d6443728",
+    "fe03b8d247ae0186b224b1c65e09091150b8049c",
+    "11e2ebb3bb87dc2aa79ac2f0a650250c340d5b5c",
+    "23bee96f1d55eb2f1fd380f5eb6f30fe40ee5e88",
+    "ee77b61802df0c59410e21da697c23718a2159b8",
+    "5eec79cf608d226870534210a06046039bdcc96a",
+    "49406c5e9d94a6c2028338fb3a48c7d2d300492b",
+    "cdbec0afba756c88a5553e16c116401eecd3b4ba",
+    "c97a04cc158e0b3456970ae99283e3a6aa8a3812",
+)
+_R06_PRE_PROTECTED_EXIT_RECOVERY_DIGEST = (
+    "d9a9cc3f46b1f469fe1d4033d2f1b1d757baa2a5067dda773f0595a5d05b0604"
+)
+
+
+@pytest.mark.parametrize("release", _R06_PRE_PROTECTED_EXIT_RECOVERY_RELEASES)
+def test_r14_pre_protected_exit_rows_keep_exact_historical_digest(
+    release: str,
+) -> None:
+    assert compat._REVIEWED_HISTORICAL_CONSUMERS[release] == (
+        compat._R06_PRE_PROTECTED_EXIT_RECOVERY_HISTORICAL_DIGEST
+    ) == _R06_PRE_PROTECTED_EXIT_RECOVERY_DIGEST
+
+
+@pytest.mark.parametrize("release", _R06_PRE_PROTECTED_EXIT_RECOVERY_RELEASES)
+def test_r14_historical_d9a9_digest_recomputes_from_git_when_object_available(
+    release: str,
+) -> None:
+    repo = Path.cwd()
+    if not (repo / ".git").is_dir():
+        worktrees = subprocess.check_output(
+            ["git", "worktree", "list", "--porcelain"],
+            text=True,
+        ).splitlines()
+        roots = [
+            Path(line.removeprefix("worktree "))
+            for line in worktrees
+            if line.startswith("worktree ")
+        ]
+        repo = next(
+            (root for root in roots if (root / ".git").is_dir()),
+            repo,
+        )
+    if not (repo / ".git").is_dir():
+        pytest.skip("full Git checkout unavailable")
+    probe = subprocess.run(
+        ["git", "-C", str(repo), "cat-file", "-e", f"{release}^{{commit}}"],
+        capture_output=True,
+        check=False,
+    )
+    if probe.returncode != 0:
+        pytest.skip("historical Git object unavailable in this checkout")
+    inventory = compat._consumer_inventory_from_git(repo, release)
+    digest = hashlib.sha256(compat.CONTRACT_VERSION.encode())
+    for relative in sorted(inventory):
+        digest.update(relative.encode() + b"\0")
+        digest.update(hashlib.sha256(inventory[relative]).digest())
+    assert digest.hexdigest() == _R06_PRE_PROTECTED_EXIT_RECOVERY_DIGEST
 
 
 _R06_PRE_PROMOTION_RELEASES = (

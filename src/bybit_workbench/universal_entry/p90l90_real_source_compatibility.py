@@ -101,6 +101,33 @@ _REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
 ), _R06_POST_PROMOTION_HISTORICAL_DIGEST))
 
 
+# #786..#817 releases kept one exact 99-file consumer inventory while
+# release/observer/Exit adapters evolved outside that inventory. Once #820
+# intentionally changed two closed-Exit consumer bytes, these append-only rows
+# became historical and must remain bound to THEIR exact Git-reconstructed
+# digest. Never relabel them to the newly loaded consumer digest.
+_R06_PRE_PROTECTED_EXIT_RECOVERY_HISTORICAL_DIGEST = (
+    "d9a9cc3f46b1f469fe1d4033d2f1b1d757baa2a5067dda773f0595a5d05b0604"
+)
+_REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
+    "ceff1305195691e3db4d582431a8184947365567",
+    "22af6687f2317756cc29c8563cd482b54a925e18",
+    "41a707f2e936474735c1f3babec3018d574268bc",
+    "7b12a55fd62eb9fd2e935f87cdebf066d303e98f",
+    "a13b782b95f4bcfeb169b1a8795a06cd224b8f40",
+    "b70b1fd05f955ce273538f6a236d842c818913ce",
+    "c4ae9d80ed97260a8e0072c1c20e8f61d6443728",
+    "fe03b8d247ae0186b224b1c65e09091150b8049c",
+    "11e2ebb3bb87dc2aa79ac2f0a650250c340d5b5c",
+    "23bee96f1d55eb2f1fd380f5eb6f30fe40ee5e88",
+    "ee77b61802df0c59410e21da697c23718a2159b8",
+    "5eec79cf608d226870534210a06046039bdcc96a",
+    "49406c5e9d94a6c2028338fb3a48c7d2d300492b",
+    "cdbec0afba756c88a5553e16c116401eecd3b4ba",
+    "c97a04cc158e0b3456970ae99283e3a6aa8a3812",
+), _R06_PRE_PROTECTED_EXIT_RECOVERY_HISTORICAL_DIGEST))
+
+
 # These wiring adapters are reviewed in the release diff. All Strategy,
 # Entry/Exit algorithms, codecs, contracts, account and private-proof modules
 # below remain byte-identical to the retained origin release.
@@ -201,9 +228,27 @@ _REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256 = {
 }
 
 
+# #820 completes the already-reviewed protected-position recovery semantics:
+# terminal first-fill TRAIL035 miss remains non-repairable, but exact durable
+# proof may no longer strand closed-5m RAW Exit. These two bytes are the ONLY
+# additional consumer changes accepted against the same physical R06 origin.
+_REVIEWED_R06_PROTECTED_EXIT_RECOVERY_SHA256 = {
+    **_REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256,
+    "universal_exit/p90l90_real_closed_exit_port.py":
+        "d45e1e623aa5108472694e880d31a63667d6034959642a6b36314cb7c043098e",
+    "universal_exit/p90l90_real_v3.py":
+        "bf6c4fdf5490ffa5e4e379a32dc8ffc0709dfadc3337fea9c6a06964f28f47c5",
+}
+
+
 def _reviewed_delta_for_origin(
     changed: set[str], *, origin_commit: str,
 ) -> dict[str, str]:
+    if (
+        origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
+        and changed == set(_REVIEWED_R06_PROTECTED_EXIT_RECOVERY_SHA256)
+    ):
+        return _REVIEWED_R06_PROTECTED_EXIT_RECOVERY_SHA256
     if (
         origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
         and changed == set(_REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256)
