@@ -345,14 +345,12 @@ reset_release_candidate \
   "$RESEARCH_TOOLING_ROOT/releases" tooling
 
 as_repo_owner install -d -m 0750 "$runtime_release"
-as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- \
-  src operations config research/server/backup research/server/connectivity \
+as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src operations config \
+  research/server/backup research/server/connectivity \
   research/server/monitoring research/server/control pyproject.toml \
   | runuser -u cripta -- tar -xf - -C "$runtime_release"
 as_repo_owner install -d -m 0750 "$tooling_release"
-as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- \
-  research/server/jobs research/server/dataset \
-  research/server/cripta-download-expansion.service \
+as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service \
   | runuser -u cripta -- tar -xf - -C "$tooling_release"
 
 # Verify every selected tracked blob and Git executable/symlink mode before
