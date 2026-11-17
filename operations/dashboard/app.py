@@ -2176,6 +2176,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         if connection.execute("SELECT to_regclass('runtime.position_ownership')").fetchone()[0]:
             ownership_rows = connection.execute(
                 """SELECT o.symbol,o.position_idx,o.side,o.strategy_id,o.strategy_version,c.name,
+                      o.actual_avg_fill,o.actual_qty,
                       coalesce((
                           SELECT sum(e.exec_fee::numeric)
                             FROM jsonb_array_elements_text(o.execution_ids) AS xid(exec_id)
@@ -2192,6 +2193,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                    LEFT JOIN strategy_entry.strategy_cards c
                      ON c.strategy_id=o.strategy_id AND c.strategy_version=o.strategy_version
                    WHERE o.state='OPEN'
+                     AND o.close_link_status='OPEN'
                      AND (
                           (o.trading_account_id=%s AND o.identity_status='PROVEN')
                      )
@@ -2543,15 +2545,14 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
     reserved_for_positions = (
         wallet_raw.get("totalPositionIM") or wallet_usdt.get("totalPositionIM") or "0"
     )
-    ownership_by_position = {
-        (str(row[0]), int(row[1] or 0), str(row[2])): {
-            "strategy_id": str(row[3]),
-            "strategy_version": str(row[4]),
-            "strategy_name": None if row[5] is None else str(row[5]),
-            "entry_fee_actual": float(row[6] or 0),
-        }
-        for row in ownership_rows
-    }
+    ownership_candidates: dict[
+        tuple[str, int, str], list[tuple[object, ...]]
+    ] = {}
+    for owner in ownership_rows:
+        candidate_key = (
+            str(owner[0]), int(owner[1] or 0), str(owner[2])
+        )
+        ownership_candidates.setdefault(candidate_key, []).append(owner)
     strategy_name_by_identity = {
         (str(row[0]), str(row[1])): str(row[2]) for row in strategy_name_rows
     }
@@ -2582,7 +2583,30 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         ticker = tickers.get(str(row[0]), {})
         executable_price = ticker.get("bid_price") if row[2] == "Buy" else ticker.get("ask_price")
         trailing_order, trailing_updated = trailing_by_symbol.get(str(row[0]), ({}, None))
-        ownership = ownership_by_position.get((str(row[0]), int(row[1] or 0), str(row[2])))
+        key = (str(row[0]), int(row[1] or 0), str(row[2]))
+        candidates = ownership_candidates.get(key, [])
+        # A single currently reconciled owner is required. Same symbol/side
+        # alone never adopts a manual or replaced Exchange position.
+        owner = candidates[0] if len(candidates) == 1 else None
+        normalized = [
+            (TRADING_ACCOUNT_ID, owner[0], owner[1], owner[2],
+             owner[3], owner[6], owner[7], owner[8])
+        ] if owner is not None else []
+        ownership = (
+            {
+                "strategy_id": str(owner[3]),
+                "strategy_version": str(owner[4]),
+                "strategy_name": None if owner[5] is None else str(owner[5]),
+                "entry_fee_actual": float(owner[8] or 0),
+            }
+            if owner is not None and matches_reconciled_strategy_cycle(
+                owners=normalized,
+                expected_strategy=str(owner[3]),
+                current_quantity=row[3],
+                current_avg_fill=row[4],
+            )
+            else None
+        )
         entry_price = float(row[4] or 0)
         position_size = float(row[3] or 0)
         executable_value = float(executable_price or ticker.get("last_price") or raw.get("markPrice") or 0)
