@@ -1081,6 +1081,16 @@ def run_p90_r06_exit_once(
 
     results: list[str] = []
     for position in positions:
+        account_id = scope.routes.account_by_strategy.get(position.strategy_id)
+        _need(
+            isinstance(account_id, str)
+            and account_id == position.trading_account_id,
+            "P90_R06_EXIT_ACCOUNT_LOCK_SCOPE_UNVERIFIED",
+        )
+        # Global P90 lock order for the ENTIRE per-position cycle:
+        # account before claim/MFE/closed-boundary/Exit persistence.
+        # Private reconciliation already uses the same account-first order.
+        lock_p90_exit_account(connection, account_id)
         _refresh_exit_claim(
             connection,
             position=position,
