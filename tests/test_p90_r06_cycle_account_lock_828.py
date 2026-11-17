@@ -43,8 +43,8 @@ def test_r06_cycle_validates_route_account_matches_position_before_lock() -> Non
 
 
 def test_inner_closed_and_execution_locks_remain_defense_in_depth() -> None:
-    from operations.connectivity import p90_r06_exit_owner as owner
     from bybit_workbench.universal_exit import p90l90_real_exit_execution as execution
+    from operations.connectivity import p90_r06_exit_owner as owner
 
     assert "lock_p90_exit_account(" in inspect.getsource(owner._process_closed)
     assert "lock_p90_exit_account(" in inspect.getsource(
@@ -131,6 +131,7 @@ def test_r06_route_mismatch_blocks_before_account_lock_or_claim(monkeypatch) -> 
     from types import SimpleNamespace
 
     import pytest
+
     from operations.connectivity import p90_r06_exit_owner as owner
 
     strategy_id = "p90l90_legacy_sub_dot_arb_apt"
