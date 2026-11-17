@@ -37,6 +37,9 @@ from bybit_workbench.market_data.r13_analytics_source import (
     read_publication_tickers,
 )
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
+from bybit_workbench.position_supervisor.exchange_attribution import (
+    matches_reconciled_strategy_cycle,
+)
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     evaluate_live_arm,
@@ -1743,17 +1746,11 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 continue
             key = (account, symbol, int(row[2] or 0), str(row[3]))
             exact_owners = p90_ownership_by_key.get(key, [])
-            live_qty = p90_decimal(row[4])
-            live_entry = p90_decimal(row[5])
-            matched = (
-                len(exact_owners) == 1
-                and str(exact_owners[0][4]) == p90_strategy_for_symbol[symbol]
-                and live_qty is not None
-                and live_qty > 0
-                and live_qty == p90_decimal(exact_owners[0][6])
-                and live_entry is not None
-                and live_entry > 0
-                and live_entry == p90_decimal(exact_owners[0][5])
+            matched = matches_reconciled_strategy_cycle(
+                owners=exact_owners,
+                expected_strategy=p90_strategy_for_symbol[symbol],
+                current_quantity=row[4],
+                current_avg_fill=row[5],
             )
             if not matched:
                 # This may be a manual/unowned Exchange position, or a
