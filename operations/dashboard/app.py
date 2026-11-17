@@ -2035,11 +2035,11 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                             else "P90_CAUSAL_CHECKPOINT"
                         ),
                         "current_price_source": current_price_source,
-                        "current_price_publication_id": (
+                        "current_price_publication_id": ticker.get("publication_id"),
+                        "current_price_native_publication_id": (
                             live_checkpoint.get("publication_id")
                             if current_price_source == "R06_NATIVE_PUBLIC_TRADE"
-                            and live_checkpoint is not None
-                            else ticker.get("publication_id")
+                            and live_checkpoint is not None else None
                         ),
                         "current_price_source_time_max": (
                             live_checkpoint.get("previous_at")
