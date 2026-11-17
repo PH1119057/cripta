@@ -195,8 +195,15 @@ def test_cycle_holds_boundary_trade_until_closed_bar_is_available(
         fill_at=fill,
         symbol="LTCUSDT",
         strategy_position_id="p",
+        strategy_id="p90l90_legacy_main_ltc_inj",
+        trading_account_id="ta-" + "1" * 32,
     )
-    scope = SimpleNamespace(identity=SimpleNamespace(origin_commit="a" * 40))
+    scope = SimpleNamespace(
+        identity=SimpleNamespace(origin_commit="a" * 40),
+        routes=SimpleNamespace(account_by_strategy={
+            "p90l90_legacy_main_ltc_inj": "ta-" + "1" * 32,
+        }),
+    )
     pre = _event(boundary - timedelta(microseconds=1), 1)
     at_boundary = _event(boundary, 2)
     snapshot = SimpleNamespace(
@@ -208,6 +215,7 @@ def test_cycle_holds_boundary_trade_until_closed_bar_is_available(
 
     monkeypatch.setattr(owner, "_runtime_scope", lambda *_a, **_k: scope)
     monkeypatch.setattr(owner, "_open_positions", lambda *_a, **_k: (position,))
+    monkeypatch.setattr(owner, "lock_p90_exit_account", lambda *_a, **_k: None)
     monkeypatch.setattr(owner, "_refresh_exit_claim", lambda *_a, **_k: None)
     monkeypatch.setattr(owner, "_latest_mfe", lambda *_a, **_k: object())
     monkeypatch.setattr(owner, "_last_closed_boundary", lambda *_a, **_k: None)
@@ -241,8 +249,15 @@ def test_pending_closed_mutation_advances_only_processed_boundary_marker(
         fill_at=fill,
         symbol="LTCUSDT",
         strategy_position_id="p",
+        strategy_id="p90l90_legacy_main_ltc_inj",
+        trading_account_id="ta-" + "1" * 32,
     )
-    scope = SimpleNamespace(identity=SimpleNamespace(origin_commit="a" * 40))
+    scope = SimpleNamespace(
+        identity=SimpleNamespace(origin_commit="a" * 40),
+        routes=SimpleNamespace(account_by_strategy={
+            "p90l90_legacy_main_ltc_inj": "ta-" + "1" * 32,
+        }),
+    )
     snapshot = SimpleNamespace(
         closed_at=boundary,
         events=(),
@@ -252,6 +267,7 @@ def test_pending_closed_mutation_advances_only_processed_boundary_marker(
 
     monkeypatch.setattr(owner, "_runtime_scope", lambda *_a, **_k: scope)
     monkeypatch.setattr(owner, "_open_positions", lambda *_a, **_k: (position,))
+    monkeypatch.setattr(owner, "lock_p90_exit_account", lambda *_a, **_k: None)
     monkeypatch.setattr(owner, "_refresh_exit_claim", lambda *_a, **_k: None)
     # First lookup says MFE exists; second lookup before closed processing too.
     monkeypatch.setattr(owner, "_latest_mfe", lambda *_a, **_k: object())
