@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import importlib
+import json
 import os
 import signal
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import psycopg
-from psycopg.rows import dict_row
+from psycopg.rows import dict_row, tuple_row
 
 from bybit_workbench.universal_entry.contracts import FrozenPolicy
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
@@ -32,14 +35,46 @@ DB_DSN = os.environ.get(
     "CRIPTA_DATABASE_DSN",
     "dbname=cripta user=cripta host=/var/run/postgresql application_name=universal-exit-consumer",
 )
-CONSUMER_ARM = os.environ.get("CRIPTA_UNIVERSAL_EXIT_MAINNET_CONSUMER", "DISABLED").strip().upper()
+CONSUMER_ARM = os.environ.get(
+    "CRIPTA_UNIVERSAL_EXIT_MAINNET_CONSUMER", "DISABLED"
+).strip().upper()
+P90_R06_OWNER = os.environ.get(
+    "CRIPTA_P90_R06_EXIT_OWNER", "DISABLED"
+).strip().upper()
+LOADED_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
 POLL_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_EXIT_CONSUMER_POLL_SECONDS", "0.25"))
+STATUS_PATH = Path(os.environ.get(
+    "CRIPTA_P90_R06_EXIT_STATUS_PATH",
+    "/var/lib/cripta-p90-r06-exit/status.json",
+))
 running = True
 
 
 def _stop(_signum: int, _frame: object) -> None:
     global running
     running = False
+
+
+def _p90_status(*, state: str, result: str, error: str | None = None) -> None:
+    if P90_R06_OWNER != "ENABLED":
+        return
+    payload = {
+        "service": "p90_r06_exit_owner",
+        "state": state,
+        "result": result,
+        "release_commit": LOADED_COMMIT,
+        "p90_r06_exit_owner": P90_R06_OWNER,
+        "generic_consumer": CONSUMER_ARM,
+        "observed_at": datetime.now(UTC).isoformat(),
+        "error": error,
+    }
+    STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = STATUS_PATH.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    temporary.replace(STATUS_PATH)
 
 
 def _execution_gate_enabled(connection: psycopg.Connection[Any]) -> bool:
@@ -202,59 +237,141 @@ def dispatch_once(
 def run_once(
     connection: psycopg.Connection[Any],
     *,
+    source_connection: psycopg.Connection[Any] | None = None,
     now: datetime | None = None,
+    run_generic: bool = True,
 ) -> str:
     current = (now or datetime.now(UTC)).astimezone(UTC)
     # A protected OPEN position is an Exit obligation even when new Entry is
-    # disarmed. P90 now has an independent owner; Entry does not queue TRAIL035.
-    # Runtime direct script and package-imported tests have different paths.
-    if __package__:
-        from . import p90_real_independent_exit
-        from .p90_real_independent_exit import run_p90_exit_once
-    else:
-        import p90_real_independent_exit
-        from p90_real_independent_exit import run_p90_exit_once
-    p90 = run_p90_exit_once(connection, now=current)
-    p90_real_independent_exit.audit_firstfill_exit_result(
+    # disarmed. P90 first-fill TRAIL035 remains independently owned here.
+    firstfill_module = importlib.import_module(
+        f"{__package__}.p90_real_independent_exit"
+        if __package__
+        else "p90_real_independent_exit"
+    )
+    p90 = str(firstfill_module.run_p90_exit_once(connection, now=current))
+    firstfill_module.audit_firstfill_exit_result(
         connection, result=p90, observed_at=current,
     )
+    p90_success = {
+        "P90_NO_PROTECTED_POSITION_REQUIRING_TRAIL",
+        "P90_EXIT_TRAIL035_REQUEST_PUBLISHED",
+        "P90_EXIT_NO_MUTATION_PROVED",
+    }
+    if P90_R06_OWNER == "ENABLED" and p90 not in p90_success:
+        raise RuntimeError("P90_R06_FIRSTFILL_OWNER_BLOCKED:" + p90)
+
+    if P90_R06_OWNER == "ENABLED":
+        if source_connection is None:
+            raise RuntimeError("P90_R06_EXIT_OWNER_SOURCE_CONNECTION_REQUIRED")
+        continuous_module = importlib.import_module(
+            f"{__package__}.p90_r06_exit_owner"
+            if __package__
+            else "p90_r06_exit_owner"
+        )
+        continuous = str(continuous_module.run_p90_r06_exit_once(
+            connection,
+            source_connection,
+            loaded_commit=LOADED_COMMIT,
+            now=current,
+        ))
+        if not run_generic:
+            return (
+                p90 + "|" + continuous
+                if p90 == "P90_EXIT_TRAIL035_REQUEST_PUBLISHED"
+                else continuous
+            )
+
+    # Preserve the original priority contract: a freshly published P90
+    # trailing request ends this cycle so generic materialization cannot race
+    # or duplicate the account-local mutation.
     if p90 == "P90_EXIT_TRAIL035_REQUEST_PUBLISHED":
         return p90
-    materialized = materialize_once(connection, now=current)
-    if materialized.startswith("REQUEST_CREATED:"):
-        return materialized
-    if materialized.startswith("DECISION_BLOCKED:"):
-        # A failed, independently audited materialization must not postpone an
-        # unrelated already-durable Exit request in the same account-neutral
-        # consumer cycle. dispatch_once only selects existing PROVEN requests,
-        # and still performs the exact Exit/Execution safety checks.
-        dispatched = dispatch_once(connection, now=current)
-        return dispatched if dispatched != "NO_REQUEST" else materialized
-    return dispatch_once(connection, now=current)
+
+    if run_generic:
+        materialized = materialize_once(connection, now=current)
+        if materialized.startswith("REQUEST_CREATED:"):
+            return materialized
+        if materialized.startswith("DECISION_BLOCKED:"):
+            dispatched = dispatch_once(connection, now=current)
+            return dispatched if dispatched != "NO_REQUEST" else materialized
+        return dispatch_once(connection, now=current)
+
+    return p90
 
 
 def main() -> int:
     global running
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
-    if CONSUMER_ARM != "ENABLED":
-        raise SystemExit("Universal Exit mainnet consumer is explicitly disabled")
-    # A leaked idle transaction must never hold position-ownership row locks
-    # indefinitely after PostgreSQL / private-runtime recovery. PostgreSQL
-    # rolls such a transaction back; systemd's on-failure restart reconnects.
-    # This does not touch Exchange orders, open positions or Entry permissions.
+    if CONSUMER_ARM not in {"DISABLED", "ENABLED"}:
+        raise SystemExit("Universal Exit generic consumer mode is invalid")
+    if P90_R06_OWNER not in {"DISABLED", "ENABLED"}:
+        raise SystemExit("P90 R06 Exit owner mode is invalid")
+    if CONSUMER_ARM != "ENABLED" and P90_R06_OWNER != "ENABLED":
+        raise SystemExit("Universal Exit consumers are explicitly disabled")
+    if (
+        P90_R06_OWNER == "ENABLED"
+        and (
+            len(LOADED_COMMIT) != 40
+            or any(c not in "0123456789abcdef" for c in LOADED_COMMIT)
+        )
+    ):
+        raise SystemExit("P90 R06 Exit owner release identity is invalid")
+
     connection = psycopg.connect(
         DB_DSN,
         autocommit=False,
         row_factory=dict_row,
         options="-c idle_in_transaction_session_timeout=120000",
     )
+    source_connection = (
+        psycopg.connect(
+            DB_DSN,
+            autocommit=False,
+            row_factory=tuple_row,
+            options="-c idle_in_transaction_session_timeout=120000",
+        )
+        if P90_R06_OWNER == "ENABLED"
+        else None
+    )
     try:
         while running:
-            run_once(connection)
-            connection.commit()
+            try:
+                result = (
+                    run_once(
+                        connection,
+                        source_connection=source_connection,
+                        run_generic=CONSUMER_ARM == "ENABLED",
+                    )
+                    if P90_R06_OWNER == "ENABLED"
+                    else run_once(connection)
+                )
+                connection.commit()
+                state = (
+                    "P90_R06_EXIT_OWNER_READY_FLAT"
+                    if result.endswith("P90_R06_EXIT_OWNER_READY_FLAT")
+                    else "P90_R06_EXIT_OWNER_RUNNING"
+                )
+                _p90_status(state=state, result=result)
+            except Exception as exc:
+                connection.rollback()
+                if source_connection is not None:
+                    source_connection.rollback()
+                code = str(exc).split(":", 1)[0]
+                if not code.startswith(("P90_", "R06_", "R09_")):
+                    code = type(exc).__name__
+                _p90_status(
+                    state="P90_R06_EXIT_OWNER_BLOCKED",
+                    result="BLOCKED",
+                    error=code[:120],
+                )
+                # A source/private transient may recover. Keep the service
+                # alive but never manufacture READY from an exception.
             time.sleep(POLL_SECONDS)
     finally:
+        if source_connection is not None:
+            source_connection.close()
         connection.close()
     return 0
 

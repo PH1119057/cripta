@@ -38,6 +38,7 @@ GLOBAL_UNITS = frozenset(
         "cripta-private-runtime.service",
         "cripta-universal-entry-observer.service",
         "cripta-universal-entry-consumer.service",
+        "cripta-universal-exit-consumer.service",
         "cripta-lifecycle-supervisor.service",
         "cripta-position-supervisor.service",
     }

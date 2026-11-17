@@ -168,12 +168,12 @@ def test_manual_only_never_synthesizes_recovery_action() -> None:
     assert decision.reason is RecoveryReason.MANUAL_ONLY
 
 
-def test_p90_profile_has_exact_nine_unit_coverage_and_no_extras() -> None:
+def test_p90_profile_has_exact_ten_unit_coverage_and_no_extras() -> None:
     specs = p90_real_v3_service_specs(sub_account_id=SUB)
     policies = p90_real_v3_recovery_policies(sub_account_id=SUB)
-    assert len(specs) == 9
+    assert len(specs) == 10
     assert {item.unit for item in policies} == {item.unit for item in specs}
-    assert len({item.unit for item in policies}) == 9
+    assert len({item.unit for item in policies}) == 10
 
 
 def test_p90_private_runtime_is_stateful_and_every_other_required_unit_is_safe() -> None:

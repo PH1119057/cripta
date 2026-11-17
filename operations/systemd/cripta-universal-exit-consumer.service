@@ -13,10 +13,15 @@ Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-/etc/cripta/release.env
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
 Environment=CRIPTA_UNIVERSAL_EXIT_MAINNET_CONSUMER=DISABLED
+Environment=CRIPTA_P90_R06_EXIT_OWNER=ENABLED
+Environment=CRIPTA_R09_NATIVE_PUBLICATION_PARITY=REQUIRE
+Environment=CRIPTA_P90_R06_EXIT_STATUS_PATH=/var/lib/cripta-p90-r06-exit/status.json
 EnvironmentFile=-/etc/cripta/universal_exit_consumer.env
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/universal_exit_consumer.py
 Restart=on-failure
 RestartSec=2
+StateDirectory=cripta-p90-r06-exit
+StateDirectoryMode=0750
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true

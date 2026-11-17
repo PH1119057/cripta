@@ -70,7 +70,6 @@ def test_allowlist_matches_exact_p90_profile() -> None:
         "cripta-mayak-v2.service",
         "cripta-dispatcher-v2.service",
         "cripta-safety-observer.service",
-        "cripta-universal-exit-consumer.service",
         "cripta-private-runtime@ta-" + "1" * 32 + ".service",
     ):
         assert not broker._is_allowed_unit(denied)

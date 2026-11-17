@@ -137,7 +137,9 @@ def test_private_worker_postfill_modules_import_under_exact_service_path() -> No
     consumer = Path(
         "operations/connectivity/universal_exit_consumer.py"
     ).read_text(encoding="utf-8")
-    assert "from p90_real_independent_exit import run_p90_exit_once" in consumer
+    assert "importlib.import_module(" in consumer
+    assert 'f"{__package__}.p90_real_independent_exit"' in consumer
+    assert 'else "p90_real_independent_exit"' in consumer
     assert "from p90l90_real_postfill_source_client import (" in handoff
     assert "from operations.connectivity.p90l90_real_postfill_source_client" not in handoff
     assert (

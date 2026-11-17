@@ -150,3 +150,83 @@ def test_observer_does_not_read_owner_arm_or_dispatch_broker() -> None:
     assert "request_recovery(" not in source
     assert "control.live_arm_sessions" not in source
     assert "control.execution_gates" not in source
+
+
+EXIT_HEALTH = PROBE["_p90_exit_owner_health"]
+
+
+def test_p90_exit_owner_health_accepts_exact_fresh_running_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    status = tmp_path / "status.json"
+    status.write_text(
+        json.dumps({
+            "service": "p90_r06_exit_owner",
+            "state": "P90_R06_EXIT_OWNER_RUNNING",
+            "result": "P90_R06_EXIT_OWNER_RUNNING|LTCUSDT:P90_R06_EXIT_CLOSED_NO_MATCH",
+            "release_commit": RELEASE,
+            "p90_r06_exit_owner": "ENABLED",
+            "generic_consumer": "DISABLED",
+            "observed_at": (NOW - timedelta(seconds=2)).isoformat(),
+            "error": None,
+        }),
+        encoding="utf-8",
+    )
+    original = PROBE["_p90_exit_owner_health"]
+    globals_dict = original.__globals__
+    real_path = globals_dict["Path"]
+
+    class RedirectPath:
+        def __new__(cls, value: str):
+            if value == "/var/lib/cripta-p90-r06-exit/status.json":
+                return status
+            return real_path(value)
+
+    monkeypatch.setitem(globals_dict, "Path", RedirectPath)
+    assert EXIT_HEALTH(release_commit=RELEASE, now=NOW) is True
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"state": "P90_R06_EXIT_OWNER_BLOCKED"},
+        {"release_commit": "b" * 40},
+        {"generic_consumer": "ENABLED"},
+        {"error": "P90_R06_EXIT_NATIVE_SOURCE_NOT_READY"},
+    ],
+)
+def test_p90_exit_owner_health_fails_closed_on_identity_or_state_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    patch: dict[str, object],
+) -> None:
+    import json
+
+    payload: dict[str, object] = {
+        "service": "p90_r06_exit_owner",
+        "state": "P90_R06_EXIT_OWNER_READY_FLAT",
+        "result": "P90_R06_EXIT_OWNER_READY_FLAT",
+        "release_commit": RELEASE,
+        "p90_r06_exit_owner": "ENABLED",
+        "generic_consumer": "DISABLED",
+        "observed_at": (NOW - timedelta(seconds=2)).isoformat(),
+        "error": None,
+    }
+    payload.update(patch)
+    status = tmp_path / "status.json"
+    status.write_text(json.dumps(payload), encoding="utf-8")
+    original = PROBE["_p90_exit_owner_health"]
+    globals_dict = original.__globals__
+    real_path = globals_dict["Path"]
+
+    class RedirectPath:
+        def __new__(cls, value: str):
+            if value == "/var/lib/cripta-p90-r06-exit/status.json":
+                return status
+            return real_path(value)
+
+    monkeypatch.setitem(globals_dict, "Path", RedirectPath)
+    assert EXIT_HEALTH(release_commit=RELEASE, now=NOW) is False

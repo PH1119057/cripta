@@ -144,6 +144,36 @@ def _healthy_status(
         return None
 
 
+def _p90_exit_owner_health(
+    *,
+    release_commit: str,
+    now: datetime,
+) -> bool | None:
+    path = Path("/var/lib/cripta-p90-r06-exit/status.json")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        observed = datetime.fromisoformat(str(data.get("observed_at") or ""))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+    if observed.tzinfo is None or observed.utcoffset() is None:
+        return None
+    age = (now.astimezone(UTC) - observed.astimezone(UTC)).total_seconds()
+    return bool(
+        data.get("service") == "p90_r06_exit_owner"
+        and data.get("state") in {
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            "P90_R06_EXIT_OWNER_RUNNING",
+        }
+        and data.get("release_commit") == release_commit
+        and data.get("p90_r06_exit_owner") == "ENABLED"
+        and data.get("generic_consumer") == "DISABLED"
+        and data.get("error") is None
+        and 0 <= age <= 5
+    )
+
+
 def _entry_consumer_health(
     *,
     release_commit: str,
@@ -248,6 +278,11 @@ def collect_once(*, now: datetime) -> dict[str, object]:
         state = _unit_state(policy.unit)
         if policy.unit in consumer_health:
             behavior = consumer_health[policy.unit]
+        elif policy.unit == "cripta-universal-exit-consumer.service":
+            behavior = _p90_exit_owner_health(
+                release_commit=release,
+                now=now,
+            )
         elif policy.unit in STATUS_PATHS:
             path, expected, ttl = STATUS_PATHS[policy.unit]
             behavior = _healthy_status(

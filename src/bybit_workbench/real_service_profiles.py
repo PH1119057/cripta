@@ -35,6 +35,14 @@ def p90_real_v3_service_specs(*, sub_account_id: str) -> tuple[ServiceSpec, ...]
             (private_sub, "cripta-universal-entry-observer.service"),
             True,
         ),
+        # R06 replaces only the Entry reader.  P90 protected-position Exit
+        # remains an independent obligation and must exist before PREARM can
+        # claim full-contour readiness.
+        ServiceSpec(
+            "cripta-universal-exit-consumer.service",
+            ("cripta-private-runtime.service", private_sub),
+            True,
+        ),
         ServiceSpec(
             "cripta-lifecycle-supervisor.service",
             ("cripta-private-runtime.service",),

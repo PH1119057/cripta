@@ -202,7 +202,7 @@ def p90_real_v3_recovery_policies(
     *,
     sub_account_id: str,
 ) -> tuple[ServiceRecoveryPolicy, ...]:
-    """Recovery classification for the exact current nine-unit P90 profile."""
+    """Recovery classification for the exact current ten-unit P90 profile."""
 
     policies: list[ServiceRecoveryPolicy] = []
     for spec in p90_real_v3_service_specs(sub_account_id=sub_account_id):
