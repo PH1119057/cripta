@@ -52,7 +52,6 @@ def test_stale_ui_never_renders_h9_distance_or_entry_readiness_as_current():
 
 def test_right_history_refresh_is_observable_and_remains_exact_read_only():
     assert "railLastFetchedAt=Date.now()" in HTML
-    assert "последний" not in HTML.split("let railPeriod=", 1)[0] or True
     assert " · проверено " in HTML
     assert "fetch('/api/live/state?view=closed',{cache:'no-store'})" in HTML
     history_widget = HTML.split(
