@@ -56,6 +56,7 @@ def preparation(tmp_path, *, epochs=None, reason=None, gate=0, registration_erro
         "pwd": SimpleNamespace(getpwnam=lambda _: SimpleNamespace(pw_uid=107)),
         "sys": SimpleNamespace(prefix=str(root / ".venv")),
         "__file__": str(root / SCRIPT), "ROOT": root, "Path": Path,
+        "RUNTIME_RELEASES": tmp_path,
         "SOURCE_CHECKOUT": tmp_path / "source_checkout",
         "psycopg": SimpleNamespace(connect=lambda *_, **__: DB()),
         "load_active_strategy_bundles": lambda _: (), "MAIN_ID": "main", "SUB_ID": "sub",
@@ -96,13 +97,17 @@ def test_missing_release_is_registered_once_then_independently_read_back(tmp_pat
     assert "ORIGIN=" + ORIGIN in capsys.readouterr().out
 
 
-def test_open_gate_defers_missing_registration_without_changing_controls(tmp_path, capsys):
+def test_open_gate_hard_blocks_release_preparation_without_registration(tmp_path, capsys):
     run, calls, _ = preparation(
         tmp_path, reason="P90_REAL_SOURCE_COMPATIBILITY_RELEASE_NOT_REGISTERED", gate=1,
     )
-    run()
+    with pytest.raises(
+        RuntimeError,
+        match="P90_REAL_COMPATIBILITY_RELEASE_PREPARATION_ENTRY_GATE_NOT_OFF",
+    ):
+        run()
     assert not calls
-    assert "DEFERRED_ENTRY_GATE_NOT_OFF" in capsys.readouterr().out
+    assert "DEFERRED_ENTRY_GATE_NOT_OFF" not in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("reason", [
