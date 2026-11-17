@@ -862,6 +862,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
     const symbol=safe(item.symbol),state=String(item.state||'FAR'),nearest=item.nearest_entry||null;
     const geometryStale=state==='STALE'||item.geometry_fresh===false;
     const external=state==='EXTERNAL'||item.external_position_present===true;
+    const inventoryUnknown=state==='ACCOUNT_UNVERIFIED'||item.account_inventory_verified===false;
     const h9Proximity=p90RailH9Proximity(item);
     const visualNear=!external&&(state==='NEAR'||(state!=='OPEN'&&h9Proximity<0.5));
     const stateClass=state==='OPEN'?'p90-open':visualNear?'p90-near':'p90-far';
@@ -869,6 +870,13 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
     const tone=state==='OPEN'?'open':visualNear?'near':'far';
     const current=price(item.current_price);
     if(state!=='OPEN'){
+      if(inventoryUnknown){
+        return '<div class="rail-open-position p90-far">'+
+          '<div class="rail-position-summary"><span><span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state far">BYBIT: СОСТОЯНИЕ НЕ ПОДТВЕРЖДЕНО</small></span></div>'+
+          '<div class="rail-position-meta">Нет свежего COMPLETE/PROVEN слепка торгового аккаунта. UNKNOWN — не FLAT и не OPEN.</div>'+
+          '<div class="rail-position-meta">Исторические позиции не показаны как текущие; торговые решения и PnL не вычисляются.</div>'+
+          '</div>';
+      }
       if(external){
         // Exchange exposure is real; its Strategy owner is NOT proven.
         // Never show Strategy PnL/Exit protection for a manual or mismatched cycle.
