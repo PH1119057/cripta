@@ -871,7 +871,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
       if(geometryStale){
         const checkpointTime=item.checkpoint_updated_at?new Date(item.checkpoint_updated_at).toLocaleString('ru-RU'):'нет checkpoint';
         const marketTime=item.current_price_source_time_max?new Date(item.current_price_source_time_max).toLocaleString('ru-RU'):'нет свежей цены';
-        const source=item.current_price_source==='MARKET_PUBLICATION'?'MarketPublication':'текущая цена недоступна';
+        const source=item.current_price_source==='MARKET_PUBLICATION'?'MarketPublication':item.current_price_source==='R06_NATIVE_PUBLIC_TRADE'?'R06 native trade':'текущая цена недоступна';
         return '<div class="rail-open-position p90-far">'+
           '<div class="rail-position-summary"><span><span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state far">ГЕОМЕТРИЯ УСТАРЕЛА</small></span>'+
           '<span class="rail-position-pnl">'+current+'<br><small class="rail-position-meta">'+safe(source)+'</small></span></div>'+
@@ -942,7 +942,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
         '</div>'+
         '<div class="rail-position-meta">'+safe(geometryText)+'</div>'+
         ruleHtml+
-        '<div class="rail-position-meta">geometry '+safe(item.geometry?.effective_at||'—')+'</div>'+
+        '<div class="rail-position-meta">geometry '+safe(item.geometry?.effective_at||'—')+' · '+safe(item.geometry_source==='R06_EXACT_ATOMIC_CAUSAL_STATE'?'R06 verified checkpoint':'legacy checkpoint')+'</div>'+
         diagLine+diagControls+
       '</div>';
     }
