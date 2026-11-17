@@ -1706,6 +1706,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             ).fetchall()
         p90_ownership_rows = connection.execute(
             """SELECT o.trading_account_id,o.symbol,o.position_idx,o.side,
+                      o.strategy_id,o.actual_avg_fill,o.actual_qty,
                       coalesce((
                           SELECT sum(e.exec_fee::numeric)
                             FROM jsonb_array_elements_text(o.execution_ids) AS xid(exec_id)
@@ -1715,25 +1716,52 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                       ),0) AS entry_fee_actual
                  FROM runtime.position_ownership o
                 WHERE o.state='OPEN'
+                  AND o.close_link_status='OPEN'
                   AND o.strategy_id IN (%s,%s)
                   AND o.strategy_version=%s
                   AND o.identity_status='PROVEN'""",
             (P90_MAIN_ID, P90_SUB_ID, P90_REAL_V3_VERSION),
         ).fetchall()
-        p90_ownership_fees = {
-            (
-                str(row[0]),
-                str(row[1]),
-                int(row[2] or 0),
-                str(row[3]),
-            ): float(row[4] or 0)
-            for row in p90_ownership_rows
-        }
+        # A current Exchange position is real, but is not automatically a
+        # StrategyPosition. A unique exact ownership link is required before
+        # the Strategy rail can display it as OPEN or calculate Strategy PnL.
+        p90_ownership_by_key: dict[
+            tuple[str, str, int, str], list[tuple[object, ...]]
+        ] = {}
+        for owner in p90_ownership_rows:
+            owner_key = (
+                str(owner[0]), str(owner[1]), int(owner[2] or 0), str(owner[3])
+            )
+            p90_ownership_by_key.setdefault(owner_key, []).append(owner)
+        p90_ownership_fees: dict[tuple[str, str, int, str], float] = {}
         p90_positions_by_symbol: dict[str, list[tuple[object, ...]]] = {}
+        p90_external_symbols: set[str] = set()
         for row in p90_position_rows:
             symbol = str(row[1])
-            if p90_account_for_symbol.get(symbol) != str(row[0]):
+            account = str(row[0])
+            if p90_account_for_symbol.get(symbol) != account:
                 continue
+            key = (account, symbol, int(row[2] or 0), str(row[3]))
+            exact_owners = p90_ownership_by_key.get(key, [])
+            live_qty = p90_decimal(row[4])
+            live_entry = p90_decimal(row[5])
+            matched = (
+                len(exact_owners) == 1
+                and str(exact_owners[0][4]) == p90_strategy_for_symbol[symbol]
+                and live_qty is not None
+                and live_qty > 0
+                and live_qty == p90_decimal(exact_owners[0][6])
+                and live_entry is not None
+                and live_entry > 0
+                and live_entry == p90_decimal(exact_owners[0][5])
+            )
+            if not matched:
+                # This may be a manual/unowned Exchange position, or a
+                # partially closed/replaced cycle awaiting exact attribution.
+                # Never adopt it into Strategy from symbol/side alone.
+                p90_external_symbols.add(symbol)
+                continue
+            p90_ownership_fees[key] = float(exact_owners[0][7] or 0)
             p90_positions_by_symbol.setdefault(symbol, []).append(row)
 
         # Presentation-only freshness boundary. The historic causal epoch is
@@ -1992,6 +2020,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 if position_payload is not None:
                     state = "OPEN"
                     rank = 0
+                elif symbol in p90_external_symbols:
+                    state = "EXTERNAL"
+                    rank = 1
                 elif not geometry_fresh:
                     state = "STALE"
                     rank = 2
@@ -2012,6 +2043,17 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                         "binding_ready": account_id is not None,
                         "state": state,
                         "rank": rank,
+                        "external_position_present": (
+                            symbol in p90_external_symbols
+                        ),
+                        "position_attribution": (
+                            "EXACT_STRATEGY_OWNED" if position_payload is not None
+                            else (
+                                "EXCHANGE_UNATTRIBUTED"
+                                if symbol in p90_external_symbols
+                                else "NO_CURRENT_EXCHANGE_POSITION"
+                            )
+                        ),
                         "current_price": (
                             None if current_price is None else str(current_price)
                         ),
