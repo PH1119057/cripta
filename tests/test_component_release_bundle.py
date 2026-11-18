@@ -65,14 +65,17 @@ def test_exit_bundle_is_content_verified_and_does_not_modify_entry(
     with zipfile.ZipFile(output) as bundle:
         assert bundle.read("src/bybit_workbench/universal_exit/engine.py") == b"EXIT_V2\n"
         assert bundle.read("src/bybit_workbench/universal_entry/engine.py") == b"ENTRY_BASELINE\n"
-        assert bundle.read("operations/connectivity/universal_exit_consumer.py") == b"EXIT_SCRIPT_BASE\n"
+        assert bundle.read(
+            "operations/connectivity/universal_exit_consumer.py"
+        ) == b"EXIT_SCRIPT_BASE\n"
         manifest = json.loads(bundle.read("component_manifest.json"))
         assert manifest["dependency_environment"] == "NOT_ATTESTED"
         assert manifest["postgresql_compatibility"] == "NOT_ATTESTED"
         for path, expected_hash in manifest["blob_sha256"].items():
             assert hashlib.sha256(bundle.read(path)).hexdigest() == expected_hash
         assert "operations/sql/anything.sql" not in bundle.namelist()
-    assert (repo / "src" / "bybit_workbench" / "universal_entry" / "engine.py").read_text() == "ENTRY_BASELINE\n"
+    entry_path = repo / "src" / "bybit_workbench" / "universal_entry" / "engine.py"
+    assert entry_path.read_text() == "ENTRY_BASELINE\n"
 
 
 def test_same_component_candidate_produces_identical_zip_bytes(
