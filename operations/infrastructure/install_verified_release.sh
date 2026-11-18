@@ -312,7 +312,7 @@ elif [[ "$NATIVE_SOURCE_CUTOVER" == "1" ]]; then
     die "NATIVE_OFFLINE_POSITION_OWNERSHIP_NOT_FLAT"
   # A Git-reviewed source profile is mandatory; never accept an arbitrary
   # stopped old writer / profile as authorization for offline upgrade.
-  target_native_unit="$(as_repo_owner git -C "$SOURCE" show
+  target_native_unit="$(as_repo_owner git -C "$SOURCE" show \
     "$RELEASE_COMMIT:operations/systemd/cripta-native-public-trade-source.service")" ||
     die "NATIVE_OFFLINE_TARGET_UNIT_UNVERIFIED"
   grep -Fxq 'Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL' <<<"$target_native_unit" ||
@@ -349,10 +349,10 @@ except Exception:
     WHERE source_session_id='$producer_old_session'
       AND producer_release_commit='$EXPECTED_BASELINE'")" == "GAP|OWNER_CONTROLLED_STOP" ]] ||
     die "NATIVE_OFFLINE_OLD_SESSION_NOT_OWNER_STOPPED_GAP"
-  if as_repo_owner git -C "$SOURCE" diff --quiet
-    "$EXPECTED_BASELINE" "$RELEASE_COMMIT" -- 
-    operations/monitoring/native_public_trade_source.py
-    operations/monitoring/public_market_source_union_capture.py
+  if as_repo_owner git -C "$SOURCE" diff --quiet \
+    "$EXPECTED_BASELINE" "$RELEASE_COMMIT" -- \
+    operations/monitoring/native_public_trade_source.py \
+    operations/monitoring/public_market_source_union_capture.py \
     operations/systemd/cripta-native-public-trade-source.service; then
     die "NATIVE_OFFLINE_NO_PRODUCER_ABI_DELTA"
   fi
