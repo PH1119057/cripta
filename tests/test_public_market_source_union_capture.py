@@ -691,3 +691,108 @@ def test_r04_cannot_isolate_a_required_spot_as_optional(
             producer_release_commit="a" * 40, publish_seconds=False,
         )
     assert touched == []
+
+
+def _p90_minimal_manifest() -> str:
+    """Exact approved current P90/Position consumers, not synthetic test feeds."""
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "operations/monitoring/required_public_feeds.json"
+    )
+    full = json.loads(path.read_text(encoding="utf-8"))
+    owners = {"ENTRY_P90", "EXIT_P90", "EXECUTION_P90", "POSITION"}
+    return json.dumps([item for item in full if item["consumer_id"] in owners])
+
+
+def test_p90_minimal_manifest_has_no_spot_and_preserves_five_symbol_facts() -> None:
+    """RED on main: Source incorrectly requires an unconditional SPOT transport."""
+    manifest = _p90_minimal_manifest()
+    rows = json.loads(manifest)
+    assert len(rows) == 55
+    assert len({
+        (item["product"], item["symbol"], item["dataset"], item["timeframe"])
+        for item in rows
+    }) == 35
+    assert {item["symbol"] for item in rows} == set(P90)
+    assert {item["product"] for item in rows} == {"LINEAR"}
+    union = parse_explicit_source_manifest(
+        manifest, native_symbols=P90, mayak_reference_symbols=(),
+    )
+    assert union.websocket_batches("LINEAR")
+    assert not union.websocket_batches("SPOT")
+    assert not union.rest_inputs
+    assert len({
+        (item.symbol, item.timeframe)
+        for item in union.requirements
+        if item.dataset == "CLOSED_KLINE" and item.required
+        and item.timeframe in {"5", "15"}
+    }) == 10
+
+
+def test_p90_minimal_source_does_not_open_spot_or_make_fictitious_quality(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One native producer, LINEAR-only sockets and durable GAP on stop."""
+    monkeypatch.setenv("CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES", "0")
+    union = parse_explicit_source_manifest(
+        _p90_minimal_manifest(), native_symbols=P90,
+    )
+    monkeypatch.setattr(
+        source, "_closed_repair_windows",
+        lambda _union, *, native_symbols: (),
+    )
+    opened: list[str] = []
+    sessions: list[tuple[str, str]] = []
+
+    class Socket:
+        def recv(self) -> str:
+            raise websocket.WebSocketTimeoutException("offline test")
+
+        def send(self, _raw: str) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    def connect(*, product: str, union: object) -> tuple[Socket, list[dict]]:
+        opened.append(product)
+        assert product == "LINEAR", "P90_MINIMAL must not open SPOT"
+        return Socket(), []
+
+    monkeypatch.setattr(source, "_connect_subscribe", connect)
+    monkeypatch.setattr(native, "uuid4", lambda: SimpleNamespace(hex="c" * 32))
+    monkeypatch.setattr(
+        native, "_session_start",
+        lambda _conn, session: sessions.append(("START", session)),
+    )
+    monkeypatch.setattr(
+        native, "_session_gap",
+        lambda _conn, session, reason: sessions.append(("GAP", reason)),
+    )
+    monkeypatch.setattr(native, "_status", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        source, "persist_public_source_quality_events",
+        lambda _conn, **_kw: 0,
+    )
+    source.run_source_union(
+        Mock(), p90_symbols=P90, union=union,
+        producer_release_commit="d" * 40, publish_seconds=False,
+        should_stop=lambda: True,
+    )
+    assert opened == ["LINEAR"]
+    assert sessions == [("START", "c" * 32), ("GAP", "OWNER_CONTROLLED_STOP")]
+
+
+def test_r11_original_capture_cannot_claim_continuity_without_spot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An R11 physical-original flag cannot run in a LINEAR-only scope."""
+    monkeypatch.setenv("CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES", "1")
+    union = parse_explicit_source_manifest(
+        _p90_minimal_manifest(), native_symbols=P90,
+    )
+    with pytest.raises(SourceManifestInvalid, match="R11_ORIGINAL_FRAME_SPOT_REQUIRED"):
+        source.run_source_union(
+            Mock(), p90_symbols=P90, union=union,
+            producer_release_commit="e" * 40, publish_seconds=True,
+        )
