@@ -3,6 +3,7 @@
 The financial source/Entry engine MUST still reject stale trading evidence.
 Existing OPEN-position Exit path remains fully strict.
 """
+
 from __future__ import annotations
 
 from contextlib import nullcontext
@@ -149,18 +150,18 @@ def test_flat_exit_rejects_publication_epoch_drift_even_if_one_symbol_fresh() ->
                 producer_release_commit=COMMIT,
             ),
         ),
-    ):
-        with pytest.raises(
+        pytest.raises(
             exit_owner.P90R06ExitBlocked,
             match="P90_R06_EXIT_PUBLICATION_SOURCE_DRIFT",
-        ):
-            exit_owner._flat_source_ready(
-                _Connection(),
-                scope=SimpleNamespace(
-                    identity=SimpleNamespace(approved_producers=frozenset((COMMIT,))),
-                ),
-                now=AT,
-            )
+        ),
+    ):
+        exit_owner._flat_source_ready(
+            _Connection(),
+            scope=SimpleNamespace(
+                identity=SimpleNamespace(approved_producers=frozenset((COMMIT,))),
+            ),
+            now=AT,
+        )
 
 
 def test_live_position_exit_freshness_was_not_weakened() -> None:
