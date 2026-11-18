@@ -24,12 +24,10 @@ Environment=CRIPTA_SOURCE_CLOSED_KLINES=0
 Environment=CRIPTA_SOURCE_UNION_CAPTURE=1
 Environment=CRIPTA_SOURCE_PUBLICATION=1
 Environment=CRIPTA_R09_SOURCE_POSTFILL_BROKER=ENABLED
-Environment=CRIPTA_R11_MAYAK_ANCHORS=0
-Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0
+Environment=CRIPTA_R11_MAYAK_ANCHORS=1
+Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=1
 Environment=CRIPTA_SOURCE_KLINE_INTERVALS=1,5,15
 Environment=CRIPTA_SOURCE_UNION_MANIFEST_FILE=/etc/cripta/market-source/required_public_feeds.json
-# Owner-reviewed install manifest selector; R11 code remains available.
-Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL
 WorkingDirectory=/srv/cripta/runtime/current
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/native_public_trade_source.py
 Restart=on-failure
