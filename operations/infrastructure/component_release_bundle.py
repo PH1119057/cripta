@@ -50,9 +50,9 @@ def _tracked_files(repo: Path, target: str) -> tuple[tuple[str, str], ...]:
             path = raw_path.decode("utf-8")
         except (ValueError, UnicodeDecodeError) as exc:
             raise ValueError("BUNDLE_TREE_INVALID") from exc
-        if mode not in ("100644", "100755") or kind != "blob":
-            raise ValueError("BUNDLE_SYMLINK_OR_UNSUPPORTED_FILE")
-        entries.append((path, mode))
+        # Unrelated paths do not affect this bundle; selected paths are
+        # checked for symlinks and unusual modes below.
+        entries.append((path, mode if kind == "blob" else "UNSUPPORTED"))
     return tuple(entries)
 
 
@@ -79,6 +79,8 @@ def stage_component_bundle(
     tracked = tuple((path, mode) for path, mode in _tracked_files(repo, target)
                     if any(path == selector or path.startswith(selector)
                            for selector in selectors))
+    if any(mode not in ("100644", "100755") for _path, mode in tracked):
+        raise ValueError("BUNDLE_SYMLINK_OR_UNSUPPORTED_FILE")
     if not tracked:
         raise ValueError("BUNDLE_SOURCES_MISSING")
     if component != "DASHBOARD_PRESENTATION" and not any(
