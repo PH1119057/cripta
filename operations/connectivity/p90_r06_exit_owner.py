@@ -25,6 +25,7 @@ from typing import Any
 
 from psycopg.rows import tuple_row
 
+from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.lifecycle_ack import claim_exit_position
 from bybit_workbench.market_data.entry_publication_reader import (
@@ -280,6 +281,34 @@ def _runtime_scope(
     return _RuntimeScope(bundles=bundles, routes=routes, identity=identity)
 
 
+def _flat_scoped_source_acceptable(source: NativeSourceEvidence) -> bool:
+    """Keep a FLAT Exit ready through a quiet symbol, not a broken producer.
+
+    The source reader has proved one ACTIVE epoch, approved producer, and
+    original cursor identity; an individual cursor can be older than its
+    strategy TTL when no trade occurred. Never relax this for OPEN positions,
+    drift, a missing cursor, or all five unusable scopes. A current immutable
+    publication and source-session parity are still checked by the caller.
+    """
+    if (
+        source.market_source_id != BYBIT_PUBLIC_MARKET_SOURCE_ID
+        or not source.session_id or not source.producer_release_commit
+        or set(source.by_symbol) != set(_SYMBOLS)
+    ):
+        return False
+    fresh = 0
+    for symbol, evidence in source.by_symbol.items():
+        if evidence.symbol != symbol:
+            return False
+        if evidence.ready:
+            if evidence.reason != "NATIVE_SOURCE_COMMITTED_CURRENT":
+                return False
+            fresh += 1
+        elif evidence.reason != "NATIVE_SOURCE_CURSOR_NOT_FRESH":
+            return False
+    return fresh > 0
+
+
 def _flat_source_ready(
     source_connection: Any,
     *,
@@ -303,7 +332,10 @@ def _flat_source_ready(
             observed_at=source_now,
             max_lag=min(ttls.values()),
         )
-        _need(source.ready, "P90_R06_EXIT_NATIVE_SOURCE_NOT_READY")
+        _need(
+            _flat_scoped_source_acceptable(source),
+            "P90_R06_EXIT_NATIVE_SOURCE_NOT_READY",
+        )
         pin = read_entry_publication_pin(
             source_connection,
             observed_at=source_now,
