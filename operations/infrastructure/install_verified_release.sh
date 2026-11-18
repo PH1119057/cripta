@@ -912,6 +912,18 @@ for service in "${managed_services[@]}"; do
   fi
 done
 
+# Fail BEFORE stopping any owner/consumer if this scope claims MAYAK was
+# already paused while it actually remains active. Releasing P90_MINIMAL is
+# not authorization to kill a live seven-symbol observation workflow.
+if [[ -z "$ROADMAP470_STAGE" && "$native_code_changed" == "1" &&
+      "${was_active[cripta-mayak-v2.service]:-0}" == "1" ]]; then
+  target_source_unit="$(as_repo_owner git -C "$SOURCE" show \
+    "$RELEASE_COMMIT:operations/systemd/cripta-native-public-trade-source.service")"
+  if grep -Fxq 'Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL' <<<"$target_source_unit"; then
+    die "P90_MINIMAL_MAYAK_MUST_BE_PREPAUSED"
+  fi
+fi
+
 trap release_exit_handler EXIT
 if [[ -n "$ROADMAP470_STAGE" ]]; then
   # This rail installs code/schema only. It does not disturb unrelated
@@ -1310,6 +1322,26 @@ for unit in "${retired_units[@]}"; do
 done
 
 systemctl daemon-reload
+
+# P90_MINIMAL deliberately pauses MAYAK. Removing a single runtime PID is
+# insufficient: enabled Mayak can be pulled back by Dispatcher/reboot.
+# The reviewed Dispatcher unit has no Wants= for MAYAK in this source scope.
+if [[ -z "$ROADMAP470_STAGE" && "$native_code_changed" == "1" &&
+      "${source_profile:-}" == "P90_MINIMAL" ]]; then
+  dispatcher_source_unit="$runtime_release/operations/dispatcher_v2/cripta-dispatcher-v2.service"
+  if grep -Eq '^Wants=.*cripta-mayak-v2\.service' "$dispatcher_source_unit"; then
+    die "P90_MINIMAL_DISPATCHER_STILL_WANTS_MAYAK"
+  fi
+  systemctl stop cripta-mayak-v2.service
+  systemctl disable cripta-mayak-v2.service >/dev/null
+  mayak_boot_state="$(systemctl is-enabled cripta-mayak-v2.service 2>/dev/null || true)"
+  [[ "$mayak_boot_state" == "disabled" ]] ||
+    die "P90_MINIMAL_MAYAK_BOOT_NOT_DISABLED"
+  ! systemctl is-active --quiet cripta-mayak-v2.service ||
+    die "P90_MINIMAL_MAYAK_NOT_PAUSED"
+  echo "P90_MINIMAL_MAYAK_PAUSED_BY_DATA_SCOPE=PASS"
+fi
+
 systemctl disable cripta-release-controller.service >/dev/null
 controller_enabled_state="$(systemctl is-enabled cripta-release-controller.service 2>/dev/null || true)"
 [[ "$controller_enabled_state" == "disabled" ]] ||
