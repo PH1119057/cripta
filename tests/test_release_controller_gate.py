@@ -3,6 +3,9 @@ import ast
 import importlib.util
 import json
 import re
+import shutil
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -305,3 +308,20 @@ def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None
                     target=target, runtime_baseline=baseline,
                     dashboard_baseline=None,
                 )
+
+
+def test_verified_release_installer_parses_with_linux_bash() -> None:
+    """Offline P90 producer lineage changes cannot break Bash parsing."""
+    if sys.platform != "linux":
+        pytest.skip("Linux-only Bash contract; Windows may resolve WSL stub")
+    bash = shutil.which("bash")
+    assert bash is not None, "Linux Bash required for release installer contract"
+    installer = (
+        Path(__file__).resolve().parents[1]
+        / "operations/infrastructure/install_verified_release.sh"
+    )
+    result = subprocess.run(
+        [bash, "-n", str(installer)],
+        check=False, text=True, capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
