@@ -205,6 +205,10 @@ def test_offline_p90_minimal_native_cutover_never_restarts_legacy_writer() -> No
         "NATIVE_OFFLINE_HOT_EXPOSURE_NOT_FLAT",
         "NATIVE_OFFLINE_POSITION_OWNERSHIP_NOT_FLAT",
         "NATIVE_OFFLINE_SOURCE_STATUS_OR_COMMIT_INVALID",
+        "NATIVE_OFFLINE_ORIGIN_COMMIT_FORMAT_INVALID",
+        "NATIVE_OFFLINE_ORIGIN_COMMIT_UNVERIFIED",
+        "NATIVE_OFFLINE_ORIGIN_NOT_BASELINE_ANCESTOR",
+        "NATIVE_OFFLINE_ORIGIN_BASELINE_ABI_DRIFT",
         "NATIVE_OFFLINE_ACTIVE_SOURCE_SESSION_PRESENT",
         "NATIVE_OFFLINE_LAST_SESSION_MISSING",
         "NATIVE_OFFLINE_OLD_SESSION_NOT_OWNER_STOPPED_GAP",
@@ -233,6 +237,7 @@ def test_offline_p90_minimal_native_cutover_never_restarts_legacy_writer() -> No
     assert "systemctl stop cripta-native-public-trade-source.service" not in offline_block
     assert "native_source_stopped_for_cutover=1" not in offline_block
     assert "NATIVE_OFFLINE_SOURCE_EPOCH_STARTED_DURING_RELEASE" in offline_block
+    assert "producer_release_commit=\'$producer_loaded_commit\'" in source
     assert "NATIVE_OFFLINE_OLD_GAP_CHANGED" in offline_block
 
 
