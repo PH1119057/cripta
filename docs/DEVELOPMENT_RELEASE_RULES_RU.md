@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.20 · 2026-11-18
+**Версия:** 2.21 · 2026-11-18
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2139,6 +2139,39 @@ Negative tests: absent/wrong producer, wrong code delta, stale PID/session/commi
 
 This is an **owner-approved exact #642 P90_MINIMAL recovery path**. It does not permit skipping CI, deploying unmerged code, changing the native producer ABI silently, rewriting historical PostgreSQL facts, reactivating R11, wiping a disk, or opening financial gates. No repeat owner question for the same already confirmed scoped action is required.
 
+
+
+### 50.6 Independent component release method — OWNER DECISION 2026-11-18 (#849)
+
+ARCH §50.1 is the single architecture authority. The previous `EXACT_VERIFIED_SOURCE_RELEASE` / global `runtime/current`/single `.venv`/common `managed_services` lifecycle is a **legacy transitional implementation**, not the default target for independently owned processes. A full release remains available only when a shared dependency/ABI/schema upgrade is **proved** to need a coordinated cutover; component-only changes do not acquire authority to mutate other owners by being merged into `main`.
+
+For each service the deployment planner must publish a reviewed immutable **ComponentReleaseManifest**:
+
+```text
+component_id / unit instance / executable entrypoint
+source_commit + content digest + immutable artifact path
+dependency lock / imported API ABI / DB schema compatibility
+prior component installed+loaded identity / candidate identity
+READ / WRITE / CREATE / RENAME / DELETE targets, Unix actor, ACL, sandbox
+affected PIDs / untouched PIDs / restart expectations
+migration actor and migration scope (NONE unless explicitly justified)
+rollback candidate + active positions/Exit protection
+postcheck: identity, consumer input progression, security, behavior
+```
+
+**Path ownership:** exact source delta, including both sides of rename, maps to one or more component owners; shared library, executable security/finance/control, unit template, global dependency, unknown path or SQL requires explicit compatibility review and safe sequential/coordinated release. An unclassified path must **not** be treated as authorization for a blanket production restart. `docs/**`, research-owned outputs and tests are non-executable source changes unless a separately verified runtime dependency proves otherwise. Monorepo main/source synchronization does not install any component automatically.
+
+**Preparation:** assemble a component-local immutable closure under a protected release root, separate from global mutable `runtime/current`. Verify byte hashes, dependency/ABI parity, clean exact source Git SHA, CI, disk headroom, effective actor/sandbox and all affected mount/parent paths. Packages have independent `COMPONENT_INSTALLED_COMMIT` / `COMPONENT_LOADED_COMMIT` records. The existing global installed release marker remains intact for legacy services. Source/live identity checks must understand a verified per-component release attestation rather than requiring all services to equal the newest Git commit or blindly exempting all component code.
+
+**Activation:** use one authorized no-argument management rail and one mutually exclusive release lock; it selects the target and exact scoped owner deterministically. No arbitrary service name, commit, path or shell from a dashboard/client. Only the component's owned units can be stopped/started; no common symlink swap, no common release.env overwrite, no all-service restart, and no migration batch. A shared ABI upgrade uses explicit compatibility stage with old/new reader+writer proofs and separate authorized migration role. A pre-existing OPEN position or uncertain Exchange outcome requires preserving current Exit/protection and matching financial safety gates; no silent ARM/DISARM or order changes.
+
+**Read-model isolation:** `Dashboard presentation` uses existing §8.1 static UI rail. Split read-model queries and control handlers into separate service/runtime/process/DB identities before claiming independent Dashboard backend. Dedicated PostgreSQL SELECT-only role with `CONNECTION LIMIT`, timeouts and query budgets; separate cgroup limits and bounded request concurrency for read-model; control API retains authenticated, audited financial mutation capability; never grant Dashboard projection `postgres` role. Any dashboard-only update must demonstrate `PG_MAIN_PID/NRestarts`, Entry/Exit/MarketSource PIDs/NRestarts, gates/permissions, and schema fingerprint unchanged. Read-model resource exhaustion must degrade Dashboard, not PostgreSQL or trading.
+
+**Negative tests:** Exit-only change => only Exit candidate and zero Entry/ARM/DB mutations; Entry-only => no Exit restart; UI-only => presentation; read-model-only => no DDL/DML/control; unknown/shared path => explicit compatibility decision not implicit full deploy; live open positions; source/installed split; schema incompatible; partial cutover; stale PID; failed/unknown systemd; rollback; SQL actor/ACL denial; OOM, long query, timeout; wrong deployed component hash. Include canary and untouched-neighbor PID parity before moving each current unit off legacy runtime. Do not claim a new release rail DEPLOYED until these are proven in Linux CI, disposable PG and actual host inspection.
+
+**Implementation sequence:** (1) owner/changed-path inventory and pure fail-closed scope planner with tests; (2) immutable service bundle + per-unit pinned ExecStart and independent identity; (3) first safe bounded canary under LIVE-preserving gates; (4) generalize using the same mechanism to all service owners; (5) independent Dashboard projection/control isolation. An architectural document or planner alone cannot deploy and must be labelled `IMPLEMENTED_PARTIAL`.
+
+The current #849 architecture work is specifically **not** permission to change existing live Gateway, actual ARM sessions, Strategy settings, Exchange orders, PostgreSQL schema/roles, or deployed systemd units before each scoped stage has actor/path and rollback proof. Owner-approved architectural rewrite supersedes the former implicit assumption that every executable CORE delta requires a simultaneous full restart, without weakening baseline OpenAI/tool security, LIVE or Exchange protection.
 
 ## 51. Generic REAL readiness preparation and bounded service-start broker — OWNER DECISION 2026-11-02 (Issue #343)
 
