@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.64
-**Дата:** 2026-11-17
+**Версия:** 3.65
+**Дата:** 2026-11-18
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -696,6 +696,9 @@ decision/execution-affecting JavaScript. Только presentation-only asset м
 Document set, mandatory pre-read, routing и Project Source count не меняются.
 README / AGENTS / Project Instructions template синхронизированы в этом cycle.
 
+
+
+**OWNER DECISION 2026-11-18 (#849):** physical Dashboard isolation is three distinct process/data owners: static presentation (§19 existing), PostgreSQL SELECT-only projection with bounded query/connection/resource budget, and authenticated control/mutation API. ARCH §50.1 owns the component ownership and independent-version architecture; DEV §50.6 owns scoped release, dependency/ABI and rollback procedure. Current combined `operations/dashboard/app.py` is explicitly a **transitional implementation**, not evidence that Dashboard read-model cannot impair PostgreSQL. No new current docs, routes, root entrypoints or Project Source files are introduced.
 
 # 20. Operator money / Dashboard read-model revision — 2026-10-05
 
