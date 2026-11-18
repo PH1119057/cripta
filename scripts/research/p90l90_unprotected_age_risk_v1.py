@@ -323,8 +323,8 @@ def main():
     if args.period == "183d":
         if args.smoke_hours != 0 or args.pilot_days not in (0, 1):
             raise ValueError("2025 supports 1-day pilot only")
-    elif args.pilot_days != 0 or args.smoke_hours not in (0, 6):
-        raise ValueError("2026 supports 6-hour native smoke only")
+    elif args.pilot_days != 0 or args.smoke_hours not in (0, 48):
+        raise ValueError("2026 supports 48-hour native smoke only")
     result = run(args.period, args.smoke_hours, args.pilot_days)
     print(json.dumps(result, sort_keys=True), flush=True)
 
