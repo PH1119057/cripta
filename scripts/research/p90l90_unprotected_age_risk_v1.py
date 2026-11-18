@@ -145,8 +145,22 @@ def prepare(module, period: str, wrapper_path: pathlib.Path) -> None:
         raise RuntimeError("wrapper source identity mismatch")
     if module.base.on_trade is not module.ORIGINAL_ON_TRADE:
         raise RuntimeError("original Exit callback already changed")
-    if module.base.take_profit_eligible is not module.ORIGINAL_TP_ELIGIBILITY if period != "183d" else module.base.take_profit_eligible is not module.ORIGINAL_ELIGIBLE:
+    eligible = (module.ORIGINAL_ELIGIBLE if period == "183d"
+                else module.ORIGINAL_TP_ELIGIBILITY)
+    if module.base.take_profit_eligible is not eligible:
         raise RuntimeError("original structural TP callback changed")
+    def approved_preflight(*arguments):
+        if (os.geteuid(), os.getegid()) != (107, 109):
+            raise PermissionError("effective actor drift")
+        if pathlib.Path.cwd().resolve() != ROOT:
+            raise PermissionError("spool cwd changed")
+        if not ROOT.is_dir() or ROOT.is_symlink():
+            raise PermissionError("spool not a real directory")
+        if digest(wrapper_path) != digest(ROOT / "source_snapshot" /
+                                           "p90l90_unprotected_age_risk_v1.py"):
+            raise RuntimeError("frozen wrapper source changed")
+        return wrapper_path
+    module.preflight = approved_preflight
 
 
 def export_snapshot(period: str, module, result_dir: pathlib.Path) -> dict:
@@ -257,23 +271,19 @@ def run(period: str, smoke_hours: int, pilot_days: int) -> dict:
 
         module.save_day = wrapped_save
         module.resume = wrapped_resume
-        old_handle = module.ORIGINAL_HANDLE
+        original_timed_handle = module.timed_handle
 
         def observed_handle(self, symbol, stamp, seq, price, events, state, priority):
-            outcome = module.timed_handle(
+            outcome = original_timed_handle(
                 self, symbol, stamp, seq, price, events, state, priority
             )
             if self.cap_h is None:
                 observe(self, symbol, stamp, seq, price, state)
             return outcome
 
-        # Driver saves/restores Book.handle itself, so wrapping that assigned
-        # handler by changing timed_handle is required to retain snapshots.
+        # Original replay assigns old.Book.handle = timed_handle during run;
+        # retain its native Exit, then record a causal post-decision snapshot.
         module.timed_handle = observed_handle
-        # Avoid recursion: observed_handle delegates to the original timed
-        # handle implementation captured above.
-        # The immutable original handle is separately pinned and restored.
-        module._r839_unused = old_handle
         result = module.run("SNAP", pilot_days)
         sub = "2025"
     else:
