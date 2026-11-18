@@ -30,7 +30,8 @@ def test_r11_manifest_is_backed_up_and_installed_only_from_r11_onward() -> None:
     ) in source
     assert "install -d -o root -g cripta -m 0750 /etc/cripta/market-source" in source
     assert "install -o root -g cripta -m 0640" in source
-    assert "R11_SEVEN_FEED_MANIFEST=INSTALLED_EXACT" in source
+    assert "SOURCE_FEED_PROFILE=$source_profile MANIFEST=INSTALLED_EXACT" in source
+    assert 'source_manifest="$runtime_release/operations/monitoring/r11_seven_public_feeds.json"' in source
     backup_line = next(
         line for line in source.splitlines()
         if line.startswith("for path in /usr/local/sbin/cripta-apply-incoming")
