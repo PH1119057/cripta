@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.17 · 2026-11-17
+**Версия:** 2.18 · 2026-11-18
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2110,6 +2110,18 @@ Preflight must verify exact commit+tree/CI/scope/baseline, writer PID/source com
 If failure is before code symlink cutover, restore the previous exact installed producer. If after cutover, perform verified code/unit rollback to retained baseline; record a NEW source GAP, preserve PostgreSQL original history and existing Exchange protections/Exit owners. Never create a second writer, synthesize missing native events, modify open positions, reopen financial LIVE or silently change strategy settings. Unknown physical outcome is BLOCKED.
 
 Negative tests: absent/wrong producer, wrong code delta, stale PID/session/commit, wrong Git baseline or CI, no GAP or advisory lock release, concurrent writers, empty/late/missing symbol events, PostgreSQL failure, source/Exit parity failure, before/after cutover rollback, moving main and unknown outcomes. Producer upgrade alone never proves per-scope P90 Entry/Exit readiness; ARCH §60, OBS §7.10 and TC §4.18 still own full consumer/Exit acceptance and owner financial gates.
+
+
+#### 50.5.1.1 P90_MINIMAL — controlled offline Native MarketSource cutover after disk containment — owner scope 2026-11-18 (#642)
+
+Норма §50.5.1 остаётся безусловной для **работающего** writer. Когда прежний семисимвольный MarketSource намеренно остановлен владельцем из-за подтверждённого риска `ENOSPC`, не разрешается временно запускать старый producer только ради выполнения проверки `ACTIVE old PID`. Для **единственного** временного профиля `P90_MINIMAL` (ARCH §60.5.1.2, OBS §7.10.5.8.1) допускается подготовить отдельный *offline old-source GAP → verified new-source* путь через тот же `NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE`, без нового произвольного CLI, без ослабления GitHub CI/scope/rollback и без финансовых прав.
+
+Перед файловым cutover Release Controller и точный installer должны независимо установить: старый systemd unit `inactive` с `MainPID=0`; неиспользуемый предыдущий status-файл `STOPPED` с текущим `INSTALLED_COMMIT`; последний durable MarketSource epoch именно этого commit уже `GAP/OWNER_CONTROLLED_STOP`; нет `ACTIVE` исходной сессии; `mainnet=OFF`, активных Entry permissions и LIVE-arm sessions — 0; локальные hot Position/Order и OPEN/RECONCILIATION_REQUIRED ownership — 0. Эта совокупность **не заменяет** обязательный перед реальным допуском независимый signed MAIN/SUB Bybit exposure/protection proof. Новый exact Git-reviewed unit должен явно декларировать `CRIPTA_SOURCE_PROFILE=P90_MINIMAL` и оба R11 optional/anchors флага `0`; изменённый producer ABI проверяется между baseline и target Git SHA. Неизвестная исходная сессия, сломанный backup/rollback, неготовая защита позиций, чужой writer или расходящиеся source/config/status должны приводить к `BLOCKED`, а не к старту прежнего семисимвольного producer.
+
+Непосредственно перед symlink mutation повторно проверить `inactive/PID0`, отсутствие `ACTIVE` epoch и сохранённый старый `GAP`; старый процесс не стартовать и не «останавливать повторно» ради фиктивного cutover. После установки **один** новый Native MarketSource запускается штатно и обязан доказать новый PID, новый `source_session_id`, target loaded commit, все пять новых native cursors и сохранённый GAP старой сессии; затем отдельно доказать 5m/15m публикации, R06/Exit parity и реальные циклы. При pre-switch ошибке прежний поток **остаётся остановленным**; rollback после перехода проверяется по exact baseline и не запускает автоматически старый тяжёлый R11. Нельзя выдавать техническую readiness за OWNER ARM или подтверждение фактического Bybit Exit.
+
+Изменение release security contract требует `owner-approved-cross-contour`, негативных тестов (активный/другой writer, неверная история GAP, чужой release, LIVE или открытая позиция, неверный unit профиль, ошибочная доступность PG, partial deploy, rollback) и полного exact CI. `DOCS/CODE_MERGE` ≠ `DEPLOYED` ≠ `E2E_LIVE_VERIFIED`. Исключение действительно только для утверждённой стабилизации P90_MINIMAL; прочие Native source cutovers продолжают идти исключительно по §50.5.1.
+
 
 ## 51. Generic REAL readiness preparation and bounded service-start broker — OWNER DECISION 2026-11-02 (Issue #343)
 
