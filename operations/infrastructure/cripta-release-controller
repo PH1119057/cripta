@@ -637,18 +637,38 @@ def _select_scoped_purpose(
             .read_text(encoding="utf-8")
         )
         old_commit = status.get("source_commit")
-        if (
-            status.get("state") != "ACTIVE"
-            or not isinstance(old_commit, str)
-            or SHA.fullmatch(old_commit) is None
-            or re.fullmatch(
-                r"[0-9a-f]{32}", str(status.get("session") or "")
-            ) is None
-            or _run([
-                "/usr/bin/systemctl", "is-active",
-                "cripta-native-public-trade-source.service",
-            ]) != "active"
-        ):
+        state = _run([
+            "/usr/bin/systemctl", "show", "--value", "-p", "ActiveState",
+            "cripta-native-public-trade-source.service",
+        ])
+        pid = _run([
+            "/usr/bin/systemctl", "show", "--value", "-p", "MainPID",
+            "cripta-native-public-trade-source.service",
+        ])
+        active_writer = (
+            status.get("state") == "ACTIVE"
+            and isinstance(old_commit, str) and SHA.fullmatch(old_commit) is not None
+            and re.fullmatch(r"[0-9a-f]{32}", str(status.get("session") or ""))
+            is not None
+            and state == "active" and pid.isdigit() and int(pid) > 0
+        )
+        # #642 offline cutover is ONLY for deliberate stopped producer -> exact
+        # reviewed P90_MINIMAL unit. The installer independently checks durable
+        # GAP, all financial gates, zero hot exposure and repeat pre-switch lock.
+        target_unit = _git(
+            "show", f"{target}:operations/systemd/cripta-native-public-trade-source.service",
+        )
+        target_unit_lines = frozenset(target_unit.splitlines())
+        offline_p90 = (
+            status.get("state") == "STOPPED"
+            and old_commit == runtime_baseline
+            and not status.get("session")
+            and state == "inactive" and pid == "0"
+            and "Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL" in target_unit_lines
+            and "Environment=CRIPTA_R11_MAYAK_ANCHORS=0" in target_unit_lines
+            and "Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0" in target_unit_lines
+        )
+        if not (active_writer or offline_p90):
             raise ControllerError("NATIVE_SOURCE_BASELINE_NOT_PROVEN")
         _git("cat-file", "-e", old_commit + "^{commit}")
         source_delta = _git(
