@@ -302,7 +302,9 @@ def parse_explicit_source_manifest(
         for symbol in native_symbols for timeframe in ("5", "15")
     ):
         raise SourceManifestInvalid("SOURCE_P90_REQUIRED_CLOSED_KLINE_MISSING")
-    if not feeds.websocket_batches("SPOT"):
+    # P90_MINIMAL is LINEAR-only. SPOT is mandatory only in the explicit
+    # R11 observational anchor profile, never as an implicit source topic.
+    if mayak_reference_symbols and not feeds.websocket_batches("SPOT"):
         raise SourceManifestInvalid("SOURCE_SPOT_TRANSPORT_MISSING")
     return feeds
 
@@ -612,6 +614,10 @@ def run_source_union(
             raise SourceManifestInvalid(
                 "R11_ORIGINAL_FRAME_REQUIRES_OPTIONAL_SOURCE_UNION"
             )
+        # R11 provider continuity requires the original optional SPOT
+        # transport. P90_MINIMAL must turn this capture mode off explicitly.
+        if not union.websocket_batches("SPOT"):
+            raise SourceManifestInvalid("R11_ORIGINAL_FRAME_SPOT_REQUIRED")
         _r11_optional_frame_preflight(connection)
     if closed_only and (
         publish_seconds
@@ -624,7 +630,13 @@ def run_source_union(
         or union.websocket_batches("SPOT")
     ):
         raise SourceManifestInvalid("R03_CLOSED_ONLY_SOURCE_SCOPE_DRIFT")
-    products = ("LINEAR",) if closed_only else ("SPOT", "LINEAR")
+    # Open only explicitly required transports. The single native owner and
+    # LINEAR journal remain unchanged; no empty SPOT socket or phantom data.
+    products = (
+        ("SPOT", "LINEAR")
+        if not closed_only and union.websocket_batches("SPOT")
+        else ("LINEAR",)
+    )
     # Avoid a second producer: the native module already owns the PostgreSQL
     # exclusive session lock. The only caller is its main() branch.
     from operations.monitoring import native_public_trade_source as native
