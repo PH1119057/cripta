@@ -1,5 +1,8 @@
 """Negative contract tests for Release Controller approval gate (#288)."""
+import ast
 import importlib.util
+import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -202,3 +205,97 @@ def test_management_native_cutover_requires_exact_explicit_delta_scope():
     with pytest.raises(gate.ReleaseDenied, match="NATIVE_CUTOVER_SCOPE_MISMATCH"):
         gate.verify_management_release(**params)
 
+
+def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None:
+    """Execute the real classifier body with inert Git/systemd substitutes.
+
+    This is a pure unit test: it never calls the host controller or systemctl.
+    """
+    controller_path = (
+        Path(__file__).resolve().parents[1]
+        / "operations/infrastructure/cripta-release-controller"
+    )
+    src = controller_path.read_text(encoding="utf-8")
+    module = ast.parse(src)
+    node = next(
+        x for x in module.body if isinstance(x, ast.FunctionDef)
+        and x.name == "_select_scoped_purpose"
+    )
+    compiled = compile(
+        ast.Module(body=[node], type_ignores=[]),
+        str(controller_path), "exec",
+    )
+    baseline, target = "a" * 40, "b" * 40
+
+    class FakePath:
+        def __init__(self, _path: str, status: dict):
+            self.status = status
+
+        def read_text(self, **_kwargs):
+            return json.dumps(self.status)
+
+    class Denied(Exception):
+        pass
+
+    unit = (
+        "Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL\n"
+        "Environment=CRIPTA_R11_MAYAK_ANCHORS=0\n"
+        "Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0"
+    )
+    cases = (
+        # state, pid, status, profile, expected
+        ("inactive", "0", {"state": "STOPPED", "source_commit": baseline,
+                            "session": ""}, unit, True),
+        ("inactive", "0", {"state": "STOPPED", "source_commit": "c" * 40,
+                            "session": ""}, unit, False),
+        ("inactive", "3", {"state": "STOPPED", "source_commit": baseline,
+                            "session": ""}, unit, False),
+        ("inactive", "0", {"state": "GAP", "source_commit": baseline,
+                            "session": ""}, unit, False),
+        ("inactive", "0", {"state": "STOPPED", "source_commit": baseline,
+                            "session": ""}, "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", False),
+        ("active", "1234", {"state": "ACTIVE", "source_commit": baseline,
+                            "session": "1" * 32},
+         "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", True),
+    )
+    for service_state, service_pid, status, profile, accepted in cases:
+        def fake_git(*args, _profile=profile):
+            if args[0] == "show":
+                return _profile
+            if args[0] == "cat-file":
+                return ""
+            if args[:2] == ("diff", "--name-only"):
+                return "operations/monitoring/public_market_source_union_capture.py"
+            raise AssertionError(args)
+
+        def fake_run(args, _state=service_state, _pid=service_pid):
+            if "ActiveState" in args:
+                return _state
+            if "MainPID" in args:
+                return _pid
+            raise AssertionError(args)
+
+        globs = {
+            "json": json,
+            "re": re,
+            "SHA": re.compile(r"^[0-9a-f]{40}$"),
+            "ControllerError": Denied,
+            "Path": lambda path, _status=status: FakePath(path, _status),
+            "_git": fake_git, "_run": fake_run,
+            "PRODUCER_ABI_PATHS": ("operations/monitoring/public_market_source_union_capture.py",),
+            "NATIVE_CUTOVER_PURPOSE": "NATIVE",
+            "DASHBOARD_PURPOSE": "DASH",
+            "FULL_PURPOSE": "FULL",
+        }
+        exec(compiled, globs)
+        if accepted:
+            assert globs["_select_scoped_purpose"](
+                target=target, runtime_baseline=baseline,
+                dashboard_baseline=None,
+            ) == ("NATIVE", True)
+        else:
+            with pytest.raises(Denied, match="NATIVE_SOURCE_BASELINE_NOT_PROVEN"):
+                globs["_select_scoped_purpose"](
+                    target=target, runtime_baseline=baseline,
+                    dashboard_baseline=None,
+                )
