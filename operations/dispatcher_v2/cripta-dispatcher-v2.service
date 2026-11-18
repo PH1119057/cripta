@@ -1,7 +1,10 @@
 [Unit]
 Description=Cripta Dispatcher V2 universal passive context runtime
+# MAYAK is an optional observation input. Dispatcher must never reactivate
+# an owner-paused MAYAK through Wants= in the P90_MINIMAL source profile.
+# After= retains ordering when MAYAK is independently started in R11 mode.
 After=cripta-mayak-v2.service cripta-private-runtime.service postgresql.service
-Wants=cripta-mayak-v2.service postgresql.service
+Wants=postgresql.service
 
 [Service]
 Type=simple
