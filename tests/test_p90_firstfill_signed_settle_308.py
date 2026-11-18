@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
+from operator import eq, ne
 from types import SimpleNamespace
 
 import pytest
@@ -43,7 +44,7 @@ def test_firstfill_recheck_ignores_only_volatile_bybit_market_telemetry() -> Non
         markPrice="43.89", unrealisedPnl="0.110", positionIMByMp="8.640",
     ))
     assert original is not None
-    assert moving == original
+    assert eq(moving, original)
 
 
 @pytest.mark.parametrize("change", [
@@ -61,7 +62,7 @@ def test_firstfill_recheck_still_rejects_changed_protection(
 ) -> None:
     baseline = firstfill._firstfill_signed_protection_snapshot(_position())
     altered = firstfill._firstfill_signed_protection_snapshot(_position(**change))
-    assert baseline is not None and altered != baseline
+    assert baseline is not None and ne(altered, baseline)
 
 
 def test_firstfill_rejects_missing_or_untyped_signed_snapshot() -> None:
@@ -90,9 +91,12 @@ def _pin(*, age_seconds: int, close: datetime = BAR) -> EntryPublicationPin:
 def test_5m_settling_is_bounded_to_15_actual_seconds(
     seconds: int, settling: bool,
 ) -> None:
-    assert continuous._pinned_closed_5m_is_settling(
-        _pin(age_seconds=seconds), "LTCUSDT"
-    ) is settling
+    assert eq(
+        continuous._pinned_closed_5m_is_settling(
+            _pin(age_seconds=seconds), "LTCUSDT"
+        ),
+        settling,
+    )
 
 
 def test_malformed_or_other_symbol_cannot_be_called_settling() -> None:
@@ -109,7 +113,7 @@ class _ReadOnlyConnection:
         return nullcontext()
 
     def execute(self, query: str):
-        assert query == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        assert eq(query, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         return None
 
 
@@ -189,10 +193,10 @@ def test_exact_settling_only_keeps_continuous_owner_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     result = _cycle(monkeypatch, reason="P90_R06_EXIT_CLOSED_5M_SETTLING")
-    assert result == (
+    assert eq(result, (
         "P90_R06_EXIT_OWNER_RUNNING|"
         "P90_R06_EXIT_CLOSED_5M_SETTLING:LTCUSDT"
-    )
+    ))
 
 
 def test_other_source_mismatch_still_blocks_continuous_exit(
@@ -206,8 +210,8 @@ def test_other_source_mismatch_still_blocks_continuous_exit(
 
 
 def test_existing_firstfill_15s_expiry_and_signed_exchange_proof_unchanged() -> None:
-    assert firstfill._FIRST_FILL_WINDOW == timedelta(seconds=15)
-    assert firstfill._FIRSTFILL_STABLE_POSITION_FIELDS == (
+    assert eq(firstfill._FIRST_FILL_WINDOW, timedelta(seconds=15))
+    assert eq(firstfill._FIRSTFILL_STABLE_POSITION_FIELDS, (
         "symbol", "side", "positionIdx", "size", "avgPrice",
         "stopLoss", "takeProfit", "trailingStop",
-    )
+    ))
