@@ -2141,7 +2141,7 @@ This is an **owner-approved exact #642 P90_MINIMAL recovery path**. It does not 
 
 
 
-### 50.6 Independent component release method — OWNER DECISION 2026-11-18 (#849)
+## 50.6 Independent component release method — OWNER DECISION 2026-11-18 (#849)
 
 ARCH §50.1 is the single architecture authority. The previous `EXACT_VERIFIED_SOURCE_RELEASE` / global `runtime/current`/single `.venv`/common `managed_services` lifecycle is a **legacy transitional implementation**, not the default target for independently owned processes. A full release remains available only when a shared dependency/ABI/schema upgrade is **proved** to need a coordinated cutover; component-only changes do not acquire authority to mutate other owners by being merged into `main`.
 
