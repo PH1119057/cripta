@@ -17,6 +17,7 @@ import os
 import re
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
+from collections.abc import Mapping
 from typing import Any
 
 import psycopg
@@ -75,6 +76,25 @@ P90RealPostfillSourceClientUnverified = (
 # A first-fill arm is intentionally not a historical repair operation.
 # Source broker has its own stricter protection/clock/coverage deadlines.
 _FIRST_FILL_WINDOW = timedelta(seconds=15)
+
+# Immutable signed Bybit position identity/protection, not volatile markPrice,
+# unrealisedPnl, mark-dependent margin or other telemetry.
+_FIRSTFILL_STABLE_POSITION_FIELDS = (
+    "symbol", "side", "positionIdx", "size", "avgPrice",
+    "stopLoss", "takeProfit", "trailingStop",
+)
+
+
+def _firstfill_signed_protection_snapshot(
+    value: object,
+) -> tuple[object, ...] | None:
+    if not isinstance(value, Mapping):
+        return None
+    if any(key not in value for key in _FIRSTFILL_STABLE_POSITION_FIELDS):
+        return None
+    return tuple(value[key] for key in _FIRSTFILL_STABLE_POSITION_FIELDS)
+
+
 R09_PARITY_MODE = os.environ.get(
     "CRIPTA_R09_NATIVE_PUBLICATION_PARITY", "DISABLED",
 ).strip().upper()
@@ -492,7 +512,10 @@ def run_p90_exit_once(
                     and again.exchange_position_key == private.exchange_position_key
                     and again.pending_exit_mutation is False
                     and again.observed_at >= private.observed_at
-                    and again.position == private.position
+                    and _firstfill_signed_protection_snapshot(private.position)
+                        is not None
+                    and _firstfill_signed_protection_snapshot(again.position)
+                        == _firstfill_signed_protection_snapshot(private.position)
                 )
 
             execution = P90RealExitExecutionPort(
