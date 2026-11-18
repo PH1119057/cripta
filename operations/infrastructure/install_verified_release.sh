@@ -915,7 +915,7 @@ done
 # Fail BEFORE stopping any owner/consumer if this scope claims MAYAK was
 # already paused while it actually remains active. Releasing P90_MINIMAL is
 # not authorization to kill a live seven-symbol observation workflow.
-if [[ -z "$ROADMAP470_STAGE" && "$native_code_changed" == "1" &&
+if [[ -z "$ROADMAP470_STAGE" &&
       "${was_active[cripta-mayak-v2.service]:-0}" == "1" ]]; then
   target_source_unit="$(as_repo_owner git -C "$SOURCE" show \
     "$RELEASE_COMMIT:operations/systemd/cripta-native-public-trade-source.service")"
@@ -1326,7 +1326,7 @@ systemctl daemon-reload
 # P90_MINIMAL deliberately pauses MAYAK. Removing a single runtime PID is
 # insufficient: enabled Mayak can be pulled back by Dispatcher/reboot.
 # The reviewed Dispatcher unit has no Wants= for MAYAK in this source scope.
-if [[ -z "$ROADMAP470_STAGE" && "$native_code_changed" == "1" &&
+if [[ -z "$ROADMAP470_STAGE" &&
       "${source_profile:-}" == "P90_MINIMAL" ]]; then
   dispatcher_source_unit="$runtime_release/operations/dispatcher_v2/cripta-dispatcher-v2.service"
   if grep -Eq '^Wants=.*cripta-mayak-v2\.service' "$dispatcher_source_unit"; then
