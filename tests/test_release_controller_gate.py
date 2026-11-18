@@ -212,7 +212,10 @@ def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None
     import json
     import re
 
-    controller_path = Path(__file__).resolve().parents[1] / "operations/infrastructure/cripta-release-controller"
+    controller_path = (
+        Path(__file__).resolve().parents[1]
+        / "operations/infrastructure/cripta-release-controller"
+    )
     src = controller_path.read_text(encoding="utf-8")
     module = ast.parse(src)
     node = next(
