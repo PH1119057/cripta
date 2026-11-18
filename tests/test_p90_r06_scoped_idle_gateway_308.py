@@ -110,6 +110,10 @@ class _Connection:
     def transaction(self):
         return nullcontext()
 
+    def execute(self, sql: str):
+        assert sql == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        return None
+
 
 def test_flat_exit_rechecks_one_fresh_immutable_publication() -> None:
     partial = _source(stale_symbols=("APTUSDT",))
