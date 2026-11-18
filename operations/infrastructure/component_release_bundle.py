@@ -127,7 +127,9 @@ def stage_component_bundle(
             archive.writestr(info, json.dumps(
                 manifest, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
             ).encode("utf-8"))
-        with staged.open("rb") as file:
+        # Windows requires a writable descriptor for fsync; the archive
+        # stays a staged-only candidate and no installed file is touched.
+        with staged.open("r+b") as file:
             os.fsync(file.fileno())
         os.chmod(staged, 0o444)
         os.replace(staged, output)
