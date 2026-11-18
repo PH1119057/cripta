@@ -661,13 +661,24 @@ def _select_scoped_purpose(
         target_unit_lines = frozenset(target_unit.splitlines())
         offline_p90 = (
             status.get("state") == "STOPPED"
-            and old_commit == runtime_baseline
+            and isinstance(old_commit, str) and SHA.fullmatch(old_commit) is not None
             and not status.get("session")
             and state == "inactive" and pid == "0"
             and "Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL" in target_unit_lines
             and "Environment=CRIPTA_R11_MAYAK_ANCHORS=0" in target_unit_lines
             and "Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0" in target_unit_lines
         )
+        if offline_p90:
+            # An ordinary FULL controller bootstrap advances INSTALLED_COMMIT
+            # without starting the deliberately stopped producer. Its durable
+            # source_commit stays at the last real writer, never fabricated as
+            # the newer runtime baseline. Require exact Git ancestor+ABI parity.
+            _git("cat-file", "-e", old_commit + "^{commit}")
+            _git("merge-base", "--is-ancestor", old_commit, runtime_baseline)
+            offline_p90 = not _git(
+                "diff", "--name-only", old_commit, runtime_baseline, "--",
+                *PRODUCER_ABI_PATHS,
+            )
         if not (active_writer or offline_p90):
             raise ControllerError("NATIVE_SOURCE_BASELINE_NOT_PROVEN")
         _git("cat-file", "-e", old_commit + "^{commit}")
