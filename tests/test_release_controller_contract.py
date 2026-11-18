@@ -1,6 +1,12 @@
 """Static safety contract for the Release Controller implementation (#288)."""
 import ast
+import json
+import shutil
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTROLLER = ROOT / "operations/infrastructure/cripta-release-controller"
@@ -146,3 +152,98 @@ def test_inactive_native_source_only_blocks_real_producer_abi_delta():
     )
     assert "return NATIVE_CUTOVER_PURPOSE, True" in block
 
+
+def test_p90_minimal_release_installs_exact_manifest_without_erasing_r11() -> None:
+    """The same reviewed source unit must select the reviewed physical feed file."""
+    installer = INSTALLER.read_text(encoding="utf-8")
+    unit = (
+        ROOT / "operations/systemd/cripta-native-public-trade-source.service"
+    ).read_text(encoding="utf-8")
+    minimal = json.loads((
+        ROOT / "operations/monitoring/p90_minimal_public_feeds.json"
+    ).read_text(encoding="utf-8"))
+    r11 = json.loads((
+        ROOT / "operations/monitoring/r11_seven_public_feeds.json"
+    ).read_text(encoding="utf-8"))
+    assert len(minimal) == 55
+    assert len({
+        (x["product"], x["symbol"], x["dataset"], x["timeframe"])
+        for x in minimal
+    }) == 35
+    assert {x["symbol"] for x in minimal} == {
+        "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+    }
+    assert {x["product"] for x in minimal} == {"LINEAR"}
+    assert {x["consumer_id"] for x in minimal} == {
+        "ENTRY_P90", "EXIT_P90", "EXECUTION_P90", "POSITION",
+    }
+    # R11 is a preserved alternate mode, not data erasure or silent rollback.
+    assert len(r11) == 138
+    assert sum(x["consumer_id"] == "MAYAK_REFERENCE" for x in r11) == 18
+    assert "Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL" in unit
+    assert "Environment=CRIPTA_R11_MAYAK_ANCHORS=0" in unit
+    assert "Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0" in unit
+    assert 'p90_minimal_public_feeds.json' in installer
+    assert 'r11_seven_public_feeds.json' in installer
+    assert "P90_MINIMAL_ANCHORS_MUST_BE_OFF" in installer
+    assert "P90_MINIMAL_ORIGINALS_MUST_BE_OFF" in installer
+    assert "SOURCE_EXACT_MANIFEST_INSTALL_BYTE_MISMATCH" in installer
+
+
+def test_offline_p90_minimal_native_cutover_never_restarts_legacy_writer() -> None:
+    """The deliberate stopped GAP producer is an exact alternative preflight."""
+    source = INSTALLER.read_text(encoding="utf-8")
+    assert "native_source_offline_cutover=0" in source
+    assert "NATIVE_SOURCE_OFFLINE_CUTOVER_PREPARED=PASS" in source
+    assert 'Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL' in source
+    assert 'Environment=CRIPTA_R11_MAYAK_ANCHORS=0' in source
+    assert 'Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0' in source
+    for reject in (
+        "NATIVE_OFFLINE_SOURCE_NOT_INACTIVE",
+        "NATIVE_OFFLINE_SOURCE_PID_NOT_ZERO",
+        "NATIVE_OFFLINE_FINANCIAL_GATE_NOT_CLOSED",
+        "NATIVE_OFFLINE_HOT_EXPOSURE_NOT_FLAT",
+        "NATIVE_OFFLINE_POSITION_OWNERSHIP_NOT_FLAT",
+        "NATIVE_OFFLINE_SOURCE_STATUS_OR_COMMIT_INVALID",
+        "NATIVE_OFFLINE_ACTIVE_SOURCE_SESSION_PRESENT",
+        "NATIVE_OFFLINE_LAST_SESSION_MISSING",
+        "NATIVE_OFFLINE_OLD_SESSION_NOT_OWNER_STOPPED_GAP",
+        "NATIVE_OFFLINE_NO_PRODUCER_ABI_DELTA",
+        "NATIVE_OFFLINE_SOURCE_STARTED_DURING_RELEASE",
+        "NATIVE_OFFLINE_SOURCE_EPOCH_STARTED_DURING_RELEASE",
+        "NATIVE_OFFLINE_OLD_GAP_CHANGED",
+    ):
+        assert reject in source
+    before_cutover = source.index(
+        "NATIVE_SOURCE_OFFLINE_CUTOVER_PREPARED=PASS"
+    )
+    new_lock = source.index(
+        "NATIVE_SOURCE_OLD_PRODUCER=ALREADY_INACTIVE_WITH_EXPLICIT_GAP"
+    )
+    switch = source.index('mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"')
+    fresh_start = source.index(
+        "systemctl start cripta-native-public-trade-source.service", switch
+    )
+    assert before_cutover < new_lock < switch < fresh_start
+    offline_block = source[
+        source.index('if [[ "$native_source_offline_cutover" == "1" ]]; then'):
+        source.index('  else\n    [[ "$native_source_was_active" == "1" ]]')
+    ]
+    assert "systemctl start cripta-native-public-trade-source.service" not in offline_block
+    assert "systemctl stop cripta-native-public-trade-source.service" not in offline_block
+    assert "native_source_stopped_for_cutover=1" not in offline_block
+    assert "NATIVE_OFFLINE_SOURCE_EPOCH_STARTED_DURING_RELEASE" in offline_block
+    assert "NATIVE_OFFLINE_OLD_GAP_CHANGED" in offline_block
+
+
+def test_offline_native_source_bash_is_syntactically_valid() -> None:
+    """No production execution; CLI parsing only on Unix CI runners."""
+    if sys.platform != "linux":
+        pytest.skip("bash -n validated only on Linux CI; Windows bash may be a WSL stub")
+    if shutil.which("bash") is None:
+        pytest.fail("Linux bash is required to parse the release installer")
+    outcome = subprocess.run(
+        ["bash", "-n", str(INSTALLER)],
+        check=False, text=True, capture_output=True,
+    )
+    assert outcome.returncode == 0, outcome.stderr
