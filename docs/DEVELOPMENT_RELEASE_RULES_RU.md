@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.19 · 2026-11-18
+**Версия:** 2.20 · 2026-11-18
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -2121,6 +2121,23 @@ Negative tests: absent/wrong producer, wrong code delta, stale PID/session/commi
 Непосредственно перед symlink mutation повторно проверить `inactive/PID0`, отсутствие `ACTIVE` epoch и сохранённый старый `GAP`; старый процесс не стартовать и не «останавливать повторно» ради фиктивного cutover. После установки **один** новый Native MarketSource запускается штатно и обязан доказать новый PID, новый `source_session_id`, target loaded commit, все пять новых native cursors и сохранённый GAP старой сессии; затем отдельно доказать 5m/15m публикации, R06/Exit parity и реальные циклы. При pre-switch ошибке прежний поток **остаётся остановленным**; rollback после перехода проверяется по exact baseline и не запускает автоматически старый тяжёлый R11. Нельзя выдавать техническую readiness за OWNER ARM или подтверждение фактического Bybit Exit.
 
 Изменение release security contract требует `owner-approved-cross-contour`, негативных тестов (активный/другой writer, неверная история GAP, чужой release, LIVE или открытая позиция, неверный unit профиль, ошибочная доступность PG, partial deploy, rollback) и полного exact CI. `DOCS/CODE_MERGE` ≠ `DEPLOYED` ≠ `E2E_LIVE_VERIFIED`. Исключение действительно только для утверждённой стабилизации P90_MINIMAL; прочие Native source cutovers продолжают идти исключительно по §50.5.1.
+
+
+#### 50.5.1.2 P90_MINIMAL — verified post-cutover forward reconciliation of a partially recorded release — OWNER DECISION 2026-11-18 (#642)
+
+**Goal:** do not roll back a uniquely proven, already functioning five-LINEAR native producer merely because an installer failed *after* immutable runtime/tooling cutover and *before* persisting the final `/var/lib/cripta/release/INSTALLED_COMMIT`. This is a narrowly authorized alternative to the post-cutover rollback sentence in §50.5.1, **not** a generic bypass of release, rollback or financial safeguards. A failed release is not labelled successful retroactively.
+
+**PREPARE (independent read-only evidence required):**
+
+- `LAST_FAILED_RELEASE` identifies the exact interrupted target and timestamp. Both actual `runtime/current` and `research/tooling/current`, their in-directory `INSTALLED_COMMIT` and immutable Git-derived files agree on that target. The external official `INSTALLED_COMMIT` remains explicitly recorded as stale. Source mirror and GitHub main identities, provenance and clean worktree are independently checked; do not invent marker consistency.
+- The currently loaded native producer is the **one** actual writer with the interrupted target's exact `source_commit`, nonzero PID, unique `ACTIVE` source session, valid PG advisory-lock/epoch ownership and five advancing LINEAR original cursors. The previous session remains durably `GAP`; no synthetic event or source identity correction. Exact source ABI, P90 manifest and R11-disabled flags agree between the actual loaded writer and immutable candidate. If producer/source lineage or PostgreSQL facts are uncertain: stop, use the verified recovery plan, do **not** start legacy seven-symbol R11.
+- `mainnet=OFF`, enabled Entry permissions = 0, all global/account LIVE-arm sessions = 0; `runtime.hot_positions`, `runtime.hot_orders` and active position ownership are flat, with independent signed MAIN/SUB Exchange inventory/protection evidence as applicable. No entry/exit/Exchange mutation or LIVE re-arm is authorized by this recovery.
+- Retained exact pre-failure backup and rollback resources, host actors/permissions/sandbox, PostgreSQL schema contract, installer lock and available disk are verified. The interruption is classified as a **post-cutover service-state/recording failure**, not an unknown DB/producer mutation. No arbitrary root script or manual `INSTALLED_COMMIT` write.
+- The **next** protected GitHub main target is a reviewed, CI-PASS, scope-classified **ordinary FULL** delta from the actual physical immutable runtime baseline, with **no producer ABI changes**, no changes to Strategy/Entry/Exit/Execution or finance, and exact fix of the relevant systemd dependency. The installer must preserve the existing native PID/session and five-symbol source; intentionally paused MAYAK stays inactive **and disabled** through Dispatcher restart and reboot.
+
+**EXECUTE:** after every PREPARE fact is PASS, deliberately invoke the unchanged, approved no-argument Release Controller once. It uses the actual matching immutable runtime/tooling baseline, performs its usual backup, additive migrations, unit installation and full postcheck, and writes the official `INSTALLED_COMMIT` only on successful completion. Require exact target parity across GitHub/source/current runtime/current tooling/official marker, single-writer proof, mandatory consumer/Exit behavior, active/inactive unit states and stable source epoch. Keep failure and rollback evidence; note the prior failed release in the durable audit instead of erasing its history. An unknown outcome, moved main, missing evidence or another failure requires fresh reconciliation **before** further retry.
+
+This is an **owner-approved exact #642 P90_MINIMAL recovery path**. It does not permit skipping CI, deploying unmerged code, changing the native producer ABI silently, rewriting historical PostgreSQL facts, reactivating R11, wiping a disk, or opening financial gates. No repeat owner question for the same already confirmed scoped action is required.
 
 
 ## 51. Generic REAL readiness preparation and bounded service-start broker — OWNER DECISION 2026-11-02 (Issue #343)
