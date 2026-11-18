@@ -19,5 +19,8 @@ def test_dispatcher_does_not_start_private_runtime() -> None:
     assert "cripta-private-runtime.service" not in wants
     # Ordering is allowed if private runtime is independently activated.
     assert "cripta-private-runtime.service" in after
-    assert "cripta-mayak-v2.service" in wants
+    # P90_MINIMAL pauses MAYAK: Dispatcher must not activate it implicitly.
+    assert "cripta-mayak-v2.service" not in wants
+    # Explicit R11 service starts still retain deterministic ordering.
+    assert "cripta-mayak-v2.service" in after
     assert "postgresql.service" in wants

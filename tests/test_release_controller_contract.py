@@ -251,3 +251,37 @@ def test_offline_native_source_bash_is_syntactically_valid() -> None:
         check=False, text=True, capture_output=True,
     )
     assert outcome.returncode == 0, outcome.stderr
+
+
+def test_p90_minimal_dispatcher_never_implicitly_starts_mayak() -> None:
+    """The paused R11 observer must not be a Dispatcher Wants dependency."""
+    unit = (ROOT / "operations/dispatcher_v2/cripta-dispatcher-v2.service").read_text(
+        encoding="utf-8"
+    )
+    assert "Wants=postgresql.service" in unit
+    assert "Wants=cripta-mayak-v2.service" not in unit
+    assert "After=cripta-mayak-v2.service" in unit
+
+
+def test_p90_minimal_release_persists_mayak_pause_before_service_restart() -> None:
+    """One scoped technical cutover cannot silently revive the R11 observer."""
+    installer = INSTALLER.read_text(encoding="utf-8")
+    for marker in (
+        "P90_MINIMAL_MAYAK_MUST_BE_PREPAUSED",
+        "P90_MINIMAL_DISPATCHER_STILL_WANTS_MAYAK",
+        "P90_MINIMAL_MAYAK_BOOT_NOT_DISABLED",
+        "P90_MINIMAL_MAYAK_NOT_PAUSED",
+        "P90_MINIMAL_MAYAK_PAUSED_BY_DATA_SCOPE=PASS",
+    ):
+        assert marker in installer
+    assert "systemctl stop cripta-mayak-v2.service" in installer
+    assert "systemctl disable cripta-mayak-v2.service" in installer
+    scope = installer.index("P90_MINIMAL_DISPATCHER_STILL_WANTS_MAYAK")
+    stop = installer.index("systemctl stop cripta-mayak-v2.service", scope)
+    disable = installer.index("systemctl disable cripta-mayak-v2.service", stop)
+    restart = installer.index('systemctl start "$service"', disable)
+    assert scope < stop < disable < restart
+    assert '"${source_profile:-}" == "P90_MINIMAL"' in installer
+    # The same P90 pause contract applies when the producer ABI is unchanged.
+    assert '"${was_active[cripta-mayak-v2.service]:-0}" == "1"' in installer
+    assert 'if [[ -z "$ROADMAP470_STAGE" && "$native_code_changed" == "1" &&' not in installer
