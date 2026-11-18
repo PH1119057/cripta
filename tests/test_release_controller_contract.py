@@ -3,6 +3,7 @@ import ast
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -237,8 +238,10 @@ def test_offline_p90_minimal_native_cutover_never_restarts_legacy_writer() -> No
 
 def test_offline_native_source_bash_is_syntactically_valid() -> None:
     """No production execution; CLI parsing only on Unix CI runners."""
+    if sys.platform != "linux":
+        pytest.skip("bash -n validated only on Linux CI; Windows bash may be a WSL stub")
     if shutil.which("bash") is None:
-        pytest.skip("bash unavailable on this platform")
+        pytest.fail("Linux bash is required to parse the release installer")
     outcome = subprocess.run(
         ["bash", "-n", str(INSTALLER)],
         check=False, text=True, capture_output=True,
