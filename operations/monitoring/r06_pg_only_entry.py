@@ -465,12 +465,21 @@ def _published_r06_observer_state(
     global source or every strategy blocked remains not-ready.
     """
     expected = set(strategy_ids)
+    benign = {
+        "NATIVE_SOURCE_CURSOR_NOT_FRESH",
+        "R06_SCOPE_AWAITING_POST_BOOTSTRAP_NATIVE_EVENT",
+        "R06_SCOPE_AWAITING_CONFIRMED_CANDLE",
+    }
     if (
         not expected or len(expected) != len(strategy_ids)
         or not set(blocked).issubset(expected)
-        or len(blocked) >= len(expected)
+        or not set(blocked.values()).issubset(benign)
     ):
         return "R06_PG_NO_ORDER_DEGRADED"
+    # All strategies can be locally waiting during a quiet market. This
+    # state is ONLY reached after a current immutable MarketPublication pin;
+    # no stale candidate is emitted, and independent FLAT/OPEN Exit proofs
+    # remain mandatory for the financial gate.
     return "R06_PG_NO_ORDER_SOURCE_ONLY"
 
 
