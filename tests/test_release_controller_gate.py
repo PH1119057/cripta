@@ -245,26 +245,31 @@ def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None
     cases = (
         # state, pid, status, profile, expected
         ("inactive", "0", {"state": "STOPPED", "source_commit": baseline,
-                            "session": ""}, unit, True),
+                            "session": ""}, unit, True, True),
         ("inactive", "0", {"state": "STOPPED", "source_commit": "c" * 40,
-                            "session": ""}, unit, False),
+                            "session": ""}, unit, True, True),
+        ("inactive", "0", {"state": "STOPPED", "source_commit": "d" * 40,
+                            "session": ""}, unit, False, False),
         ("inactive", "3", {"state": "STOPPED", "source_commit": baseline,
-                            "session": ""}, unit, False),
+                            "session": ""}, unit, False, True),
         ("inactive", "0", {"state": "GAP", "source_commit": baseline,
-                            "session": ""}, unit, False),
+                            "session": ""}, unit, False, True),
         ("inactive", "0", {"state": "STOPPED", "source_commit": baseline,
-                            "session": ""}, "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", False),
+                            "session": ""}, "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", False, True),
         ("active", "1234", {"state": "ACTIVE", "source_commit": baseline,
                             "session": "1" * 32},
-         "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", True),
+         "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", True, True),
     )
-    for service_state, service_pid, status, profile, accepted in cases:
-        def fake_git(*args, _profile=profile):
+    for service_state, service_pid, status, profile, accepted, abi_matches in cases:
+        def fake_git(*args, _profile=profile, _status=status,
+                     _matches=abi_matches):
             if args[0] == "show":
                 return _profile
-            if args[0] == "cat-file":
+            if args[0] in ("cat-file", "merge-base"):
                 return ""
             if args[:2] == ("diff", "--name-only"):
+                if args[2:4] == (_status["source_commit"], baseline):
+                    return "" if _matches else "operations/monitoring/native_public_trade_source.py"
                 return "operations/monitoring/public_market_source_union_capture.py"
             raise AssertionError(args)
 
