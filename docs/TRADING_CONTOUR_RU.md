@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.9
-**Дата:** 2026-11-14
+**Версия:** 3.10
+**Дата:** 2026-11-18
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -2026,6 +2026,19 @@ cycle либо любом изменении Strategy/version/fingerprint, Tradi
 Connector scope, symbols, stake, leverage или caps. Такое изменение требует
 нового OWNER DECISION и обычного canon/release path. Dashboard same-origin/
 session OWNER ARM остаётся действующим параллельным rail.
+
+
+### 4.15.2 Рабочий открытый P90-шлюз: закрепление Entry/Gateway и независимый ремонт Exit — OWNER DECISION 2026-11-18
+
+**Рабочий контрольный checkpoint (CHECKED HERE на host robot, 2026-11-18):** GitHub main, source mirror, immutable runtime/tooling и официальный INSTALLED_COMMIT совпадают на `21385b16898190d8a222b0ee3fa01a48ea514d5f`. После пользовательского открытия Gateway серверные read-only проверки показали `control.execution_gates.mainnet=1`, 2 enabled execution permissions и 5 ACTIVE account-live-arm records; MAIN: LTCUSDT, INJUSDT (cap 20 USDT); SUB: DOTUSDT, ARBUSDT, APTUSDT (cap 30 USDT); 10 USDT per Entry, isolated 1x. Entry, Exit, MAIN/SUB Private Runtime, Native MarketSource — active, NRestarts=0 в проверенном срезе. Снимок является **операционным эталоном**, не вечным разрешением или гарантией отсутствия будущих сбоев.
+
+**ЗАПРЕТ ПОПУТНОГО ИЗМЕНЕНИЯ:** В течение отдельного исследования/ремонта Exit действующий Entry/Gateway контур, включая авторизацию OWNER ARM, persisted financial gates/permissions/sessions, MAIN/SUB StrategyBinding, EntryPlan/Execution, исходный пятисимвольный источник, account-scoped capital/slot и UI workflow открытия, считается **FROZEN**. Exit-only задача не редактирует эти owners, не выполняет повторный ARM/DISARM и не создаёт новую Entry/StrategyVersion. Exit может читать неизменяемые Entry/position ownership handoff и работать со своими ExitPlan, protection/position reconciliation, но не получать полномочия на новые входы.
+
+**Физическая release-причина:** в текущем `install_verified_release.sh` общий `managed_services` включает Universal Entry и Universal Exit и при FULL cutover перезапускает обе стороны; financial readiness/OWNER ARM проверяет exact loaded `release_commit`. Поэтому Exit-only source patch через **нынешний общий CORE release** потенциально нарушает уже открытый Entry даже без изменения его формул. Это **подтверждённая связь в коде**, а не доказательство, что сегодняшние Entry/Exit неисправны. Не объявлять изоляцию реализованной только из-за этого канонического решения.
+
+**Порядок работы:** Exit экспериментируют и проверяют отдельно от LIVE Entry (scoped branch/tests/replay, без изменения production). Перед будущим изменением запущенного Exit исполнитель обязан доказать либо протестированный **Exit-scoped release**, который сохраняет Entry PID/state, active authorized financial scope и защиту позиций, либо отдельный безопасный owner-reviewed full-release сценарий с явным Entry impact, проверенной Exchange protection и rollback; текущий работающий Gateway не используется как испытательный стенд. Отдельные Exit acceptance: сохранение active/historical Entry owner, отсутствие новых Entry/ARM writes, отсутствие ослабления существующего Exchange hard-stop/TP, causal Exit progression и recovery уже открытых позиций. Настоящая неизвестная Exchange exposure, unprotected position, stale private reconciliation или unsafe mutation сохраняет обычный emergency DISARM/containment — эта заморозка **не** запрещает защитное действие.
+
+**Статусы:** `ENTRY_GATEWAY_WORKING_CHECKPOINT=CHECKED_HERE`; `EXIT_ISOLATED_DEPLOY=NOT IMPLEMENTED BY THIS DECISION`; `PRODUCTION_ENTRY_OR_GATE_MUTATION=NONE`; `NO_AUTOMATIC_LIVE_REARM`. Запрещено обещать «всегда открыт» вопреки реальным safety gates; цель — устранить ненужное закрытие/деградацию Entry от независимых работ с Exit.
 
 ## 4.16 Gateway-ready release acceptance — OWNER DECISION 2026-11-05
 
