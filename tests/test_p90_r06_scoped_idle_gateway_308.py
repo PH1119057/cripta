@@ -38,7 +38,9 @@ STALE = "NATIVE_SOURCE_CURSOR_NOT_FRESH"
         ({"p90_main": STALE}, "R06_PG_NO_ORDER_SOURCE_ONLY"),
         ({"p90_sub": "R06_SCOPE_AWAITING_CONFIRMED_CANDLE"},
          "R06_PG_NO_ORDER_SOURCE_ONLY"),
-        ({"p90_main": STALE, "p90_sub": STALE}, "R06_PG_NO_ORDER_DEGRADED"),
+        ({"p90_main": STALE, "p90_sub": STALE}, "R06_PG_NO_ORDER_SOURCE_ONLY"),
+        ({"p90_main": "NATIVE_SOURCE_SESSION_NOT_CURRENT"},
+         "R06_PG_NO_ORDER_DEGRADED"),
         ({"foreign": STALE}, "R06_PG_NO_ORDER_DEGRADED"),
     ],
 )
