@@ -318,6 +318,7 @@ def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None
             raise AssertionError(args)
 
         globs = {
+            "re": re,
             "SHA": re.compile(r"^[0-9a-f]{40}$"),
             "ControllerError": Denied,
             "Path": lambda path: FakePath(path, status),
