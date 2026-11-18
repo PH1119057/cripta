@@ -282,4 +282,6 @@ def test_p90_minimal_release_persists_mayak_pause_before_service_restart() -> No
     restart = installer.index('systemctl start "$service"', disable)
     assert scope < stop < disable < restart
     assert '"${source_profile:-}" == "P90_MINIMAL"' in installer
-    assert '"$native_code_changed" == "1"' in installer
+    # The same P90 pause contract applies when the producer ABI is unchanged.
+    assert '"${was_active[cripta-mayak-v2.service]:-0}" == "1"' in installer
+    assert 'if [[ -z "$ROADMAP470_STAGE" && "$native_code_changed" == "1" &&' not in installer
