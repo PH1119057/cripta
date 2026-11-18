@@ -1,8 +1,17 @@
 """Risk snapshot test: original trade Exit stays independent of future labels."""
+import importlib.util
 from decimal import Decimal as D
+from pathlib import Path
 from types import SimpleNamespace as Obj
 
-from scripts.research import p90l90_unprotected_age_risk_v1 as risk
+RISK_FILE = (
+    Path(__file__).resolve().parents[2] / "scripts" / "research"
+    / "p90l90_unprotected_age_risk_v1.py"
+)
+spec = importlib.util.spec_from_file_location("r839_age_risk", RISK_FILE)
+assert spec is not None and spec.loader is not None
+risk = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(risk)
 
 
 def setup_function():
