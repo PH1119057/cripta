@@ -146,3 +146,41 @@ def test_inactive_native_source_only_blocks_real_producer_abi_delta():
     )
     assert "return NATIVE_CUTOVER_PURPOSE, True" in block
 
+
+def test_p90_minimal_release_installs_exact_manifest_without_erasing_r11() -> None:
+    """The same reviewed source unit must select the reviewed physical feed file."""
+    import json
+
+    installer = INSTALLER.read_text(encoding="utf-8")
+    unit = (
+        ROOT / "operations/systemd/cripta-native-public-trade-source.service"
+    ).read_text(encoding="utf-8")
+    minimal = json.loads((
+        ROOT / "operations/monitoring/p90_minimal_public_feeds.json"
+    ).read_text(encoding="utf-8"))
+    r11 = json.loads((
+        ROOT / "operations/monitoring/r11_seven_public_feeds.json"
+    ).read_text(encoding="utf-8"))
+    assert len(minimal) == 55
+    assert len({
+        (x["product"], x["symbol"], x["dataset"], x["timeframe"])
+        for x in minimal
+    }) == 35
+    assert {x["symbol"] for x in minimal} == {
+        "APTUSDT", "ARBUSDT", "DOTUSDT", "INJUSDT", "LTCUSDT",
+    }
+    assert {x["product"] for x in minimal} == {"LINEAR"}
+    assert {x["consumer_id"] for x in minimal} == {
+        "ENTRY_P90", "EXIT_P90", "EXECUTION_P90", "POSITION",
+    }
+    # R11 is a preserved alternate mode, not data erasure or silent rollback.
+    assert len(r11) == 138
+    assert sum(x["consumer_id"] == "MAYAK_REFERENCE" for x in r11) == 18
+    assert "Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL" in unit
+    assert "Environment=CRIPTA_R11_MAYAK_ANCHORS=0" in unit
+    assert "Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0" in unit
+    assert 'p90_minimal_public_feeds.json' in installer
+    assert 'r11_seven_public_feeds.json' in installer
+    assert "P90_MINIMAL_ANCHORS_MUST_BE_OFF" in installer
+    assert "P90_MINIMAL_ORIGINALS_MUST_BE_OFF" in installer
+    assert "SOURCE_EXACT_MANIFEST_INSTALL_BYTE_MISMATCH" in installer
