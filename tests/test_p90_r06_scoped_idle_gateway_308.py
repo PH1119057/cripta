@@ -8,20 +8,23 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
-from bybit_workbench.universal_entry.p90l90_scoped_native_source import (
-    NativeSourceEvidence,
-    NativeSourceSymbolEvidence,
-)
-
-from operations.connectivity import p90_r06_exit_owner as exit_owner
-from operations.monitoring.r06_pg_only_entry import _published_r06_observer_state
+# Real runtime modules are loaded as isolated test subjects, rather than
+# adding their different source roots to this module's import sections.
+_market = import_module("bybit_workbench.market_identity")
+_native = import_module("bybit_workbench.universal_entry.p90l90_scoped_native_source")
+exit_owner = import_module("operations.connectivity.p90_r06_exit_owner")
+_r06 = import_module("operations.monitoring.r06_pg_only_entry")
+BYBIT_PUBLIC_MARKET_SOURCE_ID = _market.BYBIT_PUBLIC_MARKET_SOURCE_ID
+NativeSourceEvidence = _native.NativeSourceEvidence
+NativeSourceSymbolEvidence = _native.NativeSourceSymbolEvidence
+_published_r06_observer_state = _r06._published_r06_observer_state
 
 
 STRATEGIES = ("p90_main", "p90_sub")
