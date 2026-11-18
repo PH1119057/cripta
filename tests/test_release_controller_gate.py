@@ -1,5 +1,8 @@
 """Negative contract tests for Release Controller approval gate (#288)."""
+import ast
 import importlib.util
+import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -208,10 +211,6 @@ def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None
 
     This is a pure unit test: it never calls the host controller or systemctl.
     """
-    import ast
-    import json
-    import re
-
     controller_path = (
         Path(__file__).resolve().parents[1]
         / "operations/infrastructure/cripta-release-controller"
@@ -260,28 +259,29 @@ def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None
          "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", True),
     )
     for service_state, service_pid, status, profile, accepted in cases:
-        def fake_git(*args):
+        def fake_git(*args, _profile=profile):
             if args[0] == "show":
-                return profile
+                return _profile
             if args[0] == "cat-file":
                 return ""
             if args[:2] == ("diff", "--name-only"):
                 return "operations/monitoring/public_market_source_union_capture.py"
             raise AssertionError(args)
 
-        def fake_run(args):
+        def fake_run(args, _state=service_state, _pid=service_pid):
             if "ActiveState" in args:
-                return service_state
+                return _state
             if "MainPID" in args:
-                return service_pid
+                return _pid
             raise AssertionError(args)
 
         globs = {
             "re": re,
             "SHA": re.compile(r"^[0-9a-f]{40}$"),
             "ControllerError": Denied,
-            "Path": lambda path: FakePath(path, status),
+            "Path": lambda path, _status=status: FakePath(path, _status),
             "_git": fake_git, "_run": fake_run,
+            "PRODUCER_ABI_PATHS": ("operations/monitoring/public_market_source_union_capture.py",),
             "NATIVE_CUTOVER_PURPOSE": "NATIVE",
             "DASHBOARD_PURPOSE": "DASH",
             "FULL_PURPOSE": "FULL",
@@ -293,7 +293,6 @@ def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None
                 dashboard_baseline=None,
             ) == ("NATIVE", True)
         else:
-            import pytest
             with pytest.raises(Denied, match="NATIVE_SOURCE_BASELINE_NOT_PROVEN"):
                 globs["_select_scoped_purpose"](
                     target=target, runtime_baseline=baseline,
