@@ -333,26 +333,28 @@ except Exception:
     print("")
 ' "$producer_status")" ||
     die "NATIVE_OFFLINE_SOURCE_STATUS_UNREADABLE"
-  [[ "$old_status_and_commit" =~ ^STOPPED\\|[0-9a-f]{40}$ ]] ||
+  [[ "${old_status_and_commit%%|*}" == "STOPPED" ]] ||
     die "NATIVE_OFFLINE_SOURCE_STATUS_OR_COMMIT_INVALID"
   producer_loaded_commit="${old_status_and_commit#STOPPED|}"
+  [[ "$producer_loaded_commit" =~ ^[0-9a-f]{40}$ ]] ||
+    die "NATIVE_OFFLINE_ORIGIN_COMMIT_FORMAT_INVALID"
   as_repo_owner git -C "$SOURCE" cat-file -e "${producer_loaded_commit}^{commit}" ||
     die "NATIVE_OFFLINE_ORIGIN_COMMIT_UNVERIFIED"
-  as_repo_owner git -C "$SOURCE" merge-base --is-ancestor \\
+  as_repo_owner git -C "$SOURCE" merge-base --is-ancestor \
     "$producer_loaded_commit" "$EXPECTED_BASELINE" ||
     die "NATIVE_OFFLINE_ORIGIN_NOT_BASELINE_ANCESTOR"
   # The controller-only bootstrap advanced INSTALLED_COMMIT, but the actual
   # stopped producer status and its durable GAP must retain the OLD commit.
   # Prove every reviewed producer ABI file byte-identical in that interval.
-  as_repo_owner git -C "$SOURCE" diff --quiet \\
-    "$producer_loaded_commit" "$EXPECTED_BASELINE" -- \\
-    operations/monitoring/native_public_trade_source.py \\
-    operations/monitoring/public_market_source_union_capture.py \\
-    src/bybit_workbench/market_data/public_source_event_codec.py \\
-    src/bybit_workbench/market_data/public_source_second_store.py \\
-    src/bybit_workbench/market_data/public_source_quality.py \\
-    src/bybit_workbench/market_data/native_public_trade_journal.py \\
-    src/bybit_workbench/market_identity.py \\
+  as_repo_owner git -C "$SOURCE" diff --quiet \
+    "$producer_loaded_commit" "$EXPECTED_BASELINE" -- \
+    operations/monitoring/native_public_trade_source.py \
+    operations/monitoring/public_market_source_union_capture.py \
+    src/bybit_workbench/market_data/public_source_event_codec.py \
+    src/bybit_workbench/market_data/public_source_second_store.py \
+    src/bybit_workbench/market_data/public_source_quality.py \
+    src/bybit_workbench/market_data/native_public_trade_journal.py \
+    src/bybit_workbench/market_identity.py \
     operations/systemd/cripta-native-public-trade-source.service ||
     die "NATIVE_OFFLINE_ORIGIN_BASELINE_ABI_DRIFT"
   [[ "$(sql_scalar "SELECT count(*) FROM analytics.native_public_trade_source_sessions
