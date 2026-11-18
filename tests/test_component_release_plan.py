@@ -64,7 +64,9 @@ def test_schema_never_inherits_service_write_or_restart() -> None:
     result = plan_paths(["operations/sql/20261119_new_schema.sql"])
     assert result.release_scope == "COMPATIBILITY_REVIEW_REQUIRED"
     assert result.candidate_units == ()
-    assert result.requires_review == ("POSTGRESQL_MIGRATION:operations/sql/20261119_new_schema.sql",)
+    assert result.requires_review == (
+        "POSTGRESQL_MIGRATION:operations/sql/20261119_new_schema.sql",
+    )
 
 
 @pytest.mark.parametrize("path,kind", [
@@ -162,4 +164,7 @@ def test_git_renamed_file_exposes_both_owned_sides(tmp_path: Path) -> None:
     }
     classified = plan_paths(changes)
     assert classified.release_scope == "COMPATIBILITY_REVIEW_REQUIRED"
-    assert "SHARED_OR_UNMAPPED_OPERATION:operations/connectivity/new_implementation.py" in classified.requires_review
+    assert (
+        "SHARED_OR_UNMAPPED_OPERATION:operations/connectivity/new_implementation.py"
+        in classified.requires_review
+    )
