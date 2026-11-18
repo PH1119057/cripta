@@ -100,7 +100,7 @@ def test_native_source_code_cutover_is_separate_authenticated_controller_scope()
     assert "def _postcheck_native_source(target: str)" in src
     assert "NATIVE_CUTOVER_LOADED_SOURCE_UNVERIFIED" in src
     assert "NATIVE_SOURCE_PRODUCER_CODE_CHANGED_SEPARATE_CUTOVER_REQUIRED" in installer
-    assert "NATIVE_SOURCE_CUTOVER_REQUIRES_ACTIVE_OLD_WRITER" in installer
+    assert "NATIVE_SOURCE_OFFLINE_CUTOVER_PREPARED=PASS" in installer
     assert "NATIVE_SOURCE_INSTALLED_BASELINE_ABI_UNVERIFIED" in installer
     assert "NATIVE_SOURCE_OLD_SESSION_NOT_EXPLICIT_GAP" in installer
     assert "NATIVE_SOURCE_NEW_SESSION_IDENTITY_UNVERIFIED" in installer
