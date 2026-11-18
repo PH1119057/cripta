@@ -3,6 +3,9 @@ import ast
 import importlib.util
 import json
 import re
+import shutil
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -245,26 +248,32 @@ def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None
     cases = (
         # state, pid, status, profile, expected
         ("inactive", "0", {"state": "STOPPED", "source_commit": baseline,
-                            "session": ""}, unit, True),
+                            "session": ""}, unit, True, True),
         ("inactive", "0", {"state": "STOPPED", "source_commit": "c" * 40,
-                            "session": ""}, unit, False),
+                            "session": ""}, unit, True, True),
+        ("inactive", "0", {"state": "STOPPED", "source_commit": "d" * 40,
+                            "session": ""}, unit, False, False),
         ("inactive", "3", {"state": "STOPPED", "source_commit": baseline,
-                            "session": ""}, unit, False),
+                            "session": ""}, unit, False, True),
         ("inactive", "0", {"state": "GAP", "source_commit": baseline,
-                            "session": ""}, unit, False),
+                            "session": ""}, unit, False, True),
         ("inactive", "0", {"state": "STOPPED", "source_commit": baseline,
-                            "session": ""}, "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", False),
+                            "session": ""},
+         "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", False, True),
         ("active", "1234", {"state": "ACTIVE", "source_commit": baseline,
                             "session": "1" * 32},
-         "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", True),
+         "Environment=CRIPTA_SOURCE_PROFILE=R11_SEVEN", True, True),
     )
-    for service_state, service_pid, status, profile, accepted in cases:
-        def fake_git(*args, _profile=profile):
+    for service_state, service_pid, status, profile, accepted, abi_matches in cases:
+        def fake_git(*args, _profile=profile, _status=status,
+                     _matches=abi_matches):
             if args[0] == "show":
                 return _profile
-            if args[0] == "cat-file":
+            if args[0] in ("cat-file", "merge-base"):
                 return ""
             if args[:2] == ("diff", "--name-only"):
+                if args[2:4] == (_status["source_commit"], baseline):
+                    return "" if _matches else "operations/monitoring/native_public_trade_source.py"
                 return "operations/monitoring/public_market_source_union_capture.py"
             raise AssertionError(args)
 
@@ -299,3 +308,20 @@ def test_native_cutover_purpose_accepts_only_exact_offline_p90_profile() -> None
                     target=target, runtime_baseline=baseline,
                     dashboard_baseline=None,
                 )
+
+
+def test_verified_release_installer_parses_with_linux_bash() -> None:
+    """Offline P90 producer lineage changes cannot break Bash parsing."""
+    if sys.platform != "linux":
+        pytest.skip("Linux-only Bash contract; Windows may resolve WSL stub")
+    bash = shutil.which("bash")
+    assert bash is not None, "Linux Bash required for release installer contract"
+    installer = (
+        Path(__file__).resolve().parents[1]
+        / "operations/infrastructure/install_verified_release.sh"
+    )
+    result = subprocess.run(
+        [bash, "-n", str(installer)],
+        check=False, text=True, capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
