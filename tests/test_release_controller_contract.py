@@ -1,6 +1,11 @@
 """Static safety contract for the Release Controller implementation (#288)."""
 import ast
+import json
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTROLLER = ROOT / "operations/infrastructure/cripta-release-controller"
@@ -149,8 +154,6 @@ def test_inactive_native_source_only_blocks_real_producer_abi_delta():
 
 def test_p90_minimal_release_installs_exact_manifest_without_erasing_r11() -> None:
     """The same reviewed source unit must select the reviewed physical feed file."""
-    import json
-
     installer = INSTALLER.read_text(encoding="utf-8")
     unit = (
         ROOT / "operations/systemd/cripta-native-public-trade-source.service"
@@ -234,10 +237,6 @@ def test_offline_p90_minimal_native_cutover_never_restarts_legacy_writer() -> No
 
 def test_offline_native_source_bash_is_syntactically_valid() -> None:
     """No production execution; CLI parsing only on Unix CI runners."""
-    import shutil
-    import subprocess
-    import pytest
-
     if shutil.which("bash") is None:
         pytest.skip("bash unavailable on this platform")
     outcome = subprocess.run(
