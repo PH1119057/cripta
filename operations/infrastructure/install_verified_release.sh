@@ -1131,21 +1131,31 @@ done
 install -d -o root -g root -m 0755 /etc/systemd/system/cripta-private-runtime.service.d
 install -o root -g root -m 0644 "$runtime_release/operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf" /etc/systemd/system/cripta-private-runtime.service.d/10-pythonpath.conf
 
-# R11 physical activation: the same one Native MarketSource gains the
-# owner-approved BTC/ETH MAYAK-only reference requirements and original
-# optional frame capture.  Preserve the prior operator manifest in the
-# release backup above, then install exact reviewed bytes only for R11+.
+# The exact Git-reviewed native unit selects its matching source manifest.
+# P90_MINIMAL removes speculative SPOT/R11 topics but preserves the full R11
+# manifest and code in Git; rollback returns to that prior exact profile.
 case "$ROADMAP470_STAGE" in
   ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R11_REPAIR9|R12|R13|R13_REPAIR)
     install -d -o root -g cripta -m 0750 /etc/cripta/market-source
-    install -o root -g cripta -m 0640 \
-      "$runtime_release/operations/monitoring/r11_seven_public_feeds.json" \
+    source_profile_unit="$runtime_release/operations/systemd/cripta-native-public-trade-source.service"
+    if grep -qx 'Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL' "$source_profile_unit"; then
+      grep -qx 'Environment=CRIPTA_R11_MAYAK_ANCHORS=0' "$source_profile_unit" ||
+        die "P90_MINIMAL_ANCHORS_MUST_BE_OFF"
+      grep -qx 'Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0' "$source_profile_unit" ||
+        die "P90_MINIMAL_ORIGINALS_MUST_BE_OFF"
+      source_manifest="$runtime_release/operations/monitoring/p90_minimal_public_feeds.json"
+      source_profile=P90_MINIMAL
+    else
+      source_manifest="$runtime_release/operations/monitoring/r11_seven_public_feeds.json"
+      source_profile=R11_SEVEN
+    fi
+    [[ -f "$source_manifest" && ! -L "$source_manifest" ]] ||
+      die "SOURCE_EXACT_MANIFEST_NOT_REGULAR"
+    install -o root -g cripta -m 0640 "$source_manifest" \
       /etc/cripta/market-source/required_public_feeds.json
-    cmp -s \
-      "$runtime_release/operations/monitoring/r11_seven_public_feeds.json" \
-      /etc/cripta/market-source/required_public_feeds.json ||
-      die "R11 seven-feed manifest install-byte mismatch"
-    echo "R11_SEVEN_FEED_MANIFEST=INSTALLED_EXACT"
+    cmp -s "$source_manifest" /etc/cripta/market-source/required_public_feeds.json ||
+      die "SOURCE_EXACT_MANIFEST_INSTALL_BYTE_MISMATCH"
+    echo "SOURCE_FEED_PROFILE=$source_profile MANIFEST=INSTALLED_EXACT"
     ;;
 esac
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/cripta-apply-incoming" /usr/local/sbin/cripta-apply-incoming
