@@ -610,14 +610,14 @@ def run_source_union(
             "R11_ANCHOR_REQUIREMENTS_OR_CAPTURE_UNVERIFIED"
         )
     if r11_original_enabled:
-        # R11 provider continuity requires the original optional SPOT
-        # transport. P90_MINIMAL must turn this capture mode off explicitly.
-        if not union.websocket_batches("SPOT"):
-            raise SourceManifestInvalid("R11_ORIGINAL_FRAME_SPOT_REQUIRED")
         if closed_only:
             raise SourceManifestInvalid(
                 "R11_ORIGINAL_FRAME_REQUIRES_OPTIONAL_SOURCE_UNION"
             )
+        # R11 provider continuity requires the original optional SPOT
+        # transport. P90_MINIMAL must turn this capture mode off explicitly.
+        if not union.websocket_batches("SPOT"):
+            raise SourceManifestInvalid("R11_ORIGINAL_FRAME_SPOT_REQUIRED")
         _r11_optional_frame_preflight(connection)
     if closed_only and (
         publish_seconds
