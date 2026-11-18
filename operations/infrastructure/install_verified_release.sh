@@ -228,6 +228,7 @@ actual_tooling_baseline="$(runuser -u cripta -- cat "$current_tooling/INSTALLED_
 # requires a separately reviewed source upgrade/cutover, not a covert
 # in-place module swap while a long-lived process still records evidence.
 native_code_changed=0
+native_source_offline_cutover=0
 producer_loaded_commit=""
 producer_old_session=""
 producer_old_pid=""
@@ -293,7 +294,73 @@ except Exception:
     echo "NATIVE_SOURCE_CONTINUOUS_CODE_IDENTITY=PASS"
   fi
 elif [[ "$NATIVE_SOURCE_CUTOVER" == "1" ]]; then
-  die "NATIVE_SOURCE_CUTOVER_REQUIRES_ACTIVE_OLD_WRITER"
+  # #642 scoped offline producer cutover candidate: the last writer was
+  # deliberately stopped for disk safety. NEVER boot the legacy seven-symbol
+  # producer just to satisfy the active-writer cutover precondition.
+  [[ "$(systemctl show cripta-native-public-trade-source.service --value --property=ActiveState)" == "inactive" ]] ||
+    die "NATIVE_OFFLINE_SOURCE_NOT_INACTIVE"
+  [[ "$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)" == "0" ]] ||
+    die "NATIVE_OFFLINE_SOURCE_PID_NOT_ZERO"
+  [[ "$pre_gate" == "0" && "$pre_permissions" == "0" &&
+     "$pre_sessions" == "0" && "$pre_account_sessions" == "0" ]] ||
+    die "NATIVE_OFFLINE_FINANCIAL_GATE_NOT_CLOSED"
+  [[ "$(sql_scalar 'SELECT count(*) FROM runtime.hot_positions')" == "0" &&
+     "$(sql_scalar 'SELECT count(*) FROM runtime.hot_orders')" == "0" ]] ||
+    die "NATIVE_OFFLINE_HOT_EXPOSURE_NOT_FLAT"
+  [[ "$(sql_scalar "SELECT count(*) FROM runtime.position_ownership
+    WHERE state IN ('OPEN','RECONCILIATION_REQUIRED')")" == "0" ]] ||
+    die "NATIVE_OFFLINE_POSITION_OWNERSHIP_NOT_FLAT"
+  # A Git-reviewed source profile is mandatory; never accept an arbitrary
+  # stopped old writer / profile as authorization for offline upgrade.
+  target_native_unit="$(as_repo_owner git -C "$SOURCE" show \
+    "$RELEASE_COMMIT:operations/systemd/cripta-native-public-trade-source.service")" ||
+    die "NATIVE_OFFLINE_TARGET_UNIT_UNVERIFIED"
+  grep -Fxq 'Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL' <<<"$target_native_unit" ||
+    die "NATIVE_OFFLINE_PROFILE_NOT_P90_MINIMAL"
+  grep -Fxq 'Environment=CRIPTA_R11_MAYAK_ANCHORS=0' <<<"$target_native_unit" ||
+    die "NATIVE_OFFLINE_R11_ANCHORS_NOT_OFF"
+  grep -Fxq 'Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0' <<<"$target_native_unit" ||
+    die "NATIVE_OFFLINE_R11_ORIGINALS_NOT_OFF"
+  producer_status="/var/lib/cripta/native_public_trade_source/status.json"
+  [[ -f "$producer_status" && ! -L "$producer_status" ]] ||
+    die "NATIVE_OFFLINE_SOURCE_STATUS_MISSING"
+  old_status_and_commit="$(runuser -u cripta -- python3 -c '
+import json,sys
+try:
+    d=json.load(open(sys.argv[1],encoding="utf-8"))
+    print(str(d.get("state","")) + "|" + str(d.get("source_commit","")))
+except Exception:
+    print("")
+' "$producer_status")" ||
+    die "NATIVE_OFFLINE_SOURCE_STATUS_UNREADABLE"
+  [[ "$old_status_and_commit" == "STOPPED|$EXPECTED_BASELINE" ]] ||
+    die "NATIVE_OFFLINE_SOURCE_STATUS_OR_COMMIT_INVALID"
+  [[ "$(sql_scalar "SELECT count(*) FROM analytics.native_public_trade_source_sessions
+    WHERE state='ACTIVE'")" == "0" ]] ||
+    die "NATIVE_OFFLINE_ACTIVE_SOURCE_SESSION_PRESENT"
+  producer_old_session="$(sql_scalar "SELECT source_session_id
+    FROM analytics.native_public_trade_source_sessions
+    WHERE market_source_id='ms-bybit-mainnet-public-v1'
+    ORDER BY subscribed_at DESC, source_session_id DESC LIMIT 1")"
+  [[ "$producer_old_session" =~ ^[0-9a-f]{32}$ ]] ||
+    die "NATIVE_OFFLINE_LAST_SESSION_MISSING"
+  [[ "$(sql_scalar "SELECT state || '|' || reason
+    FROM analytics.native_public_trade_source_sessions
+    WHERE source_session_id='$producer_old_session'
+      AND producer_release_commit='$EXPECTED_BASELINE'")" == "GAP|OWNER_CONTROLLED_STOP" ]] ||
+    die "NATIVE_OFFLINE_OLD_SESSION_NOT_OWNER_STOPPED_GAP"
+  if as_repo_owner git -C "$SOURCE" diff --quiet \
+    "$EXPECTED_BASELINE" "$RELEASE_COMMIT" -- \
+    operations/monitoring/native_public_trade_source.py \
+    operations/monitoring/public_market_source_union_capture.py \
+    operations/systemd/cripta-native-public-trade-source.service; then
+    die "NATIVE_OFFLINE_NO_PRODUCER_ABI_DELTA"
+  fi
+  producer_loaded_commit="$EXPECTED_BASELINE"
+  producer_old_pid="0"
+  native_source_offline_cutover=1
+  native_code_changed=1
+  echo "NATIVE_SOURCE_OFFLINE_CUTOVER_PREPARED=PASS"
 fi
 
 install -d -o cripta -g cripta -m 0750 "$RUNTIME_ROOT" "$RUNTIME_ROOT/releases"
@@ -1068,19 +1135,37 @@ echo "P90_SOURCE_COMPATIBILITY_RELEASE_PREPARATION=PASS_PRE_CUTOVER"
 # Stop exactly one old PID AFTER backups+migrations+candidate validation and
 # BEFORE changing the runtime symlink. A normal release never stops this worker.
 if [[ "$native_code_changed" == "1" ]]; then
-  [[ "$NATIVE_SOURCE_CUTOVER" == "1" &&
-     "$native_source_was_active" == "1" ]] ||
+  [[ "$NATIVE_SOURCE_CUTOVER" == "1" ]] ||
     die "NATIVE_SOURCE_CUTOVER_AUTH_OR_OLD_PROCESS_INVALID"
-  systemctl stop cripta-native-public-trade-source.service
-  native_source_stopped_for_cutover=1
-  ! systemctl is-active --quiet cripta-native-public-trade-source.service ||
-    die "NATIVE_SOURCE_OLD_WRITER_STILL_ACTIVE"
-  old_source_session_state="$(sql_scalar "SELECT state FROM
-    analytics.native_public_trade_source_sessions
-    WHERE source_session_id='$producer_old_session'")"
-  [[ "$old_source_session_state" == "GAP" ]] ||
-    die "NATIVE_SOURCE_OLD_SESSION_NOT_EXPLICIT_GAP"
-  echo "NATIVE_SOURCE_OLD_PRODUCER=STOPPED_WITH_EXPLICIT_GAP"
+  if [[ "$native_source_offline_cutover" == "1" ]]; then
+    # Recheck immediately before symlink mutation: no surprise second writer.
+    [[ "$native_source_was_active" == "0" &&
+       "$(systemctl show cripta-native-public-trade-source.service --value --property=ActiveState)" == "inactive" &&
+       "$(systemctl show cripta-native-public-trade-source.service --value --property=MainPID)" == "0" ]] ||
+      die "NATIVE_OFFLINE_SOURCE_STARTED_DURING_RELEASE"
+    [[ "$(sql_scalar "SELECT count(*) FROM analytics.native_public_trade_source_sessions
+      WHERE state='ACTIVE'")" == "0" ]] ||
+      die "NATIVE_OFFLINE_SOURCE_EPOCH_STARTED_DURING_RELEASE"
+    old_source_session_state="$(sql_scalar "SELECT state FROM
+      analytics.native_public_trade_source_sessions
+      WHERE source_session_id='$producer_old_session'")"
+    [[ "$old_source_session_state" == "GAP" ]] ||
+      die "NATIVE_OFFLINE_OLD_GAP_CHANGED"
+    echo "NATIVE_SOURCE_OLD_PRODUCER=ALREADY_INACTIVE_WITH_EXPLICIT_GAP"
+  else
+    [[ "$native_source_was_active" == "1" ]] ||
+      die "NATIVE_SOURCE_CUTOVER_AUTH_OR_OLD_PROCESS_INVALID"
+    systemctl stop cripta-native-public-trade-source.service
+    native_source_stopped_for_cutover=1
+    ! systemctl is-active --quiet cripta-native-public-trade-source.service ||
+      die "NATIVE_SOURCE_OLD_WRITER_STILL_ACTIVE"
+    old_source_session_state="$(sql_scalar "SELECT state FROM
+      analytics.native_public_trade_source_sessions
+      WHERE source_session_id='$producer_old_session'")"
+    [[ "$old_source_session_state" == "GAP" ]] ||
+      die "NATIVE_SOURCE_OLD_SESSION_NOT_EXPLICIT_GAP"
+    echo "NATIVE_SOURCE_OLD_PRODUCER=STOPPED_WITH_EXPLICIT_GAP"
+  fi
 fi
 
 # Filesystem/unit cutover starts only after every DB migration and schema
@@ -1131,21 +1216,31 @@ done
 install -d -o root -g root -m 0755 /etc/systemd/system/cripta-private-runtime.service.d
 install -o root -g root -m 0644 "$runtime_release/operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf" /etc/systemd/system/cripta-private-runtime.service.d/10-pythonpath.conf
 
-# R11 physical activation: the same one Native MarketSource gains the
-# owner-approved BTC/ETH MAYAK-only reference requirements and original
-# optional frame capture.  Preserve the prior operator manifest in the
-# release backup above, then install exact reviewed bytes only for R11+.
+# The exact Git-reviewed native unit selects its matching source manifest.
+# P90_MINIMAL removes speculative SPOT/R11 topics but preserves the full R11
+# manifest and code in Git; rollback returns to that prior exact profile.
 case "$ROADMAP470_STAGE" in
   ""|R11|R11_REPAIR|R11_REPAIR2|R11_REPAIR3|R11_REPAIR4|R11_REPAIR5|R11_REPAIR6|R11_REPAIR7|R11_REPAIR8|R11_REPAIR9|R12|R13|R13_REPAIR)
     install -d -o root -g cripta -m 0750 /etc/cripta/market-source
-    install -o root -g cripta -m 0640 \
-      "$runtime_release/operations/monitoring/r11_seven_public_feeds.json" \
+    source_profile_unit="$runtime_release/operations/systemd/cripta-native-public-trade-source.service"
+    if grep -qx 'Environment=CRIPTA_SOURCE_PROFILE=P90_MINIMAL' "$source_profile_unit"; then
+      grep -qx 'Environment=CRIPTA_R11_MAYAK_ANCHORS=0' "$source_profile_unit" ||
+        die "P90_MINIMAL_ANCHORS_MUST_BE_OFF"
+      grep -qx 'Environment=CRIPTA_R11_OPTIONAL_ORIGINAL_FRAMES=0' "$source_profile_unit" ||
+        die "P90_MINIMAL_ORIGINALS_MUST_BE_OFF"
+      source_manifest="$runtime_release/operations/monitoring/p90_minimal_public_feeds.json"
+      source_profile=P90_MINIMAL
+    else
+      source_manifest="$runtime_release/operations/monitoring/r11_seven_public_feeds.json"
+      source_profile=R11_SEVEN
+    fi
+    [[ -f "$source_manifest" && ! -L "$source_manifest" ]] ||
+      die "SOURCE_EXACT_MANIFEST_NOT_REGULAR"
+    install -o root -g cripta -m 0640 "$source_manifest" \
       /etc/cripta/market-source/required_public_feeds.json
-    cmp -s \
-      "$runtime_release/operations/monitoring/r11_seven_public_feeds.json" \
-      /etc/cripta/market-source/required_public_feeds.json ||
-      die "R11 seven-feed manifest install-byte mismatch"
-    echo "R11_SEVEN_FEED_MANIFEST=INSTALLED_EXACT"
+    cmp -s "$source_manifest" /etc/cripta/market-source/required_public_feeds.json ||
+      die "SOURCE_EXACT_MANIFEST_INSTALL_BYTE_MISMATCH"
+    echo "SOURCE_FEED_PROFILE=$source_profile MANIFEST=INSTALLED_EXACT"
     ;;
 esac
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/cripta-apply-incoming" /usr/local/sbin/cripta-apply-incoming

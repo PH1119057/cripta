@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 2.8
-**Дата:** 2026-11-14
+**Версия:** 2.9
+**Дата:** 2026-11-18
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -1272,6 +1272,12 @@ ARCH §60.5.2 — единственный owner межкомпонентног�
 
 **Cutover gate:** до полной причинной parity по семи символам, native original-event continuity per provider/topic, R11 source/transport epochs, PG publisher cursors, BTC/ETH anchors, REST, MAYAK 5–900s features, Dispatcher coin contexts, WARMUP, fingerprint, downstream consumer and rollback старые MAYAK WS не отключать. Требуются RED/GREEN негативные tests и disposable PG16, exact permissions/storage/headroom, безопасная no-start install и отдельные physical runtime acceptance. Публикация с `PHYSICAL_FRAME_REF_ONLY` не доказывает непрерывность рынка. `R11_CANON=APPROVED_AFTER_MERGE`; `R11_IMPLEMENTED/DEPLOYED/BEHAVIOR_VERIFIED=NOT_PROVEN_BY_CANON`; `LIVE_CHANGE=NO`.
 
+
+#### 7.10.5.8.1 Временная пауза R11/MAYAK при P90_MINIMAL — OWNER DECISION 2026-11-18 (#642)
+
+Архитектурный owner решения — ARCH §60.5.1.2. На этапе восстановления простого рабочего P90 текущий семисимвольный MAYAK и его BTC/ETH/SPOT/raw-original dependencies имеют статус `PAUSED_BY_DATA_SCOPE`, не `FAILED`, не `READY` и не право самостоятельно подписываться на альтернативный публичный Bybit источник. Прежние R11 checkpoints, исторические факты, SQL tables и код остаются; пауза не разрешает fabricated continuity, silent backfill либо trade-side fallback на устаревшую геометрию. Dashboard/read-model должен честно показывать отсутствие текущего MAYAK и его запрет на использование как готового источника; любые обязательные context-поля конкретного EntryPlan остаются scoped `BLOCKED` до доказанной замены/потребления.
+
+Текущий единственный производитель обслуживает ровно пять текущих LINEAR P90/Position symbols, исходную native-tape последовательность и опубликованные факты для Entry/Exit/Execution с явной проверкой потребительского манифеста. При необходимости нового исследовательского dataset его topic/REST scope активируется отдельным owner-approved source/release cutover, а не blanket capture. Восстановление семисимвольного MAYAK требует отдельного fresh source epoch, SPOT+LINEAR originals, provider continuity и WARMUP/Dispatcher parity по §7.10.5.8; historical checkpoint не делает новую сессию READY. LIVE права и signed private Bybit защиты этим решением не изменяются.
 
 #### 7.10.5.9 R06 remains SOURCE_ONLY after financial owner is restored — OWNER DECISION 2026-11-16 (Issue #642)
 

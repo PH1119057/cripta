@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.13
-**Дата:** 2026-11-14
+**Версия:** 3.14
+**Дата:** 2026-11-18
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -1845,6 +1845,14 @@ Physical MAYAK source/consumer scope, качество BTC/ETH reference anchors
 **Позднейшее точное решение владельца (supersedes лишь запрет расширения семисимвольного MAYAK):** единственный физический Native MarketSource / общий `MarketPublication` МОЖЕТ быть расширен с пяти торговых symbols на `BTCUSDT` и `ETHUSDT` **только для MAYAK observational market-regime/relative reference inputs**. Утверждённое конечное множество market capture = `APTUSDT,ARBUSDT,DOTUSDT,INJUSDT,LTCUSDT,BTCUSDT,ETHUSDT`; trading/Strategy/Entry/Exit/Execution, native P90 LINEAR order trigger/closed-bar/ATR/real position scope остаются строго пять. Для BTC/ETH запрещены новые торговые решения, financial command/signal или отдельный source owner. Новые approved spot/linear event/ticker/book/liquidation + optional REST источники аналитики проходят один физический market owner и canonical PG publication, с field-level source/quality/epoch/TTL и оригинальной последовательностью без фальшивого continuity.
 
 **Порядок:** это новое разрешение архитектуры, а не автоматическая подписка или финансовый release. Existing seven-coin MAYAK WS нельзя отключить до проверенного original-event replay, BTC/ETH reference continuity, REST/account-ratio/instrument-info, Dispatcher/WARMUP/fingerprint/derived-PG-context parity, PostgreSQL storage/backup/grants и безошибочного restart/rollback. Пять P90 native original trade журналов, signed OPEN Exit и private Bybit protection сохраняются неизменными. R11 physically closed только по DEV §59.6/OBS §7.10.5.8 и точному #470; R14 отдельно. `OWNER_APPROVED=YES`; `CANON_CONFLICT=RESOLVED_AFTER_MERGE`; `NEW_SOURCE_UNIVERSE_SEVEN=CANON`; `SOURCE_ENABLED=NO_BY_THIS_DECISION`; `MAYAK_CUTOVER=NOT_AUTHORIZED_BY_THIS_DECISION`; `LIVE_CHANGE=NO`.
+
+### 60.5.1.2 P90_MINIMAL — временная source-область для рабочего торгового релиза — OWNER DECISION 2026-11-18 (#642)
+
+Владелец явно приоритизировал **работающий P90 Entry → initial SL/TP → независимый Exit → подтверждённая биржевая защита** над расширенным постоянным сбором исследовательских данных. На период стабилизации в том же единственном Native MarketSource разрешён **P90_MINIMAL**: только пять текущих торговых LINEAR инструментов `APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT` и проверенный точный required-data manifest действующих `EntryPlan / ExitPlan / Execution / Position`. Исходные native `publicTrade` `seq/execId` без прореживания, closed 5m/15m с утверждённой глубиной, текущая ценовая/позиционная защита, необходимая forming/closed 1m и подтверждённые market-publication/epoch/quality сохраняются. Обязательность конкретного ORDERBOOK/TICKER проверяется по действующему подписанному потребителю; исключение требуется только после доказанной отсутствующей зависимости. Один producer, transaction source fence R07, independent signed Bybit Private, OPEN Exit и все financial gates неизменны.
+
+**Временное исключение из §60.5.1–60.5.1.1:** семисимвольный MAYAK, BTC/ETH observation anchors, SPOT, R11 optional raw original journal и соответствующие дополнительные REST/WS subscriptions приостанавливаются с явной классификацией `PAUSED_BY_DATA_SCOPE`; их код, схемы, historical native/originals, durable checkpoints и возможность будущего возобновления **не удаляются и не переписываются**. Нельзя продолжать R11 с отсутствующими кадрами, объявлять наблюдение/WARMUP/Dispatcher READY по устаревшей семисимвольной истории либо использовать MAYAK как неявный mandatory gate для P90 без зарегистрированной текущей зависимости. Область capture задаётся проверенным deploy-time/owner-approved consumer manifest; новые темы и монеты включаются только при точной обоснованной потребности, через новую опубликованную конфигурацию и проверенный source epoch. Отсутствующий обязательный P90 input остаётся `BLOCKED`, не синтезируется и не заменяется другой ценой.
+
+Это **не** новая StrategyVersion, не изменение Entry/Exit геометрии, TRAIL035, SL/TP, плеча, размера Entry, обработки открытых позиций, MAIN/SUB или LIVE. До физического переключения: scoped tests исходного пятисимвольного LINEAR контракта и сохранения старого SPOT/R11 режима, review cross-contour, full CI, exact GitHub SHA, no-duplicate-writer/signed exposure/backup/rollback preflight, controlled MarketSource start with new epoch, PG/native/closed/Entry/Exit parity и устойчивость диска. Реальный fill/SL/TP/Exit Bybit требует отдельного текущего OWNER ARM/financial gate и signed readback. `OWNER_DECISION=YES`; `CANON_AFTER_MERGE=YES`; `IMPLEMENTED/DEPLOYED/RUNTIME_VERIFIED=NOT_PROVEN_BY_CANON`; `LIVE_CHANGE=NO`.
 
 ### 60.5.2 R07 — transaction-scoped MarketSource epoch fence for command commit — OWNER DECISION 2026-11-14 (#470)
 
