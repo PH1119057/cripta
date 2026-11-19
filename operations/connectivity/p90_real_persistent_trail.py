@@ -35,11 +35,11 @@ from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
     P90RealExitExecutionPort,
     lock_p90_exit_account,
 )
-from bybit_workbench.universal_exit.p90l90_real_pending import (
-    p90_real_exit_no_pending,
-)
 from bybit_workbench.universal_exit.p90l90_real_observation import (
     ScopedPrivatePositionEvidence,
+)
+from bybit_workbench.universal_exit.p90l90_real_pending import (
+    p90_real_exit_no_pending,
 )
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
     P90PrivateProofClient,
