@@ -3940,8 +3940,15 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                         execution_ids=real_fill_execution_ids,
                         position_idx=0,
                     )
+                    # New contract opt-in is persisted atomically at the EXACT
+                    # first protected fill. All pre-release OPEN positions lack
+                    # this marker and are NEVER bulk late-armed by deployment.
+                    from bybit_workbench.universal_exit.p90l90_real_v3 import (
+                        P90_TRAIL_RECOVERY_POLICY,
+                    )
                     initial_evidence = {
                         "source": "SIGNED_BYBIT_MARKET_FILL_AND_POSITION",
+                        "trailing_recovery_policy": P90_TRAIL_RECOVERY_POLICY,
                         "entry_order_id": exchange_order_id,
                         "entry_execution_ids": list(real_fill_execution_ids),
                         "position_idx": 0,
