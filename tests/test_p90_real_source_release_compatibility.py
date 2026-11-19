@@ -484,6 +484,16 @@ def test_owner_reviewed_recovery_delta_is_immutable_git_blob(
         "2290b2aec351de43e69b02565588e076024c8352",
         "ccc5f7629a3a80e6daf2e59952cb67a5bb7dd8de33d5bc8c6c83017706dfd279",
     ),
+    # Frozen current-before-#862 R06 consumer bytes, independently checked
+    # from the exact immutable 7068bd5... Git tree (99 files).
+    (
+        "c25c2d433757842d7415fbe21bdb1d2a420f45b1",
+        "7ac7dbbf11c14c1c1d9fecb387ecb932bc3236da4d64f7622e634c290ae37ddd",
+    ),
+    (
+        "7068bd5bfc8971d4fb22b69c93e6347e0010019c",
+        "7ac7dbbf11c14c1c1d9fecb387ecb932bc3236da4d64f7622e634c290ae37ddd",
+    ),
 ])
 def test_20261108_historical_valid_consumer_attestation_is_not_corruption(
     release: str, historic_digest: str,
