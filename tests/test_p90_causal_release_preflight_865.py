@@ -176,6 +176,41 @@ class CandidateGraphTests(unittest.TestCase):
         self.assertIn("REAL_ENTRY_RUNTIME_NOT_READY", guard)
 
 
+    def test_installer_packages_and_verifies_candidate_tests_before_cutover(self):
+        installer = (
+            ROOT / "operations/infrastructure/install_verified_release.sh"
+        ).read_text(encoding="utf-8")
+        for test_path in (
+            "tests/test_p90_causal_release_preflight_865.py",
+            "tests/test_p90_causal_pg16_865.py",
+        ):
+            self.assertGreaterEqual(
+                installer.count(test_path), 3,
+                "Candidate must archive, blob-verify, and existence-check tests",
+            )
+        self.assertLess(
+            installer.index('git -C "$SOURCE" archive --format=tar'),
+            installer.index("RELEASE_RUNTIME_GIT_BLOB_VERIFY=PASS"),
+        )
+        gate = installer.index("P90_CANDIDATE_CAUSAL_PREFLIGHT_FAILED")
+        self.assertLess(gate, installer.index("services_stopped=1"))
+        self.assertLess(gate, installer.index("pg_dump -Fc -d cripta"))
+        self.assertLess(
+            gate,
+            installer.index('mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"'),
+        )
+        self.assertIn(
+            '"$runtime_release/operations/infrastructure/'
+            'p90_causal_release_preflight.py"',
+            installer,
+        )
+        self.assertIn(
+            'PYTHONPATH="$runtime_release:$runtime_release/src"', installer,
+        )
+        self.assertIn("PYTHONDONTWRITEBYTECODE=1", installer)
+
+
+
 class CausalSimulatedTests(unittest.TestCase):
     """C1: real plan/observation/engine/safety functions, fake venue only."""
 
