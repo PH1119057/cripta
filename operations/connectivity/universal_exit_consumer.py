@@ -73,6 +73,19 @@ def _stop(_signum: int, _frame: object) -> None:
 def _p90_status(*, state: str, result: str, error: str | None = None) -> None:
     if P90_R06_OWNER != "ENABLED":
         return
+    # The unchanged Gateway requires an EXACT READY_FLAT result, not a
+    # suffixed/prefixed diagnostic. Normalize only the proven benign case;
+    # never hide a blocked recovery, non-flat state or owner error.
+    flat = "P90_R06_EXIT_OWNER_READY_FLAT"
+    benign_recovery = "P90_TRAIL_RECOVERY_NO_ELIGIBLE_POSITION"
+    recovery_detail = None
+    if (
+        state == flat
+        and error is None
+        and result == "RECOVERY=" + benign_recovery + "|" + flat
+    ):
+        result = flat
+        recovery_detail = benign_recovery
     payload = {
         "service": "p90_r06_exit_owner",
         "state": state,
@@ -83,6 +96,8 @@ def _p90_status(*, state: str, result: str, error: str | None = None) -> None:
         "observed_at": datetime.now(UTC).isoformat(),
         "error": error,
     }
+    if recovery_detail is not None:
+        payload["recovery_result"] = recovery_detail
     STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
     temporary = STATUS_PATH.with_suffix(".tmp")
     temporary.write_text(
