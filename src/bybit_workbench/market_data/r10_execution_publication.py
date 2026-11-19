@@ -8,6 +8,7 @@ fail closed. Private signed account/execution checks remain separate owners.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -17,7 +18,7 @@ from bybit_workbench.market_data.exit_publication_reader import (
     ExitPublicationPin,
     ExitPublicationUnavailable,
     read_exit_l53_candles,
-    read_exit_ticker_last_price,
+    read_market_publication_pin,
 )
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 
@@ -86,19 +87,23 @@ def read_r10_execution_quote(
     observed_at: datetime,
     max_field_age_seconds: int = 2,
 ) -> R10ExecutionQuote:
-    """Original linear bid/ask/lastPrice under EXECUTION_P90 freshness 2s."""
+    """Require fresh original bid/ask; preserve actual lastPrice field timestamp."""
     if type(max_field_age_seconds) is not int or not 1 <= max_field_age_seconds <= 5:
         raise R10ExecutionPublicationUnavailable(
             "R10_EXECUTION_TICKER_TTL_INVALID"
         )
     now = _utc(observed_at)
     try:
-        last, pin = read_exit_ticker_last_price(
+        pin = read_market_publication_pin(
             connection, symbol=symbol, observed_at=now,
         )
     except ExitPublicationUnavailable as exc:
+        # R08 emits only stable typed codes; never persist arbitrary DB errors.
+        source_code = str(exc)
+        if re.fullmatch(r"R08_[A-Z0-9_]{1,110}", source_code) is None:
+            source_code = "R08_UNCLASSIFIED"
         raise R10ExecutionPublicationUnavailable(
-            "R10_EXECUTION_TICKER_SOURCE_INVALID"
+            f"R10_EXECUTION_TICKER_SOURCE_INVALID:{source_code}"
         ) from exc
     if (
         not isinstance(pin, ExitPublicationPin)
@@ -116,7 +121,7 @@ def read_r10_execution_quote(
         or quality.get("status") != "OBSERVED"
         or any(
             quality["fields"].get(name) != "FRESH"
-            for name in _REQUIRED_TICKER_FIELDS
+            for name in _REQUIRED_TICKER_FIELDS[1:]
         )
     ):
         raise R10ExecutionPublicationUnavailable(
@@ -166,11 +171,17 @@ def read_r10_execution_quote(
     original = features["ticker"]
     times = features["ticker_field_times"]
     field_times = tuple(_utc(times.get(name)) for name in _REQUIRED_TICKER_FIELDS)
-    if any(
-        not timedelta(0) <= now - stamped
-        <= timedelta(seconds=max_field_age_seconds)
-        or stamped > pin.as_of_second
-        for stamped in field_times
+    # Historical lastPrice is the last actual trade, NOT an executable
+    # current quote. Preserve its original time; do not forge an update in
+    # a second without a new trade. Freshness is required for BOTH book sides.
+    if (
+        any(stamped > pin.as_of_second or stamped > source_time
+            or stamped > now for stamped in field_times)
+        or any(
+            not timedelta(0) <= now - stamped
+            <= timedelta(seconds=max_field_age_seconds)
+            for stamped in field_times[1:]
+        )
     ):
         raise R10ExecutionPublicationUnavailable(
             "R10_EXECUTION_TICKER_FIELD_TTL_EXPIRED"
@@ -178,13 +189,13 @@ def read_r10_execution_quote(
     original_last, bid, ask = tuple(
         _positive(original.get(name)) for name in _REQUIRED_TICKER_FIELDS
     )
-    if original_last != last or bid > ask:
+    if bid > ask:
         raise R10ExecutionPublicationUnavailable(
             "R10_EXECUTION_TICKER_CROSSED_OR_UNVERIFIED"
         )
     return R10ExecutionQuote(
         symbol=symbol,
-        last_price=last,
+        last_price=original_last,
         bid_price=bid,
         ask_price=ask,
         publication_id=pin.publication_id,
