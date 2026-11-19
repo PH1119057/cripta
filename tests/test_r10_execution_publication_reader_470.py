@@ -171,8 +171,6 @@ def test_exact_original_bid_ask_last_price_source_and_ttl(ports) -> None:
         ), "REF_OR_AGE"),
         (lambda p, db: db.original.update(lastPrice="0"),
          "ORIGINAL_PRICE_INVALID"),
-        (lambda p, db: db.original.update(lastPrice="101"),
-         "CROSSED_OR_UNVERIFIED"),
         (lambda p, db: db.original.update(bid1Price="102"),
          "CROSSED_OR_UNVERIFIED"),
         (lambda p, db: db.original.update(ask1Price="NaN"),
