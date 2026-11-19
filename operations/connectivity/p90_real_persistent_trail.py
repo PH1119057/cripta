@@ -38,6 +38,9 @@ from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
 from bybit_workbench.universal_exit.p90l90_real_pending import (
     p90_real_exit_no_pending,
 )
+from bybit_workbench.universal_exit.p90l90_real_observation import (
+    ScopedPrivatePositionEvidence,
+)
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
     P90PrivateProofClient,
 )
@@ -129,7 +132,10 @@ def _private_snapshot(private: object) -> tuple[object, ...] | None:
 
 
 def _fresh_matching_private_protection(
-    prior: object, latest: object, *, checked_at: datetime,
+    prior: ScopedPrivatePositionEvidence,
+    latest: ScopedPrivatePositionEvidence,
+    *,
+    checked_at: datetime,
 ) -> bool:
     """Distinct signed COMPLETE generation IDs may still prove one position.
 
