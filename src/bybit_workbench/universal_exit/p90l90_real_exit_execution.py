@@ -32,8 +32,8 @@ from .execution_store import (
     persist_exit_execution_request,
     publish_runtime_exit_command,
 )
-from .p90l90_real_v3 import P90_TRAIL_RECOVERY_POLICY
 from .loader import load_exit_binding
+from .p90l90_real_v3 import P90_TRAIL_RECOVERY_POLICY
 
 
 class P90RealExitExecutionUnverified(RuntimeError):
