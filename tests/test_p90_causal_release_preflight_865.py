@@ -184,10 +184,13 @@ class CandidateGraphTests(unittest.TestCase):
             "tests/test_p90_causal_release_preflight_865.py",
             "tests/test_p90_causal_pg16_865.py",
         ):
-            self.assertGreaterEqual(
-                installer.count(test_path), 3,
-                "Candidate must archive, blob-verify, and existence-check tests",
-            )
+            self.assertIn(test_path, installer)
+        self.assertIn("runtime_test_paths=()", installer)
+        self.assertIn("runtime_verify_test_paths=()", installer)
+        self.assertIn("runtime_test_paths+=(", installer)
+        self.assertIn('runtime_verify_test_paths+=(--path "$test_path")', installer)
+        self.assertIn("runtime_test_paths[@]", installer)
+        self.assertIn("runtime_verify_test_paths[@]", installer)
         self.assertLess(
             installer.index('git -C "$SOURCE" archive --format=tar'),
             installer.index("RELEASE_RUNTIME_GIT_BLOB_VERIFY=PASS"),
