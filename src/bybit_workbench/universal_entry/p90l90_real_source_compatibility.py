@@ -167,6 +167,21 @@ _REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
 ), _R06_20261118_PRE_R10_HISTORICAL_DIGEST))
 
 
+# #862 first production attempt (2026-11-19) stopped before code cutover:
+# two previously registered releases under the ACTIVE R06 physical origin
+# have the same exact 99-file historical consumer inventory. Independent
+# cripta-owned immutable Git worktree 7068bd5... recomputed this SHA256
+# contract digest; c25c2d... -> 7068bd5... changes no consumer paths.
+# Preserve their DB attestations verbatim. This does NOT authorize using the
+# old digest for the new loaded release, nor grant any ARM/Exchange permission.
+_R06_PRE_TRAIL035_860_HISTORICAL_DIGEST = (
+    "7ac7dbbf11c14c1c1d9fecb387ecb932bc3236da4d64f7622e634c290ae37ddd"
+)
+_REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
+    "c25c2d433757842d7415fbe21bdb1d2a420f45b1",
+    "7068bd5bfc8971d4fb22b69c93e6347e0010019c",
+), _R06_PRE_TRAIL035_860_HISTORICAL_DIGEST))
+
 # These wiring adapters are reviewed in the release diff. All Strategy,
 # Entry/Exit algorithms, codecs, contracts, account and private-proof modules
 # below remain byte-identical to the retained origin release.
