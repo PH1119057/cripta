@@ -13,6 +13,19 @@ ROOTS={"90d":tp.ROOT,"29d":r29.ROOT}
 STATES={"90d":"l53_clean_v2","29d":"l53_clean_29d"}
 OUT="p90l90_soft_stop_h9_18h_l53_m4w4_replay_20261119_v1"
 Q=D("0.000000000001")
+NOMINAL=D("100")
+REFERENCE_NOMINAL=D("10")
+TAKER=D("0.00055")
+MAKER=D("0.0002")
+
+def recomputed_money(row, nominal):
+ ep=D(row["entry_price"]);xp=D(row["exit_price"])
+ gross=(nominal*(xp/ep-1)*(1 if row["side"]=="LONG" else -1)).quantize(Q,rounding=ROUND_HALF_EVEN)
+ entry_fee=(nominal*TAKER).quantize(Q,rounding=ROUND_HALF_EVEN)
+ exit_fee=(nominal*xp/ep*(MAKER if row["maker_exit"] else TAKER)).quantize(Q,rounding=ROUND_HALF_EVEN)
+ return dict(gross_usdt=gross,entry_fee_usdt=entry_fee,exit_fee_usdt=exit_fee,
+             net_usdt=gross-entry_fee-exit_fee)
+
 def digest(p):
  with Path(p).open("rb") as f:return hashlib.file_digest(f,"sha256").hexdigest()
 def h9_states(period,ds):
@@ -124,7 +137,7 @@ class SSBook(tp.TPOnlyBook):
 
 def tt_net(r):
  ep=D(r["entry_price"]);xp=D(r["exit_price"])
- fee=(D("10")*xp/ep*D("0.00055")).quantize(Q,rounding=ROUND_HALF_EVEN)
+ fee=(NOMINAL*xp/ep*TAKER).quantize(Q,rounding=ROUND_HALF_EVEN)
  return D(r["gross_usdt"])-D(r["entry_fee_usdt"])-fee
 
 def stats(book,report):
@@ -159,6 +172,11 @@ def replay(period,smoke_hours=0):
   output=ROOTS[period]/"results"/OUT
  if output.exists() and not smoke_hours:raise FileExistsError("immutable output exists "+str(output))
  if not os.access(output.parent,os.W_OK|os.X_OK):raise PermissionError("research spool parent not writable")
+ # Research-only, process-local notional switch: all existing Entry/Exit geometry
+ # uses percentages. The imported historical engine uses NOMINAL in its fee/PnL.
+ if tp.old.base.NOMINAL not in (REFERENCE_NOMINAL,NOMINAL):
+  raise ValueError("unexpected upstream baseline nominal")
+ tp.old.base.NOMINAL=NOMINAL
  if period=="90d":
   data={s:tp.old.previous.inputs(s,tp.old.previous.RAW_DEFAULT,tp.old.previous.FROZEN_DEFAULT) for s in SYMS}
   streams={s:tp.old.previous.ticks(data[s]) for s in SYMS}
@@ -202,8 +220,12 @@ def replay(period,smoke_hours=0):
   if len(original)!=len(actual):raise ValueError("90d control count mismatch")
   for a,b in zip(original,actual):
    for f in ("candidate_event_id","entry_ts","exit_ts","entry_price","exit_price",
-              "exit_reason","gross_usdt","net_usdt","maker_exit"):
-    if str(a[f])!=str(b[f]):raise ValueError("90d per-trade baseline mismatch field="+f)
+              "exit_reason","maker_exit"):
+    if str(a[f])!=str(b[f]):raise ValueError("90d per-trade baseline identity mismatch field="+f)
+   for field,amount in recomputed_money(a,REFERENCE_NOMINAL).items():
+    if D(a[field])!=amount:raise ValueError("90d 10-USDT reference amount mismatch "+field)
+   for field,amount in recomputed_money(a,NOMINAL).items():
+    if D(b[field])!=amount:raise ValueError("90d 100-USDT replay amount mismatch "+field)
  sums={k:stats(b,reports[k]) for k,b in books.items()}
  c=set(r["candidate_event_id"] for r in books["TPONLY_BASELINE"].trades)
  s=set(r["candidate_event_id"] for r in books["SOFT_STOP_18H"].trades)
@@ -213,7 +235,8 @@ def replay(period,smoke_hours=0):
   "mode":"NO TRAILING/NO BE; hardstop gross -10%; original opposite dynamic RAW L5-3 TP >=+0.5%",
   "soft_stop":"L5-3 opposite RAW edge <= -4% from Entry WITH width>=4% OR first favorable H9 RAW edge <= Entry plus 18h",
   "second48":"second actual HARD_STOP in 48h pauses NEW Entry 48h; SOFT_STOP does not trigger",
-  "notional_usdt_per_entry":"10","cost":"TAKER/TAKER primary, maker resting TP supplementary",
+  "notional_usdt_per_entry":str(NOMINAL),"theoretical_five_slot_capital_usdt":str(NOMINAL*len(SYMS)),
+   "cost":"TAKER/TAKER primary, maker resting TP supplementary, no liquidity/price-impact model",
   "unmodeled":["slippage","spread","funding","latency","real_exchange_fills"],
   "symbols":list(SYMS),"geometry_parity":parity,"source_entry_sha256":{
     s:data[s]["manifest"]["events_sha256"] for s in SYMS},
@@ -223,6 +246,7 @@ def replay(period,smoke_hours=0):
   "counterfactual_entry_difference":{"soft_only_closed":len(s-c),"baseline_only_closed":len(c-s),
     "sample_soft_only":sorted(s-c)[:10]},
   "90d_exact_baseline_parity":period=="90d" and not smoke_hours,
+  "90d_price_entry_exit_identity_10usd_reference_and_100usd_money_parity":period=="90d" and not smoke_hours,
   "censored_not_realized":True}
  if smoke_hours:
   print("SMOKE_PASS",json.dumps({"period":period,"ticks":ticks,"parity":parity,
