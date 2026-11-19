@@ -306,8 +306,13 @@ def run_once(
             # An unsafe/currently unavailable proof blocks only this recovery
             # candidate. It does not cancel the protected position's existing
             # Exchange SL/TP or poison the independent continuous R06 owner.
-            connection.rollback()
-            source_connection.rollback()
+            # A live psycopg connection requires rollback after a denied
+            # candidate. Older isolated R06 tests provide a no-DB stub;
+            # do not turn a harmless blocked candidate into a worker crash.
+            if callable(getattr(connection, "rollback", None)):
+                connection.rollback()
+            if callable(getattr(source_connection, "rollback", None)):
+                source_connection.rollback()
             recovery = "P90_TRAIL_RECOVERY_BLOCKED:" + _safe_r06_error(exc)
         if recovery == "P90_TRAIL_RECOVERY_REQUEST_PUBLISHED":
             return recovery
