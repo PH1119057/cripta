@@ -178,6 +178,39 @@ def test_recovery_fails_closed_without_exact_present_time_evidence(defect) -> No
         )
 
 
+def test_rotating_signed_account_generation_does_not_permanently_veto_trail():
+    # Production account generations are renewed several times per minute.
+    # A new independently authenticated generation with identical immutable
+    # position and SL/TP is valid; altered account/protection is not.
+    from operations.connectivity.p90_real_persistent_trail import (
+        _fresh_matching_private_protection,
+    )
+
+    _position, _plan, signed, _quote, now = proof(hours=1)
+    newer = replace(signed, generation_id="new-complete-gen")
+    assert _fresh_matching_private_protection(
+        signed, newer, checked_at=now,
+    )
+    with_drift = replace(newer, position={
+        **newer.position, "stopLoss": "90.0",
+    })
+    assert not _fresh_matching_private_protection(
+        signed, with_drift, checked_at=now,
+    )
+    other_account = replace(newer, trading_account_id="ta-other")
+    assert not _fresh_matching_private_protection(
+        signed, other_account, checked_at=now,
+    )
+    stale = replace(newer, observed_at=now - timedelta(seconds=8))
+    assert not _fresh_matching_private_protection(
+        signed, stale, checked_at=now,
+    )
+    pending = replace(newer, pending_exit_mutation=True)
+    assert not _fresh_matching_private_protection(
+        signed, pending, checked_at=now,
+    )
+
+
 def test_old_firstfill_terminal_verdict_remains_durable_not_a_recovery_decision():
     from pathlib import Path
     source = (
