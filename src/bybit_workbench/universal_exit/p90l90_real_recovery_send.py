@@ -89,6 +89,15 @@ def validate_p90_trail_recovery_send(
     ).fetchone()
     _need(row is not None and len(row) == 8, "RECORDED_OWNER_MISSING")
     evidence, rule, action, saved_mutation, event, observed, attrs, refs = row
+    if not isinstance(attrs, Mapping) or not isinstance(refs, list):
+        raise P90TrailRecoverySendBlocked(
+            "P90_TRAIL_SEND_SAVED_EVIDENCE_NOT_PROVEN"
+        )
+    facts = attrs.get("p90l90_real")
+    if not isinstance(facts, Mapping):
+        raise P90TrailRecoverySendBlocked(
+            "P90_TRAIL_SEND_SAVED_FACTS_NOT_PROVEN"
+        )
     _need(
         isinstance(evidence, Mapping)
         and evidence.get("trailing_recovery_policy") == P90_TRAIL_RECOVERY_POLICY
