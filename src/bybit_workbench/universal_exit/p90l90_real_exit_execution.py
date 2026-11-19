@@ -32,6 +32,7 @@ from .execution_store import (
     persist_exit_execution_request,
     publish_runtime_exit_command,
 )
+from .p90l90_real_v3 import P90_TRAIL_RECOVERY_POLICY
 from .loader import load_exit_binding
 
 
@@ -160,7 +161,7 @@ class P90RealExitExecutionPort:
                 or details.get("current_trailing_recovery_verified") is not True
                 or details.get("current_original_ltp_verified") is not True
                 or details.get("trailing_recovery_policy")
-                   != "P90_TRAIL035_PERSISTENT_V1"
+                   != P90_TRAIL_RECOVERY_POLICY
                 or not any(ref.startswith("bybit:market-publication:")
                            for ref in observation.source_refs)
             ))
