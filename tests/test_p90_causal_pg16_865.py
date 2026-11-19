@@ -7,11 +7,13 @@ The exact candidate runner must start and independently prove that cluster.
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import psycopg
 from psycopg.rows import dict_row, tuple_row
@@ -25,12 +27,26 @@ from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
 )
+from bybit_workbench.universal_exit.contracts import ExitActionKind, ExitEvaluationStatus
+from bybit_workbench.universal_exit.engine import UniversalExitEngine
+from bybit_workbench.universal_exit.p90l90_exchange_safety import (
+    verify_p90_real_exchange_mutation,
+)
 from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
     lock_p90_exit_account,
 )
 from bybit_workbench.universal_exit.p90l90_real_pending import (
     p90_real_exit_no_pending,
 )
+from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+    P90PrivateIpcUnverified,
+    P90PrivateProofClient,
+    serve_private_proof,
+)
+from bybit_workbench.universal_exit.p90l90_real_trail_reconcile import (
+    build_p90_trail_recovery_observation,
+)
+from bybit_workbench.universal_exit.p90l90_real_v3 import P90_TRAIL_RECOVERY_POLICY
 from operations.connectivity.p90_real_persistent_trail import (
     P90PersistentTrailBlocked,
     _candidate,
@@ -142,6 +158,30 @@ def publication(admin: psycopg.Connection, *, now: datetime):
         (_EPOCH, instrument, t, BYBIT_PUBLIC_MARKET_SOURCE_ID,
          _COMMIT, t, json.dumps(original)),
     )
+
+
+
+def _fake_account_private_worker(account, connector, evidence, pipe, bad_binding):
+    """One real separate Unix process, only synthetic approved test facts."""
+    seen = [False]
+
+    def handler(_request):
+        seen[0] = True
+        return replace(
+            evidence, strategy_execution_binding_id=(
+                "invalid-binding" if bad_binding
+                else evidence.strategy_execution_binding_id
+            ),
+        )
+
+    try:
+        serve_private_proof(
+            account=account, connector=connector,
+            handler=handler, running=lambda: not seen[0],
+            ready=lambda: pipe.send("READY"),
+        )
+    finally:
+        pipe.close()
 
 
 @unittest.skipUnless(
@@ -364,6 +404,147 @@ class P90CausalPostgresTests(unittest.TestCase):
                    WHERE position_id=%s""",
                 (self.main.strategy_position_id,),
             )
+
+
+    def _exchange_ipc_roundtrip(self, *, bad_binding: bool):
+        from test_p90_causal_release_preflight_865 import _case
+
+        position, plan, private, _, _ = _case(short=False)
+        account = "ta-" + uuid4().hex
+        connector = "connector-c2-synthetic"
+        position = replace(
+            position, strategy_position_id="position-c2-" + uuid4().hex,
+            trading_account_id=account,
+            exchange_position_key=exchange_position_key(
+                account, position.symbol, 0
+            ),
+        )
+        private = replace(
+            private, trading_account_id=account,
+            exchange_position_key=position.exchange_position_key,
+            connector_id=connector, generation_id="synthetic-c2-generation",
+            observed_at=datetime.now(UTC),
+        )
+        # Durable account/position and source facts from independent PG16,
+        # not the live Bybit private worker or production database.
+        with connect(admin=True) as admin:
+            admin.execute(
+                """INSERT INTO runtime.position_ownership
+                   (position_id,trading_account_id,symbol,state,
+                    strategy_id,strategy_version,identity_status,
+                    strategy_execution_binding_id,exchange_position_key,
+                    position_idx,initial_protection_confirmed_at,
+                    initial_protection_evidence)
+                   VALUES (%s,%s,%s,'OPEN',%s,%s,'PROVEN',%s,%s,0,%s,
+                           %s::jsonb)""",
+                (position.strategy_position_id, account, position.symbol,
+                 position.strategy_id, position.strategy_version,
+                 position.strategy_execution_binding_id,
+                 position.exchange_position_key,
+                 position.initial_protection_confirmed_at,
+                 json.dumps({
+                     "trailing_recovery_policy": P90_TRAIL_RECOVERY_POLICY,
+                 })),
+            )
+        with connect() as runtime:
+            self.assertTrue(p90_real_exit_no_pending(
+                runtime, position=position, trading_account_id=account,
+            ))
+
+        ctx = multiprocessing.get_context("fork")
+        reader, writer = ctx.Pipe(duplex=False)
+        process = ctx.Process(
+            target=_fake_account_private_worker,
+            args=(account, connector, private, writer, bad_binding),
+            daemon=True,
+        )
+        process.start()
+        try:
+            self.assertTrue(reader.poll(4), "C2 private IPC listener not ready")
+            self.assertEqual(reader.recv(), "READY")
+            client = P90PrivateProofClient(
+                account=account, connector=connector, timeout_seconds=3,
+            )
+            if bad_binding:
+                with self.assertRaises(P90PrivateIpcUnverified):
+                    client.for_restart_recovery(
+                        position, at=datetime.now(UTC),
+                    )
+                return
+            signed = client.for_restart_recovery(
+                position, at=datetime.now(UTC),
+            )
+            self.assertEqual(signed.trading_account_id, account)
+            self.assertEqual(
+                signed.strategy_execution_binding_id,
+                position.strategy_execution_binding_id,
+            )
+            self.assertFalse(signed.pending_exit_mutation)
+            with connect(admin=True) as admin:
+                publication(admin, now=datetime.now(UTC))
+            with connect(tuples=True, autocommit=False) as source:
+                quote, session = _source_quote(
+                    source, symbol=position.symbol,
+                    observed_at=datetime.now(UTC),
+                )
+                source.rollback()
+            observation = build_p90_trail_recovery_observation(
+                position=position, private=signed, quote=quote,
+                eligibility=P90_TRAIL_RECOVERY_POLICY,
+                expected_source_session_id=session,
+                received_at=datetime.now(UTC),
+            )
+            evaluated = UniversalExitEngine().evaluate(
+                position, plan, observation,
+            )
+            self.assertIs(
+                evaluated.status, ExitEvaluationStatus.DECISION_CREATED,
+            )
+            decision = evaluated.decision
+            self.assertIsNotNone(decision)
+            self.assertIs(decision.action_kind, ExitActionKind.SET_TRAILING)
+            mutation = decision.requested_mutation.to_dict()
+            verify_p90_real_exchange_mutation(
+                payload={
+                    "strategy_id": position.strategy_id,
+                    "strategy_version": position.strategy_version,
+                    "trading_account_id": account,
+                    "strategy_execution_binding_id":
+                        position.strategy_execution_binding_id,
+                    "identity_status": "PROVEN",
+                    "direction": position.direction.value,
+                    "exchange_position_key": position.exchange_position_key,
+                    "trail_recovery_policy": P90_TRAIL_RECOVERY_POLICY,
+                },
+                trading_account_id=account, symbol=position.symbol,
+                position=dict(signed.position),
+                action_kind=decision.action_kind,
+                mutation=mutation, tick=signed.tick_size,
+            )
+            self.assertEqual(mutation["distance"], "0.35")
+            # Real interprocess transport and real PG, yet synthetic "signed"
+            # facts: NEVER call this proof of Bybit POST/readback.
+            with connect() as runtime:
+                self.assertEqual(
+                    runtime.execute(
+                        "SELECT count(*) AS n FROM runtime.trade_commands"
+                    ).fetchone()["n"], 0,
+                )
+        finally:
+            reader.close()
+            writer.close()
+            process.join(4)
+            if process.is_alive():
+                process.terminate()
+                process.join(3)
+            self.assertEqual(process.exitcode, 0)
+
+    def test_real_unix_ipc_process_and_pg16_to_exit_engine(self):
+        self._exchange_ipc_roundtrip(bad_binding=False)
+
+    def test_real_unix_ipc_rejects_bad_binding_before_exit(self):
+        self._exchange_ipc_roundtrip(bad_binding=True)
+
 
 
 if __name__ == "__main__":
