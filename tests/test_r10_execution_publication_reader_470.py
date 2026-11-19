@@ -113,10 +113,8 @@ class FakePG:
 def ports(monkeypatch: pytest.MonkeyPatch):
     primary = pin()
     monkeypatch.setattr(
-        r10, "read_exit_ticker_last_price",
-        lambda _db, *, symbol, observed_at: (
-            Decimal("100"), primary,
-        ),
+        r10, "read_market_publication_pin",
+        lambda _db, *, symbol, observed_at: primary,
     )
     candles = tuple(
         SimpleNamespace(
@@ -204,8 +202,8 @@ def test_quote_fails_closed_on_provenance_ttl_market_or_price(
     db = FakePG()
     change(base, db)
     monkeypatch.setattr(
-        r10, "read_exit_ticker_last_price",
-        lambda *_args, **_kw: (Decimal("100"), base),
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kw: base,
     )
     with pytest.raises(r10.R10ExecutionPublicationUnavailable, match=reason):
         quote(db)
@@ -290,6 +288,60 @@ def test_r1_no_closed_history_blocks_and_does_not_use_rest(
             FakePG(), symbol=SYMBOL, observed_at=AT,
             history_limit=220,
         )
+
+
+
+def test_stale_original_lastprice_field_does_not_veto_fresh_bid_ask(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = pin()
+    original.compact_quality["TICKER"]["fields"]["lastPrice"] = "STALE"
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times["lastPrice"] = (AT - timedelta(minutes=20)).isoformat()
+    result = quote(db)
+    assert result.last_price == Decimal("100")
+    assert result.bid_price == Decimal("99")
+    assert result.ask_price == Decimal("101")
+    # The original time remains intact; it must not be forged as current.
+    assert result.field_times[0] == AT - timedelta(minutes=20)
+    assert result.field_times[1:] == (SECOND, SECOND)
+
+
+@pytest.mark.parametrize("side", ("bid1Price", "ask1Price"))
+def test_stale_current_quote_side_still_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, side: str,
+) -> None:
+    original = pin()
+    original.compact_quality["TICKER"]["fields"]["lastPrice"] = "STALE"
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times["lastPrice"] = (AT - timedelta(minutes=10)).isoformat()
+    db.field_times[side] = (AT - timedelta(seconds=3)).isoformat()
+    with pytest.raises(r10.R10ExecutionPublicationUnavailable, match="FIELD_TTL_EXPIRED"):
+        quote(db)
+
+
+@pytest.mark.parametrize("field", ("lastPrice", "bid1Price", "ask1Price"))
+def test_future_original_field_clock_is_never_accepted(
+    monkeypatch: pytest.MonkeyPatch, field: str,
+) -> None:
+    original = pin()
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times[field] = (AT + timedelta(seconds=1)).isoformat()
+    with pytest.raises(r10.R10ExecutionPublicationUnavailable, match="FIELD_TTL_EXPIRED"):
+        quote(db)
+
 
 
 def test_r10_source_module_has_no_independent_exchange_feed() -> None:
