@@ -220,6 +220,17 @@ class P90RealExitExecutionPort:
             prepared = prepare_runtime_exit_command(
                 request, position, now=now
             )
+            if observation.event_kind == "P90L90_REAL_TRAIL_RECOVERY":
+                if decision.rule_id != "P90L90_REAL_BYBIT_NATIVE_TRAIL035_RECONCILE":
+                    raise P90RealExitExecutionUnverified(
+                        "P90_REAL_EXIT_RECOVERY_RULE_MISMATCH"
+                    )
+                # Marker alone cannot authorize mutation. private_runtime
+                # independently checks immutable per-fill eligibility, exact
+                # decision+source, fresh current LTP and signed Bybit position.
+                prepared.payload["trail_recovery_policy"] = (
+                    P90_TRAIL_RECOVERY_POLICY
+                )
             persist_exit_execution_request(self._db, request)
             publish_runtime_exit_command(
                 self._db, prepared, now=now
