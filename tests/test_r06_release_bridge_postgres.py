@@ -24,7 +24,7 @@ STATE = {"version": 1, "by_symbol": {"LTCUSDT": {"geometry_at": "2026-11-12T05:3
 def db(monkeypatch):
     admin = psycopg.connect(DSN, autocommit=True)
     assert admin.info.dbname == "r06_recovery_ci"
-    for schema in ("strategy_entry", "analytics"):
+    for schema in ("strategy_entry", "analytics", "strategy_exit", "runtime", "control"):
         admin.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
         admin.execute(f"CREATE SCHEMA {schema}")
     admin.execute("DO $$ BEGIN CREATE ROLE cripta; "
@@ -47,6 +47,24 @@ def db(monkeypatch):
     admin.execute("GRANT SELECT ON analytics.market_publications TO cripta")
     admin.execute("GRANT SELECT,INSERT,UPDATE ON "
                   "strategy_entry.p90_scoped_native_consumer_checkpoints TO cripta")
+    # Existing release adoption is NO-ORDER and may coexist with an ordinary
+    # protected OPEN position. Uncertain ownership / new Entry rights are still
+    # separate fail-closed barriers; this fixture uses real runtime SELECT ACL.
+    admin.execute("CREATE TABLE control.execution_gates (mode text PRIMARY KEY,enabled boolean)")
+    admin.execute("INSERT INTO control.execution_gates VALUES ('mainnet',false)")
+    admin.execute("CREATE TABLE control.live_arm_sessions (state text)")
+    admin.execute("CREATE TABLE control.account_live_arm_sessions (state text)")
+    admin.execute("CREATE TABLE runtime.position_ownership (strategy_id text,state text)")
+    admin.execute("CREATE TABLE strategy_entry.execution_permissions "
+                  "(enabled boolean,enabled_at timestamptz)")
+    for schema in ("strategy_entry", "strategy_exit"):
+        admin.execute(f"CREATE TABLE {schema}.execution_requests "
+                      "(execution_request_id text,strategy_id text)")
+        admin.execute(f"CREATE TABLE {schema}.execution_dispatches "
+                      "(execution_request_id text)")
+    admin.execute("GRANT USAGE ON SCHEMA control,runtime,strategy_exit TO cripta")
+    for schema in ("control", "runtime", "strategy_entry", "strategy_exit"):
+        admin.execute(f"GRANT SELECT ON ALL TABLES IN SCHEMA {schema} TO cripta")
     migration = Path(__file__).resolve().parents[1] / (
         "operations/sql/20261112_r06_checkpoint_release_bridge.sql"
     )
@@ -64,13 +82,15 @@ def db(monkeypatch):
     runtime.execute("SET ROLE cripta")
     assert runtime.execute("SELECT current_user").fetchone() == ("cripta",)
     signed = []
+    def flat_not_allowed(*_a, **_k):
+        signed.append("FLAT_CALLED")
+        raise AssertionError("EXISTING_R06_CHECKPOINT_MUST_NOT_REQUIRE_FLAT")
     monkeypatch.setattr(private, "preflight_p90_real_private_flat_source",
-                        lambda *_a, **_k: signed.append("SIGNED"))
+                        flat_not_allowed)
     monkeypatch.setattr(
         mod, "_approved_release_set",
         lambda *_a, **_k: frozenset({mod.APPROVED_BASELINE, TARGET}),
     )
-    monkeypatch.setattr(mod, "_require_no_exposure_or_requests", lambda _db: None)
     try:
         yield admin, runtime, signed
     finally:
@@ -115,13 +135,56 @@ def test_runtime_role_preserves_every_causal_field_and_audits_both(db):
     before = snapshot(runtime)
     adopt(runtime)
     assert snapshot(runtime) == before
-    assert signed == ["SIGNED"]
+    assert signed == []
     assert releases(runtime) == [(TARGET,)]
     assert audit_count(runtime) == (2,)
     for table in ("analytics.market_publications",
                   "strategy_entry.p90_r06_checkpoint_release_bridges"):
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             runtime.execute(f"DELETE FROM {table}")
+
+
+@pytest.mark.parametrize("state", ("OPEN", "CLOSED"))
+def test_release_bridge_with_existing_open_position_is_not_flat_bootstrap(db, state):
+    admin, runtime, signed = db
+    admin.execute("INSERT INTO runtime.position_ownership VALUES (%s,%s)",
+                  (mod.MAIN_ID, state))
+    before = snapshot(runtime)
+    adopt(runtime)
+    assert snapshot(runtime) == before
+    assert releases(runtime) == [(TARGET,)]
+    assert audit_count(runtime) == (2,)
+    assert signed == []
+    assert admin.execute("SELECT state FROM runtime.position_ownership").fetchone() == (state,)
+
+
+@pytest.mark.parametrize("unsafe", (
+    "gate", "permission", "global_arm", "account_arm",
+    "pending_entry", "reconciliation_required",
+))
+def test_release_bridge_rejects_new_entry_authority_or_uncertain_state(db, unsafe):
+    admin, runtime, signed = db
+    if unsafe == "gate":
+        admin.execute("UPDATE control.execution_gates SET enabled=true")
+    elif unsafe == "permission":
+        admin.execute("INSERT INTO strategy_entry.execution_permissions VALUES (true,now())")
+    elif unsafe == "global_arm":
+        admin.execute("INSERT INTO control.live_arm_sessions VALUES ('ACTIVE')")
+    elif unsafe == "account_arm":
+        admin.execute("INSERT INTO control.account_live_arm_sessions VALUES ('ACTIVE')")
+    elif unsafe == "pending_entry":
+        admin.execute("INSERT INTO strategy_entry.execution_requests VALUES ('request-1',%s)",
+                      (mod.MAIN_ID,))
+    else:
+        admin.execute("INSERT INTO runtime.position_ownership VALUES (%s,%s)",
+                      (mod.MAIN_ID, "RECONCILIATION_REQUIRED"))
+    before = snapshot(runtime)
+    with pytest.raises(mod.R06ResumeBlocked, match="R06_RESUME_RELEASE_GATE_NOT_SAFE"):
+        adopt(runtime)
+    assert snapshot(runtime) == before
+    assert releases(runtime) == [(mod.APPROVED_BASELINE,)]
+    assert audit_count(runtime) == (0,)
+    assert signed == []
 
 
 def test_attested_nonbaseline_previous_release_can_bridge(db, monkeypatch):
