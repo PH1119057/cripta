@@ -2893,14 +2893,28 @@ def _require_p90_persistent_trail_private_send(
         and str(row.get("positionIdx")) == str(position.get("positionIdx"))
         and Decimal(str(row.get("size") or 0)) > 0
     ]
-    stable = (
-        "symbol", "side", "positionIdx", "size", "avgPrice",
-        "stopLoss", "takeProfit", "trailingStop",
-    )
-    if (
-        len(matching) != 1
-        or any(str(matching[0].get(k)) != str(position.get(k)) for k in stable)
+    if len(matching) != 1:
+        raise PreMutationSafetyBlock(
+            "P90_TRAIL_RECOVERY_SIGNED_POSITION_CHANGED"
+        )
+    current_signed = matching[0]
+    if any(
+        current_signed.get(k) != position.get(k)
+        for k in ("symbol", "side")
+    ) or str(current_signed.get("positionIdx")) != str(
+        position.get("positionIdx")
     ):
+        raise PreMutationSafetyBlock(
+            "P90_TRAIL_RECOVERY_SIGNED_POSITION_CHANGED"
+        )
+    try:
+        same_protection = all(
+            Decimal(str(current_signed.get(k))) == Decimal(str(position.get(k)))
+            for k in ("size", "avgPrice", "stopLoss", "takeProfit", "trailingStop")
+        )
+    except (InvalidOperation, TypeError, ValueError):
+        same_protection = False
+    if not same_protection:
         raise PreMutationSafetyBlock(
             "P90_TRAIL_RECOVERY_SIGNED_POSITION_CHANGED"
         )
