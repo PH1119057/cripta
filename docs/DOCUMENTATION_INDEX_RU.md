@@ -409,7 +409,7 @@ No new active Source, path, mandatory reading route, actor, DB grant or architec
 
 - Канонический owner **полной причинной карты** A–U, producer/writer,
   consumer, IPC/DB, lock/gate, Exchange proof и release-test stages:
-  \`docs/DEVELOPMENT_RELEASE_RULES_RU.md §59.7\`. Не дублировать всю
+  `docs/DEVELOPMENT_RELEASE_RULES_RU.md §59.7`. Не дублировать всю
   таблицу отдельно в ARCH/TC/Issue; после изменения producer/consumer
   обновить эту матрицу и её тесты в одном change-set.
 - Текущий риск/защита/TRAIl035 — TC §7.6.5, account-specific LIVE ARM — TC
@@ -417,10 +417,10 @@ No new active Source, path, mandatory reading route, actor, DB grant or architec
   architecture/diagnostic identity — ARCH §7.1/§60; source authority —
   OBS §7.10. Вмешательство в P90 Entry/Exit economics нельзя скрывать
   как изменение тестовой инфраструктуры.
-- Исполняемые исходники preflight: \`operations/infrastructure/p90_causal_release_preflight.py\`
-  + \`tests/test_p90_causal_release_preflight_865.py\`; единственная
+- Исполняемые исходники preflight: `operations/infrastructure/p90_causal_release_preflight.py`
+  + `tests/test_p90_causal_release_preflight_865.py`; единственная
   корректная точка запуска — verified candidate runtime из
-  \`install_verified_release.sh\` **до** остановки служб/DB migration.
+  `install_verified_release.sh` **до** остановки служб/DB migration.
   C0/C1 и неподтверждённые C2/C3 различать. Нельзя выдавать
   unit/mock PASS за signed Exchange TRAIL035.
 - Реальные тесты по указанию владельца — существующие Bybit MAIN/SUB,
