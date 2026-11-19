@@ -21,6 +21,7 @@ from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
 )
+from bybit_workbench.universal_entry import p90l90_real_contract_v3 as p90
 
 AT = datetime(2026, 11, 14, 11, 12, 10, tzinfo=UTC)
 CLOSED = datetime(2026, 11, 14, 11, 10, tzinfo=UTC)
@@ -366,6 +367,40 @@ def test_r1_outstanding_signal_validity_keeps_strict_last_trade_ttl(
         )
 
 
+
+
+@pytest.mark.parametrize(
+    "side,stop,target",
+    [("Buy", "95", "105"), ("Sell", "105", "95")],
+)
+def test_real_p90_original_publication_pre_send_chain_accepts_stale_last(
+    monkeypatch: pytest.MonkeyPatch,
+    side: str,
+    stop: str,
+    target: str,
+) -> None:
+    """Positive R10 quote -> real P90 SL/TP boundary, no Exchange mutation."""
+    original = pin()
+    original.compact_quality["TICKER"]["fields"]["lastPrice"] = "STALE"
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times["lastPrice"] = (AT - timedelta(minutes=10)).isoformat()
+    original_quote = quote(db)
+    assert p90.validate_real_v3_attached_protection_at_original_quote(
+        symbol=SYMBOL,
+        side=side,
+        instrument_tick=Decimal("0.1"),
+        stop_loss=Decimal(stop),
+        take_profit=Decimal(target),
+        last_price=original_quote.last_price,
+        bid_price=original_quote.bid_price,
+        ask_price=original_quote.ask_price,
+    ) == Decimal("100")
+    assert len(db.queries) == 1
+    assert all("INSERT " not in sql and "UPDATE " not in sql for sql in db.queries)
 
 def test_r10_source_module_has_no_independent_exchange_feed() -> None:
     code = Path(
