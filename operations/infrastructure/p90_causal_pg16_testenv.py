@@ -276,7 +276,7 @@ def run_c2(code_root: Path, commit: str, *, stage: bool = False) -> bool:
     manifest = {
         "run_id": run_id, "candidate_commit": commit, "stage": stage,
         "started_at_utc": start.isoformat(), "state": "UNKNOWN",
-        "scope": "INDEPENDENT_PG16_SOURCE_PENDING_LOCK_ROLE_ONLY",
+        "scope": "INDEPENDENT_PG16_SOURCE_PENDING_LOCK_ROLE_MOCK_PEER_IPC",
         "exchange_mutation": False, "production_database": False,
     }
     try:
@@ -305,11 +305,12 @@ def run_c2(code_root: Path, commit: str, *, stage: bool = False) -> bool:
                 manifest["failures"] = len(result.failures)
                 manifest["errors"] = len(result.errors)
                 manifest["skipped"] = len(result.skipped)
-                if not result.wasSuccessful() or result.testsRun < 10 or result.skipped:
+                if not result.wasSuccessful() or result.testsRun < 12 or result.skipped:
                     raise C2Blocked("C2_SQL_TEST_SUITE_FAILED")
                 manifest["state"] = "PASS"
                 print("C2_PG16_SOURCE_LOCK_ROLE=PASS tests=" + str(result.testsRun), flush=True)
-                print("C2_SIGNED_PRIVATE_IPC=NOT_EXERCISED", flush=True)
+                print("C2_REAL_AF_UNIX_SYNTHETIC_PRIVATE_IPC=PASS", flush=True)
+                print("C2_AUTHENTICATED_BYBIT_PRIVATE_IPC=NOT_EXERCISED", flush=True)
                 print("C3_SIGNED_BYBIT=NOT_EXERCISED", flush=True)
             finally:
                 os.environ.pop("CRIPTA_P90_C2_EXACT_ISOLATED", None)
