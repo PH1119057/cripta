@@ -117,7 +117,6 @@ def validate_p90_trail_recovery_send(
         ) in refs,
         "DURABLE_DECISION_OR_ORIGINAL_SOURCE_MISMATCH",
     )
-    facts = attrs["p90l90_real"]
     _need(
         facts.get("trailing_recovery_policy") == P90_TRAIL_RECOVERY_POLICY
         and facts.get("current_trailing_recovery_verified") is True
