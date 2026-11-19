@@ -285,11 +285,9 @@ def run_c2(code_root: Path, commit: str, *, stage: bool = False) -> bool:
         _preflight_code(code_root, commit, stage=stage)
         _test_cluster_dirs()
         _check_pg16()
-        import fcntl as _flock
-
         with (_ROOT / ".c2.lock").open("a+") as lock:
             try:
-                _flock.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as exc:
                 raise C2Blocked("C2_TESTENV_CONCURRENT_RUN") from exc
             _start_cluster()
