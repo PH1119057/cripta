@@ -227,6 +227,15 @@ def read_r10_exact_r1_causal_snapshot(
         observed_at=observed_at,
         max_field_age_seconds=max_ticker_age_seconds,
     )
+    # Scope lock: the historical outstanding R1 SIGNAL_VALIDITY still uses
+    # the last trade as its target-reached evidence. The P90 new-Entry
+    # fresh-bid/ask exception must not weaken that independent consumer.
+    if not timedelta(0) <= _utc(observed_at) - quote.field_times[0] <= timedelta(
+        seconds=max_ticker_age_seconds
+    ):
+        raise R10ExecutionPublicationUnavailable(
+            "R10_R1_LAST_PRICE_FIELD_STALE"
+        )
     try:
         candles, pin = read_exit_l53_candles(
             connection, symbol=symbol, observed_at=observed_at,
