@@ -106,6 +106,7 @@ def build_p90_trail_recovery_observation(
         and quote.field_times[0] <= quote.as_of_second <= received_at
         and timedelta() <= received_at - private.observed_at
         <= timedelta(seconds=5)
+        and position.fill_at <= quote.as_of_second
         and quote.field_times[0] <= quote.as_of_second
         and timedelta() <= received_at - quote.as_of_second
         <= timedelta(seconds=2)
