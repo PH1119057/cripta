@@ -67,9 +67,15 @@ def main(argv: list[str] | None = None) -> int:
             f":errors={len(result.errors)}:skipped={len(result.skipped)}"
         )
     print(f"C0_CANDIDATE_GRAPH=PASS C1_CAUSAL_SIMULATED=PASS tests={result.testsRun}")
-    print("C2_DISPOSABLE_PG=NOT_IMPLEMENTED", flush=True)
+    # #865: actual independent PG16 source/lock/grants tests, NEVER the
+    # production PostgreSQL socket. This is a bounded C2 subset: private
+    # IPC and real Exchange proof remain separately unexercised.
+    from operations.infrastructure.p90_causal_pg16_testenv import run_c2
+
+    if not run_c2(expected, args.expected_commit):
+        return _stop("C2_PG16_SOURCE_LOCK_ROLE_FAILED")
     print("C3_SIGNED_REAL_EXCHANGE=NOT_EXERCISED", flush=True)
-    print("P90_CANDIDATE_PREFLIGHT=PASS_SHELL_LEVEL_ONLY", flush=True)
+    print("P90_CANDIDATE_PREFLIGHT=PASS_C0_C1_C2_SQL_ONLY", flush=True)
     return 0
 
 
