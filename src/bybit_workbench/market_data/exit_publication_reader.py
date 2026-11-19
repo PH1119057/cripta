@@ -149,6 +149,17 @@ def _pin(
     )
 
 
+def read_market_publication_pin(
+    connection: Any, *, symbol: str, observed_at: datetime,
+) -> ExitPublicationPin:
+    """Expose the exact read-only original publication/epoch pin.
+
+    Caller-specific field freshness is deliberately NOT proven here. R08
+    Exit and R10 pre-send must each enforce their own consumer contract.
+    """
+    return _pin(connection, symbol=symbol, observed_at=observed_at)
+
+
 def read_exit_l53_candles(
     connection: Any, *, symbol: str, observed_at: datetime,
 ) -> tuple[tuple[Candle, ...], ExitPublicationPin]:

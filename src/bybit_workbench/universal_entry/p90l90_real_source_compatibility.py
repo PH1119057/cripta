@@ -269,13 +269,34 @@ _REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256 = {
 }
 
 
+# #854 owner-approved R10 P90 pre-send proof adds one deterministic, reviewed
+# consumer byte change. The retained R06 physical source origin, all original
+# historical producer attestations and earlier reviewed hash vectors remain
+# unchanged. The adapter/reader edits outside this consumer inventory are
+# covered by the release diff and independent R10/Exit negative tests.
+_REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256 = {
+    **_REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256,
+    "universal_entry/p90l90_real_contract_v3.py":
+        "eeee1198827b8c42f233c9dd0faef66febbf97cffb1d882a173d54a7bb30ab21",
+}
+
+
 def _reviewed_delta_for_origin(
     changed: set[str], *, origin_commit: str,
+    current_hashes: dict[str, str] | None = None,
 ) -> dict[str, str]:
     if (
         origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
         and changed == set(_REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256)
     ):
+        # Select a frozen reviewed vector only when the entire exact byte
+        # inventory matches it. Never infer compatibility from changed paths
+        # alone, and never relabel old historical attestations.
+        if current_hashes is not None and all(
+            current_hashes.get(relative) == sha
+            for relative, sha in _REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256.items()
+        ):
+            return _REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256
         return _REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256
     if (
         origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
@@ -364,7 +385,12 @@ def verify_reviewed_bugfix_delta(*, current_root: Path, origin_root: Path) -> No
     if not changed:
         return
     reviewed = _reviewed_delta_for_origin(
-        changed, origin_commit=origin_root.resolve().name,
+        changed,
+        origin_commit=origin_root.resolve().name,
+        current_hashes={
+            relative: hashlib.sha256(current[relative].read_bytes()).hexdigest()
+            for relative in changed if relative in current
+        },
     )
     for relative, expected in reviewed.items():
         item = current.get(relative)
@@ -476,7 +502,12 @@ def verify_reviewed_bugfix_delta_from_git(
     if not changed:
         return
     reviewed = _reviewed_delta_for_origin(
-        changed, origin_commit=origin_commit,
+        changed,
+        origin_commit=origin_commit,
+        current_hashes={
+            relative: hashlib.sha256(current[relative].read_bytes()).hexdigest()
+            for relative in changed if relative in current
+        },
     )
     for relative, expected in reviewed.items():
         item = current.get(relative)

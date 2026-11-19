@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.10
-**Дата:** 2026-11-18
+**Версия:** 3.11
+**Дата:** 2026-11-19
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -2248,3 +2248,11 @@ R06 candidate
 Historical/source-only backlog до baseline запрещено исполнять. Если Consumer после ARM видит candidate старше Strategy-owned request freshness, он не создаёт поздний request и durable продвигает promotion cursor к текущей verified R06 границе. SECOND48, account safety, exact binding, slot ownership, capital, request TTL, initial protection, source provenance и R07 transaction fence остаются независимыми fail-closed gates.
 
 R06 bootstrap OFF/no-exposure gate не является постоянным запретом уже после принятого source checkpoint: финансовые requests/positions могут существовать downstream, пока сам R06 сохраняет `trading_effect=NONE` и не выполняет admission. Ни этот handoff, ни технический PREARM автоматически не открывают mainnet или execution permissions. Architecture owner — ARCH §60.5.3; терминология — GLOSSARY §47.
+
+### 4.19.3 R10 fresh executable quote vs unchanged lastPrice — OWNER DECISION 2026-11-19 (#854)
+
+For the existing five P90 REAL LINEAR instruments, Execution-side initial-protection check immediately before first Bybit Exchange mutation uses the **one same native PostgreSQL `MarketPublication`**. Exact R10 source/epoch/producer/symbol/reference and physical `bid1Price` + `ask1Price` timestamps remain mandatory **<= 2 seconds** at the current pre-send clock; quotes must be positive, finite and noncrossed. Preserve the original `lastPrice` **with its actual unchanged source-field timestamp**; its age alone does not deny a new Entry if the current original bid/ask and whole publication pass. Never re-stamp or fabricate it, infer a missing trade, silently increase the stale price TTL or fetch an independent public market ticker from Exchange REST/WS.
+
+P90 initial attached protection remains calculated by the existing immutable Strategy/EntryPlan and checked against **last, bid and ask simultaneously**: LONG `SL < min(last,bid,ask)` and `TP > max(last,bid,ask)`; SHORT `TP < min(last,bid,ask)` and `SL > max(last,bid,ask)`. Invalid tick/TP/SL, absent last price, aged bid/ask, missing physical row, stale source/ref, source gap, account/signed protection uncertainty or mixed epoch are **BLOCKED before mutation**; no post-hoc Entry and no relaxation of the R07 transaction fence. Store the precise sanitized pre-send reason for audit and latency attribution, not only the exception class. This is a narrowly scoped correction of **Execution R10 quote evidence**, not a change in Strategy Entry/Exit/TP/SL economic policy, R08 Exit source contract, LIVE authority or previous signals.
+
+Canonical owner: ARCH §60.5.4. Implementation/CI/physical release and independent runtime proof are separate; **no automatic LIVE ARM**. `OWNER_DECISION=YES`; `CANON_AFTER_MERGE=YES`; `IMPLEMENTED_BY_DOCS=NO`; `LIVE_CHANGE=NO`.

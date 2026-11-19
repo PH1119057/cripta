@@ -50,13 +50,47 @@ def test_r14_r06_origin_accepts_only_exact_reviewed_four_file_delta() -> None:
         )
 
 
-def test_r14_reviewed_r06_r07_r10_hashes_bind_current_exact_git_bytes() -> None:
-    reviewed = compat._REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256
+def test_r14_854_reviewed_p90_consumer_hashes_bind_current_exact_git_bytes() -> None:
+    # Historical #470/#820/#824 hash vectors must stay frozen. The sole
+    # changed consumer in #854 is the reviewed P90 protection check.
+    old = compat._REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256
+    reviewed = compat._REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256
+    path = "universal_entry/p90l90_real_contract_v3.py"
+    assert old[path] == "2bdd80448ae7cc6274078939f8b41ebd706b09e089824ec69c99052416395ac7"
+    assert reviewed[path] == "eeee1198827b8c42f233c9dd0faef66febbf97cffb1d882a173d54a7bb30ab21"
+    assert set(old) == set(reviewed)
+    assert all(
+        old[key] == new_sha for key, new_sha in reviewed.items() if key != path
+    )
     for relative, expected in reviewed.items():
         blob = subprocess.check_output([
             "git", "show", f"HEAD:src/bybit_workbench/{relative}",
         ])
         assert hashlib.sha256(blob).hexdigest() == expected
+
+    assert compat._reviewed_delta_for_origin(
+        set(reviewed),
+        origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+        current_hashes=reviewed,
+    ) == reviewed
+    # One unreviewed extra file or a single altered byte must never inherit
+    # the #854 source-origin compatibility exemption.
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat._reviewed_delta_for_origin(
+            set(reviewed) | {"universal_entry/unreviewed.py"},
+            origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+            current_hashes=reviewed,
+        )
+    changed = dict(reviewed)
+    changed[path] = "0" * 64
+    assert compat._reviewed_delta_for_origin(
+        set(reviewed),
+        origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+        current_hashes=changed,
+    ) == old
 
 
 def test_r14_r06_origin_accepts_exact_account_lock_order_delta() -> None:
@@ -93,11 +127,11 @@ def test_r14_r06_origin_accepts_exact_protected_exit_recovery_delta() -> None:
         set(reviewed),
         origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
     ) == reviewed
-    for relative, expected in reviewed.items():
-        blob = subprocess.check_output([
-            "git", "show", f"HEAD:src/bybit_workbench/{relative}",
-        ])
-        assert hashlib.sha256(blob).hexdigest() == expected
+    # This is a preserved historical SHA vector, not a statement about
+    # the new HEAD after the explicitly reviewed #854 P90 consumer change.
+    assert reviewed["universal_entry/p90l90_real_contract_v3.py"] == (
+        "2bdd80448ae7cc6274078939f8b41ebd706b09e089824ec69c99052416395ac7"
+    )
 
 
 _R06_PRE_PROTECTED_EXIT_RECOVERY_RELEASES = (

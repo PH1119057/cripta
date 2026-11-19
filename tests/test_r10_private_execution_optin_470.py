@@ -244,6 +244,39 @@ def test_p90_original_publication_price_has_exact_tp_sl_semantics(
             p90.validate_real_v3_attached_protection_at_original_price(**args)
 
 
+@pytest.mark.parametrize(
+    "side,last,bid,ask,stop,target,accepted",
+    [
+        ("Buy", "100", "99", "101", "95", "105", True),
+        ("Sell", "100", "99", "101", "105", "95", True),
+        ("Buy", "100", "94", "101", "95", "105", False),
+        ("Buy", "100", "99", "106", "95", "105", False),
+        ("Sell", "100", "94", "101", "105", "95", False),
+        ("Sell", "100", "99", "106", "105", "95", False),
+        ("Buy", "105", "99", "101", "95", "105", False),
+        ("Sell", "95", "99", "101", "105", "95", False),
+        ("Buy", "100", "101", "99", "95", "105", False),
+    ],
+)
+def test_p90_pre_send_protection_checks_last_and_both_current_quote_sides(
+    side: str, last: str, bid: str, ask: str, stop: str, target: str,
+    accepted: bool,
+) -> None:
+    args = {
+        "symbol": SYMBOL, "side": side,
+        "instrument_tick": Decimal("0.1"),
+        "stop_loss": Decimal(stop), "take_profit": Decimal(target),
+        "last_price": Decimal(last),
+        "bid_price": Decimal(bid), "ask_price": Decimal(ask),
+    }
+    if accepted:
+        assert p90.validate_real_v3_attached_protection_at_original_quote(**args) == Decimal(last)
+    else:
+        with pytest.raises(ValueError, match="P90_REAL_ATTACHED"):
+            p90.validate_real_v3_attached_protection_at_original_quote(**args)
+
+
+
 def test_r10_safety_route_only_occurs_under_opt_in_and_never_fakes_ticker() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text()
     tree = ast.parse(source)
@@ -257,7 +290,7 @@ def test_r10_safety_route_only_occurs_under_opt_in_and_never_fakes_ticker() -> N
         and n.func.id == "_r10_exact_r1_snapshot"
         for n in ast.walk(execution)
     )
-    assert "validate_real_v3_attached_protection_at_original_price(" in source
+    assert "validate_real_v3_attached_protection_at_original_quote(" in source
     assert "read_r10_execution_quote(" in source
     assert "REPEATABLE READ READ ONLY" in source
     assert "CRIPTA_R10_EXECUTION_PUBLICATION" in source

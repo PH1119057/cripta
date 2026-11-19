@@ -467,6 +467,28 @@ def _is_sub_private_worker() -> bool:
     )
 
 
+def _r10_safe_denial_code(exc: BaseException) -> str:
+    """Only durable, non-secret internal R10/Strategy codes survive this gate."""
+    value = str(exc).strip()
+    safe_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:")
+    if (
+        0 < len(value) <= 180
+        and set(value) <= safe_chars
+        and (
+            isinstance(exc, R10ExecutionPublicationUnavailable)
+            and value.startswith("R10_")
+            or isinstance(exc, ValueError)
+            and value.startswith("P90_REAL_ATTACHED_")
+        )
+    ):
+        return value
+    if isinstance(exc, psycopg.Error):
+        return "R10_DB_READ_FAILED"
+    if isinstance(exc, OSError):
+        return "R10_OS_READ_FAILED"
+    return "R10_PRE_SEND_PROOF_UNAVAILABLE"
+
+
 def _private_worker_safe_error(exc: BaseException) -> str:
     """SUB diagnostics may persist only whitelisted internal stable tokens."""
     if _is_sub_private_worker():
@@ -478,6 +500,16 @@ def _private_worker_safe_error(exc: BaseException) -> str:
             safe_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:-")
             if 0 < len(message) <= 180 and set(message) <= safe_chars:
                 return f"{type(exc).__name__}:{message}"
+        # R10 pre-send errors are wholly internal stable tokens. Retain the
+        # exact code also on SUB; never persist raw exceptions or credentials.
+        prefix = "R10_P90_ORIGINAL_PUBLICATION_INVALID:"
+        if (
+            isinstance(exc, PreMutationSafetyBlock)
+            and message.startswith(prefix)
+            and 0 < len(message) <= 260
+            and set(message) <= set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:")
+        ):
+            return f"{type(exc).__name__}:{message}"
         # Keep only typed, allowlisted POSTFILL source failures for SUB audit.
         prefix = "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED:"
         if message.startswith(prefix) and isinstance(exc, ExchangeMutationBarrier):
@@ -2217,7 +2249,12 @@ def handle_pre_mutation_safety_block(
             connection,
             "command",
             "pre_send_market_publication_blocked",
-            error="R10_P90_ORIGINAL_PUBLICATION_INVALID",
+            error=(
+                str(exc) if (
+                    len(str(exc)) <= 260
+                    and set(str(exc)) <= set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:")
+                ) else "R10_P90_ORIGINAL_PUBLICATION_INVALID"
+            ),
             mutation_sent=False,
         )
     else:
@@ -3531,20 +3568,23 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             if _r10_pg_publication_enabled():
                 try:
                     quote = _r10_execution_quote(symbol)
-                    p90v3.validate_real_v3_attached_protection_at_original_price(
+                    p90v3.validate_real_v3_attached_protection_at_original_quote(
                         symbol=symbol,
                         side=side,
                         instrument_tick=tick,
                         stop_loss=stop,
                         take_profit=target,
                         last_price=quote.last_price,
+                        bid_price=quote.bid_price,
+                        ask_price=quote.ask_price,
                     )
                 except (
                     R10ExecutionPublicationUnavailable,
                     psycopg.Error, OSError, ValueError,
                 ) as exc:
                     raise PreMutationSafetyBlock(
-                        f"R10_P90_ORIGINAL_PUBLICATION_INVALID:{type(exc).__name__}"
+                        "R10_P90_ORIGINAL_PUBLICATION_INVALID:"
+                        f"{_r10_safe_denial_code(exc)}"
                     ) from exc
             else:
                 current_ticker, _ = api_get(
