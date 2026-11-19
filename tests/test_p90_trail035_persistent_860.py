@@ -6,7 +6,7 @@ No real PostgreSQL, Bybit, credential, service or ARM action. The existing
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
