@@ -26,9 +26,6 @@ from bybit_workbench.universal_exit.p90l90_real_trail_reconcile import (
 from bybit_workbench.universal_exit.p90l90_real_v3 import (
     P90_TRAIL_RECOVERY_POLICY,
 )
-from test_p90l90_real_observation import AT, _scope
-
-
 def proof(*, short=False, sub=False, hours=1, ltp=None, trailing="0"):
     position, plan, _, _, private, _ = _scope(short=short, sub=sub)
     now = AT + timedelta(hours=hours)
