@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.15
-**Дата:** 2026-11-18
+**Версия:** 3.16
+**Дата:** 2026-11-19
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -1908,6 +1908,20 @@ R06 cutover prerequisite `mainnet=OFF + execution_permissions=0 + no OPEN/RECONC
 Promotion и R07 dispatch используют exact тот же source session/publication/original native event и immutable Strategy/EntryPlan/ExitPlan identities. Source epoch drift, missing candidate payload, ambiguous same-native-event signal, stale candidate, отсутствующий account arm/safety/generation/binding, slot/capital rejection или unknown transaction outcome — fail-closed. Historical R06 rows без нового immutable candidate payload являются SOURCE_ONLY evidence и никогда не promoted.
 
 Этот owner decision закрывает architecture capability gap из Issue #642, но сам по себе **не включает LIVE**. Required order остаётся CANON -> implementation/tests -> protected GitHub merge -> migration/deploy exact commit -> runtime evidence -> отдельный current owner-controlled re-arm. R07 §60.5.2 остаётся dispatch/fence owner уже созданного `EntryExecutionRequest`, а не producer финансового решения.
+
+
+### 60.5.4 R10 current-quote proof for P90 pre-send protection — OWNER DECISION 2026-11-19 (Issue #854)
+
+**Scope and cause.** P90 Entry may be rare; accepted account-scoped Entry must not be rejected solely because the last native publicTrade, and hence original ticker `lastPrice` field update, is older than two seconds while the current best-bid and best-ask are independently fresh. Original ticker deltas update field clocks only for fields explicitly changed. This is a defect in equating *last traded-price update time* to *current executable-quote freshness*, not permission to fabricate a new trade or timestamp. On 2026-11-18T23:50:45Z LTCUSDT SHORT failed pre-mutation R10; the historical exact inner reason was not durably preserved and must not be asserted retrospectively.
+
+**Approved R10 proof for NEW P90 Entry** within one immutable native PostgreSQL `MarketPublication`, from the unique ACTIVE source epoch and exact LINEAR symbol/instrument/producer: the physical original `bid1Price` and `ask1Price` values and *their own original field timestamps* must each be fresh **at most 2 seconds** at the pre-send verification clock; reference/source/publication timing, identity, coverage, non-crossed positive prices and physically committed source facts remain verified. The original `lastPrice` remains positive, finite, exactly recorded and stamped with its unchanged original field timestamp, no future-time/source-session mismatch; **the age of that lastPrice field alone is NOT a 2-second veto**. A stale or absent current bid OR ask, stale physical current quote/reference, missing original lastPrice, source-gap/mixed epoch or failed provenance stays `BLOCKED`. A fresh quote never upgrades a stale original last trade into a new trade event.
+
+Before the first Exchange mutation the P90 initial attached `stopLoss/takeProfit` (already produced by immutable Strategy policy) must remain strictly on the safe side of **all three proven observations: last traded price, current best bid and current best ask**, with exact tick/side geometry: LONG `SL < min(last,bid,ask)` and `TP > max(last,bid,ask)`; SHORT `TP < min(last,bid,ask)` and `SL > max(last,bid,ask)`. There is no repricing or silent modification of TP/SL. Missing or crossed/invalid quotes, invalid instrument tick, invalid protection, contradictory identity/time or unknown Exchange/account state remain fail-closed. Independent signed Bybit account/order/position/protection reads and subsequent reconciliation are unchanged.
+
+**Ownership:** common MarketSource produces originals; Execution's R10 reader validates one PG publication and one exact physical compact-second row in READ ONLY REPEATABLE READ; Execution does not open Public REST/WS or synthesize prices. R08 Exit reading and original native publicTrade coverage are not weakened. R06 remains source-only; R07 remains transaction/epoch dispatch fence; no replay of historical Entry after ARM; no increase in capital/leverage, new TradingAccount, service permission, or automatic LIVE. Exact typed pre-send denial code must be persisted without raw credentials; transport/DB errors remain sanitized. Owner-approved canonical implementation path: CANON -> targeted regression + positive/negative synthetic tests -> protected CI/GitHub PR -> reviewed release only with trading-code deploy safety and explicit later owner-controlled ARM -> independent runtime proof and stability gate.
+
+**Status:** `OWNER_DECISION=YES`; `CANON=AFTER_MERGE`; `IMPLEMENTED=NOT_PROVEN_BY_THIS_SECTION`; `DEPLOYED=NO_BY_THIS_DECISION`; `LIVE_CHANGE=NO`.
+
 
 ## 61. Minimum production PostgreSQL: current Strategies only by default — OWNER DECISION 2026-11-14 (Issue #642)
 
