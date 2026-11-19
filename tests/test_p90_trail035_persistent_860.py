@@ -92,6 +92,31 @@ def test_old_window_is_not_a_terminal_gate_for_new_opted_in_position(
     assert result.decision.rule_id == "P90L90_REAL_BYBIT_NATIVE_TRAIL035_RECONCILE"
 
 
+def test_no_new_public_trade_since_before_fill_does_not_expire_recovery():
+    """A valid fresh publication need not manufacture a new native trade."""
+    position, plan, private, quote, now = proof(
+        hours=1, ltp="102",
+    )
+    historical_last = position.fill_at - timedelta(minutes=30)
+    quote = replace(
+        quote,
+        field_times=(historical_last, quote.field_times[1], quote.field_times[2]),
+    )
+    observation = build_p90_trail_recovery_observation(
+        position=position, private=private, quote=quote,
+        eligibility=P90_TRAIL_RECOVERY_POLICY,
+        expected_source_session_id=quote.source_session_id,
+        received_at=now,
+    )
+    assert quote.field_times[0] < position.fill_at
+    assert observation.event_at == quote.as_of_second
+    assert observation.event_at >= position.fill_at
+    result = UniversalExitEngine().evaluate(position, plan, observation)
+    assert result.status is ExitEvaluationStatus.DECISION_CREATED
+    assert result.decision.action_kind is ExitActionKind.SET_TRAILING
+    assert "active_price" not in result.decision.requested_mutation.to_dict()
+
+
 def test_recovered_or_already_armed_venue_trail_does_not_reissue() -> None:
     position, plan, private, quote, now = proof(trailing="0.35")
     observation = build_p90_trail_recovery_observation(
