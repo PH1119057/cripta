@@ -570,6 +570,8 @@ if [[ -z "$ROADMAP470_STAGE" ]]; then
     die "P90_CANDIDATE_CAUSAL_PREFLIGHT_RUNNER_MISSING"
   [[ -f "$runtime_release/tests/test_p90_causal_release_preflight_865.py" ]] ||
     die "P90_CANDIDATE_CAUSAL_PREFLIGHT_TEST_MISSING"
+  [[ -f "$runtime_release/tests/test_p90_causal_pg16_865.py" ]] ||
+    die "P90_CANDIDATE_CAUSAL_PG16_TEST_MISSING"
   runuser -u cripta -- env PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="$runtime_release:$runtime_release/src" \
     "$runtime_release/.venv/bin/python" -B \
