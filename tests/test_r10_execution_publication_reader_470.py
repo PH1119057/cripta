@@ -344,6 +344,31 @@ def test_future_original_field_clock_is_never_accepted(
 
 
 
+
+def test_r1_outstanding_signal_validity_keeps_strict_last_trade_ttl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = pin()
+    original.compact_quality["TICKER"]["fields"]["lastPrice"] = "STALE"
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times["lastPrice"] = (AT - timedelta(seconds=20)).isoformat()
+    # New P90 execution-quote semantic accepts the immutable last trade.
+    assert quote(db).last_price == Decimal("100")
+    # Legacy R1 target-reached SIGNAL_VALIDITY still fails closed.
+    with pytest.raises(
+        r10.R10ExecutionPublicationUnavailable,
+        match="R10_R1_LAST_PRICE_FIELD_STALE",
+    ):
+        r10.read_r10_exact_r1_causal_snapshot(
+            db, symbol=SYMBOL, observed_at=AT, history_limit=220,
+        )
+
+
+
 def test_r10_source_module_has_no_independent_exchange_feed() -> None:
     code = Path(
         "src/bybit_workbench/market_data/r10_execution_publication.py"
