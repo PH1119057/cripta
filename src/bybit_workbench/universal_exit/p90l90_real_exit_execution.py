@@ -134,7 +134,7 @@ class P90RealExitExecutionPort:
             or observation.strategy_position_id != position.strategy_position_id
             or observation.event_kind not in (
                 "P90L90_REAL_NATIVE_TRADE", "P90L90_REAL_CLOSED_5M",
-                "P90L90_REAL_POSTFILL",
+                "P90L90_REAL_POSTFILL", "P90L90_REAL_TRAIL_RECOVERY",
             )
             or not isinstance(details, Mapping)
             or details.get("trading_account_id") != approved
@@ -153,6 +153,15 @@ class P90RealExitExecutionPort:
                 or decision.source_refs != observation.source_refs
                 or decision.action_kind.value != "SET_TRAILING"
                 or not any(ref.startswith("bybit:execution:list:exact-order:")
+                           for ref in observation.source_refs)
+            ))
+            or (observation.event_kind == "P90L90_REAL_TRAIL_RECOVERY" and (
+                decision.action_kind.value != "SET_TRAILING"
+                or details.get("current_trailing_recovery_verified") is not True
+                or details.get("current_original_ltp_verified") is not True
+                or details.get("trailing_recovery_policy")
+                   != "P90_TRAIL035_PERSISTENT_V1"
+                or not any(ref.startswith("bybit:market-publication:")
                            for ref in observation.source_refs)
             ))
             or details.get("pending_exit_mutation") is not False
