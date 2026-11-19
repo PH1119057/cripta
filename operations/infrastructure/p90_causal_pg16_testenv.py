@@ -25,6 +25,7 @@ _SHA = re.compile(r"^[0-9a-f]{40}$")
 _ROOT = Path("/data/cripta/research/testenvs/p90_causal_pg16")
 _STAGE = Path("/data/cripta/research/worktrees/p90_causal_c2_865_20261119")
 _RELEASES = Path("/srv/cripta/runtime/releases")
+_ARCHIVES = Path("/data/cripta/research/testenvs/p90_causal_candidate_865")
 _PG_BIN = Path("/usr/lib/postgresql/16/bin")
 _PORT = 6546
 _TEST = "test_p90_causal_pg16_865.py"
@@ -60,7 +61,9 @@ def _own_dir(path: Path, *, create: bool = False):
         raise C2Blocked("C2_TEST_DIR_ACL_INVALID")
 
 
-def _preflight_code(code_root: Path, commit: str, *, stage: bool):
+def _preflight_code(
+    code_root: Path, commit: str, *, stage: bool, candidate_archive: bool = False,
+):
     if not _SHA.fullmatch(commit):
         raise C2Blocked("C2_TARGET_COMMIT_INVALID")
     if code_root.is_symlink() or not code_root.is_dir():
@@ -71,7 +74,17 @@ def _preflight_code(code_root: Path, commit: str, *, stage: bool):
     test = code_root / "tests" / _TEST
     if not test.is_file() or test.is_symlink():
         raise C2Blocked("C2_CANDIDATE_TEST_MISSING")
-    if stage:
+    if stage and candidate_archive:
+        raise C2Blocked("C2_STAGE_MODE_CONFLICT")
+    if candidate_archive:
+        if code_root != _ARCHIVES / commit:
+            raise C2Blocked("C2_ARCHIVE_CANDIDATE_PATH_INVALID")
+        marker = code_root / "INSTALLED_COMMIT"
+        if not marker.is_file() or marker.is_symlink():
+            raise C2Blocked("C2_ARCHIVE_IDENTITY_MARKER_MISSING")
+        if marker.read_text().strip() != commit:
+            raise C2Blocked("C2_ARCHIVE_IDENTITY_MISMATCH")
+    elif stage:
         if code_root != _STAGE:
             raise C2Blocked("C2_STAGE_PATH_NOT_APPROVED")
         head = _run(["git", "-C", str(code_root), "rev-parse", "HEAD"]).stdout.strip()
@@ -268,13 +281,17 @@ def _prepare_test_db():
             c.execute(sql)
 
 
-def run_c2(code_root: Path, commit: str, *, stage: bool = False) -> bool:
+def run_c2(
+    code_root: Path, commit: str, *, stage: bool = False,
+    candidate_archive: bool = False,
+) -> bool:
     start = datetime.now(UTC)
     run_id = start.strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:10]
     old_umask = os.umask(0o077)
     cluster_started = False
     manifest = {
         "run_id": run_id, "candidate_commit": commit, "stage": stage,
+        "candidate_archive": candidate_archive,
         "started_at_utc": start.isoformat(), "state": "UNKNOWN",
         "scope": "INDEPENDENT_PG16_SOURCE_PENDING_LOCK_ROLE_MOCK_PEER_IPC",
         "exchange_mutation": False, "production_database": False,
@@ -282,7 +299,10 @@ def run_c2(code_root: Path, commit: str, *, stage: bool = False) -> bool:
     try:
         if os.geteuid() != 107:
             raise C2Blocked("C2_EXPECTED_UNIX_CRIPTA_UID")
-        _preflight_code(code_root, commit, stage=stage)
+        _preflight_code(
+            code_root, commit, stage=stage,
+            candidate_archive=candidate_archive,
+        )
         _test_cluster_dirs()
         _check_pg16()
         with (_ROOT / ".c2.lock").open("a+") as lock:
@@ -359,14 +379,19 @@ def run_c2(code_root: Path, commit: str, *, stage: bool = False) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--stage-worktree", action="store_true")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--stage-worktree", action="store_true")
+    modes.add_argument("--candidate-archive", action="store_true")
     parser.add_argument("--expected-commit", required=True)
     args = parser.parse_args(argv)
-    code_root = _STAGE if args.stage_worktree else (
-        _RELEASES / args.expected_commit
+    code_root = (
+        _STAGE if args.stage_worktree
+        else (_ARCHIVES if args.candidate_archive else _RELEASES)
+        / args.expected_commit
     )
     return 0 if run_c2(
         code_root, args.expected_commit, stage=args.stage_worktree,
+        candidate_archive=args.candidate_archive,
     ) else 2
 
 
