@@ -436,6 +436,8 @@ as_repo_owner install -d -m 0750 "$runtime_release"
 as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src operations config \
   research/server/backup research/server/connectivity \
   research/server/monitoring research/server/control pyproject.toml \
+  tests/test_p90_causal_release_preflight_865.py \
+  tests/test_p90_causal_pg16_865.py \
   | runuser -u cripta -- tar -xf - -C "$runtime_release"
 as_repo_owner install -d -m 0750 "$tooling_release"
 as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service \
@@ -450,7 +452,10 @@ runuser -u cripta -- /usr/bin/python3 \
   --path src --path operations --path config \
   --path research/server/backup --path research/server/connectivity \
   --path research/server/monitoring --path research/server/control \
-  --path pyproject.toml || die "RELEASE_RUNTIME_GIT_BLOB_VERIFY_FAILED"
+  --path pyproject.toml \
+  --path tests/test_p90_causal_release_preflight_865.py \
+  --path tests/test_p90_causal_pg16_865.py ||
+  die "RELEASE_RUNTIME_GIT_BLOB_VERIFY_FAILED"
 echo "RELEASE_RUNTIME_GIT_BLOB_VERIFY=PASS target:$RELEASE_COMMIT"
 
 runuser -u cripta -- /usr/bin/python3 \
