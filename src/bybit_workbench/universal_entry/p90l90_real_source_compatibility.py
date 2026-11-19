@@ -141,6 +141,32 @@ _REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
 ), _R06_PRE_ACCOUNT_LOCK_ORDER_HISTORICAL_DIGEST))
 
 
+# #854 post-merge production release diagnostic 2026-11-19: before the
+# verified R10 consumer change, ten already-registered ACTIVE-R06-source
+# releases shared one immutable 99-file consumer inventory. Every digest
+# below was RECOMPUTED directly from its own immutable Git commit objects
+# by the approved read-only cripta actor (not trusted from production SQL).
+# Preserve their append-only historical attestations exactly as written.
+# This is NOT approval to reuse an old digest for the newly loaded release:
+# inspect_real_source_identity separately demands the current consumer
+# contract for the exact new release, and unknown releases still fail closed.
+_R06_20261118_PRE_R10_HISTORICAL_DIGEST = (
+    "173df8aab8a71bf329c560e010f068618f3abb0ba8722018edd321349211b6a8"
+)
+_REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
+    "21385b16898190d8a222b0ee3fa01a48ea514d5f",
+    "46cf79ac2ac53872548c8d5e960bacded877a98a",
+    "549ba6863556e47adcfab71cee8753b941455b5f",
+    "643410ccbf8b97d1a564c95fe3c64eebbd67cdb6",
+    "66c35fb0177a929573776b9349a0f28fc318778b",
+    "6b49ba6ef6bf3c3041c8b0f5ddee9f4879cd5acd",
+    "6feadeef3f3308b7ed45a6d0202105007568f5a5",
+    "7608434c84a2bf5546be75bf682e3d212b5f5865",
+    "e25e455038aed397507818f0508b9bbfbabc3568",
+    "e9d71bfb0729c642707168b74d97c8640f0bb8bf",
+), _R06_20261118_PRE_R10_HISTORICAL_DIGEST))
+
+
 # These wiring adapters are reviewed in the release diff. All Strategy,
 # Entry/Exit algorithms, codecs, contracts, account and private-proof modules
 # below remain byte-identical to the retained origin release.
