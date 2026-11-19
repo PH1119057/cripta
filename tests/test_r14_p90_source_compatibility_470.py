@@ -16,6 +16,102 @@ import pytest
 from bybit_workbench.universal_entry import p90l90_real_source_compatibility as compat
 
 
+def test_r14_860_new_trail_exact_r06_origin_bytes_and_negative_paths(
+    tmp_path: Path,
+) -> None:
+    # Independently checked on cripta-owned exact #862 Git checkout.
+    # The frozen #854 seven-file vector must remain byte-identical.
+    previous = compat._REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256
+    reviewed = compat._REVIEWED_R06_P90_TRAIL035_PERSISTENT_860_SHA256
+    added = {
+        "universal_exit/p90l90_exchange_safety.py",
+        "universal_exit/p90l90_real_trail_reconcile.py",
+        "universal_exit/p90l90_real_recovery_send.py",
+    }
+    edited = {
+        "universal_exit/p90l90_real_v3.py",
+        "universal_exit/p90l90_real_exit_execution.py",
+    }
+    assert len(previous) == 7
+    assert len(reviewed) == 10
+    assert set(reviewed) == set(previous) | added
+    assert all(
+        reviewed[relative] == digest
+        for relative, digest in previous.items()
+        if relative not in edited
+    )
+    assert compat._reviewed_delta_for_origin(
+        set(reviewed), origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+        current_hashes=reviewed,
+    ) == reviewed
+
+    package = Path(__file__).resolve().parents[1] / "src/bybit_workbench"
+    for relative, digest in reviewed.items():
+        assert hashlib.sha256((package / relative).read_bytes()).hexdigest() == digest
+
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat._reviewed_delta_for_origin(
+            set(reviewed) | {"universal_exit/unreviewed.py"},
+            origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+        )
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat._reviewed_delta_for_origin(
+            set(reviewed), origin_commit="0" * 40,
+        )
+
+    # Exercise the real full-inventory verifier, not only the map selector.
+    origin = tmp_path / compat._REVIEWED_R06_SOURCE_ORIGIN
+    current = tmp_path / ("f" * 40)
+    for relative in sorted(reviewed):
+        item = current / "src/bybit_workbench" / relative
+        item.parent.mkdir(parents=True, exist_ok=True)
+        item.write_bytes((package / relative).read_bytes())
+        if relative not in added:
+            old = origin / "src/bybit_workbench" / relative
+            old.parent.mkdir(parents=True, exist_ok=True)
+            old.write_bytes(b"# original pre-stabilization consumer bytes\\n")
+    for relative in (
+        "strategy_position.py",
+        "exchange_position_identity.py",
+        "domain/models.py",
+        "market_data/shared_closed_candles.py",
+    ):
+        for root in (origin, current):
+            item = root / "src/bybit_workbench" / relative
+            item.parent.mkdir(parents=True, exist_ok=True)
+            item.write_bytes(b"# unchanged required shared consumer\\n")
+
+    compat.verify_reviewed_bugfix_delta(
+        current_root=current, origin_root=origin,
+    )
+    tampered = current / "src/bybit_workbench/universal_exit/p90l90_real_recovery_send.py"
+    original = tampered.read_bytes()
+    tampered.write_bytes(original + b"\\n# unreviewed change\\n")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="REVIEWED_BUGFIX_CONTENT_DRIFT",
+    ):
+        compat.verify_reviewed_bugfix_delta(
+            current_root=current, origin_root=origin,
+        )
+    tampered.write_bytes(original)
+    extra = current / "src/bybit_workbench/universal_exit/unreviewed.py"
+    extra.write_bytes(b"# unexpected consumer\\n")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat.verify_reviewed_bugfix_delta(
+            current_root=current, origin_root=origin,
+        )
+
+
 def test_r14_r06_origin_accepts_only_exact_reviewed_four_file_delta() -> None:
     expected = compat._REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256
     assert set(expected) == {
