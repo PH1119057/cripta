@@ -64,7 +64,7 @@ def _require(ok: bool, code: str) -> None:
 
 def _candidate(connection: Any) -> dict[str, Any] | None:
     """New-fill marker is an actual financial scope fence, not a rollout guess."""
-    return connection.execute(
+    rows = connection.execute(
         """SELECT p.position_id,p.trading_account_id,p.symbol
              FROM runtime.position_ownership p
             WHERE p.strategy_version=%s AND p.state='OPEN'
@@ -72,9 +72,12 @@ def _candidate(connection: Any) -> dict[str, Any] | None:
               AND p.initial_protection_confirmed_at IS NOT NULL
               AND p.initial_protection_evidence->>'trailing_recovery_policy'=%s
             ORDER BY p.initial_protection_confirmed_at,p.position_id
-            LIMIT 1""",
+            LIMIT 128""",
         (VERSION, P90_TRAIL_RECOVERY_POLICY),
-    ).fetchone()
+    ).fetchall()
+    # Native trail is checked across all open positions rather than endlessly
+    # selecting the same already-armed position while another remains unarmed.
+    return rows[int(datetime.now(UTC).timestamp()) % len(rows)] if rows else None
 
 
 def _source_quote(
@@ -83,6 +86,11 @@ def _source_quote(
     observed_at: datetime,
 ) -> tuple[object, str]:
     """Only one exact original MarketPublication from one read-only PG view."""
+    # The continuous R06 reader may have left a prior implicit read
+    # transaction on its independent PG connection. No private/Exit writes
+    # occur on that connection; close the old view before the next original
+    # publication's fresh REPEATABLE READ READ ONLY snapshot.
+    source_connection.rollback()
     with source_connection.transaction():
         source_connection.execute(
             "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
@@ -291,6 +299,8 @@ def run_p90_persistent_trail_once(
             raise P90PersistentTrailBlocked(
                 "P90_TRAIL_RECOVERY_" + reason
             )
+        if evaluation.status is ExitEvaluationStatus.NO_MATCH:
+            return "P90_TRAIL_RECOVERY_ALREADY_ARMED"
         store = PostgresExitShadowStore(connection)
         store.record(evaluation, position=position, plan=plan)
         if evaluation.status is ExitEvaluationStatus.DECISION_CREATED:
