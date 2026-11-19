@@ -19,7 +19,6 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
 
 from .contracts import ExitActionKind, ExitObservation
 
-
 P90_TRAIL_RECOVERY_POLICY = "P90_TRAIL035_PERSISTENT_V1"
 
 
