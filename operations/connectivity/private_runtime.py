@@ -2856,6 +2856,7 @@ def _require_p90_persistent_trail_private_send(
     marker and fails this gate even if a caller injects a forged payload.
     """
     from psycopg.rows import tuple_row
+
     from bybit_workbench.universal_exit.p90l90_real_recovery_send import (
         validate_p90_trail_recovery_send,
     )
