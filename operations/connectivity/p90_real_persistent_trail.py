@@ -100,9 +100,10 @@ def _source_quote(
         )
         _require(
             quote.source_session_id == session_id
-            and timedelta() <= observed_at - quote.field_times[0]
+            and quote.field_times[0] <= quote.as_of_second
+            and timedelta() <= observed_at - quote.as_of_second
             <= timedelta(seconds=2),
-            "CURRENT_ORIGINAL_LTP_NOT_FRESH",
+            "CURRENT_ORIGINAL_LTP_PUBLICATION_NOT_FRESH",
         )
     return quote, str(session_id)
 
