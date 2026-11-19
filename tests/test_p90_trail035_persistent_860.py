@@ -11,8 +11,6 @@ from decimal import Decimal
 
 import pytest
 
-from test_p90l90_real_observation import AT, _scope
-
 from bybit_workbench.market_data.r10_execution_publication import (
     R10ExecutionQuote,
 )
