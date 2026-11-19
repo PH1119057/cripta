@@ -20,6 +20,9 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
 from .contracts import ExitActionKind, ExitObservation
 
 
+P90_TRAIL_RECOVERY_POLICY = "P90_TRAIL035_PERSISTENT_V1"
+
+
 class P90RealExitUnverified(ValueError):
     """Exact real position, source or protection evidence is insufficient."""
 
@@ -114,7 +117,7 @@ def project_p90l90_real_exit(
             if postfill else (
                 real.get("current_trailing_recovery_verified") is not True
                 or real.get("current_original_ltp_verified") is not True
-                or real.get("trailing_recovery_policy") != "P90_TRAIL035_PERSISTENT_V1"
+                or real.get("trailing_recovery_policy") != P90_TRAIL_RECOVERY_POLICY
             ) if recovery else real.get("durable_cursor_verified") is not True)
         or (postfill and (
             not isinstance(real.get("signed_fill_execution_ids"), list)
