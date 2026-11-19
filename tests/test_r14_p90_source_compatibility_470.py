@@ -45,9 +45,18 @@ def test_r14_860_new_trail_exact_r06_origin_bytes_and_negative_paths(
         current_hashes=reviewed,
     ) == reviewed
 
-    package = Path(__file__).resolve().parents[1] / "src/bybit_workbench"
+    # Windows worktrees may have CRLF while immutable Git blobs use LF.
+    # R14 binds Git-object bytes, not platform-specific checkout bytes.
+    git_root = Path(__file__).resolve().parents[1]
+    blobs = {
+        relative: subprocess.check_output([
+            "git", "-C", str(git_root), "show",
+            f"HEAD:src/bybit_workbench/{relative}",
+        ])
+        for relative in reviewed
+    }
     for relative, digest in reviewed.items():
-        assert hashlib.sha256((package / relative).read_bytes()).hexdigest() == digest
+        assert hashlib.sha256(blobs[relative]).hexdigest() == digest
 
     with pytest.raises(
         compat.P90RealSourceCompatibilityUnverified,
@@ -71,7 +80,7 @@ def test_r14_860_new_trail_exact_r06_origin_bytes_and_negative_paths(
     for relative in sorted(reviewed):
         item = current / "src/bybit_workbench" / relative
         item.parent.mkdir(parents=True, exist_ok=True)
-        item.write_bytes((package / relative).read_bytes())
+        item.write_bytes(blobs[relative])
         if relative not in added:
             old = origin / "src/bybit_workbench" / relative
             old.parent.mkdir(parents=True, exist_ok=True)
