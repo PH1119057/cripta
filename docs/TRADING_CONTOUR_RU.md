@@ -1308,7 +1308,7 @@ Assistant/server maintenance action не подменяет owner trigger.
 
 **Авторизация и метод:** 10 USDT — разрешённая граница риска, а не
 способ подменить контрольный вход. Для §4.8.3 применяются существующие
-\`OWNER_FULL_CONTOUR_TRIGGER\`, authenticated owner action, отдельная
+`OWNER_FULL_CONTOUR_TRIGGER`, authenticated owner action, отдельная
 StrategyVersion v3 и все её MAIN/SUB private, admission, current
 source, mode, slot, protection, signed readback и lifetime gates. В
 частности, v3 имеет **свой** SL/TP ±0.2%, а не P90 stop -10% и
@@ -1324,17 +1324,17 @@ production P90 StrategyVersion с разрешённым current MAIN/SUB
 scope и *обычным* ENTRY/EXIT/financial gate по §4.15.1,
 либо будущий explicit reviewed diagnostic contract, использующий
 именно исходный P90 ExitPlan без подделки P90 stats. Тест
-\`OWNER_FULL_CONTOUR_TRIGGER\` v3 с ExitPlan ±0.2% **никогда**
+`OWNER_FULL_CONTOUR_TRIGGER` v3 с ExitPlan ±0.2% **никогда**
 не считается тестом TRAIL035. Решение только после реального
 eligible fill, подтверждённого SL/TP, оригинальных market
 facts, signed private account, native trailing-stop POST и
 **независимого** signed GET trailingStop с сохранённым SL/TP;
 невозможность получить безопасный eligible fill фиксируется
-\`NOT EXERCISED\`, а не подменяется принудительной сделкой.
+`NOT EXERCISED`, а не подменяется принудительной сделкой.
 
 Это согласие не даёт разрешения менять уже OPEN позицию,
 отменять текущую защиту, переармливать закрытый owner gate или
-обходить \`UNKNOWN\`/failed protection. Изменение конкретного
+обходить `UNKNOWN`/failed protection. Изменение конкретного
 Entry/Exit/Strategy risk contract потребует отдельной immutable
 версии и §4.15/ARCH review. Разрешение пользователя от
 2026-11-19 фиксирует тестовый account scope, но не утверждает,
