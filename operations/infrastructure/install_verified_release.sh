@@ -432,12 +432,24 @@ reset_release_candidate \
   "$tooling_release" "$RESEARCH_TOOLING_ROOT/current" \
   "$RESEARCH_TOOLING_ROOT/releases" tooling
 
+# Only current normal releases contain #865 tests. Historical R07-R13
+# staged commits predate these paths and must keep their original archive ABI.
+runtime_test_paths=()
+runtime_verify_test_paths=()
+if [[ -z "$ROADMAP470_STAGE" ]]; then
+  runtime_test_paths+=(
+    tests/test_p90_causal_release_preflight_865.py
+    tests/test_p90_causal_pg16_865.py
+  )
+  for test_path in "${runtime_test_paths[@]}"; do
+    runtime_verify_test_paths+=(--path "$test_path")
+  done
+fi
 as_repo_owner install -d -m 0750 "$runtime_release"
 as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src operations config \
   research/server/backup research/server/connectivity \
   research/server/monitoring research/server/control pyproject.toml \
-  tests/test_p90_causal_release_preflight_865.py \
-  tests/test_p90_causal_pg16_865.py \
+  "${runtime_test_paths[@]}" \
   | runuser -u cripta -- tar -xf - -C "$runtime_release"
 as_repo_owner install -d -m 0750 "$tooling_release"
 as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service \
@@ -452,9 +464,7 @@ runuser -u cripta -- /usr/bin/python3 \
   --path src --path operations --path config \
   --path research/server/backup --path research/server/connectivity \
   --path research/server/monitoring --path research/server/control \
-  --path pyproject.toml \
-  --path tests/test_p90_causal_release_preflight_865.py \
-  --path tests/test_p90_causal_pg16_865.py ||
+  --path pyproject.toml "${runtime_verify_test_paths[@]}" ||
   die "RELEASE_RUNTIME_GIT_BLOB_VERIFY_FAILED"
 echo "RELEASE_RUNTIME_GIT_BLOB_VERIFY=PASS target:$RELEASE_COMMIT"
 
