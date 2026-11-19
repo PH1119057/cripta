@@ -2761,8 +2761,21 @@ def _universal_exit_position(
             LIMIT 1""",
         (position_id,),
     ).fetchone()
-    if latest_observation is None or str(latest_observation[0]) != str(latest_decision[1]):
+    if latest_observation is None:
         raise RuntimeError("STRATEGY_EXIT_OBSERVATION_SUPERSEDED")
+    if str(latest_observation[0]) != str(latest_decision[1]):
+        # Native MFE/closed-bar observations may advance while a *present-time*
+        # Exchange protection recovery is queued. The latest financial
+        # ExitDecision must still match exactly, and before any POST the
+        # account worker rechecks both signed Bybit and the latest original
+        # MarketPublication plus the durable per-fill opt-in. Do not weaken
+        # ordinary TP/close/early-firstfill supersession.
+        if not (
+            str(payload.get("trail_recovery_policy") or "")
+            == "P90_TRAIL035_PERSISTENT_V1"
+            and str(payload.get("action_kind") or "") == "SET_TRAILING"
+        ):
+            raise RuntimeError("STRATEGY_EXIT_OBSERVATION_SUPERSEDED")
 
     exchange_position = next(
         (
