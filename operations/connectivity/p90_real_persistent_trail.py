@@ -70,11 +70,6 @@ def _candidate(connection: Any) -> dict[str, Any] | None:
               AND p.identity_status='PROVEN'
               AND p.initial_protection_confirmed_at IS NOT NULL
               AND p.initial_protection_evidence->>'trailing_recovery_policy'=%s
-              AND NOT EXISTS (
-                SELECT 1 FROM strategy_exit.exit_decisions d
-                 WHERE d.strategy_position_id=p.position_id
-                   AND d.action_kind='SET_TRAILING'
-              )
             ORDER BY p.initial_protection_confirmed_at,p.position_id
             LIMIT 1""",
         (VERSION, P90_TRAIL_RECOVERY_POLICY),
