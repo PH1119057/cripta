@@ -322,6 +322,6 @@ def test_r14_r10_historical_99_consumer_git_objects_exact(
     assert len(inventory) == 99
     digest = hashlib.sha256(compat.CONTRACT_VERSION.encode())
     for relative in sorted(inventory):
-        digest.update(relative.encode() + b"\\0")
+        digest.update(relative.encode() + b"\0")
         digest.update(hashlib.sha256(inventory[relative]).digest())
     assert digest.hexdigest() == _R06_PRE_R10_HISTORICAL_DIGEST
