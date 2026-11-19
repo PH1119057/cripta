@@ -171,7 +171,10 @@ def build_p90_trail_recovery_observation(
         observation_id=observation_id,
         strategy_position_id=position.strategy_position_id,
         symbol=position.symbol,
-        event_at=quote.field_times[0].astimezone(UTC),
+        # A recovery is a new present-time protection fact. The unchanged
+        # original lastPrice field time is historical and can predate fill;
+        # only the verified current MarketPublication is the event clock.
+        event_at=quote.as_of_second.astimezone(UTC),
         observed_at=received_at.astimezone(UTC),
         received_at=received_at.astimezone(UTC),
         event_kind="P90L90_REAL_TRAIL_RECOVERY",
