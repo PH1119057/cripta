@@ -165,7 +165,7 @@ def build_p90_trail_recovery_observation(
         "exit_plan": position.exit_plan_fingerprint,
         "publication": quote.publication_id,
         "private_generation": private.generation_id,
-        "lts": quote.field_times[0].astimezone(UTC),
+        "publication_time": quote.as_of_second.astimezone(UTC),
     })[:32]
     return ExitObservation(
         observation_id=observation_id,
