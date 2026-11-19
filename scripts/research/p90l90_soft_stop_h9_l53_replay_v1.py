@@ -228,8 +228,8 @@ def replay(period,smoke_hours=0):
   print("SMOKE_PASS",json.dumps({"period":period,"ticks":ticks,"parity":parity,
    "counts":{k:v["counts"] for k,v in sums.items()}},sort_keys=True),flush=True)
   return result
- output.mkdir(mode=0o2770)
- snap=output/"source_snapshot";snap.mkdir(mode=0o2770)
+ output.mkdir(mode=0o770)
+ snap=output/"source_snapshot";snap.mkdir(mode=0o770)
  for file in (Path(__file__),Path(tp.__file__),Path(tp.old.__file__),
               Path(tp.old.previous.__file__),Path(tp.old.base.__file__),
               Path(tp.old.entry90.__file__),Path(r29.__file__),
