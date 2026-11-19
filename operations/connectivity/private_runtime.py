@@ -2826,6 +2826,102 @@ def assert_legacy_automated_exit_ownership(
             )
 
 
+
+def _require_p90_persistent_trail_private_send(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+    *,
+    payload: dict[str, object],
+    position: dict[str, object],
+    tick: Decimal,
+) -> None:
+    """Re-attest new-policy opt-in + current LTP + signed Bybit before POST.
+
+    No historical high/old ExitObservation or self-attested payload may
+    authorize the financial mutation. Existing pre-release INJ has no durable
+    marker and fails this gate even if a caller injects a forged payload.
+    """
+    from psycopg.rows import tuple_row
+    from bybit_workbench.universal_exit.p90l90_real_recovery_send import (
+        validate_p90_trail_recovery_send,
+    )
+    from bybit_workbench.universal_exit.p90l90_real_v3 import (
+        P90_TRAIL_RECOVERY_POLICY,
+    )
+
+    if payload.get("trail_recovery_policy") != P90_TRAIL_RECOVERY_POLICY:
+        raise PreMutationSafetyBlock(
+            "P90_TRAIL_RECOVERY_POLICY_NOT_AUTHORIZED"
+        )
+    # Same account-first global lock order as private reconciliation and
+    # Universal Exit publisher, now on THIS command's live transaction.
+    connection.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+        (TRADING_ACCOUNT_ID,),
+    )
+    symbol = str(payload.get("symbol") or "")
+    live, _ = api_get(
+        "/v5/position/list",
+        {"category": "linear", "symbol": symbol},
+        key,
+        secret,
+    )
+    _require_entry_bybit_read_ok(live, "/v5/position/list")
+    rows = (live.get("result") or {}).get("list")
+    if not isinstance(rows, list):
+        raise PreMutationSafetyBlock(
+            "P90_TRAIL_RECOVERY_SIGNED_POSITION_LIST_UNVERIFIED"
+        )
+    matching = [
+        row for row in rows
+        if isinstance(row, dict)
+        and row.get("symbol") == symbol
+        and str(row.get("positionIdx")) == str(position.get("positionIdx"))
+        and Decimal(str(row.get("size") or 0)) > 0
+    ]
+    stable = (
+        "symbol", "side", "positionIdx", "size", "avgPrice",
+        "stopLoss", "takeProfit", "trailingStop",
+    )
+    if (
+        len(matching) != 1
+        or any(str(matching[0].get(k)) != str(position.get(k)) for k in stable)
+    ):
+        raise PreMutationSafetyBlock(
+            "P90_TRAIL_RECOVERY_SIGNED_POSITION_CHANGED"
+        )
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        "application_name=p90-trail035-private-presend",
+        autocommit=True,
+        row_factory=tuple_row,
+    ) as source:
+        with source.transaction():
+            source.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            )
+            checked_at = datetime.now(UTC)
+            quote = read_r10_execution_quote(
+                source,
+                symbol=symbol,
+                observed_at=checked_at,
+            )
+    try:
+        validate_p90_trail_recovery_send(
+            connection,
+            payload=payload,
+            position=matching[0],
+            quote=quote,
+            tick=tick,
+            at=datetime.now(UTC),
+        )
+    except Exception as exc:
+        raise PreMutationSafetyBlock(
+            "P90_TRAIL_RECOVERY_PRESEND_PROOF_UNVERIFIED"
+        ) from exc
+
+
 def _execute_universal_exit_command(
     connection: psycopg.Connection,
     key: str,
@@ -3061,6 +3157,15 @@ def _execute_universal_exit_command(
         )
 
     if action_kind is ExitActionKind.SET_TRAILING:
+        if payload.get("trail_recovery_policy") is not None:
+            _require_p90_persistent_trail_private_send(
+                connection,
+                key,
+                secret,
+                payload=payload,
+                position=position,
+                tick=tick,
+            )
         distance = _step_aligned(
             Decimal(str(mutation["distance"])), tick, "trailing distance"
         )
