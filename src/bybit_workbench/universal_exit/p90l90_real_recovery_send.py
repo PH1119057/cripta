@@ -7,7 +7,7 @@ position AFTER acquiring its account lock and BEFORE the actual POST.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 from typing import Any
 
