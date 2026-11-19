@@ -2923,17 +2923,16 @@ def _require_p90_persistent_trail_private_send(
         "application_name=p90-trail035-private-presend",
         autocommit=True,
         row_factory=tuple_row,
-    ) as source:
-        with source.transaction():
-            source.execute(
-                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-            )
-            checked_at = datetime.now(UTC)
-            quote = read_r10_execution_quote(
-                source,
-                symbol=symbol,
-                observed_at=checked_at,
-            )
+    ) as source, source.transaction():
+        source.execute(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        checked_at = datetime.now(UTC)
+        quote = read_r10_execution_quote(
+            source,
+            symbol=symbol,
+            observed_at=checked_at,
+        )
     try:
         validate_p90_trail_recovery_send(
             connection,
