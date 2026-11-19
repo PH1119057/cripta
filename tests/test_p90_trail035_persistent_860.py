@@ -267,9 +267,15 @@ def test_forged_recovery_marker_alone_never_reaches_bybit_post(monkeypatch):
         "requested_mutation": {"distance": "0.35", "tpsl_mode": "Full"},
         "trail_recovery_policy": P90_TRAIL_RECOVERY_POLICY,
     }
-    with pytest.raises(Exception):
+    class NoDatabaseMutation:
+        def execute(self, *_args, **_kwargs):
+            raise worker.PreMutationSafetyBlock(
+                "P90_TRAIL_RECOVERY_DURABLE_AUTHORITY_NOT_PROVEN"
+            )
+
+    with pytest.raises(worker.PreMutationSafetyBlock):
         worker._execute_universal_exit_command(
-            None, "never-use", "never-use",
+            NoDatabaseMutation(), "never-use", "never-use",
             command_id="forged", symbol=position.symbol, payload=payload,
             positions_payload={"retCode": 0, "result": {"list": [dict(private.position)]}},
             tick=Decimal("0.01"), qty_step=Decimal("0.001"),
