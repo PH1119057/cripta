@@ -53,6 +53,10 @@ def validate_p90_trail_recovery_send(
     decision_id = str(payload.get("exit_decision_id") or "")
     symbol = str(payload.get("symbol") or "")
     mutation = payload.get("requested_mutation")
+    if not isinstance(mutation, Mapping):
+        raise P90TrailRecoverySendBlocked(
+            "P90_TRAIL_SEND_MUTATION_NOT_PROVEN"
+        )
     _need(
         payload.get("trail_recovery_policy") == P90_TRAIL_RECOVERY_POLICY
         and str(payload.get("action_kind")) == "SET_TRAILING"
