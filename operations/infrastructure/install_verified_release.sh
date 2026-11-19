@@ -557,6 +557,24 @@ printf '%s\n' "$RELEASE_COMMIT" > "$tooling_release/INSTALLED_COMMIT"
 chown cripta:cripta "$runtime_release/INSTALLED_COMMIT" "$tooling_release/INSTALLED_COMMIT"
 chmod 0640 "$runtime_release/INSTALLED_COMMIT" "$tooling_release/INSTALLED_COMMIT"
 
+# #865: exact candidate-only C0/C1 causal preflight. Fail BEFORE changing
+# current symlinks, stopping any managed service, or running production SQL.
+# Historical Roadmap470 offline stage commits predate this approved runner.
+if [[ -z "$ROADMAP470_STAGE" ]]; then
+  [[ -f "$runtime_release/operations/infrastructure/p90_causal_release_preflight.py" ]] ||
+    die "P90_CANDIDATE_CAUSAL_PREFLIGHT_RUNNER_MISSING"
+  [[ -f "$runtime_release/tests/test_p90_causal_release_preflight_865.py" ]] ||
+    die "P90_CANDIDATE_CAUSAL_PREFLIGHT_TEST_MISSING"
+  runuser -u cripta -- env PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH="$runtime_release:$runtime_release/src" \
+    "$runtime_release/.venv/bin/python" -B \
+    "$runtime_release/operations/infrastructure/p90_causal_release_preflight.py" \
+    --candidate-root "$runtime_release" --expected-commit "$RELEASE_COMMIT" ||
+    die "P90_CANDIDATE_CAUSAL_PREFLIGHT_FAILED"
+else
+  echo "P90_CANDIDATE_CAUSAL_PREFLIGHT=DEFERRED_HISTORICAL_STAGE stage:$ROADMAP470_STAGE"
+fi
+
 next_runtime="$RUNTIME_ROOT/.current-$RELEASE_COMMIT"
 next_tooling="$RESEARCH_TOOLING_ROOT/.current-$RELEASE_COMMIT"
 rm -f "$next_runtime" "$next_tooling"
