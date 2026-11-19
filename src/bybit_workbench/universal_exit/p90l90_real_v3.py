@@ -8,7 +8,7 @@ must provide these facts; this module does NOT attest to their provenance.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import ExitPlan, TradeDirection
