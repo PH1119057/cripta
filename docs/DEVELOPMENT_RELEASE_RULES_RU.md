@@ -3048,6 +3048,38 @@ when running. A missing test module/dependency/edge or failed assertion
 must return nonzero BEFORE stopping production. No tool/permission
 block workaround.
 
+**Existing verified test assets — reuse, do not reinvent.** Repository already
+has `tests/postgres_trade_lifecycle_bootstrap.sql`,
+`tests/test_p90_real_firstfill_two_connection_postgres.py`,
+`tests/test_p90_real_restart_postfill_guard_postgres.py`,
+`tests/integration/p90_ws_recovery_disposable_setup.sql`,
+and `.github/workflows/trade-lifecycle-postgres.yml` with PostgreSQL 16,
+real test-role grants, transaction/restart/negative cases and
+`CRIPTA_TRADE_LIFECYCLE_TEST_DSN`. These are *existing* disposable
+integration facilities, not missing infrastructure. Use their full
+actual schema/role semantics, preserving their checks
+`dbname=cripta_integration`, server PostgreSQL ≥16 and
+`CRIPTA_P90_POSTFILL_E2E_REQUIRED=1` (missing DSN must FAIL, not SKIP).
+GitHub-hosted disposable CI execution does not substitute for the
+owner-required **server** candidate run.
+
+**Permanent server C2 environment — prepared contract, NOT YET INSTALLED:**
+use a separate PostgreSQL 16 instance or independent test cluster bound
+to a dedicated local socket/port, under the exact authorized PG cluster
+actor and a vetted project test workspace on the Data SSD; dedicated
+disposable `cripta_integration` database and `cripta`-equivalent test
+role limited to this cluster. Never pass production `dbname=cripta`,
+`/var/run/postgresql` production socket, Exchange credentials, or
+production `runtime/current` to the C2 runner. For EACH run validate
+cluster/socket/role/DB identity, exact candidate SHA and grants before
+destructive fixture creation, and prove test transactions and teardown
+without touching production. Retain reproducible versioned fixture and
+non-secret manifest; test-output IDs/paths and fail/unknown status must
+be durable. Actor, UNIX owner/group/ACL, systemd sandbox, PostgreSQL
+migration actor and test DB connection checks require DEV §5.1/§19
+and actual MAP §1.4 *before* provisioning; absence is
+`C2_SERVER_NOT_PREPARED`, not a claim that tests are impossible.
+
 **Blocking semantics:** C0/C1 are mandatory once installed; if a
 change requires C2 for correctness, absence of working C2 blocks the
 claim of complete pre-release causal validation. `C3` cannot run
