@@ -2893,7 +2893,7 @@ P90 производителей, потребителей, разрешений
 текущий actor/path — MAP §1.4. Эта секция — canonical owner
 **связей и предрелизного доказательства**, НЕ новый финансовый writer.
 Исходная инвентаризация выполнена по GitHub main
-\`f20270e835202d5609e7a7b980d8e6565903d261\` (датированный
+`f20270e835202d5609e7a7b980d8e6565903d261` (датированный
 source checkpoint от 19.11.2026; не вечное требование LOADED_COMMIT).
 Issue #865 — evidence / историю отказа; содержимое таблицы в Issue не
 второй authority. После изменений topology эту таблицу менять вместе с
@@ -2937,53 +2937,53 @@ GitHub protected main -> U. Verified candidate -> pre-release tests
 Observer не открывает Exchange. Credential-free Exit не выполняет
 Bybit POST непосредственно. Dedicated MAIN и SUB Private Runtime
 не взаимозаменяемы. MAYAK/Dispatcher в P90_MINIMAL остаются
-\`PAUSED_BY_DATA_SCOPE\` и не являются emergency источниками.
-\`Claim heartbeat\`, положительный \`ExitDecision\`, Exchange ACK и
-фактический signed readback \`trailingStop>0\` — **разные** доказательства.
+`PAUSED_BY_DATA_SCOPE` и не являются emergency источниками.
+`Claim heartbeat`, положительный `ExitDecision`, Exchange ACK и
+фактический signed readback `trailingStop>0` — **разные** доказательства.
 
 #### 59.7.2 Матрица событий, IPC, таблиц и ownership
 
 | ID / событие | Истинный writer / конкретный исполнитель | INPUT → OUTPUT: database / IPC / файл | Точный gate и lock | Следующий consumer / обязательное свидетельство |
 |---|---|---|---|---|
-| A. Public source | \`cripta-native-public-trade-source.service\`, \`operations/monitoring/native_public_trade_source.py\` | Approved Bybit publicTrade / candles → оригиналы и \`analytics.native_public_trade_source_sessions\` | Один физический producer, PG lock, source epoch, no second WS | B/H/I/J: по 5 LINEAR instrument, sequence continuity и source identity |
-| B. Publication | Native MarketSource / publication writer | \`analytics.public_market_source_seconds\`, immutable current/closed publication, exact session/producer_commit/frame | Один committed PG boundary; field-time/TTL и original-to-publication provenance | C/I/J: source session+publication_id, закрытые 5m, LTP из реальных данных |
-| C. No-order Entry facts | \`cripta-universal-entry-observer.service\`, R06 source-only | R06 PG native future-only candidate, \`strategy_entry.p90_scoped_native_consumer_checkpoints\` | Только чтение verified source, никакого financial request, нет historical replay | D: current future-only signal + causal refs |
-| D. Financial Entry | MAIN и SUB \`cripta-universal-entry-consumer*.service\`, \`r06_financial_promotion.py\` | Candidate + \`strategy_entry.p90_r06_financial_promotion_checkpoints\` → \`strategy_entry.execution_requests\` | MAIN/SUB strategy binding, account ARM, mainnet=ON, permissions, future-only baseline, SECOND48 | E/F: одна законная новая заявка со ссылкой на publication |
-| E. Slot & capital | Universal Entry admission, bound account | \`runtime.capital_reservations\`, \`runtime.exchange_position_slot_claims\`, request/dispatch | Строгий однонаправленный one-way slot, 10 USDT, isolated 1x, MAIN cap 20/SUB cap 30; pending/unknown prohibit duplicate | F: idempotent account-scoped command без второй позиции |
-| F. Bybit Entry | \`cripta-private-runtime*\` с credential MAIN/SUB | \`runtime.trade_commands\`, Bybit order/fills, \`runtime.position_ownership\`, \`runtime.hot_positions\` | Сверенная credential→connector→TradingAccount, actual fill vs ACK, account lock/reconcile | G: OPEN/PROVEN, fill_price, qty, positionIdx, order/fill provenance |
-| G. Initial protection | Тот же credential private owner | Bybit Full SL/TP → \`runtime.position_ownership.initial_protection_evidence\`, \`initial_protection_confirmed_at\`, durable opted-in policy | Signed Bybit position/orders, qty/idx/side, reduceOnly/closeOnTrigger; no ACK-only proof | H/K/L/M/N: защищённая позиция и immutable ExitPlan |
-| H. Immediate original source | \`p90_real_independent_exit.py\`, R09 postfill source | Immutable postfill original source window | 15 секунд от protection, exact epoch and time coverage; stale=typed refusal | L: доказанная граница first-fill, не бессрочное удержание owner |
-| I. Current executable quote | \`r10_execution_publication.py::read_r10_execution_quote\` | \`analytics.public_market_source_seconds\` в REPEATABLE READ READ ONLY | ONE ACTIVE source session, same publication, LTP/bid/ask field age ≤2s, no invented timestamp | M/P: свежая безопасная цена для активации TRAIL035 |
-| J. MFE & 5m | Native originals + \`p90_r06_exit_owner.py\` | \`strategy_exit.exit_observations\` high-watermark and closed 5m | One causal per-boundary progression, immutable source lineage | N: continuous RAW L5-3 exit независимо от slow firstfill |
-| K. Signed private | MAIN/SUB \`private_runtime.py\` signed IPC via \`P90PrivateProofClient\` | Bybit position/list, orders, account mode/UID → account-specific proof | Correct actor/credential, connector, qty/side/idx/SL/TP, source epoch, pending mutation, freshness | L/M/P: matching public/private at same temporal snapshot |
-| L. First-fill TRAIL035 | \`p90_real_independent_exit.py::run_p90_exit_once\` from Universal Exit consumer | G+H+K → ExitObservation/Decision/Request, \`runtime.connection_events\` refusal | Account advisory + position row lock; 15s immutable window; typed \`FIRST_FILL_UNVERIFIED\` | O/P: durable result; expiry does **not** terminate M/N |
-| M. Persistent TRAIL035 | \`p90_real_persistent_trail.py::run_p90_persistent_trail_once\` #860 | Opted-in OPEN position + I + K + second independent signed re-GET → current observation | Same account-first lock; exactly approved new-fill marker, no unknown/pending child command, no original-source substitute | O/P: one SET_TRAILING or typed BLOCKED, no blind re-POST |
-| N. Continuous Exit | \`p90_r06_exit_owner.py::run_p90_r06_exit_once\` | \`runtime.position_exit_claims\` heartbeat, \`strategy_exit.exit_observations\`, dynamic 5m TP | Account+position lock and immutable ExitPlan; heartbeat does **not** prove native trail | O/Q/R: continuously PROVEN ownership and causal MFE/exit |
-| O. Exit decision | Universal Exit Engine + \`p90l90_real_exit_execution.py\` / ExecutionPort | Observation+ExitPlan → \`strategy_exit.exit_decisions\`, \`strategy_exit.execution_requests\`, \`runtime.trade_commands\` | Account/position lock, protection/identity & pending guard, release/source/fingerprint | P: queued exact account command with no double execution |
-| P. Bybit trailing | Credential-bound Private Runtime SET_TRAILING handler | Bybit \`POST /v5/position/trading-stop\` Full idx0 distance/tick → signed GET \`/v5/position/list\` and protection evidence | Validate qty/side/SL/TP before+after; confirm \`trailingStop>0\`, unknown ACK needs reconcile | Q/R: Exchange-confirmed independent native trail, not just ACK |
-| Q. Exit overall status | \`universal_exit_consumer.py::run_once/_p90_status\` | L/M/N status → \`/var/lib/cripta-p90-r06-exit/status.json\` | Separate \`firstfill\`, \`recovery\`, \`continuous\`, \`trailing_confirmed\` obligations; no false READY | R/S/T: documented state with release, freshness, actual protection |
-| R. Safety/lifecycle | Lifecycle/Position Supervisors | \`runtime.lifecycle_faults\`, \`runtime.effective_protection_evidence\`, \`runtime.position_exit_claims\` | Detect absent SL/TP, stale/missing Exit claim, changed position qty; false old fault != new scoped failure | S/T: durable fault & updated protection, no silent clear |
-| S. Gate for new Entry | \`release_arm_safety.py::check_release_arm_invariant\` / guard | Owner readiness → \`control.release_arm_incidents\`, \`control.execution_gate_events\`, \`control.execution_gates\` | Fail closed on actual hazard; stop NEW Entry, do not cancel existing Exchange protection/Exit | T: scoped reason, exact source/account/owner proof |
-| T. Owner Gateway | Dashboard \`p90l90_real_prearm_evidence.py::prepare_p90l90_real_v3_prearm_evidence\` | Service+current/flat/ARM/account/source/Exit evidence, staged gate | Current strict flat state: fresh exact \`READY_FLAT\` and both accounts FLAT; OPEN-position rearm is separate TC/ARCH owner contract | Authenticated OWNER ARM only after full independent technical readiness |
-| U. Release owner | GitHub protected main → \`cripta-release-controller.service\` / verified installer | Exact immutable candidate \`/srv/cripta/runtime/releases/<SHA>\` before symlink → installed/loaded runtime | Hash/CI/rollback/source ABI, candidate test *before* service stop, no auto ARM | All A–T match candidate commit; postrelease behavior and signed proof separately |
+| A. Public source | `cripta-native-public-trade-source.service`, `operations/monitoring/native_public_trade_source.py` | Approved Bybit publicTrade / candles → оригиналы и `analytics.native_public_trade_source_sessions` | Один физический producer, PG lock, source epoch, no second WS | B/H/I/J: по 5 LINEAR instrument, sequence continuity и source identity |
+| B. Publication | Native MarketSource / publication writer | `analytics.public_market_source_seconds`, immutable current/closed publication, exact session/producer_commit/frame | Один committed PG boundary; field-time/TTL и original-to-publication provenance | C/I/J: source session+publication_id, закрытые 5m, LTP из реальных данных |
+| C. No-order Entry facts | `cripta-universal-entry-observer.service`, R06 source-only | R06 PG native future-only candidate, `strategy_entry.p90_scoped_native_consumer_checkpoints` | Только чтение verified source, никакого financial request, нет historical replay | D: current future-only signal + causal refs |
+| D. Financial Entry | MAIN и SUB `cripta-universal-entry-consumer*.service`, `r06_financial_promotion.py` | Candidate + `strategy_entry.p90_r06_financial_promotion_checkpoints` → `strategy_entry.execution_requests` | MAIN/SUB strategy binding, account ARM, mainnet=ON, permissions, future-only baseline, SECOND48 | E/F: одна законная новая заявка со ссылкой на publication |
+| E. Slot & capital | Universal Entry admission, bound account | `runtime.capital_reservations`, `runtime.exchange_position_slot_claims`, request/dispatch | Строгий однонаправленный one-way slot, 10 USDT, isolated 1x, MAIN cap 20/SUB cap 30; pending/unknown prohibit duplicate | F: idempotent account-scoped command без второй позиции |
+| F. Bybit Entry | `cripta-private-runtime*` с credential MAIN/SUB | `runtime.trade_commands`, Bybit order/fills, `runtime.position_ownership`, `runtime.hot_positions` | Сверенная credential→connector→TradingAccount, actual fill vs ACK, account lock/reconcile | G: OPEN/PROVEN, fill_price, qty, positionIdx, order/fill provenance |
+| G. Initial protection | Тот же credential private owner | Bybit Full SL/TP → `runtime.position_ownership.initial_protection_evidence`, `initial_protection_confirmed_at`, durable opted-in policy | Signed Bybit position/orders, qty/idx/side, reduceOnly/closeOnTrigger; no ACK-only proof | H/K/L/M/N: защищённая позиция и immutable ExitPlan |
+| H. Immediate original source | `p90_real_independent_exit.py`, R09 postfill source | Immutable postfill original source window | 15 секунд от protection, exact epoch and time coverage; stale=typed refusal | L: доказанная граница first-fill, не бессрочное удержание owner |
+| I. Current executable quote | `r10_execution_publication.py::read_r10_execution_quote` | `analytics.public_market_source_seconds` в REPEATABLE READ READ ONLY | ONE ACTIVE source session, same publication, LTP/bid/ask field age ≤2s, no invented timestamp | M/P: свежая безопасная цена для активации TRAIL035 |
+| J. MFE & 5m | Native originals + `p90_r06_exit_owner.py` | `strategy_exit.exit_observations` high-watermark and closed 5m | One causal per-boundary progression, immutable source lineage | N: continuous RAW L5-3 exit независимо от slow firstfill |
+| K. Signed private | MAIN/SUB `private_runtime.py` signed IPC via `P90PrivateProofClient` | Bybit position/list, orders, account mode/UID → account-specific proof | Correct actor/credential, connector, qty/side/idx/SL/TP, source epoch, pending mutation, freshness | L/M/P: matching public/private at same temporal snapshot |
+| L. First-fill TRAIL035 | `p90_real_independent_exit.py::run_p90_exit_once` from Universal Exit consumer | G+H+K → ExitObservation/Decision/Request, `runtime.connection_events` refusal | Account advisory + position row lock; 15s immutable window; typed `FIRST_FILL_UNVERIFIED` | O/P: durable result; expiry does **not** terminate M/N |
+| M. Persistent TRAIL035 | `p90_real_persistent_trail.py::run_p90_persistent_trail_once` #860 | Opted-in OPEN position + I + K + second independent signed re-GET → current observation | Same account-first lock; exactly approved new-fill marker, no unknown/pending child command, no original-source substitute | O/P: one SET_TRAILING or typed BLOCKED, no blind re-POST |
+| N. Continuous Exit | `p90_r06_exit_owner.py::run_p90_r06_exit_once` | `runtime.position_exit_claims` heartbeat, `strategy_exit.exit_observations`, dynamic 5m TP | Account+position lock and immutable ExitPlan; heartbeat does **not** prove native trail | O/Q/R: continuously PROVEN ownership and causal MFE/exit |
+| O. Exit decision | Universal Exit Engine + `p90l90_real_exit_execution.py` / ExecutionPort | Observation+ExitPlan → `strategy_exit.exit_decisions`, `strategy_exit.execution_requests`, `runtime.trade_commands` | Account/position lock, protection/identity & pending guard, release/source/fingerprint | P: queued exact account command with no double execution |
+| P. Bybit trailing | Credential-bound Private Runtime SET_TRAILING handler | Bybit `POST /v5/position/trading-stop` Full idx0 distance/tick → signed GET `/v5/position/list` and protection evidence | Validate qty/side/SL/TP before+after; confirm `trailingStop>0`, unknown ACK needs reconcile | Q/R: Exchange-confirmed independent native trail, not just ACK |
+| Q. Exit overall status | `universal_exit_consumer.py::run_once/_p90_status` | L/M/N status → `/var/lib/cripta-p90-r06-exit/status.json` | Separate `firstfill`, `recovery`, `continuous`, `trailing_confirmed` obligations; no false READY | R/S/T: documented state with release, freshness, actual protection |
+| R. Safety/lifecycle | Lifecycle/Position Supervisors | `runtime.lifecycle_faults`, `runtime.effective_protection_evidence`, `runtime.position_exit_claims` | Detect absent SL/TP, stale/missing Exit claim, changed position qty; false old fault != new scoped failure | S/T: durable fault & updated protection, no silent clear |
+| S. Gate for new Entry | `release_arm_safety.py::check_release_arm_invariant` / guard | Owner readiness → `control.release_arm_incidents`, `control.execution_gate_events`, `control.execution_gates` | Fail closed on actual hazard; stop NEW Entry, do not cancel existing Exchange protection/Exit | T: scoped reason, exact source/account/owner proof |
+| T. Owner Gateway | Dashboard `p90l90_real_prearm_evidence.py::prepare_p90l90_real_v3_prearm_evidence` | Service+current/flat/ARM/account/source/Exit evidence, staged gate | Current strict flat state: fresh exact `READY_FLAT` and both accounts FLAT; OPEN-position rearm is separate TC/ARCH owner contract | Authenticated OWNER ARM only after full independent technical readiness |
+| U. Release owner | GitHub protected main → `cripta-release-controller.service` / verified installer | Exact immutable candidate `/srv/cripta/runtime/releases/<SHA>` before symlink → installed/loaded runtime | Hash/CI/rollback/source ABI, candidate test *before* service stop, no auto ARM | All A–T match candidate commit; postrelease behavior and signed proof separately |
 
 #### 59.7.3 Точные разрывы #865 / запрет «просто подправить статус»
 
-1. При первом DOT fill/SLTP firstfill был \`P90_FIRST_FILL_EXIT_UNVERIFIED\`,
-   потом \`P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED\`. Для
+1. При первом DOT fill/SLTP firstfill был `P90_FIRST_FILL_EXIT_UNVERIFIED`,
+   потом `P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED`. Для
    постоянного M нужно получить actual current source+private proof, а
    не повторять expired H или менять 15s.
-2. M даёт \`R10ExecutionPublicationUnavailable\`, \`CURRENT_PROOF_STALE\`,
-   \`PRIVATE_IPC_POSITION_INTERNAL_UNVERIFIED\` в отдельных попытках.
+2. M даёт `R10ExecutionPublicationUnavailable`, `CURRENT_PROOF_STALE`,
+   `PRIVATE_IPC_POSITION_INTERNAL_UNVERIFIED` в отдельных попытках.
    Нужен один same-cycle источник/приватное доказательство с точной
    кодовой точкой отказа. Изолированный SELECT не доказывает то же событие.
 3. #860 unit test строил заранее согласованные объекты quote/private.
    Он не проходил реальную цепочку I+K→M→O→P→Bybit signed readback.
-4. Существующий \`p90_firstfill_blocked\` способен поставить общий
-   \`P90_R06_EXIT_OWNER_BLOCKED\` при живом N; L,M,N,P — независимые
+4. Существующий `p90_firstfill_blocked` способен поставить общий
+   `P90_R06_EXIT_OWNER_BLOCKED` при живом N; L,M,N,P — независимые
    obligations. Объявить READY только по живому N при неподтверждённом
    TRAIL035 запрещено.
-5. \`READY_FLAT\` Gateway и \`RUNNING\` для OPEN позиции — разные
+5. `READY_FLAT` Gateway и `RUNNING` для OPEN позиции — разные
    predicates; не менять AUTH/ARM из-за ошибки диагностики.
 6. Успешный §4.8.3 diagnostic REAL в MAIN/SUB (10 USDT/1x, SL/TP ±0.2%)
    доказывает *общий* контур, но не P90 TRAIL035. TC §4.8.4
@@ -3011,18 +3011,18 @@ reviewed branch + GitHub CI
 ~~~
 
 **Test levels, not interchangeable:**
-- \`C0_SOURCE_GRAPH\`: executable candidate source graph, named owner/function/
+- `C0_SOURCE_GRAPH`: executable candidate source graph, named owner/function/
   state keys, candidate commit identity; no running process needed.
-- \`C1_CAUSAL_SIMULATED\`: candidate Engine + mock original public quotes,
+- `C1_CAUSAL_SIMULATED`: candidate Engine + mock original public quotes,
   signed-private IPC and fake Exchange with separate actors; firstfill success
   and expiry→recovery, no fresh quote, bad UID/qty/SLTP, pending/unknown
   mutation, denied trailing readback, repeated call, two-account isolation,
   continuous Exit and runtime-gate status checked. It is TEST, not Bybit.
-- \`C2_DISPOSABLE_PG\`: isolated PostgreSQL 16 fixture with actual schema/grants
+- `C2_DISPOSABLE_PG`: isolated PostgreSQL 16 fixture with actual schema/grants
   and bounded job, replaying writer→consumer→transaction/lock/source TTL;
-  cannot use cripta production DB. An absent C2 suite is \`NOT IMPLEMENTED\`,
+  cannot use cripta production DB. An absent C2 suite is `NOT IMPLEMENTED`,
   not PASS.
-- \`C3_LIVE_EXCHANGE\`: owner-authorized real MAIN/SUB diagnostic 10 USDT/1x
+- `C3_LIVE_EXCHANGE`: owner-authorized real MAIN/SUB diagnostic 10 USDT/1x
   via *existing* TC §4.8.3 authenticated route, **or** authorized genuine
   P90 trial for actual TRAIL035 (different contracts), with signed Bybit
   pre/post readback; never estimated from C1/C2. New external real
@@ -3030,12 +3030,12 @@ reviewed branch + GitHub CI
   action, and no mainnet mutation from CI.
 
 **Execution owner and locations:** server test code is versioned in
-\`operations/infrastructure/p90_causal_release_preflight.py\` and
-\`tests/test_p90_causal_release_preflight_865.py\`; this is the *source*
-of the candidate runner, not an untracked script in \`/tmp\`.
+`operations/infrastructure/p90_causal_release_preflight.py` and
+`tests/test_p90_causal_release_preflight_865.py`; this is the *source*
+of the candidate runner, not an untracked script in `/tmp`.
 Installer after exact Git archive+dependency-lock candidate build launches
-the candidate runner under effective Unix \`cripta\` from
-\`/srv/cripta/runtime/releases/<SHA>\`; test data are hermetic and
+the candidate runner under effective Unix `cripta` from
+`/srv/cripta/runtime/releases/<SHA>`; test data are hermetic and
 no real secrets, Bybit, service start or prod PG used. A separate
 persistent test workspace/venv under the existing RESEARCH worktrees/tooling
 permissions may cache fixed test dependencies and manifests, but it must
@@ -3043,14 +3043,14 @@ never be an alternative runtime authority or own Exchange credentials.
 Filesystem contract: READ candidate code/tests and local mock fixtures;
 WRITE/CREATE/DELETE NONE for stdout-only candidate test; no DB role.
 Any disposable DB setup must have its own future actor/path/teardown
-evidence (DEV §5.1/§19, MAP §1.4). Use \`PYTHONDONTWRITEBYTECODE=1\`
+evidence (DEV §5.1/§19, MAP §1.4). Use `PYTHONDONTWRITEBYTECODE=1`
 when running. A missing test module/dependency/edge or failed assertion
 must return nonzero BEFORE stopping production. No tool/permission
 block workaround.
 
 **Blocking semantics:** C0/C1 are mandatory once installed; if a
 change requires C2 for correctness, absence of working C2 blocks the
-claim of complete pre-release causal validation. \`C3\` cannot run
+claim of complete pre-release causal validation. `C3` cannot run
 before deploy on immutable candidate without live mutation; it is
 a separately owner-authorized post-release proof, not silently PASS.
 A green C0 is not C1 and a successful C1 is not Exchange verification.
@@ -3064,6 +3064,6 @@ backup/cutover/rehydration security. After successful install, compare
 REMOTE/SOURCE/INSTALLED/LOADED, bound MAIN/SUB private/Entry/Exit/safety
 owner PIDs and heartbeat, independently signed account/source and
 position/protection; test the actual applicable Gateway path. For a
-genuine eligible first fill, actual Exchange \`trailingStop>0\` with
+genuine eligible first fill, actual Exchange `trailingStop>0` with
 matching SL/TP and a healthy following Exit window is needed to call
-TRAIL035 \`E2E_VERIFIED\`. If no eligible fill: \`NOT EXERCISED\`.
+TRAIL035 `E2E_VERIFIED`. If no eligible fill: `NOT EXERCISED`.
