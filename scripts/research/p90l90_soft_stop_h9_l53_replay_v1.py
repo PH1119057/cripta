@@ -150,9 +150,15 @@ def stats(book,report):
 def replay(period,smoke_hours=0):
  if (os.geteuid(),os.getegid())!=(107,109):raise PermissionError("wrong research actor")
  if period not in ROOTS or smoke_hours<0 or smoke_hours>24:raise ValueError("invalid replay scope")
- output=ROOTS[period]/"results"/OUT
+ # Autonomous runner has ProtectSystem=strict; spool within its approved
+ # CRIPTA_REPORT_DIR and publish immutable results later to research archive.
+ report_parent=os.environ.get("CRIPTA_REPORT_DIR")
+ if not smoke_hours and report_parent:
+  output=Path(report_parent)/("soft_stop_"+period)
+ else:
+  output=ROOTS[period]/"results"/OUT
  if output.exists() and not smoke_hours:raise FileExistsError("immutable output exists "+str(output))
- if not os.access(output.parent,os.W_OK|os.X_OK):raise PermissionError("research results write denied")
+ if not os.access(output.parent,os.W_OK|os.X_OK):raise PermissionError("research spool parent not writable")
  if period=="90d":
   data={s:tp.old.previous.inputs(s,tp.old.previous.RAW_DEFAULT,tp.old.previous.FROZEN_DEFAULT) for s in SYMS}
   streams={s:tp.old.previous.ticks(data[s]) for s in SYMS}
@@ -212,6 +218,8 @@ def replay(period,smoke_hours=0):
   "symbols":list(SYMS),"geometry_parity":parity,"source_entry_sha256":{
     s:data[s]["manifest"]["events_sha256"] for s in SYMS},
   "native_ticks":ticks,"scenarios":sums,"source_snapshot_sha256":{},
+  "output_spool_path":str(output),
+  "requires_copy_after_qc_to_research_archive":bool(report_parent and not smoke_hours),
   "counterfactual_entry_difference":{"soft_only_closed":len(s-c),"baseline_only_closed":len(c-s),
     "sample_soft_only":sorted(s-c)[:10]},
   "90d_exact_baseline_parity":period=="90d" and not smoke_hours,
