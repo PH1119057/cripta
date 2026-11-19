@@ -59,7 +59,7 @@ def exercise(exception: Exception) -> tuple[DB, list[str], list[dict[str, object
 
 def test_p90_r10_price_failure_does_not_install_unknown_mutation_latch() -> None:
     exception = private_runtime.PreMutationSafetyBlock(
-        "R10_P90_ORIGINAL_PUBLICATION_INVALID:R10ExecutionPublicationUnavailable"
+        "R10_P90_ORIGINAL_PUBLICATION_INVALID:R10_EXECUTION_TICKER_FIELDS_NOT_FRESH"
     )
     db, latches, events = exercise(exception)
     assert not latches
@@ -67,9 +67,46 @@ def test_p90_r10_price_failure_does_not_install_unknown_mutation_latch() -> None
     assert any("SET state='failed'" in sql for sql, _params in db.statements)
     assert events == [{
         "name": "pre_send_market_publication_blocked",
-        "error": "R10_P90_ORIGINAL_PUBLICATION_INVALID",
+        "error": "R10_P90_ORIGINAL_PUBLICATION_INVALID:R10_EXECUTION_TICKER_FIELDS_NOT_FRESH",
         "mutation_sent": False,
     }]
+
+
+def test_sub_r10_safe_original_reason_survives_without_disarming_unrelated_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(private_runtime, "_is_sub_private_worker", lambda: True)
+    exception = private_runtime.PreMutationSafetyBlock(
+        "R10_P90_ORIGINAL_PUBLICATION_INVALID:"
+        "R10_EXECUTION_TICKER_SOURCE_INVALID:R08_ONE_ACTIVE_SOURCE_EPOCH_REQUIRED"
+    )
+    db, latches, events = exercise(exception)
+    assert not latches
+    command_error = [
+        params[1] for sql, params in db.statements
+        if "SET state='failed'" in sql
+    ][0]
+    assert "R08_ONE_ACTIVE_SOURCE_EPOCH_REQUIRED" in command_error
+    assert events[0]["error"].endswith("R08_ONE_ACTIVE_SOURCE_EPOCH_REQUIRED")
+    assert events[0]["mutation_sent"] is False
+
+
+def test_untrusted_r10_exception_payload_must_never_be_persisted_on_sub(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(private_runtime, "_is_sub_private_worker", lambda: True)
+    exception = private_runtime.PreMutationSafetyBlock(
+        "R10_P90_ORIGINAL_PUBLICATION_INVALID:RAW SECRET=never"
+    )
+    db, latches, events = exercise(exception)
+    assert not latches
+    command_error = [
+        params[1] for sql, params in db.statements
+        if "SET state='failed'" in sql
+    ][0]
+    assert "RAW SECRET" not in command_error
+    assert events[0]["error"] == "R10_P90_ORIGINAL_PUBLICATION_INVALID"
+
 
 
 @pytest.mark.parametrize("reason", [
@@ -98,6 +135,6 @@ def test_pre_send_failure_requires_fresh_validation_next_attempt() -> None:
         "def ", 1
     )[0]
     assert "R10_P90_ORIGINAL_PUBLICATION_INVALID" in executor
-    assert "validate_real_v3_attached_protection_at_original_price" in executor
+    assert "validate_real_v3_attached_protection_at_original_quote" in executor
     assert "authenticated_entry_connector_gate(connection, key, secret)" in executor
     assert "account_entry_safety_ready(" in executor
