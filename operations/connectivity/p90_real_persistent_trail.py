@@ -274,9 +274,23 @@ def run_p90_persistent_trail_once(
                     and latest_private.signed_provider_uid
                     == private.signed_provider_uid
                     and latest_private.trading_account_id == account_id
-                    and latest_private.generation_id == private.generation_id
+                    # A later independently signed COMPLETE generation is
+                    # allowed. Account collectors rotate generations every few
+                    # seconds: requiring literal generation ID equality can
+                    # permanently starve a safe recovery on an active account.
+                    # The private proof reader itself validates each latest
+                    # generation's account, connector, signed uid and age.
+                    and bool(latest_private.generation_id)
+                    and latest_private.connector_id == private.connector_id
+                    and latest_private.strategy_execution_binding_id
+                    == private.strategy_execution_binding_id
+                    and latest_private.exchange_position_key
+                    == private.exchange_position_key
+                    and latest_private.source_ref == private.source_ref
                     and latest_private.pending_exit_mutation is False
                     and latest_private.observed_at >= private.observed_at
+                    and timedelta() <= datetime.now(UTC)
+                    - latest_private.observed_at <= timedelta(seconds=5)
                     and _private_snapshot(latest_private) == snapshot
                 )
             except Exception:
