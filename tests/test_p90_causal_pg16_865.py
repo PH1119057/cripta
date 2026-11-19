@@ -170,7 +170,7 @@ class P90CausalPostgresTests(unittest.TestCase):
                         position_idx,initial_protection_confirmed_at,
                         initial_protection_evidence)
                        VALUES (%s,%s,%s,'OPEN',%s,%s,'PROVEN',%s,%s,0,%s,
-                               '{"trailing_recovery_policy":"P90_REAL_TRAIL035_PERSISTENT_V1"}'::jsonb)""",
+                               '{"trailing_recovery_policy":"P90_TRAIL035_PERSISTENT_V1"}'::jsonb)""",
                     (p.strategy_position_id, p.trading_account_id, p.symbol,
                      p.strategy_id, p.strategy_version,
                      p.strategy_execution_binding_id, p.exchange_position_key,
@@ -323,10 +323,18 @@ class P90CausalPostgresTests(unittest.TestCase):
                 (now-timedelta(seconds=12), _EPOCH),
             )
         with connect(tuples=True, autocommit=False) as source:
-            with self.assertRaises(R10ExecutionPublicationUnavailable):
-                read_r10_execution_quote(
-                    source, symbol="LTCUSDT", observed_at=datetime.now(UTC),
+            with source.transaction():
+                source.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
                 )
+                with self.assertRaisesRegex(
+                    R10ExecutionPublicationUnavailable,
+                    "R10_EXECUTION_TICKER_FIELD_TTL_EXPIRED",
+                ):
+                    read_r10_execution_quote(
+                        source, symbol="LTCUSDT",
+                        observed_at=datetime.now(UTC),
+                    )
 
     def test_extra_active_source_session_blocks_recovery(self):
         now = datetime.now(UTC)
