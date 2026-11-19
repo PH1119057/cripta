@@ -128,6 +128,36 @@ def _private_snapshot(private: object) -> tuple[object, ...] | None:
     return tuple(raw[k] for k in keys)
 
 
+def _fresh_matching_private_protection(
+    prior: object, latest: object, *, checked_at: datetime,
+) -> bool:
+    """Distinct signed COMPLETE generation IDs may still prove one position.
+
+    This comparison is only used *after* P90PrivateProofClient has independently
+    validated both account-local signed replies and fresh generation evidence.
+    A changed Exchange size, mode, protection or pending mutation always blocks.
+    """
+    try:
+        age = checked_at - latest.observed_at
+        return (
+            bool(latest.generation_id)
+            and latest.trading_account_id == prior.trading_account_id
+            and latest.connector_id == prior.connector_id
+            and latest.strategy_execution_binding_id
+            == prior.strategy_execution_binding_id
+            and latest.exchange_position_key == prior.exchange_position_key
+            and latest.source_ref == prior.source_ref
+            and latest.signed_provider_uid == prior.signed_provider_uid
+            and latest.pending_exit_mutation is False
+            and latest.observed_at >= prior.observed_at
+            and timedelta() <= age <= timedelta(seconds=5)
+            and _private_snapshot(latest) == _private_snapshot(prior)
+            and _private_snapshot(latest) is not None
+        )
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
 def run_p90_persistent_trail_once(
     connection: Any,
     source_connection: Any,
@@ -271,26 +301,9 @@ def run_p90_persistent_trail_once(
                     == quote.producer_release_commit
                     and latest_quote.last_price == quote.last_price
                     and latest_quote.field_times[0] == quote.field_times[0]
-                    and latest_private.signed_provider_uid
-                    == private.signed_provider_uid
-                    and latest_private.trading_account_id == account_id
-                    # A later independently signed COMPLETE generation is
-                    # allowed. Account collectors rotate generations every few
-                    # seconds: requiring literal generation ID equality can
-                    # permanently starve a safe recovery on an active account.
-                    # The private proof reader itself validates each latest
-                    # generation's account, connector, signed uid and age.
-                    and bool(latest_private.generation_id)
-                    and latest_private.connector_id == private.connector_id
-                    and latest_private.strategy_execution_binding_id
-                    == private.strategy_execution_binding_id
-                    and latest_private.exchange_position_key
-                    == private.exchange_position_key
-                    and latest_private.source_ref == private.source_ref
-                    and latest_private.pending_exit_mutation is False
-                    and latest_private.observed_at >= private.observed_at
-                    and timedelta() <= datetime.now(UTC)
-                    - latest_private.observed_at <= timedelta(seconds=5)
+                    and _fresh_matching_private_protection(
+                        private, latest_private, checked_at=datetime.now(UTC),
+                    )
                     and _private_snapshot(latest_private) == snapshot
                 )
             except Exception:
