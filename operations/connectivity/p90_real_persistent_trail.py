@@ -16,7 +16,6 @@ from typing import Any
 from psycopg.rows import tuple_row
 
 from bybit_workbench.market_data.r10_execution_publication import (
-    R10ExecutionPublicationUnavailable,
     read_r10_execution_quote,
 )
 from bybit_workbench.universal_entry.p90l90_real_account_routes import (
