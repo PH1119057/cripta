@@ -9,8 +9,8 @@ command, which only credential-local private_runtime may send to Bybit.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime, timedelta
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from psycopg.rows import tuple_row
