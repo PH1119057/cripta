@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime, timedelta
+from collections.abc import Mapping
 from typing import Any
 
 from psycopg.rows import tuple_row
@@ -115,7 +116,7 @@ def _private_snapshot(private: object) -> tuple[object, ...] | None:
         "symbol", "side", "positionIdx", "size", "avgPrice",
         "stopLoss", "takeProfit", "trailingStop",
     )
-    if not isinstance(raw, dict) or any(k not in raw for k in keys):
+    if not isinstance(raw, Mapping) or any(k not in raw for k in keys):
         return None
     return tuple(raw[k] for k in keys)
 
