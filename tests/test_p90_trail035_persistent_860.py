@@ -162,9 +162,7 @@ def test_old_firstfill_terminal_verdict_remains_durable_not_a_recovery_decision(
     assert "_FIRST_FILL_WINDOW = timedelta(seconds=15)" in source
     assert "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED" in source
     # #860 uses a distinct current-source event, not forged POSTFILL.
-    from bybit_workbench.universal_exit.p90l90_real_v3 import (
-        project_p90l90_real_exit,
-    )
+    from bybit_workbench.universal_exit.p90l90_real_v3 import project_p90l90_real_exit
     assert callable(project_p90l90_real_exit)
 
 
