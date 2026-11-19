@@ -282,6 +282,41 @@ def run_once(
     if p90_firstfill_blocked:
         connection.commit()
 
+    # #860: an old first-fill timeout is durable incident evidence, not the
+    # owner of every future OPEN position's TRAIL035. This separate recovery
+    # checks ONLY per-fill-opted-in NEW positions and never touches legacy INJ.
+    # The independent Bybit signed GET and original LTP are rechecked under
+    # the existing account / Exit execution locks before any child command.
+    recovery = ""
+    if (
+        P90_R06_OWNER == "ENABLED"
+        and source_connection is not None
+        and p90 != "P90_EXIT_TRAIL035_REQUEST_PUBLISHED"
+    ):
+        recovery_module = importlib.import_module(
+            f"{__package__}.p90_real_persistent_trail"
+            if __package__ else "p90_real_persistent_trail"
+        )
+        try:
+            recovery = recovery_module.run_p90_persistent_trail_once(
+                connection, source_connection,
+                loaded_commit=LOADED_COMMIT, now=current,
+            )
+        except Exception as exc:
+            # An unsafe/currently unavailable proof blocks only this recovery
+            # candidate. It does not cancel the protected position's existing
+            # Exchange SL/TP or poison the independent continuous R06 owner.
+            # A live psycopg connection requires rollback after a denied
+            # candidate. Older isolated R06 tests provide a no-DB stub;
+            # do not turn a harmless blocked candidate into a worker crash.
+            if callable(getattr(connection, "rollback", None)):
+                connection.rollback()
+            if callable(getattr(source_connection, "rollback", None)):
+                source_connection.rollback()
+            recovery = "P90_TRAIL_RECOVERY_BLOCKED:" + _safe_r06_error(exc)
+        if recovery == "P90_TRAIL_RECOVERY_REQUEST_PUBLISHED":
+            return recovery
+
     continuous = ""
     if P90_R06_OWNER == "ENABLED":
         if source_connection is None:
@@ -301,12 +336,13 @@ def run_once(
             if p90_firstfill_blocked:
                 return (
                     "P90_R06_FIRSTFILL_OWNER_BLOCKED|FIRSTFILL="
-                    + p90 + "|CONTINUOUS=" + continuous
+                    + p90 + "|RECOVERY=" + recovery
+                    + "|CONTINUOUS=" + continuous
                 )
             return (
                 p90 + "|" + continuous
                 if p90 == "P90_EXIT_TRAIL035_REQUEST_PUBLISHED"
-                else continuous
+                else ("RECOVERY=" + recovery + "|" + continuous)
             )
 
     # Preserve the original priority contract: a freshly published P90

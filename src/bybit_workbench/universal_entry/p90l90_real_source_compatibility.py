@@ -307,10 +307,33 @@ _REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256 = {
 }
 
 
+# #860: exact cripta-actor SHA256 attestation of the current full consumer
+# delta against the ACTIVE physical R06 source origin. Historical reviewed
+# hash vectors remain frozen; this is not ARM or Exchange authorization.
+_REVIEWED_R06_P90_TRAIL035_PERSISTENT_860_SHA256 = {
+    **_REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256,
+    "universal_exit/p90l90_real_v3.py":
+        "a553b1695a7c5588d43cf92a1a7443739ea4e816ef2aa51b05cec9634d806b21",
+    "universal_exit/p90l90_real_exit_execution.py":
+        "2aa05359cf468f41087374d694ec21967949c7dfb0b0bd8ac3fc671cf139a348",
+    "universal_exit/p90l90_exchange_safety.py":
+        "9470a4798a20247ac92471a740f0dc7f25888d0d92b6688f69257ce17162c543",
+    "universal_exit/p90l90_real_trail_reconcile.py":
+        "d015f0cf66edea2b7147576c5c16e694be1fd71d964f77094414e86bc2830f53",
+    "universal_exit/p90l90_real_recovery_send.py":
+        "43ee81841f0d215c51f14a761bb5b428ba5be984c5bf779357ed07f43d829aec",
+}
+
+
 def _reviewed_delta_for_origin(
     changed: set[str], *, origin_commit: str,
     current_hashes: dict[str, str] | None = None,
 ) -> dict[str, str]:
+    if (
+        origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
+        and changed == set(_REVIEWED_R06_P90_TRAIL035_PERSISTENT_860_SHA256)
+    ):
+        return _REVIEWED_R06_P90_TRAIL035_PERSISTENT_860_SHA256
     if (
         origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
         and changed == set(_REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256)

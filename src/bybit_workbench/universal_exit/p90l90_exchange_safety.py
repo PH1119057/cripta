@@ -140,7 +140,6 @@ def verify_p90_real_exchange_mutation(
                 "P90_REAL_EXIT_TRAILING_ALREADY_INSTALLED_OR_DRIFTED"
             )
         distance = _positive(mutation.get("distance"), "TRAILING_DISTANCE")
-        active = _positive(mutation.get("active_price"), "TRAILING_ACTIVE_PRICE")
         expected_distance = (
             (actual_fill * Decimal("0.0035") / tick).to_integral_value(
                 rounding=ROUND_FLOOR
@@ -150,18 +149,50 @@ def verify_p90_real_exchange_mutation(
             (actual_fill * (Decimal("1.005") if long else Decimal("0.995")) / tick)
             .to_integral_value(rounding=ROUND_CEILING if long else ROUND_FLOOR) * tick
         )
-        if (
-            mutation.get("tpsl_mode") != "Full"
-            or distance <= 0
-            or distance != expected_distance
-            or active != expected_active
-            or (mark >= active if long else mark <= active)
-            or (live_stop >= active - distance if long
-                else live_stop <= active + distance)
-        ):
-            raise P90RealExchangeSafetyBlock(
-                "P90_REAL_EXIT_BYBIT_TRAILING_ARM_NOT_EXACT_OR_LATE"
+        # A protected, NEW-fill-opted-in position may need native trailing
+        # after restart. The private runtime must already have independently
+        # verified the durable marker, exact recovery decision/source and
+        # a fresh original LTP under its account lock. Ordinary first-fill
+        # requests retain the original early-arm constraints unchanged.
+        recovery = (
+            payload.get("trail_recovery_policy") == "P90_TRAIL035_PERSISTENT_V1"
+        )
+        if recovery:
+            if (
+                mutation.get("tpsl_mode") != "Full"
+                or distance <= 0 or distance != expected_distance
+                or (live_stop >= mark - distance if long
+                    else live_stop <= mark + distance)
+            ):
+                raise P90RealExchangeSafetyBlock(
+                    "P90_REAL_EXIT_RECOVERY_TRAILING_NOT_PROTECTIVE"
+                )
+            if "active_price" in mutation:
+                active = _positive(
+                    mutation.get("active_price"), "TRAILING_ACTIVE_PRICE"
+                )
+                if active != expected_active or (
+                    mark >= active if long else mark <= active
+                ):
+                    raise P90RealExchangeSafetyBlock(
+                        "P90_REAL_EXIT_RECOVERY_ACTIVE_PRICE_NOT_FUTURE"
+                    )
+        else:
+            active = _positive(
+                mutation.get("active_price"), "TRAILING_ACTIVE_PRICE"
             )
+            if (
+                mutation.get("tpsl_mode") != "Full"
+                or distance <= 0
+                or distance != expected_distance
+                or active != expected_active
+                or (mark >= active if long else mark <= active)
+                or (live_stop >= active - distance if long
+                    else live_stop <= active + distance)
+            ):
+                raise P90RealExchangeSafetyBlock(
+                    "P90_REAL_EXIT_BYBIT_TRAILING_ARM_NOT_EXACT_OR_LATE"
+                )
     elif action_kind is ExitActionKind.SET_TP:
         requested = _positive(mutation.get("take_profit_price"), "NEW_TP")
         if (
