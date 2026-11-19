@@ -3002,7 +3002,7 @@ reviewed branch + GitHub CI
   → immutable candidate /srv/cripta/runtime/releases/<SHA>
   → candidate runtime .venv (фиксированные hashes)
   → C0 source graph + C1 deterministic integration tests
-  → C2 disposable PG+actor/IPC (только если подготовлен)
+  → C2 independent PostgreSQL16 + restricted role + mock AF_UNIX (mandatory)
   → FAIL/BLOCKED: release stops BEFORE service stop/DB migration
   → PASS: штатный Release Controller may deploy with all original gates
   → actual signed postrelease readiness (MAIN/SUB, Entry, Exit, status)
@@ -3018,10 +3018,16 @@ reviewed branch + GitHub CI
   and expiry→recovery, no fresh quote, bad UID/qty/SLTP, pending/unknown
   mutation, denied trailing readback, repeated call, two-account isolation,
   continuous Exit and runtime-gate status checked. It is TEST, not Bybit.
-- `C2_DISPOSABLE_PG`: isolated PostgreSQL 16 fixture with actual schema/grants
-  and bounded job, replaying writer→consumer→transaction/lock/source TTL;
-  cannot use cripta production DB. An absent C2 suite is `NOT IMPLEMENTED`,
-  not PASS.
+- `C2_DISPOSABLE_PG`: отдельный Unix-user `cripta` PostgreSQL 16 cluster
+  на private AF_UNIX socket, физический `PGDATA` вне production; fixtures
+  с ограниченной DB role `cripta` и test-admin `postgres`, два независимых
+  соединения, настоящий R10 READ ONLY, реально конкурирующие account locks,
+  pending/unknown Exit и настоящая AF_UNIX передача между тестовыми процессами.
+  Producer IPC использует **синтетический** private response: C2 проверяет
+  клиент, peer/nonce/binding и отсутствие поддельного Exit, **не** реальные
+  signed Bybit GET. Fixture покрывает выбранный subset таблиц; полная
+  production-equivalent schema и PRIVATE worker credential behavior пока
+  `NOT EXERCISED` и не могут наследовать PASS от C2.
 - `C3_LIVE_EXCHANGE`: owner-authorized real MAIN/SUB diagnostic 10 USDT/1x
   via *existing* TC §4.8.3 authenticated route, **or** authorized genuine
   P90 trial for actual TRAIL035 (different contracts), with signed Bybit
@@ -3029,24 +3035,50 @@ reviewed branch + GitHub CI
   accounts require separate owner scope. No arbitrary command can fake owner
   action, and no mainnet mutation from CI.
 
-**Execution owner and locations:** server test code is versioned in
-`operations/infrastructure/p90_causal_release_preflight.py` and
-`tests/test_p90_causal_release_preflight_865.py`; this is the *source*
-of the candidate runner, not an untracked script in `/tmp`.
-Installer after exact Git archive+dependency-lock candidate build launches
-the candidate runner under effective Unix `cripta` from
-`/srv/cripta/runtime/releases/<SHA>`; test data are hermetic and
-no real secrets, Bybit, service start or prod PG used. A separate
-persistent test workspace/venv under the existing RESEARCH worktrees/tooling
-permissions may cache fixed test dependencies and manifests, but it must
-never be an alternative runtime authority or own Exchange credentials.
-Filesystem contract: READ candidate code/tests and local mock fixtures;
-WRITE/CREATE/DELETE NONE for stdout-only candidate test; no DB role.
-Any disposable DB setup must have its own future actor/path/teardown
-evidence (DEV §5.1/§19, MAP §1.4). Use `PYTHONDONTWRITEBYTECODE=1`
-when running. A missing test module/dependency/edge or failed assertion
-must return nonzero BEFORE stopping production. No tool/permission
-block workaround.
+**Execution owner and locations:** versioned source files are
+`operations/infrastructure/p90_causal_release_preflight.py`,
+`operations/infrastructure/p90_causal_pg16_testenv.py`,
+`tests/test_p90_causal_release_preflight_865.py`,
+`tests/test_p90_causal_pg16_865.py`. The verified installer must archive
+and Git-blob-verify BOTH test files along with `src/` and `operations/`;
+source-checked runner from exact candidate executes under `runuser -u cripta`
+in `/srv/cripta/runtime/releases/<SHA>`, after candidate locked `.venv`
+build and BEFORE managed service stops, production SQL or runtime symlink.
+Both C0/C1 and the C2 PG source/role/lock/mock-peer suite are mandatory;
+no `pytest` system dependency; `PYTHONDONTWRITEBYTECODE=1`.
+
+**Exact testenv actor/path contract (DEV §5.1):**
+- effective Unix actor = `cripta` (checked UID 107 on robot); test-cluster
+  internal **only** PostgreSQL test-superuser role = `postgres`, restricted
+  test runtime role = `cripta`. Production `postgres` OS actor and DB
+  `cripta` are never invoked or granted permissions by this runner;
+- READ = exact candidate code+tests, verified candidate `.venv`, PostgreSQL
+  binaries `/usr/lib/postgresql/16/bin/{initdb,pg_ctl,postgres}`; no Bybit
+  credentials, no production PostgreSQL socket, no `runtime/current`
+  imports inside verified release;
+- WRITE/CREATE = **only** own `/data/cripta/research/testenvs/p90_causal_pg16/`
+  directories `cluster/`, `socket/`, `logs/`, `runs/`, `.c2.lock` and
+  audit temporary JSON; all created by `cripta` mode 0700/umask 077;
+- RENAME = own runs `.tmp` to `.json` via atomic `os.replace`;
+  DELETE = disposable `cripta_integration` **test-cluster** database on
+  verified same PGDATA and its fixture rows, and consumed manifest tmp
+  only; cluster files are retained as testenv, no production path touched;
+- network = PostgreSQL `listen_addresses=''`, test-only private Unix socket
+  under mode-0700 root at port 6546, no public TCP; fake P90 private IPC
+  uses random **synthetic** account identity and Linux abstract AF_UNIX;
+  systemd `Sandbox` = not a new unit, running as the bounded release child;
+- before any test DB destructive create/drop, compare `SHOW data_directory`,
+  socket, port, no TCP, PG16 version and test role. Strict single-run flock;
+  if existing test cluster running or identity unknown, STOP and reconcile;
+  PG cluster stops in `finally` and manifest records its stopped state.
+  No recursive mode change, no root actor for test workload.
+
+The test checkout in RESEARCH is evidence only and never a release authority;
+source SHA, testenv manifest and actual host result must be distinct.
+The runner does **not** install or restart production PostgreSQL and does not
+run REAL Bybit. Any missing test file/dependency, failed assertion, stale
+source or unexpectedly running test cluster blocks BEFORE production stop.
+No permissions/tool-policy bypass.
 
 **Existing verified test assets — reuse, do not reinvent.** Repository already
 has `tests/postgres_trade_lifecycle_bootstrap.sql`,
@@ -3063,22 +3095,20 @@ actual schema/role semantics, preserving their checks
 GitHub-hosted disposable CI execution does not substitute for the
 owner-required **server** candidate run.
 
-**Permanent server C2 environment — prepared contract, NOT YET INSTALLED:**
-use a separate PostgreSQL 16 instance or independent test cluster bound
-to a dedicated local socket/port, under the exact authorized PG cluster
-actor and a vetted project test workspace on the Data SSD; dedicated
-disposable `cripta_integration` database and `cripta`-equivalent test
-role limited to this cluster. Never pass production `dbname=cripta`,
-`/var/run/postgresql` production socket, Exchange credentials, or
-production `runtime/current` to the C2 runner. For EACH run validate
-cluster/socket/role/DB identity, exact candidate SHA and grants before
-destructive fixture creation, and prove test transactions and teardown
-without touching production. Retain reproducible versioned fixture and
-non-secret manifest; test-output IDs/paths and fail/unknown status must
-be durable. Actor, UNIX owner/group/ACL, systemd sandbox, PostgreSQL
-migration actor and test DB connection checks require DEV §5.1/§19
-and actual MAP §1.4 *before* provisioning; absence is
-`C2_SERVER_NOT_PREPARED`, not a claim that tests are impossible.
+**Permanent server testenv — CHECKED HERE 2026-11-19, BRANCH-STAGED ONLY:**
+Independent PostgreSQL16 `/data/cripta/research/testenvs/p90_causal_pg16`
+created by current Unix `cripta` with private socket and no TCP.
+On GitHub branch head `072d17428f9c4826efccb05aa6b9bdda786f38cf`
+(actual **stage checkout**, not production release), test suite executed
+on robot with 12/12 PASS; manifest
+`runs/20261119T170230Z_175b508fca.json` and `cluster_stopped=true`
+are durable nonsecret evidence. Earlier 10/10 at `856feb83...` is historical
+subset evidence. Test code remains in Draft PR #868; GitHub main and installed
+production runtime remain separately checked. This **does not** prove that
+production installer ran the new candidate release hook. When the PR head
+changes, rerun tests on its exact new checkout SHA. C2 mock private peer
+is not authenticated Exchange GET, and the whole chain A–U is not yet
+proven end-to-end by this subset; C3 is `NOT EXERCISED`.
 
 **Blocking semantics:** C0/C1 are mandatory once installed; if a
 change requires C2 for correctness, absence of working C2 blocks the
