@@ -108,7 +108,7 @@ def test_recovered_or_already_armed_venue_trail_does_not_reissue() -> None:
 @pytest.mark.parametrize("defect", (
     "pre-release-unmarked-current-INJ",
     "unknown-account",
-    "stale-original-ltp",
+    "stale-publication",
     "stale-private",
     "pending-mutation",
     "signed-qty-drift",
@@ -124,11 +124,8 @@ def test_recovery_fails_closed_without_exact_present_time_evidence(defect) -> No
         marker = None
     elif defect == "unknown-account":
         private = replace(private, trading_account_id="ta-foreign")
-    elif defect == "stale-original-ltp":
-        quote = replace(quote, field_times=(
-            now - timedelta(seconds=10),
-            quote.field_times[1], quote.field_times[2],
-        ))
+    elif defect == "stale-publication":
+        quote = replace(quote, as_of_second=now - timedelta(seconds=10))
     elif defect == "stale-private":
         private = replace(private, observed_at=now - timedelta(seconds=10))
     elif defect == "pending-mutation":
