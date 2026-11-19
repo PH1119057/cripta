@@ -113,10 +113,15 @@ def _source_quote(
 
 
 def _private_snapshot(private: object) -> tuple[object, ...] | None:
-    from p90_real_independent_exit import _firstfill_signed_protection_snapshot
-
+    # Stable authenticated protection, never include changing mark/margin/PnL.
     raw = getattr(private, "position", None)
-    return _firstfill_signed_protection_snapshot(raw)
+    keys = (
+        "symbol", "side", "positionIdx", "size", "avgPrice",
+        "stopLoss", "takeProfit", "trailingStop",
+    )
+    if not isinstance(raw, dict) or any(k not in raw for k in keys):
+        return None
+    return tuple(raw[k] for k in keys)
 
 
 def run_p90_persistent_trail_once(
