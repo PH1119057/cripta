@@ -26,12 +26,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate-root", required=True)
     parser.add_argument("--expected-commit", required=True)
+    # Explicit offline-only Data-SSD candidate; never used by production installer.
+    parser.add_argument("--staged-candidate", action="store_true")
     args = parser.parse_args(argv)
 
     if not _SHA40.fullmatch(args.expected_commit):
         return _stop("EXPECTED_COMMIT_INVALID")
     # Never follow runtime/current or an arbitrary borrowed root.
-    base = Path("/srv/cripta/runtime/releases")
+    base = (
+        Path("/data/cripta/research/testenvs/p90_causal_candidate_865")
+        if args.staged_candidate
+        else Path("/srv/cripta/runtime/releases")
+    )
     specified = Path(args.candidate_root)
     expected = base / args.expected_commit
     if not specified.is_absolute() or specified != expected:
@@ -72,10 +78,19 @@ def main(argv: list[str] | None = None) -> int:
     # IPC and real Exchange proof remain separately unexercised.
     from operations.infrastructure.p90_causal_pg16_testenv import run_c2
 
-    if not run_c2(expected, args.expected_commit):
+    if not run_c2(
+        expected,
+        args.expected_commit,
+        candidate_archive=args.staged_candidate,
+    ):
         return _stop("C2_PG16_SOURCE_LOCK_ROLE_FAILED")
     print("C3_SIGNED_REAL_EXCHANGE=NOT_EXERCISED", flush=True)
-    print("P90_CANDIDATE_PREFLIGHT=PASS_C0_C1_C2_SQL_ONLY", flush=True)
+    print(
+        "P90_CANDIDATE_PREFLIGHT="
+        + ("PASS_OFFLINE_ARCHIVE_C0_C1_C2" if args.staged_candidate
+           else "PASS_RELEASE_C0_C1_C2"),
+        flush=True,
+    )
     return 0
 
 
