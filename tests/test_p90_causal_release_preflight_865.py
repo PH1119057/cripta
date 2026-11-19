@@ -6,11 +6,13 @@ C1 SIMULATED verification only; this suite NEVER certifies signed Exchange E2E.
 from __future__ import annotations
 
 import ast
+import json
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.market_data.r10_execution_publication import R10ExecutionQuote
@@ -308,6 +310,42 @@ class CausalSimulatedTests(unittest.TestCase):
                         eligibility=marker, expected_source_session_id=session,
                         received_at=now,
                     )
+
+    def test_gateway_exact_ready_flat_is_not_confused_with_recovery_failures(self):
+        from operations.connectivity import universal_exit_consumer as consumer
+
+        def project(result: str, state: str, error: str | None = None):
+            writer = MagicMock()
+            with (
+                patch.object(consumer, "STATUS_PATH", writer),
+                patch.object(consumer, "P90_R06_OWNER", "ENABLED"),
+                patch.object(consumer, "CONSUMER_ARM", "DISABLED"),
+                patch.object(consumer, "LOADED_COMMIT", "a" * 40),
+            ):
+                consumer._p90_status(state=state, result=result, error=error)
+            self.assertTrue(
+                writer.with_suffix.return_value.write_text.called,
+            )
+            data = writer.with_suffix.return_value.write_text.call_args.args[0]
+            return json.loads(data)
+
+        flat = "P90_R06_EXIT_OWNER_READY_FLAT"
+        benign = "P90_TRAIL_RECOVERY_NO_ELIGIBLE_POSITION"
+        healthy = project("RECOVERY=" + benign + "|" + flat, flat)
+        self.assertEqual(healthy["result"], flat)
+        self.assertEqual(healthy["recovery_result"], benign)
+        self.assertEqual(healthy["state"], flat)
+        self.assertIsNone(healthy["error"])
+
+        blocked = "RECOVERY=P90_TRAIL_RECOVERY_BLOCKED:CURRENT_PROOF_STALE|" + flat
+        unsafe = project(blocked, flat)
+        self.assertEqual(unsafe["result"], blocked)
+        self.assertNotIn("recovery_result", unsafe)
+        self.assertNotEqual(unsafe["result"], flat)
+        crashed = project("BLOCKED", "P90_R06_EXIT_OWNER_BLOCKED",
+                          error="P90_PRIVATE_IPC_UNVERIFIED")
+        self.assertEqual(crashed["state"], "P90_R06_EXIT_OWNER_BLOCKED")
+        self.assertNotEqual(crashed["result"], flat)
 
     def test_signed_private_rotation_is_not_protection_drift(self):
         _, _, private, _, now = _case()
