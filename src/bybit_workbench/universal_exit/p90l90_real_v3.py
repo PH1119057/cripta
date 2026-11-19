@@ -190,7 +190,9 @@ def project_p90l90_real_exit(
         # Bybit supports omitting activePrice: starts trailing from its current
         # LTP when +0.5% is already satisfied. Otherwise wait at the original
         # Entry-relative threshold; NEVER replay a past high-watermark.
-        mutation = {"distance": str(expected_distance), "tpsl_mode": "Full"}
+        mutation: dict[str, object] = {
+            "distance": str(expected_distance), "tpsl_mode": "Full",
+        }
         if not (last >= activation if long else last <= activation):
             mutation["active_price"] = str(activation)
         return (
