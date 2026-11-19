@@ -5,12 +5,12 @@ C1 SIMULATED verification only; this suite NEVER certifies signed Exchange E2E.
 """
 from __future__ import annotations
 
+import ast
+import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-import ast
-import unittest
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.market_data.r10_execution_publication import R10ExecutionQuote
