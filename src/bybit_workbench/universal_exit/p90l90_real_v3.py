@@ -140,13 +140,16 @@ def project_p90l90_real_exit(
             else _positive(real.get("native_trade_price"), "NATIVE_PRICE")
         )
     )
+    entry = position.actual_avg_fill
     # The present-time reconciliation deliberately does not reconstruct old MFE.
-    best = (entry if recovery else
-            _positive(real.get("durable_best_favorable_price"), "MFE_PRICE"))
+    best = (
+        entry if recovery else
+        _positive(real.get("durable_best_favorable_price"), "MFE_PRICE")
+    )
     live_stop = _positive(real.get("exchange_stop_price"), "EXCHANGE_STOP")
     live_tp = _positive(real.get("exchange_tp_price"), "EXCHANGE_TP")
+    mark = _positive(real.get("exchange_mark_price"), "SIGNED_MARK")
     tick = _positive(real.get("tick_size"), "TICK_SIZE")
-    entry = position.actual_avg_fill
     if (
         not entry.is_finite() or entry <= 0
         or live_stop % tick != 0 or live_tp % tick != 0
@@ -178,8 +181,9 @@ def project_p90l90_real_exit(
         if live_trailing == expected_distance:
             return None  # Already armed on Bybit: idempotent, never POST twice.
         if live_trailing != 0 or not (
-            stop < mark < tp and stop < last < tp if long
-            else tp < mark < stop and tp < last < stop
+            live_stop < mark < live_tp and live_stop < last < live_tp
+            if long else live_tp < mark < live_stop
+            and live_tp < last < live_stop
         ):
             raise P90RealExitUnverified(
                 "P90_REAL_TRAIL_RECOVERY_SIGNED_PRICE_OR_GUARD_UNVERIFIED"
@@ -199,7 +203,6 @@ def project_p90l90_real_exit(
     }:
         # Arm once, before the trigger: Exchange activePrice will activate the
         # autonomous trailing on +0.5%. No repeated SET_STOP proxy is allowed.
-        mark = _positive(real.get("exchange_mark_price"), "SIGNED_MARK")
         if favorable >= Decimal("0.5") or (mark >= activation if long else mark <= activation):
             # A past high/low watermark cannot be reconstructed into an
             # Exchange-native stop after price has already retraced.
