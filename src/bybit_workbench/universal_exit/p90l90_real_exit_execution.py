@@ -145,9 +145,16 @@ class P90RealExitExecutionPort:
                != position.exchange_position_key
             or details.get("actual_fill_confirmed") is not True
             or details.get("protection_exchange_confirmed") is not True
-            or (details.get("fill_to_postfill_source_verified") is not True
-                if observation.event_kind == "P90L90_REAL_POSTFILL"
-                else details.get("durable_cursor_verified") is not True)
+            or (
+                observation.event_kind == "P90L90_REAL_POSTFILL"
+                and details.get("fill_to_postfill_source_verified") is not True
+            )
+            or (
+                observation.event_kind not in (
+                    "P90L90_REAL_POSTFILL", "P90L90_REAL_TRAIL_RECOVERY",
+                )
+                and details.get("durable_cursor_verified") is not True
+            )
             or (observation.event_kind == "P90L90_REAL_POSTFILL" and (
                 not isinstance(details.get("signed_fill_execution_ids"), list)
                 or not details["signed_fill_execution_ids"]
