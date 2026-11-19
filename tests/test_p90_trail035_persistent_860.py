@@ -27,6 +27,8 @@ from bybit_workbench.universal_exit.p90l90_real_v3 import (
     P90_TRAIL_RECOVERY_POLICY,
 )
 def proof(*, short=False, sub=False, hours=1, ltp=None, trailing="0"):
+    from test_p90l90_real_observation import AT, _scope
+
     position, plan, _, _, private, _ = _scope(short=short, sub=sub)
     now = AT + timedelta(hours=hours)
     seen = now.replace(microsecond=0)
