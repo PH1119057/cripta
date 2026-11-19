@@ -1779,7 +1779,10 @@ Execution, ExitPlan, MFE, source sequence/ownership и состоянием за
 ордеров. Priority recovery: текущая position/protection/Exit → необходимые
 исторические/source данные → новые Entry. Биржевые SL/TP остаются
 самостоятельной защитой, **но не заменяют** доказанную работоспособность
-обязательного Universal Exit owner. При неполном exact native replay
+обязательного Universal Exit owner.
+
+**OWNER DECISION 2026-11-19 — persistent native TRAIL035 Exit recovery (Issue #860).** Existing-position-first is a permanent obligation until independently signed CLOSED, not a one-time first-fill temporal privilege. The independent account-scoped signed Bybit private reconciliation owner detects `OPEN + immutable eligible ExitPlan requiring native trailing + signed trailingStop=0`; Universal Exit/Execution separately validates current exact account/protection/no-pending state and a fresh original LTP and submits an Exchange-native one-time protection request through its existing credential-owning owner. An original 15-second first-fill source gap remains durable fault evidence but **must not permanently veto a present-time trailing activation**. This capability does not invent missing past native trade IDs, replay lost MFE, replace dynamic RAW TP/Exit or transfer Exchange mutation ownership to Observer/Dashboard/Position Supervisor. Every check stays account/position-scoped under a durable lock. Signed Bybit nonzero trailing and preserved SL/TP are necessary after mutation; unresolved/unknown mutation remains BLOCKED. Current position exclusion: the existing 2026-11-19 OPEN INJUSDT belongs to a separate owner decision and must not be mutated automatically by this release. Only positions with a persisted per-fill new-contract eligibility marker, or explicit separately authorized per-position opt-in, are included; mere source/release upgrade is not sufficient. Exact calculation, above/below threshold behavior and required negative tests are owned by TRADING_CONTOUR §7.6.5. No automatic new Entry/ARM or service restart is implied by this architecture change.
+ При неполном exact native replay
 не объявлять Exit VERIFIED, не заменять MFE свечным приближением; сохранить
 Exchange protection и открыть отдельный bounded repair для affected
 position/source. Открытый unrelated repair не останавливает рабочие
