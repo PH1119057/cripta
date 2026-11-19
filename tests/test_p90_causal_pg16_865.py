@@ -36,7 +36,6 @@ from operations.connectivity.p90_real_persistent_trail import (
     _candidate,
     _source_quote,
 )
-from test_p90_causal_release_preflight_865 import _case
 
 _TESTENV = Path("/data/cripta/research/testenvs/p90_causal_pg16")
 _SOCKET = _TESTENV / "socket"
@@ -62,6 +61,8 @@ def connect(*, admin: bool = False, autocommit: bool = True, tuples: bool = Fals
 
 
 def positions():
+    from test_p90_causal_release_preflight_865 import _case
+
     main, *_ = _case(short=False)
     sub, *_ = _case(short=True)
     main_id = "ta-" + "1" * 32
@@ -322,19 +323,18 @@ class P90CausalPostgresTests(unittest.TestCase):
                     WHERE source_session_id=%s""",
                 (now-timedelta(seconds=12), _EPOCH),
             )
-        with connect(tuples=True, autocommit=False) as source:
-            with source.transaction():
-                source.execute(
-                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        with connect(tuples=True, autocommit=False) as source, source.transaction():
+            source.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            )
+            with self.assertRaisesRegex(
+                R10ExecutionPublicationUnavailable,
+                "R10_EXECUTION_TICKER_FIELD_TTL_EXPIRED",
+            ):
+                read_r10_execution_quote(
+                    source, symbol="LTCUSDT",
+                    observed_at=datetime.now(UTC),
                 )
-                with self.assertRaisesRegex(
-                    R10ExecutionPublicationUnavailable,
-                    "R10_EXECUTION_TICKER_FIELD_TTL_EXPIRED",
-                ):
-                    read_r10_execution_quote(
-                        source, symbol="LTCUSDT",
-                        observed_at=datetime.now(UTC),
-                    )
 
     def test_extra_active_source_session_blocks_recovery(self):
         now = datetime.now(UTC)
@@ -347,21 +347,23 @@ class P90CausalPostgresTests(unittest.TestCase):
                    VALUES (%s,%s,%s,'ACTIVE',%s)""",
                 ("f"*32, BYBIT_PUBLIC_MARKET_SOURCE_ID, _COMMIT, now),
             )
-        with connect(tuples=True, autocommit=False) as source:
-            with self.assertRaises(P90PersistentTrailBlocked):
-                _source_quote(
-                    source, symbol="LTCUSDT", observed_at=datetime.now(UTC),
-                )
+        with connect(tuples=True, autocommit=False) as source, self.assertRaises(
+            P90PersistentTrailBlocked
+        ):
+            _source_quote(
+                source, symbol="LTCUSDT", observed_at=datetime.now(UTC),
+            )
 
     def test_runtime_db_role_cannot_mutate_exchange_ownership(self):
-        with connect() as c:
-            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
-                c.execute(
-                    """UPDATE runtime.position_ownership
-                         SET identity_status='UNVERIFIED'
-                       WHERE position_id=%s""",
-                    (self.main.strategy_position_id,),
-                )
+        with connect() as c, self.assertRaises(
+            psycopg.errors.InsufficientPrivilege
+        ):
+            c.execute(
+                """UPDATE runtime.position_ownership
+                     SET identity_status='UNVERIFIED'
+                   WHERE position_id=%s""",
+                (self.main.strategy_position_id,),
+            )
 
 
 if __name__ == "__main__":
