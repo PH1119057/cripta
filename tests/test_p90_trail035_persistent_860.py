@@ -238,8 +238,8 @@ def test_exchange_gate_accepts_only_new_contract_exact_native_activation(
 
 
 def test_forged_recovery_marker_alone_never_reaches_bybit_post(monkeypatch):
-    from pathlib import Path
     import importlib
+    from pathlib import Path
 
     # Even if a caller injects a marker in runtime.trade_commands, the private
     # Execution layer must recheck the immutable per-fill DB marker and signed
