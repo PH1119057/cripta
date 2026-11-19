@@ -412,17 +412,24 @@ No new active Source, path, mandatory reading route, actor, DB grant or architec
   `docs/DEVELOPMENT_RELEASE_RULES_RU.md §59.7`. Не дублировать всю
   таблицу отдельно в ARCH/TC/Issue; после изменения producer/consumer
   обновить эту матрицу и её тесты в одном change-set.
-- Текущий риск/защита/TRAIl035 — TC §7.6.5, account-specific LIVE ARM — TC
+- Текущий риск/защита/TRAIL035 — TC §7.6.5, account-specific LIVE ARM — TC
   §4.15.1/§4.15.2, bounded MAIN/SUB 10 USDT diagnostics — TC §4.8.2–4.8.4,
   architecture/diagnostic identity — ARCH §7.1/§60; source authority —
   OBS §7.10. Вмешательство в P90 Entry/Exit economics нельзя скрывать
   как изменение тестовой инфраструктуры.
-- Исполняемые исходники preflight: `operations/infrastructure/p90_causal_release_preflight.py`
-  + `tests/test_p90_causal_release_preflight_865.py`; единственная
-  корректная точка запуска — verified candidate runtime из
-  `install_verified_release.sh` **до** остановки служб/DB migration.
-  C0/C1 и неподтверждённые C2/C3 различать. Нельзя выдавать
-  unit/mock PASS за signed Exchange TRAIL035.
+- Исполняемые исходники preflight:
+  `operations/infrastructure/p90_causal_release_preflight.py`,
+  `operations/infrastructure/p90_causal_pg16_testenv.py`,
+  `tests/test_p90_causal_release_preflight_865.py`,
+  `tests/test_p90_causal_pg16_865.py`; штатный запуск на verified
+  candidate runtime из `install_verified_release.sh` **до** остановки
+  служб/production DB migration. C0/C1 изолированы, C2 = собственный
+  PostgreSQL16, transaction/lock/source и **синтетический** AF_UNIX
+  private peer, C3 = отдельно подтверждённый настоящий Bybit.
+  CHECKED HERE 2026-11-19: серверный C2 stage checkout SHA `072d1742...`
+  12/12 PASS, manifest `20261119T170230Z_175b508fca.json`; это НЕ
+  installed/live runtime, НЕ подписанный Bybit GET и НЕ проверка каждого
+  A–U перехода. Не выдавать mock/CI PASS за Exchange TRAIL035.
 - Реальные тесты по указанию владельца — существующие Bybit MAIN/SUB,
   10 USDT/позиция, isolated 1x, только актуальные пять связанного
   P90 scope; это не означает ни запуск ордера без authenticated
