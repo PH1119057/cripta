@@ -139,7 +139,6 @@ def run_p90_persistent_trail_once(
     row = _candidate(connection)
     if row is None:
         return "P90_TRAIL_RECOVERY_NO_ELIGIBLE_POSITION"
-    at = (now or datetime.now(UTC)).astimezone(UTC)
     position_id = str(row["position_id"])
     account_id = str(row["trading_account_id"])
     symbol = str(row["symbol"])
