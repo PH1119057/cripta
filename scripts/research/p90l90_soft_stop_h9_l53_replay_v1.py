@@ -210,7 +210,7 @@ def replay(period,smoke_hours=0):
   nx=next(streams[s],None)
   if nx is not None:heapq.heappush(heap,(nx[0],ix,nx))
  reports={name:book.finish() for name,book in books.items()}
- if reports["TPONLY_BASELINE"]["counts"]["qualified_candidate"]!=reports["SOFT_STOP_18H"]["counts"]["qualified_candidate"]:
+ if reports["TPONLY_BASELINE"]["counts"].get("qualified_candidate",0)!=reports["SOFT_STOP_18H"]["counts"].get("qualified_candidate",0):
   raise ValueError("candidate parity fails between books")
  if reports["SOFT_STOP_18H"]["counts"].get("close_PROTECTED_STOP",0):raise ValueError("trailing not removed")
  if period=="90d" and not smoke_hours:
