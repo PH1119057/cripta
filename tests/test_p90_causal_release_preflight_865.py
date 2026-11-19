@@ -170,7 +170,7 @@ class CandidateGraphTests(unittest.TestCase):
         prearm = (ROOT/"src/bybit_workbench/p90l90_real_prearm_evidence.py").read_text()
         guard = (ROOT/"src/bybit_workbench/release_arm_safety.py").read_text()
         self.assertIn("P90_R06_EXIT_OWNER_READY_FLAT", prearm)
-        self.assertIn("P90_R06_EXIT_OWNER_BLOCKED", guard)
+        self.assertIn("exit_owner_ready", guard)
         self.assertIn("REAL_ENTRY_RUNTIME_NOT_READY", guard)
 
 
