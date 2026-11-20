@@ -406,7 +406,7 @@ class P90CausalPostgresTests(unittest.TestCase):
             publication(admin, now=now)
         with connect(tuples=True, autocommit=False) as source:
             quote, epoch = _source_quote(
-                source, symbol="LTCUSDT", observed_at=datetime.now(UTC),
+                source, symbol="LTCUSDT", observed_at=now,
             )
             self.assertEqual(epoch, _EPOCH)
             self.assertEqual(quote.source_session_id, _EPOCH)
@@ -437,7 +437,7 @@ class P90CausalPostgresTests(unittest.TestCase):
             ):
                 read_r10_execution_quote(
                     source, symbol="LTCUSDT",
-                    observed_at=datetime.now(UTC),
+                    observed_at=now,
                 )
 
     def test_extra_active_source_session_blocks_recovery(self):
@@ -455,7 +455,7 @@ class P90CausalPostgresTests(unittest.TestCase):
             P90PersistentTrailBlocked
         ):
             _source_quote(
-                source, symbol="LTCUSDT", observed_at=datetime.now(UTC),
+                source, symbol="LTCUSDT", observed_at=now,
             )
 
     def test_reader_only_fixture_cannot_mutate_exchange_ownership(self):
@@ -483,11 +483,12 @@ class P90CausalPostgresTests(unittest.TestCase):
                 account, position.symbol, 0
             ),
         )
+        simulated_at = datetime.now(UTC)
         private = replace(
             private, trading_account_id=account,
             exchange_position_key=position.exchange_position_key,
             connector_id=connector, generation_id="synthetic-c2-generation",
-            observed_at=datetime.now(UTC),
+            observed_at=simulated_at,
         )
         # Durable account/position and source facts from independent PG16,
         # not the live Bybit private worker or production database.
@@ -532,11 +533,11 @@ class P90CausalPostgresTests(unittest.TestCase):
             if bad_binding:
                 with self.assertRaises(P90PrivateIpcUnverified):
                     client.for_restart_recovery(
-                        position, at=datetime.now(UTC),
+                        position, at=simulated_at,
                     )
                 return
             signed = client.for_restart_recovery(
-                position, at=datetime.now(UTC),
+                position, at=simulated_at,
             )
             self.assertEqual(signed.trading_account_id, account)
             self.assertEqual(
@@ -545,18 +546,18 @@ class P90CausalPostgresTests(unittest.TestCase):
             )
             self.assertFalse(signed.pending_exit_mutation)
             with connect(admin=True) as admin:
-                publication(admin, now=datetime.now(UTC))
+                publication(admin, now=simulated_at)
             with connect(tuples=True, autocommit=False) as source:
                 quote, session = _source_quote(
                     source, symbol=position.symbol,
-                    observed_at=datetime.now(UTC),
+                    observed_at=simulated_at,
                 )
                 source.rollback()
             observation = build_p90_trail_recovery_observation(
                 position=position, private=signed, quote=quote,
                 eligibility=P90_TRAIL_RECOVERY_POLICY,
                 expected_source_session_id=session,
-                received_at=datetime.now(UTC),
+                received_at=simulated_at,
             )
             evaluated = UniversalExitEngine().evaluate(
                 position, plan, observation,
