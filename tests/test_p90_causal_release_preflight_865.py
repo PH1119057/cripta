@@ -240,6 +240,13 @@ class CandidateGraphTests(unittest.TestCase):
         self.assertIn('"--require-hashes"', builder)
         self.assertIn('"--staged-candidate"', builder)
         self.assertIn("CANDIDATE_ALREADY_EXISTS_RECONCILE", builder)
+        # A timed-out child must not orphan the independent test PostgreSQL.
+        self.assertIn("timeout=420", builder)
+        self.assertIn("_stop_exact_test_cluster_after_child_timeout()", builder)
+        self.assertIn("PG_TIMEOUT_PHYSICAL_IDENTITY_MISMATCH", builder)
+        self.assertIn('db.execute("SHOW data_directory")', builder)
+        self.assertIn('db.execute("SHOW listen_addresses")', builder)
+        self.assertIn("CANDIDATE_PREFLIGHT_LOG=", builder)
         self.assertNotIn("systemctl", builder)
         self.assertNotIn("pg_dump", builder)
         self.assertNotIn("trading-stop", builder)
