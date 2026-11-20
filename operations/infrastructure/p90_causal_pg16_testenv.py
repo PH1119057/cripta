@@ -252,8 +252,17 @@ _DDL = (
         compact_features jsonb NOT NULL,
         PRIMARY KEY(source_session_id,instrument_id,observed_second)
     )""",
+    # These positive source-writer grants match current canonical migrations.
+    # Other tables remain intentionally reader-only test fixture grants; NEVER
+    # infer production effective privileges from this isolated test cluster.
     "GRANT USAGE ON SCHEMA runtime,strategy_exit,analytics TO cripta",
     "GRANT SELECT ON ALL TABLES IN SCHEMA runtime,strategy_exit,analytics TO cripta",
+    "GRANT SELECT,INSERT,UPDATE ON analytics.native_public_trade_source_sessions TO cripta",
+    "GRANT SELECT,INSERT ON analytics.market_publications TO cripta",
+    "GRANT SELECT,INSERT ON analytics.public_market_source_seconds TO cripta",
+    "GRANT SELECT,INSERT ON strategy_exit.exit_decisions,"
+    "strategy_exit.execution_requests,"
+    "strategy_exit.execution_dispatches TO cripta",
 )
 
 
