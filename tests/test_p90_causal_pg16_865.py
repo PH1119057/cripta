@@ -228,9 +228,16 @@ class P90CausalPostgresTests(unittest.TestCase):
             self.assertEqual(row["current_database"], "cripta_integration")
             self.assertIsNone(row["inet_server_addr"])
             self.assertGreaterEqual(row["current_setting"], 160000)
-            self.assertFalse(c.execute(
+            # Current production-effective ACL was independently read-only
+            # checked: runtime ownership UPDATE allowed, DELETE denied.
+            # This is a separate disposable TEST role, not a GRANT to prod.
+            self.assertTrue(c.execute(
                 "SELECT has_table_privilege('cripta',"
                 "'runtime.position_ownership','UPDATE') AS allowed"
+            ).fetchone()["allowed"])
+            self.assertFalse(c.execute(
+                "SELECT has_table_privilege('cripta',"
+                "'runtime.position_ownership','DELETE') AS allowed"
             ).fetchone()["allowed"])
 
     def test_source_writer_dml_grants_match_canonical_sql_subset(self):
