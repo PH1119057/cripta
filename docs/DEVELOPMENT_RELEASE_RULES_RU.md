@@ -3279,3 +3279,31 @@ After this proof the **PR branch** candidate runner now requires this stage
 after C0/C1 and synthetic C2 but BEFORE any production service/DB/symlink
 cutover. It is still NOT DEPLOYED, and the **new combined archive SHA**
 must pass its own full on-host rehearsal before merge or release.
+
+
+**Timeout/host pressure containment (CHECKED HERE 2026-11-20):**
+Original offline SHA `203de26796f04abbb870d5bcc1d594cd7c10f4f1`
+checked 767 Git blobs, lock-installed `.venv` and imports, but its parent
+subprocess budget of 110 seconds elapsed before combined C2+66 migration
+completion; job `job_ce1389ca278c` returned `FAIL:TimeoutExpired`,
+manifest `.../p90_causal_candidate_865/runs/20261120T003408Z_cc4753aa0b.json`.
+That forced timeout **orphaned the isolated PG16**, not production DB.
+The leftover cluster was positively proved at exact actor `cripta=UID107`,
+PGDATA `.../p90_causal_pg16/cluster`, private socket `.../socket`,
+port 6546, `listen_addresses=''`, PG16 and test-only role/db
+`postgres/postgres`. Then same `cripta` actor performed only
+`pg_ctl -D <exact-test-PGDATA> -m fast -w stop`;
+stop RC=0, subsequent `pg_ctl status` RC=3, no
+`postmaster.pid` or test Unix socket. **Production was not restarted.**
+The failed artifact remains immutable forensic evidence and is never
+overwritten.
+
+Remediation in the branch: candidate test child logs are streamed into
+`.../p90_causal_candidate_865/runs/<run_id>.preflight.log` and the
+bounded overall causal test timeout is 420 seconds (outer approved
+server job 600s); on child timeout, wrapper kills only its own child
+and stops any surviving **test** PostgreSQL only after strict
+physical PGDATA/socket/no-TCP/port/role/version/effective-actor evidence.
+Unmatched or busy cluster => `BLOCKED/UNKNOWN`, never guessed cleanup.
+The next candidate SHA must prove the new wrapper behavior by actual
+host execution before the offline full-schema gate can be marked green.
