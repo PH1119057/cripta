@@ -440,6 +440,8 @@ if [[ -z "$ROADMAP470_STAGE" ]]; then
   runtime_test_paths+=(
     tests/test_p90_causal_release_preflight_865.py
     tests/test_p90_causal_pg16_865.py
+    tests/postgres_trade_lifecycle_bootstrap.sql
+    .github/workflows/trade-lifecycle-postgres.yml
   )
   for test_path in "${runtime_test_paths[@]}"; do
     runtime_verify_test_paths+=(--path "$test_path")
