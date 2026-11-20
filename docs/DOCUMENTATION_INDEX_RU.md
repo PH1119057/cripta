@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.67
+**Версия:** 3.68
 **Дата:** 2026-11-20
 **Статус:** канонический индекс документации
 
@@ -754,7 +754,7 @@ runtime changes, imported fixtures, auth/control/API/SQL/shared ABI never
 inherit UI-only scope or trigger a silent FULL fallback. Pure docs/tests alone
 do not deploy any service. ARCH §9.0/§50.1 retain three independent owners;
 MAP §24 tracks the actually installed controller separately from canon.
-No Project Source count or routing change. Implementation/runtime migration
+**OWNER CLARIFICATION 2026-11-20 (#871):** A position or pending Exchange order is *not* a general release blocker (DEV §44–46). Distinguish installation, preservation/reconciliation of Exit protection, and separate authorization of new Entry. Releasing UI or independently verified components never depends on FLAT; do not claim a missing condition. No Project Source count or routing change. Implementation/runtime migration
 remains separately gated and must not be labelled deployed by this text.
 
 # 20. Operator money / Dashboard read-model revision — 2026-10-05
