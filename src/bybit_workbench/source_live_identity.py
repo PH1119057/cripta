@@ -17,9 +17,28 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
-DOCUMENTARY_PREFIXES = ("docs/", "research/", "tests/")
+DOCUMENTARY_PREFIXES = ("research/", "tests/research/")
 DOCUMENTARY_EXACT = {"README.md", "AGENTS.md"}
 DASHBOARD_PREFIX = "operations/dashboard/"
+DASHBOARD_SOURCE_PATHS = frozenset((
+    "operations/dashboard/index.html",
+    "operations/dashboard/app.py",
+))
+
+
+def _non_runtime_review_path(path: str) -> bool:
+    """Conservatively exclude only proven non-production review artifacts."""
+    if path in DOCUMENTARY_EXACT:
+        return True
+    if path.startswith("docs/") and path.endswith(".md"):
+        return True
+    if path.startswith(DOCUMENTARY_PREFIXES):
+        return True
+    return (
+        path.startswith("tests/test_")
+        and path.endswith(".py")
+        and path.count("/") == 1
+    )
 CONTROLLER_SOURCE_PATH = "operations/infrastructure/cripta-release-controller"
 CONTROLLER_LIVE_PATH = Path(
     "/usr/local/libexec/cripta-release-controller/cripta-release-controller"
@@ -48,10 +67,10 @@ def classify_delta_paths(
 ) -> tuple[bool, str | None]:
     """Pure path classifier for DEVELOPMENT_RELEASE §26.2."""
     for path in changed_paths:
-        if path in DOCUMENTARY_EXACT or path.startswith(DOCUMENTARY_PREFIXES):
+        if _non_runtime_review_path(path):
             continue
         if path.startswith(DASHBOARD_PREFIX):
-            if dashboard_delta_verified:
+            if dashboard_delta_verified and path in DASHBOARD_SOURCE_PATHS:
                 continue
             return False, "DASHBOARD_UI_DELTA_NOT_VERIFIED"
         if path == CONTROLLER_SOURCE_PATH:
