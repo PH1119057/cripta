@@ -27,6 +27,8 @@ _REQUIRED_CASES = frozenset({
     "CausalSimulatedTests.test_firstfill_window_can_expire_but_opted_in_recovery_reaches_decision",
     "CausalSimulatedTests.test_gateway_exact_ready_flat_is_not_confused_with_recovery_failures",
     "CausalSimulatedTests.test_signed_private_rotation_is_not_protection_drift",
+    "CausalSimulatedTests.test_firstfill_failure_recovery_request_is_not_false_ready",
+    "CausalSimulatedTests.test_newer_original_quote_revalidates_exact_same_trail_action",
     "CausalSimulatedTests.test_stale_or_wrong_private_source_and_unsafe_position_fail_closed",
 })
 
