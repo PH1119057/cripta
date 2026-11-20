@@ -420,6 +420,8 @@ No new active Source, path, mandatory reading route, actor, DB grant or architec
 - Исполняемые исходники preflight:
   `operations/infrastructure/p90_causal_release_preflight.py`,
   `operations/infrastructure/p90_causal_pg16_testenv.py`,
+  `operations/infrastructure/p90_causal_candidate_archive_865.py`
+  (Data-SSD exact Git/archive/hashed runtime-deps rehearsal; NOT deployment),
   `tests/test_p90_causal_release_preflight_865.py`,
   `tests/test_p90_causal_pg16_865.py`; штатный запуск на verified
   candidate runtime из `install_verified_release.sh` **до** остановки
