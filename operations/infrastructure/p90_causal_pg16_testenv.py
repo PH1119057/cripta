@@ -30,6 +30,33 @@ _PG_BIN = Path("/usr/lib/postgresql/16/bin")
 _PORT = 6546
 _TEST = "test_p90_causal_pg16_865.py"
 
+_REQUIRED_CASES = frozenset({
+    "P90CausalPostgresTests.test_disposable_pg16_database_and_restricted_actor",
+    "P90CausalPostgresTests.test_source_writer_dml_grants_match_canonical_sql_subset",
+    "P90CausalPostgresTests.test_immutable_new_fill_marker_and_multi_account_candidate",
+    "P90CausalPostgresTests.test_p90_real_no_pending_uses_actual_pg_joins",
+    "P90CausalPostgresTests.test_unmaterialized_decision_blocks_only_main_account",
+    "P90CausalPostgresTests.test_orphan_unknown_exit_command_blocks_new_trailing",
+    "P90CausalPostgresTests.test_account_advisory_xact_lock_serializes_while_sub_is_independent",
+    "P90CausalPostgresTests.test_source_read_only_repeatable_read_real_publication",
+    "P90CausalPostgresTests.test_bad_publication_fails_closed_no_fabricated_price",
+    "P90CausalPostgresTests.test_extra_active_source_session_blocks_recovery",
+    "P90CausalPostgresTests.test_runtime_ownership_allows_update_but_not_delete",
+    "P90CausalPostgresTests.test_real_unix_ipc_process_and_pg16_to_exit_engine",
+    "P90CausalPostgresTests.test_real_unix_ipc_rejects_bad_binding_before_exit",
+})
+
+
+def _loaded_case_ids(suite: unittest.TestSuite) -> list[str]:
+    found: list[str] = []
+    for case in suite:
+        if isinstance(case, unittest.TestSuite):
+            found.extend(_loaded_case_ids(case))
+        else:
+            found.append(".".join(case.id().split(".")[-2:]))
+    return found
+
+
 
 class C2Blocked(RuntimeError):
     pass
@@ -333,6 +360,12 @@ def run_c2(
                 suite = unittest.defaultTestLoader.discover(
                     start_dir=str(code_root / "tests"), pattern=_TEST,
                 )
+                case_ids = _loaded_case_ids(suite)
+                if (
+                    len(case_ids) != len(_REQUIRED_CASES)
+                    or set(case_ids) != _REQUIRED_CASES
+                ):
+                    raise C2Blocked("C2_SQL_TEST_INVENTORY_MISMATCH")
                 result = unittest.TextTestRunner(verbosity=2).run(suite)
                 manifest["tests"] = result.testsRun
                 manifest["failures"] = len(result.failures)
@@ -342,7 +375,7 @@ def run_c2(
                     {"id": case.id(), "traceback_tail": trace[-3500:]}
                     for case, trace in (*result.failures, *result.errors)
                 ]
-                if not result.wasSuccessful() or result.testsRun < 13 or result.skipped:
+                if not result.wasSuccessful() or result.testsRun != len(_REQUIRED_CASES) or result.skipped:
                     raise C2Blocked("C2_SQL_TEST_SUITE_FAILED")
                 manifest["state"] = "PASS"
                 print("C2_PG16_SOURCE_LOCK_ROLE=PASS tests=" + str(result.testsRun), flush=True)
