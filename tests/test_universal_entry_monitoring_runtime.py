@@ -513,12 +513,8 @@ def test_universal_symbol_universe_has_no_legacy_enabled_symbols_gate() -> None:
     assert "enabled_symbols" not in rearm
     assert "select at least one trading symbol before re-arm" not in dashboard
     assert "нельзя открыть шлюз: не выбрана ни одна торговая монета" not in dashboard
-    monitor_start = html.index('id="coinMonitorSection"')
-    monitor_end = html.index('id="signalObservationSection"', monitor_start)
-    monitor = html[monitor_start:monitor_end]
-    assert "auto-check" not in monitor
-    assert "setAuto(" not in monitor
-    assert "Список монет задаётся только StrategyCard" in monitor
+    assert 'id="coinMonitorSection"' not in html
+    assert "setAuto(" not in html
     assert "- universe/symbols;" in architecture
     assert (
         "Trading universe конкретной Strategy определяется только её StrategyCard."

@@ -3,22 +3,24 @@ from pathlib import Path
 DASHBOARD = Path("operations/dashboard/index.html")
 
 
-def test_strategy_monitor_has_readiness_traffic_light() -> None:
+def test_operator_p90_rail_keeps_read_only_proximity_indicators() -> None:
     html = DASHBOARD.read_text(encoding="utf-8")
-    assert 'id="strategyMonitorGreen"' in html
-    assert 'Зелёный ≤' in html
-    assert "strategy-monitor-row-green" in html
-    assert "strategy-monitor-row-yellow" in html
-    assert "strategy-monitor-row-red" in html
-    assert "label:'НЕ ГОТОВО'" in html
-    assert "label:'ГОТОВО'" in html
-    assert "LOW_CHANGED" in html
-    assert "working_width_pct" in html
-    assert "strict_stable_states" in html
+    assert 'id="marketWorkspaceRail"' in html
+    assert "p90-open" in html
+    assert "p90-near" in html
+    assert "p90-far" in html
+    assert "h9Proximity<0.5" in html
+    assert "const h9NearestDistance=p90RailH9Proximity(item)" in html
+    assert "ENTRY BLOCKED (геометрия)" in html
+    assert "Entry требует overlap с L5-3" in html
 
 
-def test_strategy_monitor_traffic_light_is_ui_only() -> None:
+def test_retired_entryplan_widget_is_not_exposed_or_used_to_trade() -> None:
     html = DASHBOARD.read_text(encoding="utf-8")
-    assert "Светофор — только визуализация readiness; EntryPlan не меняется." in html
-    assert "onStrategyMonitorGreenChange()" in html
-    assert "localStorage.setItem('cripta-strategy-monitor-green'" in html
+    assert 'id="coinMonitorSection"' not in html
+    assert 'id="strategyMonitorGreen"' not in html
+    assert 'data-trade-page="monitor"' not in html
+    assert "renderStrategyMonitor(d.strategy_monitor)" not in html
+    assert "EntryPlan не меняется" not in html
+    assert "Пresentation-only" not in html
+    assert "function p90RailStableRows(items){" in html
