@@ -70,7 +70,9 @@ def classify_delta_paths(
         if _non_runtime_review_path(path):
             continue
         if path.startswith(DASHBOARD_PREFIX):
-            if dashboard_delta_verified and path in DASHBOARD_SOURCE_PATHS:
+            if path not in DASHBOARD_SOURCE_PATHS:
+                return False, "TRADING_OR_UNKNOWN_SOURCE_DELTA"
+            if dashboard_delta_verified:
                 continue
             return False, "DASHBOARD_UI_DELTA_NOT_VERIFIED"
         if path == CONTROLLER_SOURCE_PATH:
