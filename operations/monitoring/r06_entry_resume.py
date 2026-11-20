@@ -206,22 +206,20 @@ def _require_safe_existing_checkpoint_bridge(connection: Any) -> None:
 
     An existing protected OPEN position and its outstanding Exit requests are
     owned by the private/Exit lifecycle, not by the R06 no-order decision
-    cursor. Require zero *new Entry authority*, no pending older Entry request
-    and no uncertain owned position. Fresh-epoch creation still uses the
-    independent signed MAIN/SUB FLAT preflight and exposure gate.
+    cursor. Require zero *effective new Entry authority*: mainnet gate OFF
+    and no ACTIVE global owner-arm; no undelivered older Entry request and no
+    uncertain owned position. DEV §44–46 require a verified ordinary installer
+    to preserve enabled permissions and old account ARM rows, so their mere
+    existence cannot veto adoption of this NO_ORDER observer-only checkpoint.
+    Neither this bridge nor the installer writes gates/permissions/ARM/Exchange.
+    Fresh-epoch creation still uses the independent signed MAIN/SUB FLAT
+    preflight and exposure gate.
     """
     gate = connection.execute(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
     ).fetchone()
-    selected = connection.execute(
-        "SELECT count(*) FROM strategy_entry.execution_permissions "
-        "WHERE enabled=true AND enabled_at IS NOT NULL"
-    ).fetchone()
     global_arms = connection.execute(
         "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'"
-    ).fetchone()
-    account_arms = connection.execute(
-        "SELECT count(*) FROM control.account_live_arm_sessions WHERE state='ACTIVE'"
     ).fetchone()
     pending_entry = connection.execute(
         """SELECT count(*) FROM strategy_entry.execution_requests r
@@ -236,9 +234,8 @@ def _require_safe_existing_checkpoint_bridge(connection: Any) -> None:
         ([MAIN_ID, SUB_ID],),
     ).fetchone()
     if (
-        gate != (False,) or selected != (0,) or global_arms != (0,)
-        or account_arms != (0,) or pending_entry != (0,)
-        or uncertain != (0,)
+        gate != (False,) or global_arms != (0,)
+        or pending_entry != (0,) or uncertain != (0,)
     ):
         raise R06ResumeBlocked("R06_RESUME_RELEASE_GATE_NOT_SAFE")
 
