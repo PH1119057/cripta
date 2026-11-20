@@ -2878,3 +2878,432 @@ Full R07 `C/M/I/T/D/R=PASS` needs both source/canonical and physical release pro
 ARCH §60.5.1.1 и OBS §7.10.5.8 разрешают ровно BTCUSDT/ETHUSDT только как R11 MAYAK observational anchors в **существующем single-owner** MarketSource, в дополнение к пяти P90 instruments. Ни P90 native trading journal/Entry/Exit/Execution Strategy universe, ни signed Bybit private truth, ни LIVE-arm не расширяются. Одна проверенная source configuration объединяет exact five trading requirements и отдельные BTC/ETH MAYAK-only requirements; запрещено выдавать BTC/ETH trading consumer requirements или включать без exact manifest/fingerprint.
 
 Gate: (1) full #470 PR/worktree/writer/job continuity, (2) isolated additive source-only manifest/parser/event/PG16 schema and original publication tests, provider sequence/epoch reset/GAP/REST failures, (3) readonly DB preflight and no-start migration only authorized `postgres`, native effective Unix `cripta` write permissions, backup, capacity and rollback, (4) controlled SINGLE native producer ABI/source epoch transition with five trading cursors intact, (5) MAYAK & Dispatcher seven-coin feature equivalence against original feeds; BTC/ETH anchoring, 5–900s causal features, WARMUP and config_fingerprint, source/no-source negative and restart/lag tests, (6) only then controlled MAYAK public WS retirement with safe rollback, same source/installed/loaded identities and signed independent OPEN protection. Trade and financial-arm changes require **another** owner decision. No silent release or DDL from GitHub docs PR. R11 CLOSED only with C/M/I/T/D/R proven; separate R14 final consolidation not implied.
+
+
+### 59.7 P90 source→consumer→Execution→Exit→Gateway: постоянная причинная карта и release gate (OWNER DECISION 2026-11-19, #865)
+
+**Канонический owner и основание.** Владелец требует иметь в действующей
+документации не сокращённый обзор, а полную прослеживаемую схему всех
+P90 производителей, потребителей, разрешений, таблиц, IPC, блокировок,
+доказательств и переходов. **До** production cutover кандидат должен
+проходить серверные интеграционные тесты по этой схеме. Источник точной
+торговой семантики, защиты и подтверждённых лимитов — TC §7.6.5,
+§4.8–4.8.4 и §4.15; архитектурные границы — ARCH §7.1, §60;
+контракты source — OBS §7.10; DB/Unix/agent — SECURITY, DEV §5.1/§19,
+текущий actor/path — MAP §1.4. Эта секция — canonical owner
+**связей и предрелизного доказательства**, НЕ новый финансовый writer.
+Исходная инвентаризация выполнена по GitHub main
+`f20270e835202d5609e7a7b980d8e6565903d261` (датированный
+source checkpoint от 19.11.2026; не вечное требование LOADED_COMMIT).
+Issue #865 — evidence / историю отказа; содержимое таблицы в Issue не
+второй authority. После изменений topology эту таблицу менять вместе с
+целевым кодом, до разрешения merge.
+
+#### 59.7.1 Схема направленных потоков
+
+~~~text
+Bybit PUBLIC LINEAR (5 symbols) [без credential]
+ -> A. Native MarketSource один active producer/PG advisory lock
+ -> B. Immutable original trades + current/closed MarketPublication, epoch
+      |-> C. R06 SOURCE_ONLY Observer/candidate (NO ORDER)
+      |    -> D. MAIN/SUB Universal Entry (financial)
+      |    -> E. Entry admission, slot/capital, request, command
+      |    -> F. MAIN/SUB Private Runtime -> Bybit real order/fill
+      |    -> G. signed initial SL/TP and StrategyPosition OPEN/PROVEN
+      |                              |
+      |                              +-> L. First-fill 15-sec Exit
+      |                              +-> M. opted-in persistent TRAIL035
+      |                              +-> N. continuous R06 Exit/MFE/5m
+      |-> H. immutable post-fill R09 source -----------L
+      |-> I. fresh R10 execution quote (<2s) --------M
+      |-> J. native MFE+closed 5m --------------------N
+Bybit PRIVATE MAIN / SUB
+ -> K. credential-bound Private Runtime signed position/order/IPC
+      |-> G (SL/TP proof)
+      |-> L/M (exact account, positionIdx, SL/TP, pending, freshness)
+L/M -> O. Exit Engine + Execution Port -> Exit Decision/Request
+    -> P. account Private Runtime Bybit trading-stop POST
+    -> P2. signed /v5/position/list readback + protection evidence
+N   -> O (dynamic Exit observations/decisions)
+L/M/N/P2 -> Q. Universal Exit Consumer status aggregator
+Q + P2 -> R. Lifecycle/Position/Safety owners and faults
+Q/R + MAIN/SUB Entry/source/ARM -> S. Runtime gate for NEW Entry
+Q/R/source/Private + release -> T. Dashboard prearm and explicit OWNER ARM
+GitHub protected main -> U. Verified candidate -> pre-release tests
+ -> Release Controller -> installed/loaded runtime -> all A..T
+~~~
+
+**Не путать владельцев.** R06 SOURCE_ONLY не владеет Entry order,
+Observer не открывает Exchange. Credential-free Exit не выполняет
+Bybit POST непосредственно. Dedicated MAIN и SUB Private Runtime
+не взаимозаменяемы. MAYAK/Dispatcher в P90_MINIMAL остаются
+`PAUSED_BY_DATA_SCOPE` и не являются emergency источниками.
+`Claim heartbeat`, положительный `ExitDecision`, Exchange ACK и
+фактический signed readback `trailingStop>0` — **разные** доказательства.
+
+#### 59.7.2 Матрица событий, IPC, таблиц и ownership
+
+| ID / событие | Истинный writer / конкретный исполнитель | INPUT → OUTPUT: database / IPC / файл | Точный gate и lock | Следующий consumer / обязательное свидетельство |
+|---|---|---|---|---|
+| A. Public source | `cripta-native-public-trade-source.service`, `operations/monitoring/native_public_trade_source.py` | Approved Bybit publicTrade / candles → оригиналы и `analytics.native_public_trade_source_sessions` | Один физический producer, PG lock, source epoch, no second WS | B/H/I/J: по 5 LINEAR instrument, sequence continuity и source identity |
+| B. Publication | Native MarketSource / publication writer | `analytics.public_market_source_seconds`, immutable current/closed publication, exact session/producer_commit/frame | Один committed PG boundary; field-time/TTL и original-to-publication provenance | C/I/J: source session+publication_id, закрытые 5m, LTP из реальных данных |
+| C. No-order Entry facts | `cripta-universal-entry-observer.service`, R06 source-only | R06 PG native future-only candidate, `strategy_entry.p90_scoped_native_consumer_checkpoints` | Только чтение verified source, никакого financial request, нет historical replay | D: current future-only signal + causal refs |
+| D. Financial Entry | MAIN и SUB `cripta-universal-entry-consumer*.service`, `r06_financial_promotion.py` | Candidate + `strategy_entry.p90_r06_financial_promotion_checkpoints` → `strategy_entry.execution_requests` | MAIN/SUB strategy binding, account ARM, mainnet=ON, permissions, future-only baseline, SECOND48 | E/F: одна законная новая заявка со ссылкой на publication |
+| E. Slot & capital | Universal Entry admission, bound account | `runtime.capital_reservations`, `runtime.exchange_position_slot_claims`, request/dispatch | Строгий однонаправленный one-way slot, 10 USDT, isolated 1x, MAIN cap 20/SUB cap 30; pending/unknown prohibit duplicate | F: idempotent account-scoped command без второй позиции |
+| F. Bybit Entry | `cripta-private-runtime*` с credential MAIN/SUB | `runtime.trade_commands`, Bybit order/fills, `runtime.position_ownership`, `runtime.hot_positions` | Сверенная credential→connector→TradingAccount, actual fill vs ACK, account lock/reconcile | G: OPEN/PROVEN, fill_price, qty, positionIdx, order/fill provenance |
+| G. Initial protection | Тот же credential private owner | Bybit Full SL/TP → `runtime.position_ownership.initial_protection_evidence`, `initial_protection_confirmed_at`, durable opted-in policy | Signed Bybit position/orders, qty/idx/side, reduceOnly/closeOnTrigger; no ACK-only proof | H/K/L/M/N: защищённая позиция и immutable ExitPlan |
+| H. Immediate original source | `p90_real_independent_exit.py`, R09 postfill source | Immutable postfill original source window | 15 секунд от protection, exact epoch and time coverage; stale=typed refusal | L: доказанная граница first-fill, не бессрочное удержание owner |
+| I. Current executable quote | `r10_execution_publication.py::read_r10_execution_quote` | `analytics.public_market_source_seconds` в REPEATABLE READ READ ONLY | ONE ACTIVE source session, same publication, LTP/bid/ask field age ≤2s, no invented timestamp | M/P: свежая безопасная цена для активации TRAIL035 |
+| J. MFE & 5m | Native originals + `p90_r06_exit_owner.py` | `strategy_exit.exit_observations` high-watermark and closed 5m | One causal per-boundary progression, immutable source lineage | N: continuous RAW L5-3 exit независимо от slow firstfill |
+| K. Signed private | MAIN/SUB `private_runtime.py` signed IPC via `P90PrivateProofClient` | Bybit position/list, orders, account mode/UID → account-specific proof | Correct actor/credential, connector, qty/side/idx/SL/TP, source epoch, pending mutation, freshness | L/M/P: matching public/private at same temporal snapshot |
+| L. First-fill TRAIL035 | `p90_real_independent_exit.py::run_p90_exit_once` from Universal Exit consumer | G+H+K → ExitObservation/Decision/Request, `runtime.connection_events` refusal | Account advisory + position row lock; 15s immutable window; typed `FIRST_FILL_UNVERIFIED` | O/P: durable result; expiry does **not** terminate M/N |
+| M. Persistent TRAIL035 | `p90_real_persistent_trail.py::run_p90_persistent_trail_once` #860 | Opted-in OPEN position + I + K + second independent signed re-GET → current observation | Same account-first lock; exactly approved new-fill marker, no unknown/pending child command, no original-source substitute | O/P: one SET_TRAILING or typed BLOCKED, no blind re-POST |
+| N. Continuous Exit | `p90_r06_exit_owner.py::run_p90_r06_exit_once` | `runtime.position_exit_claims` heartbeat, `strategy_exit.exit_observations`, dynamic 5m TP | Account+position lock and immutable ExitPlan; heartbeat does **not** prove native trail | O/Q/R: continuously PROVEN ownership and causal MFE/exit |
+| O. Exit decision | Universal Exit Engine + `p90l90_real_exit_execution.py` / ExecutionPort | Observation+ExitPlan → `strategy_exit.exit_decisions`, `strategy_exit.execution_requests`, `runtime.trade_commands` | Account/position lock, protection/identity & pending guard, release/source/fingerprint | P: queued exact account command with no double execution |
+| P. Bybit trailing | Credential-bound Private Runtime SET_TRAILING handler | Bybit `POST /v5/position/trading-stop` Full idx0 distance/tick → signed GET `/v5/position/list` and protection evidence | Validate qty/side/SL/TP before+after; confirm `trailingStop>0`, unknown ACK needs reconcile | Q/R: Exchange-confirmed independent native trail, not just ACK |
+| Q. Exit overall status | `universal_exit_consumer.py::run_once/_p90_status` | L/M/N status → `/var/lib/cripta-p90-r06-exit/status.json` | Separate `firstfill`, `recovery`, `continuous`, `trailing_confirmed` obligations; no false READY | R/S/T: documented state with release, freshness, actual protection |
+| R. Safety/lifecycle | Lifecycle/Position Supervisors | `runtime.lifecycle_faults`, `runtime.effective_protection_evidence`, `runtime.position_exit_claims` | Detect absent SL/TP, stale/missing Exit claim, changed position qty; false old fault != new scoped failure | S/T: durable fault & updated protection, no silent clear |
+| S. Gate for new Entry | `release_arm_safety.py::check_release_arm_invariant` / guard | Owner readiness → `control.release_arm_incidents`, `control.execution_gate_events`, `control.execution_gates` | Fail closed on actual hazard; stop NEW Entry, do not cancel existing Exchange protection/Exit | T: scoped reason, exact source/account/owner proof |
+| T. Owner Gateway | Dashboard `p90l90_real_prearm_evidence.py::prepare_p90l90_real_v3_prearm_evidence` | Service+current/flat/ARM/account/source/Exit evidence, staged gate | Current strict flat state: fresh exact `READY_FLAT` and both accounts FLAT; OPEN-position rearm is separate TC/ARCH owner contract | Authenticated OWNER ARM only after full independent technical readiness |
+| U. Release owner | GitHub protected main → `cripta-release-controller.service` / verified installer | Exact immutable candidate `/srv/cripta/runtime/releases/<SHA>` before symlink → installed/loaded runtime | Hash/CI/rollback/source ABI, candidate test *before* service stop, no auto ARM | All A–T match candidate commit; postrelease behavior and signed proof separately |
+
+#### 59.7.3 Точные разрывы #865 / запрет «просто подправить статус»
+
+1. При первом DOT fill/SLTP firstfill был `P90_FIRST_FILL_EXIT_UNVERIFIED`,
+   потом `P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED`. Для
+   постоянного M нужно получить actual current source+private proof, а
+   не повторять expired H или менять 15s.
+2. M даёт `R10ExecutionPublicationUnavailable`, `CURRENT_PROOF_STALE`,
+   `PRIVATE_IPC_POSITION_INTERNAL_UNVERIFIED` в отдельных попытках.
+   Нужен один same-cycle источник/приватное доказательство с точной
+   кодовой точкой отказа. Изолированный SELECT не доказывает то же событие.
+3. #860 unit test строил заранее согласованные объекты quote/private.
+   Он не проходил реальную цепочку I+K→M→O→P→Bybit signed readback.
+4. Существующий `p90_firstfill_blocked` способен поставить общий
+   `P90_R06_EXIT_OWNER_BLOCKED` при живом N; L,M,N,P — независимые
+   obligations. Объявить READY только по живому N при неподтверждённом
+   TRAIL035 запрещено.
+5. `READY_FLAT` Gateway и `RUNNING` для OPEN позиции — разные
+   predicates; не менять AUTH/ARM из-за ошибки диагностики.
+6. Успешный §4.8.3 diagnostic REAL в MAIN/SUB (10 USDT/1x, SL/TP ±0.2%)
+   доказывает *общий* контур, но не P90 TRAIL035. TC §4.8.4
+   подтверждает этот account scope без автоматического Bybit POST.
+
+#### 59.7.4 Серверный pre-release test rail и доказательные уровни
+
+**Owner-решение:** не использовать один GitHub CI или flat prearm как
+основание готовности к торговому релизу. Код-кандидат должен проходить
+обязательную серверную проверку *до* остановки любых работающих CORE units,
+до миграции production PostgreSQL и до переключения symlink.
+
+~~~text
+reviewed branch + GitHub CI
+  → protected main / exact SHA+tree
+  → immutable candidate /srv/cripta/runtime/releases/<SHA>
+  → candidate runtime .venv (фиксированные hashes)
+  → C0 source graph + C1 deterministic integration tests
+  → C2 independent PostgreSQL16 + restricted role + mock AF_UNIX (mandatory)
+  → FAIL/BLOCKED: release stops BEFORE service stop/DB migration
+  → PASS: штатный Release Controller may deploy with all original gates
+  → actual signed postrelease readiness (MAIN/SUB, Entry, Exit, status)
+  → only separately approved LIVE diagnostic / genuine eligible P90 fill
+  → C3 signed Exchange fill/protection/trailing/close behavior and stability
+~~~
+
+**Test levels, not interchangeable:**
+- `C0_SOURCE_GRAPH`: executable candidate source graph, named owner/function/
+  state keys, candidate commit identity; no running process needed.
+- `C1_CAUSAL_SIMULATED`: candidate Engine + mock original public quotes,
+  signed-private IPC and fake Exchange with separate actors; firstfill success
+  and expiry→recovery, no fresh quote, bad UID/qty/SLTP, pending/unknown
+  mutation, denied trailing readback, repeated call, two-account isolation,
+  continuous Exit and runtime-gate status checked. It is TEST, not Bybit.
+- `C2_DISPOSABLE_PG`: отдельный Unix-user `cripta` PostgreSQL 16 cluster
+  на private AF_UNIX socket, физический `PGDATA` вне production; fixtures
+  с ограниченной DB role `cripta` и test-admin `postgres`, два независимых
+  соединения, настоящий R10 READ ONLY, реально конкурирующие account locks,
+  pending/unknown Exit и настоящая AF_UNIX передача между тестовыми процессами.
+  Producer IPC использует **синтетический** private response: C2 проверяет
+  клиент, peer/nonce/binding и отсутствие поддельного Exit, **не** реальные
+  signed Bybit GET. Fixture покрывает выбранный subset таблиц; полная
+  production-equivalent schema и PRIVATE worker credential behavior пока
+  `NOT EXERCISED` и не могут наследовать PASS от C2.
+- `C3_LIVE_EXCHANGE`: owner-authorized real MAIN/SUB diagnostic 10 USDT/1x
+  via *existing* TC §4.8.3 authenticated route, **or** authorized genuine
+  P90 trial for actual TRAIL035 (different contracts), with signed Bybit
+  pre/post readback; never estimated from C1/C2. New external real
+  accounts require separate owner scope. No arbitrary command can fake owner
+  action, and no mainnet mutation from CI.
+
+**Execution owner and locations:** versioned source files are
+`operations/infrastructure/p90_causal_release_preflight.py`,
+`operations/infrastructure/p90_causal_pg16_testenv.py`,
+`tests/test_p90_causal_release_preflight_865.py`,
+`tests/test_p90_causal_pg16_865.py`. The verified installer must archive
+and Git-blob-verify BOTH test files along with `src/` and `operations/`;
+source-checked runner from exact candidate executes under `runuser -u cripta`
+in `/srv/cripta/runtime/releases/<SHA>`, after candidate locked `.venv`
+build and BEFORE managed service stops, production SQL or runtime symlink.
+Both C0/C1 and the C2 PG source/role/lock/mock-peer suite are mandatory;
+no `pytest` system dependency; `PYTHONDONTWRITEBYTECODE=1`.
+
+**Exact testenv actor/path contract (DEV §5.1):**
+- effective Unix actor = `cripta` (checked UID 107 on robot); test-cluster
+  internal **only** PostgreSQL test-superuser role = `postgres`, restricted
+  test runtime role = `cripta`. Production `postgres` OS actor and DB
+  `cripta` are never invoked or granted permissions by this runner;
+- READ = exact candidate code+tests, verified candidate `.venv`, PostgreSQL
+  binaries `/usr/lib/postgresql/16/bin/{initdb,pg_ctl,postgres}`; no Bybit
+  credentials, no production PostgreSQL socket, no `runtime/current`
+  imports inside verified release;
+- WRITE/CREATE = **only** own `/data/cripta/research/testenvs/p90_causal_pg16/`
+  directories `cluster/`, `socket/`, `logs/`, `runs/`, `.c2.lock` and
+  audit temporary JSON; all created by `cripta` mode 0700/umask 077;
+- RENAME = own runs `.tmp` to `.json` via atomic `os.replace`;
+  DELETE = disposable `cripta_integration` **test-cluster** database on
+  verified same PGDATA and its fixture rows, and consumed manifest tmp
+  only; cluster files are retained as testenv, no production path touched;
+- network = PostgreSQL `listen_addresses=''`, test-only private Unix socket
+  under mode-0700 root at port 6546, no public TCP; fake P90 private IPC
+  uses random **synthetic** account identity and Linux abstract AF_UNIX;
+  systemd `Sandbox` = not a new unit, running as the bounded release child;
+- before any test DB destructive create/drop, compare `SHOW data_directory`,
+  socket, port, no TCP, PG16 version and test role. Strict single-run flock;
+  if existing test cluster running or identity unknown, STOP and reconcile;
+  PG cluster stops in `finally` and manifest records its stopped state.
+  No recursive mode change, no root actor for test workload.
+
+The test checkout in RESEARCH is evidence only and never a release authority;
+source SHA, testenv manifest and actual host result must be distinct.
+The runner does **not** install or restart production PostgreSQL and does not
+run REAL Bybit. Any missing test file/dependency, failed assertion, stale
+source or unexpectedly running test cluster blocks BEFORE production stop.
+No permissions/tool-policy bypass.
+
+**Existing verified test assets — reuse, do not reinvent.** Repository already
+has `tests/postgres_trade_lifecycle_bootstrap.sql`,
+`tests/test_p90_real_firstfill_two_connection_postgres.py`,
+`tests/test_p90_real_restart_postfill_guard_postgres.py`,
+`tests/integration/p90_ws_recovery_disposable_setup.sql`,
+and `.github/workflows/trade-lifecycle-postgres.yml` with PostgreSQL 16,
+real test-role grants, transaction/restart/negative cases and
+`CRIPTA_TRADE_LIFECYCLE_TEST_DSN`. These are *existing* disposable
+integration facilities, not missing infrastructure. Use their full
+actual schema/role semantics, preserving their checks
+`dbname=cripta_integration`, server PostgreSQL ≥16 and
+`CRIPTA_P90_POSTFILL_E2E_REQUIRED=1` (missing DSN must FAIL, not SKIP).
+GitHub-hosted disposable CI execution does not substitute for the
+owner-required **server** candidate run.
+
+**Permanent server testenv — CHECKED HERE 2026-11-19, BRANCH-STAGED ONLY:**
+Independent PostgreSQL16 `/data/cripta/research/testenvs/p90_causal_pg16`
+created by current Unix `cripta` with private socket and no TCP.
+On GitHub branch head `072d17428f9c4826efccb05aa6b9bdda786f38cf`
+(actual **stage checkout**, not production release), test suite executed
+on robot with 12/12 PASS; manifest
+`runs/20261119T170230Z_175b508fca.json` and `cluster_stopped=true`
+are durable nonsecret evidence. Earlier 10/10 at `856feb83...` is historical
+subset evidence. Test code remains in Draft PR #868; GitHub main and installed
+production runtime remain separately checked. This **does not** prove that
+production installer ran the new candidate release hook. When the PR head
+changes, rerun tests on its exact new checkout SHA. C2 mock private peer
+is not authenticated Exchange GET, and the whole chain A–U is not yet
+proven end-to-end by this subset; C3 is `NOT EXERCISED`.
+
+**Blocking semantics:** C0/C1 are mandatory once installed; if a
+change requires C2 for correctness, absence of working C2 blocks the
+claim of complete pre-release causal validation. `C3` cannot run
+before deploy on immutable candidate without live mutation; it is
+a separately owner-authorized post-release proof, not silently PASS.
+A green C0 is not C1 and a successful C1 is not Exchange verification.
+Current open-position Exit bug #865 remains NOT FIXED until complete
+candidate causal test AND real Exit behavior, irrespective of this rule.
+
+**Audit & rollback:** emit for each step PASS/FAIL/NOT_RUN with exact
+candidate_sha/phase, fail before any systemd stop/SQL/symlink if a
+mandatory stage is not PASS. Release Controller must preserve original
+backup/cutover/rehydration security. After successful install, compare
+REMOTE/SOURCE/INSTALLED/LOADED, bound MAIN/SUB private/Entry/Exit/safety
+owner PIDs and heartbeat, independently signed account/source and
+position/protection; test the actual applicable Gateway path. For a
+genuine eligible first fill, actual Exchange `trailingStop>0` with
+matching SL/TP and a healthy following Exit window is needed to call
+TRAIL035 `E2E_VERIFIED`. If no eligible fill: `NOT EXERCISED`.
+
+
+#### 59.7.5 Offline Git-verified full runtime candidate rehearsal, не deployment
+
+До испытания настоящего installer cutover разрешён **только** независимый
+предрелизный прогон runtime payload на Data SSD. Script source:
+`operations/infrastructure/p90_causal_candidate_archive_865.py`.
+Точный rehearsal root — `/data/cripta/research/testenvs/p90_causal_candidate_865/<SHA>`;
+worktree — уже зарегистрированный
+`/data/cripta/research/worktrees/p90_causal_c2_865_20261119`.
+Скрипт из exact clean PR checkout проверяет full SHA и status, `git archive`
+из exact commit тех **же runtime paths**, что у обычного installer,
+затем применяет canonical `verify_release_candidate_git.py` к
+EVERY tracked blob/type/mode до создания `.venv`. Только после PASS
+строит локальную `venv --system-site-packages`, запускает
+`pip install --only-binary=:all: --require-hashes` из **самого candidate**
+`operations/runtime/runtime_requirements.lock`, импорт-проверку и
+`p90_causal_release_preflight.py --staged-candidate` с реальным
+изолированным C2. Это verified **full runtime archive subset**, не весь
+production installer workflow, не импорт из current и не доказательство
+runtime cutover/Exchange.
+
+**Actor/path matrix, DEV §5.1 и §19:** effective Unix writer `cripta`,
+проверенный на robot UID 107. READ: exact Git worktree и archive blobs,
+locked requirements, project current Python interpreter *только для вызова
+builder*, Ubuntu PG16 test binaries и DDL из собственного source
+код-кандидата. WRITE/CREATE: `/data/cripta/research/testenvs/p90_causal_candidate_865/`
+`.build.lock`, `<SHA>/` (tar-extracted immutable Git-source bytes +
+`INSTALLED_COMMIT` + локальная `.venv`), `runs/*.tmp`.
+RENAME: atomically own `runs/*.tmp → runs/*.json`; DELETE: none
+(candidate retained for forensic, never blindly replaced). Parent
+`/data/cripta/research/testenvs` проверяется actor-owned/mode 0700.
+Tested child C2 writes/deletes only its separate explicitly scoped
+`p90_causal_pg16` fixture/PGDATA DB as documented §59.7.4.
+Systemd sandbox: no new unit (bounded approved management command).
+DB actors: local `cripta` Unix hosts disposable PG16; test-DB
+`postgres` DDL only on verified private PGDATA/socket, test `cripta`
+for selected operational DML and read-only Exit queries. Production DB
+actors or credentials never invoked. Git worktree and candidate source
+are read-only; GitHub API controls future source edits.
+
+**Failure handling:** unexpected candidate directory, dirty worktree,
+incorrect SHA, stale manifest, low free Data SSD (<2 GiB), lock
+contention, archive mismatch, pip/hash/import failure, missing tests,
+C0/C1 or C2 failure = FAIL, no service stop/restart/real Gate/Bybit.
+Don't relaunch a failed/in-flight build until reconciling its manifest
+and exact candidate path; no automatic recursive deletion/chown/chmod.
+Durable manifest in `.../runs/<run_id>.json` distinguishes `PASS`,
+`FAIL`, target commit, no Exchange mutation and no production action.
+
+The production installer NEVER passes `--staged-candidate`; it
+retains its strict `/srv/cripta/runtime/releases/<SHA>` identity,
+rebuild/rollback, backup and full release safety. Offline rehearsal PASS
+therefore **не доказывает** on-host production installer behavior,
+systemd/DB migration or loaded release. Последующие release и C3 Bybit
+контролируются отдельными gates.
+
+**C2 permission parity:** separate current source SQL from test role:
+`20261108_native_public_trade_source_sessions.sql` requires
+`cripta SELECT,INSERT,UPDATE` on active sessions, and
+`20261110_market_source_publication.sql` /
+`20261110_public_source_compact_seconds.sql` permit `SELECT,INSERT`
+without UPDATE/DELETE. C2 must check positive **operational INSERT/UPDATE**
+and negative permissions. Its `runtime.position_ownership` synthetic
+reader-only fixture deliberately does *not* model all production grants:
+`TEST_FIXTURE_GRANTS != CANONICAL_SQL_GRANTS != PRODUCTION_EFFECTIVE_GRANTS`.
+The complete production-equivalent PostgreSQL 16 lifecycle bootstrap and
+credential-local private actor are still open evidence, and no extra
+production privilege is implied by fixture tests.
+
+**PRODUCTION_EFFECTIVE_GRANTS read-only smoke 2026-11-20:** the exact
+Unix actor `cripta` connected by local PostgreSQL socket as
+`current_user=cripta, current_database=cripta, inet_server_addr=NULL`;
+in READ ONLY transaction `has_table_privilege` returned:
+
+| Target | SELECT | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| runtime.trade_commands | YES | YES | YES | YES |
+| runtime.position_ownership | YES | YES | YES | NO |
+| strategy_exit.exit_decisions | YES | YES | NO | NO |
+| strategy_exit.execution_requests | YES | YES | NO | NO |
+| strategy_exit.execution_dispatches | YES | YES | NO | NO |
+| analytics.native_public_trade_source_sessions | YES | YES | YES | NO |
+| analytics.market_publications | YES | YES | NO | NO |
+| analytics.public_market_source_seconds | YES | YES | NO | NO |
+
+These are **observed effective ACL**, NOT a request to broaden
+permissions. The server test C2 for these exact eight modeled relations
+must assert the same matrix and exercise a positive native session
+`INSERT/UPDATE`, positive publication `INSERT` and positive
+position ownership `UPDATE`, plus ownership `DELETE` refusal.
+Prior C2 `SELECT`-only ownership fixture incorrectly classified actual
+runtime `UPDATE` as forbidden; this was a **TEST_MODEL_DIVERGENCE**,
+not evidence of production rights failure. All additional real
+production schema constraints/trigger semantics/role hierarchy are
+`NOT CHECKED BY C2`; the existing independent full PostgreSQL CI
+suite is a separate protection, not a substitute for server runtime
+causal E2E.
+
+
+#### 59.7.6 CI PostgreSQL 16 original-migration parity on isolated server
+
+A separate `operations/infrastructure/p90_causal_fullschema_865.py`
+runner replays exactly the **66 ordered SQL migration files** listed in
+`.github/workflows/trade-lifecycle-postgres.yml`, following
+`tests/postgres_trade_lifecycle_bootstrap.sql` and the already documented
+`runtime.connection_events` fixture expansion. All bootstrap and CI
+workflow bytes must be archived and Git-blob-verified with candidate code;
+the list is parsed strictly, count/fingerprint exact and files resolved
+relative to that candidate. This is the **GitHub CI lifecycle schema subset**
+up through its last listed migration, NOT an automatic claim that it covers
+every later production migration or trigger.
+
+Test environment: the exact same already approved and isolated
+`/data/cripta/research/testenvs/p90_causal_pg16` cluster. Exact actor
+`cripta`; local PG16-test superuser `postgres` only within this private
+PGDATA/socket; no `sudo postgres`, production socket, real account keys,
+systemd or Exchange. READ: candidate `operations/sql/*.sql`, bootstrap,
+CI list and exact private runtime function. WRITE/CREATE/DELETE: only
+`cripta_integration` inside independently proven test PGDATA, plus
+`runs/*.tmp` manifest, test log and existing `.c2.lock`; RENAME = own
+JSON temp to result. The test must validate the PGDATA/socket/port/no-TCP
+identity **before** creating or dropping this disposable database, hold
+the exclusive testenv flock and stop the test cluster in a finally block.
+Any unexpected script/path, failure of one migration, missing runtime
+schema/role privileges, or first-fill recovery SQL mismatch => FAIL,
+not SKIP. Production ACL is *read-only compared* but never copied by
+issuing GRANT to production.
+
+Acceptance is independent of the existing subset synthetic C2. After
+all migration DDL, it must execute the **actual candidate
+`private_runtime.py::resolve_prestart_entry_commands` SQL** under
+the disposable `cripta` role and assert it returns no false evidence for
+a synthetic absent Entry/account. Retain count of actually created tables,
+migration progress index, exact candidate SHA and durable manifest.
+A PASS in this CI schema reproduction does NOT prove credential-local
+Private Runtime, pending network Bybit commands or C3 live.
+
+**CHECKED HERE 2026-11-20 — branch-staged validation only:** host robot,
+exact Git stage SHA `de7f51754cb9bb26e25865d3888b6da54e9a06bb`,
+job `job_df46d3dea191`, `66/66` original CI migrations,
+`53` modeled tables, `prestart_actual_code_sql=PASS`, no production
+DB or Exchange mutation, `cluster_stopped=true`. Durable manifest
+`/data/cripta/research/testenvs/p90_causal_pg16/runs/20261120T002748Z_a5ce019570.json`.
+This is executable evidence for **the exact CI 66-migration schema**, not
+later migration parity, actual private Bybit readback or full live chain.
+After this proof the **PR branch** candidate runner now requires this stage
+after C0/C1 and synthetic C2 but BEFORE any production service/DB/symlink
+cutover. It is still NOT DEPLOYED, and the **new combined archive SHA**
+must pass its own full on-host rehearsal before merge or release.
+
+
+**Timeout/host pressure containment (CHECKED HERE 2026-11-20):**
+Original offline SHA `203de26796f04abbb870d5bcc1d594cd7c10f4f1`
+checked 767 Git blobs, lock-installed `.venv` and imports, but its parent
+subprocess budget of 110 seconds elapsed before combined C2+66 migration
+completion; job `job_ce1389ca278c` returned `FAIL:TimeoutExpired`,
+manifest `.../p90_causal_candidate_865/runs/20261120T003408Z_cc4753aa0b.json`.
+That forced timeout **orphaned the isolated PG16**, not production DB.
+The leftover cluster was positively proved at exact actor `cripta=UID107`,
+PGDATA `.../p90_causal_pg16/cluster`, private socket `.../socket`,
+port 6546, `listen_addresses=''`, PG16 and test-only role/db
+`postgres/postgres`. Then same `cripta` actor performed only
+`pg_ctl -D <exact-test-PGDATA> -m fast -w stop`;
+stop RC=0, subsequent `pg_ctl status` RC=3, no
+`postmaster.pid` or test Unix socket. **Production was not restarted.**
+The failed artifact remains immutable forensic evidence and is never
+overwritten.
+
+Remediation in the branch: candidate test child logs are streamed into
+`.../p90_causal_candidate_865/runs/<run_id>.preflight.log` and the
+bounded overall causal test timeout is 420 seconds (outer approved
+server job 600s); on child timeout, wrapper kills only its own child
+and stops any surviving **test** PostgreSQL only after strict
+physical PGDATA/socket/no-TCP/port/role/version/effective-actor evidence.
+Unmatched or busy cluster => `BLOCKED/UNKNOWN`, never guessed cleanup.
+The next candidate SHA must prove the new wrapper behavior by actual
+host execution before the offline full-schema gate can be marked green.

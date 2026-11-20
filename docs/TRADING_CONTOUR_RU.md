@@ -1293,6 +1293,55 @@ Runtime actor `cripta` не получает table-wide DELETE на
 Новый v3 run по-прежнему начинается только explicit authenticated owner click.
 Assistant/server maintenance action не подменяет owner trigger.
 
+
+### 4.8.4 Diagnostic account scope and the P90 TRAIL035 proof boundary — OWNER CLARIFICATION 2026-11-19 (#865)
+
+Владелец уточнил: два существующих dedicated Bybit TradingAccount **MAIN**
+и **SUB** — те самые специальные торговые аккаунты для REAL diagnostic.
+Разрешены ограниченные тестовые входы по **10 USDT на позицию**,
+**isolated 1x**, на инструменте из уже разрешённого соответствующему
+аккаунту набора: MAIN LTCUSDT/INJUSDT; SUB DOTUSDT/ARBUSDT/APTUSDT.
+Для будущих отдельных реальных торговых аккаунтов владелец сообщит
+об изменении scope; это уточнение не переносит permission на них, не
+расширяет current instrument list, не снимает капитал/слот/identity
+и не разрешает неограниченную серию автоматических Exchange orders.
+
+**Авторизация и метод:** 10 USDT — разрешённая граница риска, а не
+способ подменить контрольный вход. Для §4.8.3 применяются существующие
+`OWNER_FULL_CONTOUR_TRIGGER`, authenticated owner action, отдельная
+StrategyVersion v3 и все её MAIN/SUB private, admission, current
+source, mode, slot, protection, signed readback и lifetime gates. В
+частности, v3 имеет **свой** SL/TP ±0.2%, а не P90 stop -10% и
+TRAIL035. §4.8 execution smoke (без StrategySignal/Exit lineage) —
+только transport smoke, не полный контур. Нельзя запустить оба
+через произвольный root/SQL/sentinel_exec/pytest или выдать
+диагностическое approval за general owner ARM. Изолированная
+серверная test-среда не содержит настоящих Bybit credentials и
+не вправе отправлять реальные ордера.
+
+**Для проверки P90 TRAIL035** требуется отдельная, неизменённая
+production P90 StrategyVersion с разрешённым current MAIN/SUB
+scope и *обычным* ENTRY/EXIT/financial gate по §4.15.1,
+либо будущий explicit reviewed diagnostic contract, использующий
+именно исходный P90 ExitPlan без подделки P90 stats. Тест
+`OWNER_FULL_CONTOUR_TRIGGER` v3 с ExitPlan ±0.2% **никогда**
+не считается тестом TRAIL035. Решение только после реального
+eligible fill, подтверждённого SL/TP, оригинальных market
+facts, signed private account, native trailing-stop POST и
+**независимого** signed GET trailingStop с сохранённым SL/TP;
+невозможность получить безопасный eligible fill фиксируется
+`NOT EXERCISED`, а не подменяется принудительной сделкой.
+
+Это согласие не даёт разрешения менять уже OPEN позицию,
+отменять текущую защиту, переармливать закрытый owner gate или
+обходить `UNKNOWN`/failed protection. Изменение конкретного
+Entry/Exit/Strategy risk contract потребует отдельной immutable
+версии и §4.15/ARCH review. Разрешение пользователя от
+2026-11-19 фиксирует тестовый account scope, но не утверждает,
+что diagnostic v3 уже установлен/работает, и не является
+доказательством LIVE E2E.
+
+
 ## 4.9 PAPER / REAL execution mode — OWNER DECISION 2026-10-06
 
 Execution mode — это выбор среды исполнения одной активной Strategy, а не
