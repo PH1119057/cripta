@@ -105,7 +105,81 @@ def _verify_archive(candidate: Path, sha: str):
     print(output, flush=True)
 
 
-def _run_candidate(candidate: Path, sha: str):
+def _stop_exact_test_cluster_after_child_timeout() -> str:
+    """Stop ONLY the verified isolated test PG16, never production PostgreSQL."""
+    import psycopg
+
+    root = Path("/data/cripta/research/testenvs/p90_causal_pg16")
+    data = root / "cluster"
+    socket = root / "socket"
+    if (
+        os.geteuid() != 107
+        or root.is_symlink()
+        or data.is_symlink()
+        or socket.is_symlink()
+        or not data.is_dir()
+        or not socket.is_dir()
+        or data.stat().st_uid != 107
+        or socket.stat().st_uid != 107
+    ):
+        raise CandidateBlocked("PG_TIMEOUT_CLEANUP_SCOPE_NOT_PROVEN")
+    lock_path = root / ".c2.lock"
+    if lock_path.is_symlink():
+        raise CandidateBlocked("PG_TIMEOUT_LOCK_SYMLINK")
+    with lock_path.open("a+") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise CandidateBlocked("PG_TIMEOUT_ANOTHER_TEST_IN_PROGRESS") from exc
+        pgctl = "/usr/lib/postgresql/16/bin/pg_ctl"
+        status = subprocess.run(
+            [pgctl, "-D", str(data), "status"], check=False,
+            capture_output=True, text=True, timeout=12,
+        )
+        if status.returncode == 3:
+            if (data / "postmaster.pid").exists() or list(socket.iterdir()):
+                raise CandidateBlocked("PG_TIMEOUT_STOPPED_WITH_STALE_STATE")
+            return "ALREADY_STOPPED"
+        if status.returncode != 0:
+            raise CandidateBlocked("PG_TIMEOUT_STATUS_UNKNOWN")
+        with psycopg.connect(
+            host=str(socket), port=6546, user="postgres",
+            dbname="postgres", connect_timeout=3,
+        ) as db:
+            identity = (
+                db.execute("SHOW data_directory").fetchone()[0],
+                db.execute("SHOW unix_socket_directories").fetchone()[0],
+                db.execute("SHOW listen_addresses").fetchone()[0],
+                db.execute("SHOW port").fetchone()[0],
+            )
+            if (
+                identity != (str(data), str(socket), "", "6546")
+                or not 160000 <= db.info.server_version < 170000
+                or db.execute("SELECT inet_server_addr()").fetchone()[0] is not None
+                or db.execute("SELECT current_user,current_database()").fetchone()
+                != ("postgres", "postgres")
+            ):
+                raise CandidateBlocked("PG_TIMEOUT_PHYSICAL_IDENTITY_MISMATCH")
+        stop = subprocess.run(
+            [pgctl, "-D", str(data), "-m", "fast", "-w",
+             "-t", "25", "stop"],
+            capture_output=True, text=True, check=False, timeout=38,
+        )
+        afterwards = subprocess.run(
+            [pgctl, "-D", str(data), "status"],
+            capture_output=True, text=True, check=False, timeout=12,
+        )
+        if (
+            stop.returncode != 0
+            or afterwards.returncode != 3
+            or (data / "postmaster.pid").exists()
+            or list(socket.iterdir())
+        ):
+            raise CandidateBlocked("PG_TIMEOUT_CLEANUP_NOT_VERIFIED")
+        return "STOPPED_AND_VERIFIED"
+
+
+def _run_candidate(candidate: Path, sha: str, run_id: str):
     python = candidate / ".venv/bin/python"
     lock = candidate / "operations/runtime/runtime_requirements.lock"
     if not lock.is_file() or lock.is_symlink():
@@ -146,8 +220,26 @@ def _run_candidate(candidate: Path, sha: str):
         "--staged-candidate",
     ]
     print("CANDIDATE_C0_C1_C2=RUNNING", flush=True)
-    output = _checked(command, env=env, timeout=110)
+    log_path = _PARENT / "runs" / (run_id + ".preflight.log")
+    _path_owned(log_path.parent, create=True)
+    print("CANDIDATE_PREFLIGHT_LOG=" + str(log_path), flush=True)
+    with log_path.open("x", encoding="utf-8") as log:
+        child = subprocess.Popen(
+            command, stdin=subprocess.DEVNULL, stdout=log,
+            stderr=subprocess.STDOUT, env=env,
+        )
+        try:
+            exit_code = child.wait(timeout=420)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait(timeout=12)
+            cleaned = _stop_exact_test_cluster_after_child_timeout()
+            print("CANDIDATE_PG_TIMEOUT_RECONCILE=" + cleaned, flush=True)
+            raise CandidateBlocked("CANDIDATE_PREFLIGHT_TIMED_OUT_AFTER_420S") from None
+    output = log_path.read_text(encoding="utf-8", errors="replace")
     print(output[-9000:], flush=True)
+    if exit_code:
+        raise CandidateBlocked("CANDIDATE_PREFLIGHT_FAILED_RC:" + str(exit_code))
     if "P90_CANDIDATE_PREFLIGHT=PASS_OFFLINE_ARCHIVE_C0_C1_C2_SQL" not in output:
         raise CandidateBlocked("CANDIDATE_PREFLIGHT_NOT_PROVEN")
     return output
@@ -197,7 +289,8 @@ def run(sha: str) -> int:
             _verify_archive(candidate, sha)
             (candidate / "INSTALLED_COMMIT").write_text(sha + "\n")
             print("CANDIDATE_ARCHIVE_HASHES=PASS", flush=True)
-            _run_candidate(candidate, sha)
+            _run_candidate(candidate, sha, run_id)
+            manifest["preflight_log"] = str(_PARENT / "runs" / (run_id + ".preflight.log"))
             manifest["state"] = "PASS"
             manifest["candidate_root"] = str(candidate)
             print("CANDIDATE_OFFLINE_END_TO_END=PASS", flush=True)
