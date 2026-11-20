@@ -209,3 +209,51 @@ def test_git_original_bytes_must_match_installed_source(monkeypatch, tmp_path):
         identity.subprocess, "check_output", lambda *_a, **_kw: b"other\n",
     )
     assert _verified(live, release) is False
+
+
+def test_end_to_end_source_live_identity_accepts_only_attested_controller(
+    monkeypatch, tmp_path,
+):
+    live, release, proof, _, _ = _setup_proof(monkeypatch, tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+    controller_path = identity.CONTROLLER_SOURCE_PATH
+
+    def fake_git(_root, *args):
+        if args == ("rev-parse", "HEAD"):
+            return TARGET
+        if args == ("ls-remote", "origin", "refs/heads/main"):
+            return TARGET + "\trefs/heads/main"
+        if args == ("status", "--porcelain=v1", "--untracked-files=all"):
+            return ""
+        if args == (
+            "diff", "--name-only", f"{LOADED}..{TARGET}"
+        ):
+            return controller_path + "\ntests/test_management_controller_identity_871.py"
+        if args == (
+            "diff", "--name-only", "--no-renames",
+            TARGET, TARGET, "--", controller_path,
+        ):
+            return ""
+        raise AssertionError(args)
+
+    monkeypatch.setattr(identity, "_git", fake_git)
+    actual = identity.inspect_source_live_identity(
+        loaded_commit=LOADED,
+        source=source,
+        release_state=release,
+        controller_live=live,
+    )
+    assert actual.ok is True
+    assert actual.blocker is None
+    assert controller_path in actual.changed_paths
+
+    proof.unlink()
+    blocked = identity.inspect_source_live_identity(
+        loaded_commit=LOADED,
+        source=source,
+        release_state=release,
+        controller_live=live,
+    )
+    assert blocked.ok is False
+    assert blocked.blocker == "MANAGEMENT_CONTROLLER_DELTA_NOT_VERIFIED"
