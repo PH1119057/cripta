@@ -164,6 +164,63 @@ def _fresh_matching_private_protection(
         return False
 
 
+
+def _recovery_recheck_matches_current_action(
+    *,
+    position: Any,
+    plan: Any,
+    original_quote: Any,
+    latest_quote: Any,
+    latest_private: ScopedPrivatePositionEvidence,
+    first_decision: Any,
+    source_session_id: str,
+    received_at: datetime,
+) -> bool:
+    """Allow changed LIVE quote only if it produces the identical safe action.
+
+    A newer, separately proven original MarketPublication may have a different
+    lastPrice after signed IPC. The second quote must be causally monotone and
+    independently re-evaluated against the SAME immutable position/ExitPlan.
+    Crossing the activation branch, changing account protection, stale source,
+    or any change in action/parameters fails closed; never reuse a stale
+    observation simply because its quote was once fresh.
+    """
+    try:
+        if (
+            latest_quote.source_session_id != source_session_id
+            or latest_quote.source_session_id != original_quote.source_session_id
+            or latest_quote.producer_release_commit
+            != original_quote.producer_release_commit
+            or latest_quote.publication_id < original_quote.publication_id
+            or latest_quote.as_of_second < original_quote.as_of_second
+            or latest_quote.field_times[0] < original_quote.field_times[0]
+        ):
+            return False
+        latest_observation = build_p90_trail_recovery_observation(
+            position=position,
+            private=latest_private,
+            quote=latest_quote,
+            eligibility=P90_TRAIL_RECOVERY_POLICY,
+            expected_source_session_id=source_session_id,
+            received_at=received_at,
+        )
+        reevaluated = UniversalExitEngine().evaluate(
+            position, plan, latest_observation,
+        )
+        candidate = reevaluated.decision
+        return bool(
+            reevaluated.status is ExitEvaluationStatus.DECISION_CREATED
+            and candidate is not None
+            and first_decision is not None
+            and candidate.action_kind == first_decision.action_kind
+            and candidate.rule_id == first_decision.rule_id
+            and candidate.requested_mutation.to_dict()
+            == first_decision.requested_mutation.to_dict()
+        )
+    except (AttributeError, TypeError, ValueError, RuntimeError):
+        return False
+
+
 def run_p90_persistent_trail_once(
     connection: Any,
     source_connection: Any,
@@ -303,14 +360,20 @@ def run_p90_persistent_trail_once(
                 )
                 return (
                     latest_session == session_id
-                    and latest_quote.producer_release_commit
-                    == quote.producer_release_commit
-                    and latest_quote.last_price == quote.last_price
-                    and latest_quote.field_times[0] == quote.field_times[0]
                     and _fresh_matching_private_protection(
                         private, latest_private, checked_at=datetime.now(UTC),
                     )
                     and _private_snapshot(latest_private) == snapshot
+                    and _recovery_recheck_matches_current_action(
+                        position=position,
+                        plan=plan,
+                        original_quote=quote,
+                        latest_quote=latest_quote,
+                        latest_private=latest_private,
+                        first_decision=decision,
+                        source_session_id=session_id,
+                        received_at=datetime.now(UTC),
+                    )
                 )
             except Exception:
                 return False
