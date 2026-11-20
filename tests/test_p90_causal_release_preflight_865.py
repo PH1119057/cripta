@@ -145,6 +145,8 @@ class CandidateGraphTests(unittest.TestCase):
             "operations/connectivity/p90_real_persistent_trail.py",
             "operations/connectivity/p90_r06_exit_owner.py",
             "operations/connectivity/universal_exit_consumer.py",
+            "operations/infrastructure/p90_causal_candidate_archive_865.py",
+            "operations/infrastructure/p90_causal_fullschema_865.py",
             "src/bybit_workbench/universal_exit/p90l90_real_exit_execution.py",
             "src/bybit_workbench/universal_exit/p90l90_real_trail_reconcile.py",
             "src/bybit_workbench/market_data/r10_execution_publication.py",
