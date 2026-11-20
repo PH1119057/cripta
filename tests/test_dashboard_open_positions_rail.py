@@ -58,7 +58,10 @@ def test_p90_rail_stably_pins_open_rows_without_geometry_jitter():
     assert "account_inventory_verified===true" in block
     assert "p90RailKnownOpen.has(key)&&item?.account_inventory_verified===false" in block
     assert "p90RailLastH9Distance" in block
-    assert ("if((!Number.isFinite(liveA)||!Number.isFinite(liveB))"\n            "&&previous!==null)return previous;") in block
+    assert (
+        "if((!Number.isFinite(liveA)||!Number.isFinite(liveB))"
+        "&&previous!==null)return previous;"
+    ) in block
     assert "Math.abs(da-db)>0.05" in block
     assert "p90RailPreviousOrder.clear()" in block
     assert "patchP90RailDom(rail,rows.map(item=>" in source
