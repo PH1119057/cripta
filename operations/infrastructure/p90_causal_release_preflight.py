@@ -84,11 +84,23 @@ def main(argv: list[str] | None = None) -> int:
         candidate_archive=args.staged_candidate,
     ):
         return _stop("C2_PG16_SOURCE_LOCK_ROLE_FAILED")
+
+    # Same physically isolated PG16 cluster, independent original-schema check:
+    # actual 66 SQL migrations from the canonical GitHub CI workflow and
+    # original private_runtime prestart-recovery query under test role cripta.
+    from operations.infrastructure.p90_causal_fullschema_865 import run_full_schema
+
+    if not run_full_schema(
+        expected,
+        args.expected_commit,
+        candidate_archive=args.staged_candidate,
+    ):
+        return _stop("C2_FULL_SCHEMA_CI_MIGRATION_OR_SQL_FAILED")
     print("C3_SIGNED_REAL_EXCHANGE=NOT_EXERCISED", flush=True)
     print(
         "P90_CANDIDATE_PREFLIGHT="
-        + ("PASS_OFFLINE_ARCHIVE_C0_C1_C2" if args.staged_candidate
-           else "PASS_RELEASE_C0_C1_C2"),
+        + ("PASS_OFFLINE_ARCHIVE_C0_C1_C2_SQL" if args.staged_candidate
+           else "PASS_RELEASE_C0_C1_C2_SQL"),
         flush=True,
     )
     return 0
