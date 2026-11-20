@@ -539,3 +539,20 @@ def test_bybit_kz_quarantine4_is_absent_from_research_acquisition_defaults() -> 
         assert symbol in rules
         assert symbol in current_map
 
+
+def test_actual_preread_receipt_and_e2e_truth_are_bootstrapped() -> None:
+    template = _read("operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt")
+    meta = _read("docs/CHATGPT_INTERACTION_RULES_RU.md")
+    work = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+    agents = _read("AGENTS.md")
+    readme = _read("README.md")
+    for content in (template, meta, work, index, agents, readme):
+        assert "CANON_READ_RECEIPT" in content
+    for token in ("BASE_READ", "ROUTED_READ", "NOT_CHECKED_HERE", "RUNTIME BEHAVIOR VERIFIED"):
+        assert token in meta
+    assert "CI PASS ≠ IMPLEMENTED ≠ MERGED ≠ DEPLOYED" in template
+    assert "DEV §52.1–52.11" in template
+    assert "DEV §59.7" in template
+    assert "Открытая позиция САМА ПО СЕБЕ не запрещает релиз" in template
+    assert "META §17.6" in template

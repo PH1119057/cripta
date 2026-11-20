@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.68
+**Версия:** 3.69
 **Дата:** 2026-11-20
 **Статус:** канонический индекс документации
 
@@ -94,6 +94,10 @@ bundle превысил limit. Добавление 12-го current file тре�
 этот INDEX. Устаревшая ссылка в root bootstrap является documentation defect.
 
 # 5. Mandatory pre-read and routed pre-read
+
+Квитанция фактического чтения `CANON_READ_RECEIPT` и запрет подменять
+`DEPLOYED` доказательством реального поведения — META §17.6, WORK §13.
+Это контроль исполнения существующего маршрута, не 12-й файл Project Source.
 
 Base new-chat reading contract — OWNER DIRECTION 2026-11-14:
 - FULL: META (docs/CHATGPT_INTERACTION_RULES_RU*.md), WORK (docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md), SECURITY (docs/SECURITY.md).
