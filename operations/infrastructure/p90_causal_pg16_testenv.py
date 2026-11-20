@@ -334,6 +334,10 @@ def run_c2(
                 manifest["failures"] = len(result.failures)
                 manifest["errors"] = len(result.errors)
                 manifest["skipped"] = len(result.skipped)
+                manifest["failed_cases"] = [
+                    {"id": case.id(), "traceback_tail": trace[-3500:]}
+                    for case, trace in (*result.failures, *result.errors)
+                ]
                 if not result.wasSuccessful() or result.testsRun < 13 or result.skipped:
                     raise C2Blocked("C2_SQL_TEST_SUITE_FAILED")
                 manifest["state"] = "PASS"
