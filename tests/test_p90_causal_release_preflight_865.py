@@ -417,6 +417,119 @@ class CausalSimulatedTests(unittest.TestCase):
         self.assertEqual(crashed["state"], "P90_R06_EXIT_OWNER_BLOCKED")
         self.assertNotEqual(crashed["result"], flat)
 
+    def test_newer_original_quote_revalidates_exact_same_trail_action(self):
+        from operations.connectivity.p90_real_persistent_trail import (
+            _recovery_recheck_matches_current_action,
+        )
+
+        for short in (False, True):
+            with self.subTest(short=short):
+                position, plan, private, quote, now = _case(short=short)
+                evaluation = UniversalExitEngine().evaluate(
+                    position, plan, _observe(position, private, quote, now),
+                )
+                self.assertIs(evaluation.status, ExitEvaluationStatus.DECISION_CREATED)
+                newer = now + timedelta(milliseconds=300)
+                price = quote.last_price + (D("-0.02") if short else D("0.02"))
+                moved = replace(
+                    quote, last_price=price,
+                    bid_price=price-D("0.01"), ask_price=price+D("0.01"),
+                    publication_id=quote.publication_id + 1,
+                    as_of_second=newer, field_times=(newer, newer, newer),
+                )
+                kwargs = dict(
+                    position=position, plan=plan, original_quote=quote,
+                    latest_private=private, first_decision=evaluation.decision,
+                    source_session_id=quote.source_session_id,
+                    received_at=newer + timedelta(milliseconds=100),
+                )
+                # New committed MarketPublication is valid if its independent
+                # reevaluation yields the SAME immutable decision and mutation.
+                self.assertTrue(
+                    _recovery_recheck_matches_current_action(
+                        latest_quote=moved, **kwargs,
+                    ),
+                )
+                # Price crossing +0.5% switches the activePrice policy branch;
+                # do not publish a command built for the previous market state.
+                crossed_price = D("99.6") if short else D("100.4")
+                crossed = replace(
+                    moved, last_price=crossed_price,
+                    bid_price=crossed_price-D("0.01"),
+                    ask_price=crossed_price+D("0.01"),
+                )
+                self.assertFalse(
+                    _recovery_recheck_matches_current_action(
+                        latest_quote=crossed, **kwargs,
+                    ),
+                )
+                self.assertFalse(
+                    _recovery_recheck_matches_current_action(
+                        latest_quote=replace(moved, publication_id=864), **kwargs,
+                    ),
+                )
+                self.assertFalse(
+                    _recovery_recheck_matches_current_action(
+                        latest_quote=replace(moved, producer_release_commit="c"*40),
+                        **kwargs,
+                    ),
+                )
+                self.assertFalse(
+                    _recovery_recheck_matches_current_action(
+                        latest_quote=replace(moved, field_times=quote.field_times),
+                        **kwargs,
+                    ) if moved.last_price != quote.last_price and
+                    moved.as_of_second == quote.as_of_second
+                    else _recovery_recheck_matches_current_action(
+                        latest_quote=replace(moved, as_of_second=now-timedelta(seconds=1)),
+                        **kwargs,
+                    ),
+                )
+
+    def test_firstfill_failure_recovery_request_is_not_false_ready(self):
+        from operations.connectivity import universal_exit_consumer as consumer
+
+        firstfill = MagicMock()
+        firstfill.run_p90_exit_once.return_value = (
+            "P90_REAL_EXIT_FIRST_FILL_ORIGINAL_SOURCE_WINDOW_EXPIRED"
+        )
+        recovery = MagicMock()
+        recovery.run_p90_persistent_trail_once.return_value = (
+            "P90_TRAIL_RECOVERY_REQUEST_PUBLISHED"
+        )
+        continuous = MagicMock()
+        continuous.run_p90_r06_exit_once.return_value = (
+            "P90_R06_EXIT_OWNER_RUNNING"
+        )
+        def fake_module(name):
+            if name.endswith("p90_real_independent_exit"):
+                return firstfill
+            if name.endswith("p90_real_persistent_trail"):
+                return recovery
+            if name.endswith("p90_r06_exit_owner"):
+                return continuous
+            raise AssertionError(name)
+
+        with (
+            patch.object(consumer, "P90_R06_OWNER", "ENABLED"),
+            patch.object(consumer.importlib, "import_module", side_effect=fake_module),
+        ):
+            connection = MagicMock()
+            source = MagicMock()
+            outcome = consumer.run_once(
+                connection, source_connection=source, run_generic=False,
+            )
+            self.assertEqual(outcome, "P90_TRAIL_RECOVERY_REQUEST_PUBLISHED")
+            continuous.run_p90_r06_exit_once.assert_not_called()
+            recovery.run_p90_persistent_trail_once.return_value = (
+                "P90_TRAIL_RECOVERY_BLOCKED:CURRENT_PROOF_STALE"
+            )
+            second = consumer.run_once(
+                connection, source_connection=source, run_generic=False,
+            )
+            self.assertTrue(second.startswith("P90_R06_FIRSTFILL_OWNER_BLOCKED|"))
+            self.assertIn("CONTINUOUS=P90_R06_EXIT_OWNER_RUNNING", second)
+
     def test_signed_private_rotation_is_not_protection_drift(self):
         _, _, private, _, now = _case()
         rotated = replace(private, generation_id="new-signed-generation")
