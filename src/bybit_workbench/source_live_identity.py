@@ -2,8 +2,9 @@
 
 Owner decision #381 / defect #380:
 GitHub/source HEAD may advance without changing the installed trading runtime.
-Only explicitly classified documentary/research/test paths and an independently
-verified/deployed Dashboard presentation bundle may be ignored by trading
+Only explicitly classified documentary/research/test paths, an independently
+verified/deployed Dashboard presentation bundle, and the exact independently
+attested management Release Controller may be ignored by trading
 SOURCE_LIVE_IDENTITY. Everything else remains fail-closed.
 """
 from __future__ import annotations
@@ -19,6 +20,10 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 DOCUMENTARY_PREFIXES = ("docs/", "research/", "tests/")
 DOCUMENTARY_EXACT = {"README.md", "AGENTS.md"}
 DASHBOARD_PREFIX = "operations/dashboard/"
+CONTROLLER_SOURCE_PATH = "operations/infrastructure/cripta-release-controller"
+CONTROLLER_LIVE_PATH = Path(
+    "/usr/local/libexec/cripta-release-controller/cripta-release-controller"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +44,7 @@ def classify_delta_paths(
     changed_paths: list[str] | tuple[str, ...],
     *,
     dashboard_delta_verified: bool,
+    controller_delta_verified: bool = False,
 ) -> tuple[bool, str | None]:
     """Pure path classifier for DEVELOPMENT_RELEASE §26.2."""
     for path in changed_paths:
@@ -48,6 +54,10 @@ def classify_delta_paths(
             if dashboard_delta_verified:
                 continue
             return False, "DASHBOARD_UI_DELTA_NOT_VERIFIED"
+        if path == CONTROLLER_SOURCE_PATH:
+            if controller_delta_verified:
+                continue
+            return False, "MANAGEMENT_CONTROLLER_DELTA_NOT_VERIFIED"
         return False, "TRADING_OR_UNKNOWN_SOURCE_DELTA"
     return True, None
 
@@ -165,12 +175,91 @@ def _dashboard_deploy_evidence(
     return True, dashboard_commit
 
 
+
+def _controller_deploy_evidence(
+    *,
+    loaded_commit: str,
+    source_head: str,
+    source: Path,
+    release_state: Path,
+    controller_live: Path,
+) -> bool:
+    """Exact Git+installed-byte attestation; independent of trading release.
+
+    This check only grants an exception for the one management executable,
+    never for shared libraries, systemd units, SQL or other control code.
+    The protected release installer creates the marker after independently
+    checking approved PR/CI, owner management trigger and rollback integrity.
+    """
+    proof = release_state / "MANAGEMENT_CONTROLLER_DEPLOY.json"
+    try:
+        record = json.loads(proof.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return False
+    if not isinstance(record, dict) or record.get("schema_version") != 1:
+        return False
+    commit = record.get("management_controller_commit")
+    expected_hash = record.get("installed_sha256")
+    if (
+        not isinstance(commit, str)
+        or not SHA.fullmatch(commit)
+        or not isinstance(expected_hash, str)
+        or re.fullmatch(r"[0-9a-f]{64}", expected_hash) is None
+        or record.get("source_path") != CONTROLLER_SOURCE_PATH
+        or record.get("installed_path") != str(CONTROLLER_LIVE_PATH)
+        or controller_live != CONTROLLER_LIVE_PATH
+    ):
+        return False
+    if not (
+        _git_is_ancestor(source, loaded_commit, commit)
+        and _git_is_ancestor(source, commit, source_head)
+    ):
+        return False
+    if _git(
+        source, "diff", "--name-only", "--no-renames",
+        commit, source_head, "--", CONTROLLER_SOURCE_PATH,
+    ):
+        return False
+    try:
+        # Git stores exact immutable source bytes; strip() on _git is not
+        # suitable for source-hash comparison (trailing newlines matter).
+        source_bytes = subprocess.check_output(
+            [
+                "git", "-C", str(source), "show",
+                f"{commit}:{CONTROLLER_SOURCE_PATH}",
+            ],
+            stderr=subprocess.DEVNULL,
+        )
+        source_hash = hashlib.sha256(source_bytes).hexdigest()
+        live_hash = _sha256(controller_live)
+        st = controller_live.lstat()
+        proof_stat = proof.lstat()
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return False
+    # Root-owned, non-symlink executable and root-owned read-only proof.
+    # The production release state directory is root:cripta mode 0750.
+    import stat
+
+    if (
+        not stat.S_ISREG(st.st_mode)
+        or st.st_uid != 0
+        or st.st_mode & 0o022
+        or not stat.S_ISREG(proof_stat.st_mode)
+        or proof_stat.st_uid != 0
+        or proof_stat.st_mode & 0o022
+    ):
+        return False
+    return source_hash == expected_hash == live_hash
+
+
+
 def inspect_source_live_identity(
     *,
     loaded_commit: str,
     source: Path = Path("/srv/cripta/source_checkout"),
     dashboard_root: Path = Path("/srv/cripta/dashboard-ui"),
     release_state: Path = Path("/var/lib/cripta/release"),
+    controller_live: Path = CONTROLLER_LIVE_PATH,
 ) -> SourceLiveIdentity:
     """Inspect current Git/source and independent Dashboard identity fail-closed."""
     if not SHA.fullmatch(loaded_commit):
@@ -248,9 +337,19 @@ def inspect_source_live_identity(
                 dashboard_root=dashboard_root,
                 release_state=release_state,
             )
+        controller_verified = False
+        if CONTROLLER_SOURCE_PATH in changed_paths:
+            controller_verified = _controller_deploy_evidence(
+                loaded_commit=loaded_commit,
+                source_head=source_head,
+                source=source,
+                release_state=release_state,
+                controller_live=controller_live,
+            )
         allowed, reason = classify_delta_paths(
             changed_paths,
             dashboard_delta_verified=dashboard_verified,
+            controller_delta_verified=controller_verified,
         )
     except RuntimeError:
         return SourceLiveIdentity(
