@@ -251,6 +251,14 @@ class P90CausalPostgresTests(unittest.TestCase):
             ("strategy_exit.exit_decisions", "SELECT", True),
             ("strategy_exit.exit_decisions", "INSERT", True),
             ("strategy_exit.exit_decisions", "UPDATE", False),
+            ("runtime.position_ownership", "SELECT", True),
+            ("runtime.position_ownership", "INSERT", True),
+            ("runtime.position_ownership", "UPDATE", True),
+            ("runtime.position_ownership", "DELETE", False),
+            ("runtime.trade_commands", "SELECT", True),
+            ("runtime.trade_commands", "INSERT", True),
+            ("runtime.trade_commands", "UPDATE", True),
+            ("runtime.trade_commands", "DELETE", True),
         )
         with connect() as c:
             for table, privilege, expected in grants:
@@ -458,16 +466,28 @@ class P90CausalPostgresTests(unittest.TestCase):
                 source, symbol="LTCUSDT", observed_at=now,
             )
 
-    def test_reader_only_fixture_cannot_mutate_exchange_ownership(self):
-        with connect() as c, self.assertRaises(
-            psycopg.errors.InsufficientPrivilege
-        ):
+    def test_runtime_ownership_allows_update_but_not_delete(self):
+        # Actual production effective role permits UPDATE, denies DELETE.
+        # Prove that the disposable fixture matches this specific subset.
+        with connect() as c:
             c.execute(
                 """UPDATE runtime.position_ownership
                      SET identity_status='UNVERIFIED'
                    WHERE position_id=%s""",
                 (self.main.strategy_position_id,),
             )
+            row = c.execute(
+                """SELECT identity_status
+                     FROM runtime.position_ownership
+                    WHERE position_id=%s""",
+                (self.main.strategy_position_id,),
+            ).fetchone()
+            self.assertEqual(row["identity_status"], "UNVERIFIED")
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                c.execute(
+                    "DELETE FROM runtime.position_ownership WHERE position_id=%s",
+                    (self.main.strategy_position_id,),
+                )
 
 
     def _exchange_ipc_roundtrip(self, *, bad_binding: bool):
