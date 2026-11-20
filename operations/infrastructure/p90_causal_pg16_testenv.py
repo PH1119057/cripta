@@ -263,6 +263,10 @@ _DDL = (
     "GRANT SELECT,INSERT ON strategy_exit.exit_decisions,"
     "strategy_exit.execution_requests,"
     "strategy_exit.execution_dispatches TO cripta",
+    # CHECKED HERE: production-effective runtime grants at 2026-11-20.
+    # TEST fixture only; never a request to alter live role privileges.
+    "GRANT SELECT,INSERT,UPDATE ON runtime.position_ownership TO cripta",
+    "GRANT SELECT,INSERT,UPDATE,DELETE ON runtime.trade_commands TO cripta",
 )
 
 
