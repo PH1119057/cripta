@@ -158,20 +158,37 @@ def test_release_bridge_with_existing_open_position_is_not_flat_bootstrap(db, st
     assert admin.execute("SELECT state FROM runtime.position_ownership").fetchone() == (state,)
 
 
+def test_release_bridge_preserves_enabled_permissions_and_old_account_arms(db):
+    admin, runtime, signed = db
+    admin.execute("INSERT INTO runtime.position_ownership VALUES (%s,'OPEN')",
+                  (mod.MAIN_ID,))
+    admin.execute("INSERT INTO strategy_entry.execution_permissions "
+                  "VALUES (true,now()),(true,now())")
+    for _ in range(5):
+        admin.execute("INSERT INTO control.account_live_arm_sessions VALUES ('ACTIVE')")
+    before = snapshot(runtime)
+    adopt(runtime)
+    assert snapshot(runtime) == before
+    assert releases(runtime) == [(TARGET,)]
+    assert audit_count(runtime) == (2,)
+    assert signed == []
+    assert admin.execute("SELECT count(*) FROM runtime.position_ownership "
+                         "WHERE state='OPEN'").fetchone() == (1,)
+    assert admin.execute("SELECT count(*) FROM strategy_entry.execution_permissions "
+                         "WHERE enabled=true").fetchone() == (2,)
+    assert admin.execute("SELECT count(*) FROM control.account_live_arm_sessions "
+                         "WHERE state='ACTIVE'").fetchone() == (5,)
+
+
 @pytest.mark.parametrize("unsafe", (
-    "gate", "permission", "global_arm", "account_arm",
-    "pending_entry", "reconciliation_required",
+    "gate", "global_arm", "pending_entry", "reconciliation_required",
 ))
 def test_release_bridge_rejects_new_entry_authority_or_uncertain_state(db, unsafe):
     admin, runtime, signed = db
     if unsafe == "gate":
         admin.execute("UPDATE control.execution_gates SET enabled=true")
-    elif unsafe == "permission":
-        admin.execute("INSERT INTO strategy_entry.execution_permissions VALUES (true,now())")
     elif unsafe == "global_arm":
         admin.execute("INSERT INTO control.live_arm_sessions VALUES ('ACTIVE')")
-    elif unsafe == "account_arm":
-        admin.execute("INSERT INTO control.account_live_arm_sessions VALUES ('ACTIVE')")
     elif unsafe == "pending_entry":
         admin.execute("INSERT INTO strategy_entry.execution_requests VALUES ('request-1',%s)",
                       (mod.MAIN_ID,))
