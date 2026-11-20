@@ -148,7 +148,7 @@ def _run_candidate(candidate: Path, sha: str):
     print("CANDIDATE_C0_C1_C2=RUNNING", flush=True)
     output = _checked(command, env=env, timeout=110)
     print(output[-9000:], flush=True)
-    if "P90_CANDIDATE_PREFLIGHT=PASS_OFFLINE_ARCHIVE_C0_C1_C2" not in output:
+    if "P90_CANDIDATE_PREFLIGHT=PASS_OFFLINE_ARCHIVE_C0_C1_C2_SQL" not in output:
         raise CandidateBlocked("CANDIDATE_PREFLIGHT_NOT_PROVEN")
     return output
 
