@@ -828,12 +828,13 @@ function p90RailH9Proximity(item){
   return values.length?Math.min(...values):Number.POSITIVE_INFINITY;
 }
 // Stable presentation-only ordering: never infer a live fill from cached geometry.
-const p90RailPreviousOrder=new Map(),p90RailLastH9Distance=new Map(),p90RailKnownOpen=new Set();
+const p90RailPreviousOrder=new Map(),p90RailPreviousRank=new Map();
+const p90RailLastH9Distance=new Map(),p90RailKnownOpen=new Set();
 const p90RailConfirmedGone=new Map();
 const P90_RAIL_FIXED_SYMBOLS=new Set(['LTCUSDT','INJUSDT','DOTUSDT','ARBUSDT','APTUSDT']);
 function p90RailStableRows(items){
   const rows=Array.isArray(items)?[...items]:[];
-  const prior=new Map(p90RailPreviousOrder);
+  const prior=new Map(p90RailPreviousOrder),priorRank=new Map(p90RailPreviousRank);
   for(const item of rows){
     const key=String(item?.symbol||''),state=String(item?.state||'');
     if(!key)continue;
@@ -866,8 +867,13 @@ function p90RailStableRows(items){
     const ak=String(a?.symbol||''),bk=String(b?.symbol||'');
     const oldA=prior.get(ak),oldB=prior.get(bk);
     const previous=oldA!==undefined&&oldB!==undefined?oldA-oldB:null;
-    // Keep same-rank cards in the exact prior order across all background polls.
-    // The initial H9 sort is useful; silently reshuffling it on each tick is not.
+    // A confirmed close moves below currently non-open rows once, not on
+    // every background price/geometry update.
+    const movedA=priorRank.has(ak)&&priorRank.get(ak)!==ra;
+    const movedB=priorRank.has(bk)&&priorRank.get(bk)!==rb;
+    if(movedA!==movedB)return movedA?1:-1;
+    // Keep same-rank cards in their exact prior order across all polls.
+    // An automatic H9 reshuffle must never bounce the five cards on screen.
     if(previous!==null)return previous;
     const liveA=p90RailH9Proximity(a),liveB=p90RailH9Proximity(b);
     // A missing calculation must not send a card to the end and back next poll.
@@ -885,7 +891,12 @@ function p90RailStableRows(items){
     return ak.localeCompare(bk);
   });
   p90RailPreviousOrder.clear();
-  rows.forEach((item,i)=>p90RailPreviousOrder.set(String(item?.symbol||''),i));
+  p90RailPreviousRank.clear();
+  rows.forEach((item,i)=>{
+    const key=String(item?.symbol||'');
+    p90RailPreviousOrder.set(key,i);
+    p90RailPreviousRank.set(key,rank(item));
+  });
   return rows;
 }
 function patchP90RailNode(node,next){
