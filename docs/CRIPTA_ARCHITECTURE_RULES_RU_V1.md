@@ -611,6 +611,33 @@ Authentication, control/mutation handlers, Exchange mutation, gates,
 permissions, Strategy/Entry/Exit/Execution semantics и decision-affecting code
 остаются частью application/trading runtime и проходят полный release gate.
 
+**OWNER DECISION 2026-11-20 (#871) — permanent Dashboard release independence.**
+The static/presentation Dashboard release is a separate versioned component, not a
+trading/application release. Exact reviewed UI-only changes and their
+**non-executable** tests, documentation and review evidence MUST be eligible for
+`DASHBOARD_PRESENTATION_RELEASE` while `mainnet gate=OPEN`, without stopping,
+restarting, re-arming, disarming or reloading Entry/Exit, MarketSource,
+Dispatcher, MAYAK, Supervisors, Private Runtime or PostgreSQL. The standalone
+Dashboard installer preserves independent `DASHBOARD_UI_COMMIT` and immutable
+UI hashes; static-only deployment must not restart Dashboard either.
+
+Repository test/documentation changes do not independently grant permission to
+deploy an executable component or authorize a FULL cutover. The release planner
+must classify the **operational executable diff**, with a strictly reviewed
+non-executable path exclusion. Changed trading/control/auth/SQL/systemd/shared
+dependencies, unknown paths, or any changed test/data that actually executes
+inside a production service are **not** Dashboard-only. A mixed change is
+`RELEASE_SCOPE_BLOCKED` until its genuine component owners and compatibility
+gates are reviewed; it is never automatic permission for a monolithic trading
+restart.
+
+This decision preserves the stronger target in §50.1: independent read-only
+Dashboard query process with SELECT-only DB role and separate authenticated
+financial control plane. The current combined Dashboard backend remains a
+documented transitional implementation; **static release independence does
+not yet prove backend process/resource isolation**. DEV §8.1/§50.5/§50.6
+own executable release gates, rollback and deployment proof.
+
 ## 9.1 Lifecycle Supervisor
 
 Lifecycle Supervisor контролирует сквозную корректность lifecycle, но не

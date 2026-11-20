@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.66
-**Дата:** 2026-11-19
+**Версия:** 3.67
+**Дата:** 2026-11-20
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -741,6 +741,21 @@ README / AGENTS / Project Instructions template синхронизированы
 
 
 **OWNER DECISION 2026-11-18 (#849):** physical Dashboard isolation is three distinct process/data owners: static presentation (§19 existing), PostgreSQL SELECT-only projection with bounded query/connection/resource budget, and authenticated control/mutation API. ARCH §50.1 owns the component ownership and independent-version architecture; DEV §50.6 owns scoped release, dependency/ABI and rollback procedure. Current combined `operations/dashboard/app.py` is explicitly a **transitional implementation**, not evidence that Dashboard read-model cannot impair PostgreSQL. No new current docs, routes, root entrypoints or Project Source files are introduced.
+
+**OWNER DECISION 2026-11-20 (#871) — permanent independent Dashboard release:**
+the one-off static UI update #869 is now a permanent outcome requirement, **not**
+an authorization to use arbitrary root scripts as the routine management rail.
+DEV §8.1.1/§50.5 own the exact Git-first controller classification:
+Dashboard HTML/presentation/read-only verified changes accompanied by
+non-executable docs/tests must select `DASHBOARD_PRESENTATION_RELEASE`,
+even if P90 is ARMED and `mainnet gate=OPEN`; zero trading PIDs/restarts,
+financial permissions or Exchange actions may change. Unclassified/mixed
+runtime changes, imported fixtures, auth/control/API/SQL/shared ABI never
+inherit UI-only scope or trigger a silent FULL fallback. Pure docs/tests alone
+do not deploy any service. ARCH §9.0/§50.1 retain three independent owners;
+MAP §24 tracks the actually installed controller separately from canon.
+No Project Source count or routing change. Implementation/runtime migration
+remains separately gated and must not be labelled deployed by this text.
 
 # 20. Operator money / Dashboard read-model revision — 2026-10-05
 

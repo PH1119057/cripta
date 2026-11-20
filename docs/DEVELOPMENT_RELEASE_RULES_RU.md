@@ -318,6 +318,46 @@ Full runtime installer обязан сохранять эту физическу
 подключать runtime Dashboard к current UI asset, а не возвращать presentation
 asset под общий trading-runtime lifecycle.
 
+### 8.1.1 Permanent Dashboard-only release decision — 2026-11-20 (#871)
+
+**OWNER DECISION:** разовый Dashboard-only релиз #869 становится постоянным
+контрактом, а НЕ постоянным разрешением запускать произвольный root script.
+Именно **штатный fixed no-argument Release Controller** должен выбирать
+`DASHBOARD_PRESENTATION_RELEASE` по точному операционному diff, запускать
+существующий проверяющий `cripta-deploy-dashboard-ui`, фиксировать rollback/
+hash evidence и не изменять runtime `INSTALLED_COMMIT` / `LOADED_COMMIT`.
+
+GitHub `main` содержит также тесты и документацию, но их **доказанное
+неисполняемое** изменение не является trading executable delta. При сочетании
+Dashboard presentation/read-only projection + таких doc/test изменений
+выбирается **Dashboard-only**, не `FULL` и не ожидание `DISARMED`.
+Pure docs/test changes без UI delta не дают права на какой-либо service deploy.
+Исполняемые test fixtures, импортируемые production, и нераспознанные файлы
+нельзя исключать только по названию или префиксу.
+
+Безопасный UI scope: `operations/dashboard/index.html`,
+`operations/dashboard/app.py` только по точному существующему read-only
+AST/verifier contract, и отдельно проверенные presentation assets.
+`operations/dashboard/*.py` не является автоматическим whitelist:
+другие executable Python модули, API/auth/control/mutation, SQL/migration,
+strategy/Entry/Exit/Execution, shared ABI, systemd и runtime dependencies
+не проходят UI-only classification.
+
+Перед/после: текущий GitHub tree, approved CI (`scope`/`quality`),
+`DASHBOARD_UI_COMMIT`, exact installed/loaded trading identities, immutable
+asset bytes, откат и неизменность mainnet/permissions/activations/ARM,
+MarketSource/Dispatcher/MAYAK/Observer/Entry/Exit/Private/Supervisors,
+PostgreSQL PID/NRestarts и схемы. Для static-only даже Dashboard PID
+сохраняется. Любая несопоставленная executable change:
+`RELEASE_SCOPE_BLOCKED`, без автоматического FULL fallback; отдельный
+положительно обоснованный coordinated release остаётся возможным по §50.6.
+Бэкэнд Dashboard считается полностью независимым только после
+физического разделения projection и control owners (ARCH §50.1).
+
+Implementation и deployment этой ревизии доказываются отдельно:
+docs/main ≠ installed Release Controller; запрещено считать прошлый
+одноразовый `sudo script_run` постоянным штатным каналом.
+
 ## 9. Strongest practical gate
 
 По возможности:
@@ -2095,6 +2135,7 @@ Permanent controller is the single approved no-argument management rail for an e
 - Mandatory backup/rollback integrity, immutable installer bytes, exact Git identity, failure recovery and durable audit of invocation, purpose, target/baseline/result. A failed/unknown mutation must be reconciled before any retry.
 - Deterministic release purpose from actual exact changed scope: `EXACT_VERIFIED_SOURCE_RELEASE` for ordinary full application/trading code; `DASHBOARD_PRESENTATION_RELEASE` for DEV §8.1 UI/read-model only; `NATIVE_MARKET_SOURCE_CODE_CUTOVER_RELEASE` for a genuinely changed running native writer ABI with the additional §50.5.1 checks. An ABI change can never fall back to ordinary FULL release.
 - Dashboard-only scope validation must exclude auth/control/mutation/Strategy/Entry/Exit/Execution changes, preserve trading service PIDs/NRestarts, mainnet gate, Strategy activation and permissions; only approved Dashboard backend may restart.
+- **OWNER DECISION 2026-11-20 (#871):** release purpose selection uses verified **operational executable changes**, not a raw blanket count of `tests/test_*.py` and `docs/*.md`. Reviewed non-production tests/docs may accompany a Dashboard-only change without causing `EXACT_VERIFIED_SOURCE_RELEASE`; the existing Dashboard verifier remains mandatory. Actual production-executable files under `operations/dashboard/` other than approved presentation/read-only surfaces, imported test artifacts, unknown/mixed changes or any code affecting another owner must fail closed for Dashboard and must not silently trigger a full trading-service restart. Pure docs/tests alone are not a deployment. Recheck current owner/SHA/path and required CI; never use an open LIVE gate as a reason to ask for DISARMED on a UI-only release.
 - The controller verifies REMOTE_HEAD, SOURCE_HEAD, INSTALLED_COMMIT, LOADED_COMMIT, deployed source/runtime mapping and behavior, not service liveness alone. It cannot silently alter mainnet gate, OWNER ARM, Strategy Activation, Execution permission or Exchange orders.
 - Tests must demonstrate a management trigger cannot be synthesized by source sync; wrong baseline/commit/tree/purpose, failed CI/scope, dirty source, moving main, actor/path denial, lock collision, wrong rollback, untrusted unit, injection and stale state all block. Tests must also prove a routine release succeeds *without* Issue #291 approval. Native and Dashboard negative cases remain mandatory.
 - Deployment authorization change follows OWNER DECISION -> CANON UPDATE -> IMPLEMENTATION -> TEST -> GITHUB -> DEPLOY -> RUNTIME EVIDENCE. A source merge or this documentation alone does not alter already installed Release Controller behavior.
@@ -2160,6 +2201,7 @@ postcheck: identity, consumer input progression, security, behavior
 ```
 
 **Path ownership:** exact source delta, including both sides of rename, maps to one or more component owners; shared library, executable security/finance/control, unit template, global dependency, unknown path or SQL requires explicit compatibility review and safe sequential/coordinated release. An unclassified path must **not** be treated as authorization for a blanket production restart. `docs/**`, research-owned outputs and tests are non-executable source changes unless a separately verified runtime dependency proves otherwise. Monorepo main/source synchronization does not install any component automatically.
+**Dashboard co-change clarification (#871):** a proven non-executable test/doc diff accompanies the UI candidate as reviewed CI evidence; it is not a new running trading component. A test imported by production or an unknown file is NOT exempt. Exact diff from `DASHBOARD_UI_COMMIT` must also reconcile independently installed component changes rather than either ignore them or force a blanket FULL. A standalone Dashboard update never rolls the global trading `INSTALLED_COMMIT` forward.
 
 **Preparation:** assemble a component-local immutable closure under a protected release root, separate from global mutable `runtime/current`. Verify byte hashes, dependency/ABI parity, clean exact source Git SHA, CI, disk headroom, effective actor/sandbox and all affected mount/parent paths. Packages have independent `COMPONENT_INSTALLED_COMMIT` / `COMPONENT_LOADED_COMMIT` records. The existing global installed release marker remains intact for legacy services. Source/live identity checks must understand a verified per-component release attestation rather than requiring all services to equal the newest Git commit or blindly exempting all component code.
 
