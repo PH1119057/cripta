@@ -55,8 +55,10 @@ def test_p90_rail_stably_pins_open_rows_without_geometry_jitter():
         "function patchP90RailDom(", 1
     )[0]
     assert "p90RailKnownOpen.add(key)" in block
-    assert "account_inventory_verified===true" in block
-    assert "p90RailKnownOpen.has(key)&&item?.account_inventory_verified===false" in block
+    assert "p90RailConfirmedGone.set(key,seen)" in block
+    assert "seen>=3" in block
+    assert "p90RailKnownOpen.has(key)" in block
+    assert "position_attribution" in block
     assert "p90RailLastH9Distance" in block
     assert (
         "if((!Number.isFinite(liveA)||!Number.isFinite(liveB))"
@@ -65,9 +67,12 @@ def test_p90_rail_stably_pins_open_rows_without_geometry_jitter():
     assert "Math.abs(da-db)>0.05" in block
     assert "p90RailPreviousOrder.clear()" in block
     assert "patchP90RailDom(rail,rows.map(item=>" in source
-    assert "if(lt.p90_rail?.items?.length)renderP90RailPositions(" in source
+    assert "if(Array.isArray(lt.p90_rail?.items)" in source
     assert "else renderOpenRailPositions(positions);" in source
-    assert "node.contains(document.activeElement)" in source
+    assert "rail.dataset.p90Rendered==='true'" in source
+    assert "function patchP90RailNode(node,next){" in source
+    assert "node===document.activeElement" in source
+    assert "node.innerHTML=next.innerHTML" not in source
     assert "data-p90-symbol" in source
     assert "fetch(" not in block
     assert "tradeCommand(" not in block
