@@ -6,9 +6,9 @@ C1 SIMULATED verification only; this suite NEVER certifies signed Exchange E2E.
 from __future__ import annotations
 
 import ast
-from contextlib import ExitStack
 import json
 import unittest
+from contextlib import ExitStack
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -492,6 +492,7 @@ class CausalSimulatedTests(unittest.TestCase):
         owner code fails with CURRENT_PROOF_STALE before the Exit Engine.
         """
         from types import SimpleNamespace
+
         from operations.connectivity import p90_real_persistent_trail as owner
 
         position, plan, private, quote, at = _case()
