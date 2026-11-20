@@ -687,17 +687,81 @@ def _select_scoped_purpose(
             *PRODUCER_ABI_PATHS,
         )
         if source_delta:
+            if dashboard_baseline is not None:
+                dashboard_component_delta = _git(
+                    "diff", "--name-only", "--no-renames",
+                    dashboard_baseline, target, "--",
+                    "operations/dashboard/index.html",
+                    "operations/dashboard/app.py",
+                )
+                if dashboard_component_delta:
+                    raise ControllerError("NATIVE_AND_DASHBOARD_SCOPE_MIXED")
             return NATIVE_CUTOVER_PURPOSE, True
-    # Dashboard scope is checked a second time by the existing read-only
-    # verifier before any asset installation. An uncertain scope stays FULL.
-    if dashboard_baseline is not None and dashboard_baseline != target:
-        delta = _git("diff", "--name-only", dashboard_baseline, target, "--")
-        changed = tuple(line for line in delta.splitlines() if line)
-        if changed and all(
-            path.startswith(("operations/dashboard/", "operations/dashboard_ui/"))
-            for path in changed
+    # #871: a reviewed, non-executable docs/test co-change is CI evidence,
+    # not a trading service to be replaced. An unknown path is NEVER silently
+    # converted into permission for a combined Dashboard + trading release.
+    # --no-renames exposes both old and new paths of a rename to this guard.
+    dashboard_paths = frozenset((
+        "operations/dashboard/index.html",
+        "operations/dashboard/app.py",
+    ))
+
+    def release_path_kind(path: str) -> str:
+        # Keep this strictly narrower than "everything in operations/dashboard".
+        # The canonical Dashboard deployer independently AST-verifies app.py.
+        if not path or path.startswith("/") or "\\u0000" in path:
+            return "UNKNOWN"
+        if any(part in ("", ".", "..") for part in path.split("/")):
+            return "UNKNOWN"
+        if path in dashboard_paths:
+            return "DASHBOARD"
+        if path in ("README.md", "AGENTS.md"):
+            return "REVIEW_EVIDENCE"
+        if path.startswith("docs/") and path.endswith(".md"):
+            return "REVIEW_EVIDENCE"
+        if (
+            path.startswith("tests/test_")
+            and path.endswith(".py")
+            and path.count("/") == 1
         ):
+            # Root tests/test_*.py never becomes the production code bundle.
+            # Anything under other test/data/helper paths remains fail-closed.
+            return "REVIEW_EVIDENCE"
+        return "OTHER_EXECUTABLE_OR_UNKNOWN"
+
+    def changed_paths(baseline: str) -> tuple[str, ...]:
+        raw = _git("diff", "--name-only", "--no-renames", baseline, target, "--")
+        return tuple(line for line in raw.splitlines() if line)
+
+    if dashboard_baseline is not None:
+        dashboard_delta = changed_paths(dashboard_baseline)
+        kinds = frozenset(release_path_kind(path) for path in dashboard_delta)
+        if "UNKNOWN" in kinds:
+            raise ControllerError("DASHBOARD_SCOPE_PATH_INVALID")
+        if "DASHBOARD" in kinds:
+            if "OTHER_EXECUTABLE_OR_UNKNOWN" in kinds:
+                raise ControllerError("DASHBOARD_MIXED_EXECUTABLE_SCOPE")
+            # A previously published Dashboard UI version cannot conceal a
+            # still-uninstalled trading executable from the global runtime.
+            runtime_delta = changed_paths(runtime_baseline)
+            if any(
+                release_path_kind(path) not in ("DASHBOARD", "REVIEW_EVIDENCE")
+                for path in runtime_delta
+            ):
+                raise ControllerError("DASHBOARD_TRADING_RUNTIME_DELTA_PENDING")
             return DASHBOARD_PURPOSE, False
+        if dashboard_delta and kinds == frozenset(("REVIEW_EVIDENCE",)):
+            # Docs/test-only commits are never a deployment request.
+            raise ControllerError("NON_EXECUTABLE_SOURCE_ADVANCE_ONLY")
+        if not dashboard_delta:
+            runtime_delta = changed_paths(runtime_baseline)
+            if runtime_delta and all(
+                release_path_kind(path) in ("DASHBOARD", "REVIEW_EVIDENCE")
+                for path in runtime_delta
+            ):
+                raise ControllerError("DASHBOARD_ALREADY_CURRENT_NO_FULL_RELEASE")
+            if not runtime_delta:
+                raise ControllerError("NO_COMPONENT_DELTA_TO_DEPLOY")
     return FULL_PURPOSE, False
 
 def main() -> int:
