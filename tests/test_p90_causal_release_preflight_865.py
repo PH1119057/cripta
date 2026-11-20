@@ -484,7 +484,9 @@ class CausalSimulatedTests(unittest.TestCase):
                     ),
                 )
 
-    def test_delayed_private_get_requires_fresh_original_quote_before_decision(self):
+        self._check_delayed_private_get_requires_fresh_original_quote_before_decision()
+
+    def _check_delayed_private_get_requires_fresh_original_quote_before_decision(self):
         """Regression-first: a signed GET may outlive the earlier 2s R10 pin.
 
         No DB/Bybit/credential access here. A distinct, monotonically newer
