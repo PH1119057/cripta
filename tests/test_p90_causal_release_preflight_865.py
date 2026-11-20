@@ -235,7 +235,7 @@ class CandidateGraphTests(unittest.TestCase):
         self.assertIn("RELEASE_CANDIDATE_GIT_VERIFY=PASS", builder)
         self.assertLess(
             builder.index("_verify_archive(candidate, sha)"),
-            builder.index("_run_candidate(candidate, sha)"),
+            builder.index("_run_candidate(candidate, sha, run_id)"),
         )
         self.assertIn('"--require-hashes"', builder)
         self.assertIn('"--staged-candidate"', builder)
