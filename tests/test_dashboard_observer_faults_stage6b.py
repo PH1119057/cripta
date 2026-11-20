@@ -356,3 +356,17 @@ def test_dashboard_verifier_restricts_inbox_receipt_to_nontrading_delivery() -> 
     assert '"UPDATE runtime.lifecycle_fault_deliveries" not in value' in verifier
     assert "d.channel='DASHBOARD_INBOX'" in verifier
     assert "f.state='OPEN'" in verifier
+
+
+def test_owner_historical_console_archives_prior_faults_without_resolving_current_errors() -> None:
+    html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
+    console = html.split("function renderObserverFaults(model){", 1)[1].split(
+        "async function refresh(){", 1
+    )[0]
+    assert "BEFORE_CURRENT_P90_OPERATION" in console
+    assert "x.p90_operation_relation!=='BEFORE_CURRENT_P90_OPERATION'" in console
+    assert "historical.push(...allItems.filter(" in console
+    assert "НЕЗАКРЫТЫХ записей · журнал не изменён" in console
+    assert "if(value.state==='unavailable')" in console
+    assert "fetch('/api/observer-faults/displayed'" in console
+    assert "resolveObserverFault(this.dataset.faultId)" in console
