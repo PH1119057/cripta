@@ -3129,3 +3129,72 @@ position/protection; test the actual applicable Gateway path. For a
 genuine eligible first fill, actual Exchange `trailingStop>0` with
 matching SL/TP and a healthy following Exit window is needed to call
 TRAIL035 `E2E_VERIFIED`. If no eligible fill: `NOT EXERCISED`.
+
+
+#### 59.7.5 Offline Git-verified full runtime candidate rehearsal, не deployment
+
+До испытания настоящего installer cutover разрешён **только** независимый
+предрелизный прогон runtime payload на Data SSD. Script source:
+`operations/infrastructure/p90_causal_candidate_archive_865.py`.
+Точный rehearsal root — `/data/cripta/research/testenvs/p90_causal_candidate_865/<SHA>`;
+worktree — уже зарегистрированный
+`/data/cripta/research/worktrees/p90_causal_c2_865_20261119`.
+Скрипт из exact clean PR checkout проверяет full SHA и status, `git archive`
+из exact commit тех **же runtime paths**, что у обычного installer,
+затем применяет canonical `verify_release_candidate_git.py` к
+EVERY tracked blob/type/mode до создания `.venv`. Только после PASS
+строит локальную `venv --system-site-packages`, запускает
+`pip install --only-binary=:all: --require-hashes` из **самого candidate**
+`operations/runtime/runtime_requirements.lock`, импорт-проверку и
+`p90_causal_release_preflight.py --staged-candidate` с реальным
+изолированным C2. Это verified **full runtime archive subset**, не весь
+production installer workflow, не импорт из current и не доказательство
+runtime cutover/Exchange.
+
+**Actor/path matrix, DEV §5.1 и §19:** effective Unix writer `cripta`,
+проверенный на robot UID 107. READ: exact Git worktree и archive blobs,
+locked requirements, project current Python interpreter *только для вызова
+builder*, Ubuntu PG16 test binaries и DDL из собственного source
+код-кандидата. WRITE/CREATE: `/data/cripta/research/testenvs/p90_causal_candidate_865/`
+`.build.lock`, `<SHA>/` (tar-extracted immutable Git-source bytes +
+`INSTALLED_COMMIT` + локальная `.venv`), `runs/*.tmp`.
+RENAME: atomically own `runs/*.tmp → runs/*.json`; DELETE: none
+(candidate retained for forensic, never blindly replaced). Parent
+`/data/cripta/research/testenvs` проверяется actor-owned/mode 0700.
+Tested child C2 writes/deletes only its separate explicitly scoped
+`p90_causal_pg16` fixture/PGDATA DB as documented §59.7.4.
+Systemd sandbox: no new unit (bounded approved management command).
+DB actors: local `cripta` Unix hosts disposable PG16; test-DB
+`postgres` DDL only on verified private PGDATA/socket, test `cripta`
+for selected operational DML and read-only Exit queries. Production DB
+actors or credentials never invoked. Git worktree and candidate source
+are read-only; GitHub API controls future source edits.
+
+**Failure handling:** unexpected candidate directory, dirty worktree,
+incorrect SHA, stale manifest, low free Data SSD (<2 GiB), lock
+contention, archive mismatch, pip/hash/import failure, missing tests,
+C0/C1 or C2 failure = FAIL, no service stop/restart/real Gate/Bybit.
+Don't relaunch a failed/in-flight build until reconciling its manifest
+and exact candidate path; no automatic recursive deletion/chown/chmod.
+Durable manifest in `.../runs/<run_id>.json` distinguishes `PASS`,
+`FAIL`, target commit, no Exchange mutation and no production action.
+
+The production installer NEVER passes `--staged-candidate`; it
+retains its strict `/srv/cripta/runtime/releases/<SHA>` identity,
+rebuild/rollback, backup and full release safety. Offline rehearsal PASS
+therefore **не доказывает** on-host production installer behavior,
+systemd/DB migration or loaded release. Последующие release и C3 Bybit
+контролируются отдельными gates.
+
+**C2 permission parity:** separate current source SQL from test role:
+`20261108_native_public_trade_source_sessions.sql` requires
+`cripta SELECT,INSERT,UPDATE` on active sessions, and
+`20261110_market_source_publication.sql` /
+`20261110_public_source_compact_seconds.sql` permit `SELECT,INSERT`
+without UPDATE/DELETE. C2 must check positive **operational INSERT/UPDATE**
+and negative permissions. Its `runtime.position_ownership` synthetic
+reader-only fixture deliberately does *not* model all production grants:
+`TEST_FIXTURE_GRANTS != CANONICAL_SQL_GRANTS != PRODUCTION_EFFECTIVE_GRANTS`.
+The complete production-equivalent PostgreSQL 16 lifecycle bootstrap and
+credential-local private actor are still open evidence, and no extra
+production privilege is implied by fixture tests.
