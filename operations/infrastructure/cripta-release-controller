@@ -687,6 +687,15 @@ def _select_scoped_purpose(
             *PRODUCER_ABI_PATHS,
         )
         if source_delta:
+            if dashboard_baseline is not None:
+                dashboard_component_delta = _git(
+                    "diff", "--name-only", "--no-renames",
+                    dashboard_baseline, target, "--",
+                    "operations/dashboard/index.html",
+                    "operations/dashboard/app.py",
+                )
+                if dashboard_component_delta:
+                    raise ControllerError("NATIVE_AND_DASHBOARD_SCOPE_MIXED")
             return NATIVE_CUTOVER_PURPOSE, True
     # #871: a reviewed, non-executable docs/test co-change is CI evidence,
     # not a trading service to be replaced. An unknown path is NEVER silently
