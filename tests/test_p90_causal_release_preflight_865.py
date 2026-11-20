@@ -250,6 +250,35 @@ class CandidateGraphTests(unittest.TestCase):
 
 
 
+    def test_original_ci_pg_schema_blocks_before_live_cutover(self):
+        preflight = (
+            ROOT / "operations/infrastructure/p90_causal_release_preflight.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("C2_FULL_SCHEMA_CI_MIGRATION_OR_SQL_FAILED", preflight)
+        self.assertIn("from operations.infrastructure.p90_causal_fullschema_865", preflight)
+        self.assertLess(
+            preflight.index("if not run_c2("),
+            preflight.index("if not run_full_schema("),
+        )
+        self.assertLess(
+            preflight.index("if not run_full_schema("),
+            preflight.index('print("C3_SIGNED_REAL_EXCHANGE=NOT_EXERCISED"'),
+        )
+        installer = (
+            ROOT / "operations/infrastructure/install_verified_release.sh"
+        ).read_text(encoding="utf-8")
+        for required in (
+            "tests/postgres_trade_lifecycle_bootstrap.sql",
+            ".github/workflows/trade-lifecycle-postgres.yml",
+        ):
+            self.assertIn(required, installer)
+        builder = (
+            ROOT / "operations/infrastructure/p90_causal_candidate_archive_865.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("PASS_OFFLINE_ARCHIVE_C0_C1_C2_SQL", builder)
+
+
+
 class CausalSimulatedTests(unittest.TestCase):
     """C1: real plan/observation/engine/safety functions, fake venue only."""
 
