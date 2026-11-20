@@ -216,6 +216,38 @@ class CandidateGraphTests(unittest.TestCase):
 
 
 
+    def test_offline_candidate_rehearsal_preserves_live_ownership(self):
+        builder_path = (
+            ROOT / "operations/infrastructure/p90_causal_candidate_archive_865.py"
+        )
+        builder = builder_path.read_text(encoding="utf-8")
+        verifier = (
+            ROOT / "operations/infrastructure/verify_release_candidate_git.py"
+        )
+        self.assertTrue(verifier.is_file())
+        self.assertIn(
+            '"/data/cripta/research/testenvs/p90_causal_candidate_865"',
+            builder,
+        )
+        self.assertIn('"/data/cripta/research/worktrees/p90_causal_c2_865_20261119"', builder)
+        self.assertIn("RELEASE_CANDIDATE_GIT_VERIFY=PASS", builder)
+        self.assertLess(
+            builder.index("_verify_archive(candidate, sha)"),
+            builder.index("_run_candidate(candidate, sha)"),
+        )
+        self.assertIn('"--require-hashes"', builder)
+        self.assertIn('"--staged-candidate"', builder)
+        self.assertIn("CANDIDATE_ALREADY_EXISTS_RECONCILE", builder)
+        self.assertNotIn("systemctl", builder)
+        self.assertNotIn("pg_dump", builder)
+        self.assertNotIn("trading-stop", builder)
+        installer = (
+            ROOT / "operations/infrastructure/install_verified_release.sh"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("--staged-candidate", installer)
+
+
+
 class CausalSimulatedTests(unittest.TestCase):
     """C1: real plan/observation/engine/safety functions, fake venue only."""
 
