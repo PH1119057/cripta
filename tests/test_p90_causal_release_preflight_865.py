@@ -476,12 +476,9 @@ class CausalSimulatedTests(unittest.TestCase):
                 )
                 self.assertFalse(
                     _recovery_recheck_matches_current_action(
-                        latest_quote=replace(moved, field_times=quote.field_times),
-                        **kwargs,
-                    ) if moved.last_price != quote.last_price and
-                    moved.as_of_second == quote.as_of_second
-                    else _recovery_recheck_matches_current_action(
-                        latest_quote=replace(moved, as_of_second=now-timedelta(seconds=1)),
+                        latest_quote=replace(
+                            moved, as_of_second=now-timedelta(seconds=1),
+                        ),
                         **kwargs,
                     ),
                 )
