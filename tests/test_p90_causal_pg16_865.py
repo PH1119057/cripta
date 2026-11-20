@@ -233,6 +233,70 @@ class P90CausalPostgresTests(unittest.TestCase):
                 "'runtime.position_ownership','UPDATE') AS allowed"
             ).fetchone()["allowed"])
 
+    def test_source_writer_dml_grants_match_canonical_sql_subset(self):
+        # Positive subset from 20261108 native sessions and 20261110
+        # MarketPublication / compact seconds; never production ACL evidence.
+        grants = (
+            ("analytics.native_public_trade_source_sessions", "SELECT", True),
+            ("analytics.native_public_trade_source_sessions", "INSERT", True),
+            ("analytics.native_public_trade_source_sessions", "UPDATE", True),
+            ("analytics.native_public_trade_source_sessions", "DELETE", False),
+            ("analytics.market_publications", "SELECT", True),
+            ("analytics.market_publications", "INSERT", True),
+            ("analytics.market_publications", "UPDATE", False),
+            ("analytics.market_publications", "DELETE", False),
+            ("analytics.public_market_source_seconds", "SELECT", True),
+            ("analytics.public_market_source_seconds", "INSERT", True),
+            ("analytics.public_market_source_seconds", "UPDATE", False),
+            ("strategy_exit.exit_decisions", "SELECT", True),
+            ("strategy_exit.exit_decisions", "INSERT", True),
+            ("strategy_exit.exit_decisions", "UPDATE", False),
+        )
+        with connect() as c:
+            for table, privilege, expected in grants:
+                with self.subTest(table=table, privilege=privilege):
+                    result = c.execute(
+                        "SELECT has_table_privilege(current_user,%s,%s) AS allowed",
+                        (table, privilege),
+                    ).fetchone()["allowed"]
+                    self.assertIs(result, expected)
+            # Runtime consumer/producer DML is intentionally not SELECT-only.
+            ts = datetime.now(UTC)
+            c.execute(
+                """INSERT INTO analytics.native_public_trade_source_sessions
+                   (source_session_id,market_source_id,producer_release_commit,
+                    state,subscribed_at)
+                   VALUES (%s,%s,%s,'ACTIVE',%s)""",
+                ("c" * 32, BYBIT_PUBLIC_MARKET_SOURCE_ID, _COMMIT, ts),
+            )
+            c.execute(
+                """UPDATE analytics.native_public_trade_source_sessions
+                      SET state='INACTIVE'
+                    WHERE source_session_id=%s""",
+                ("c" * 32,),
+            )
+            c.execute(
+                """INSERT INTO analytics.market_publications
+                   (publication_id,market_source_id,source_session_id,
+                    producer_release_commit,as_of_second,publication_status,
+                    closed_instrument_refs,closed_instrument_coverage,
+                    compact_second_refs,compact_field_coverage)
+                   VALUES (867,%s,%s,%s,%s,'WATERMARKS_ONLY',
+                           '{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb)""",
+                (
+                    BYBIT_PUBLIC_MARKET_SOURCE_ID, "c" * 32, _COMMIT, ts,
+                ),
+            )
+            self.assertEqual(
+                c.execute(
+                    """SELECT state
+                         FROM analytics.native_public_trade_source_sessions
+                        WHERE source_session_id=%s""",
+                    ("c" * 32,),
+                ).fetchone()["state"],
+                "INACTIVE",
+            )
+
     def test_immutable_new_fill_marker_and_multi_account_candidate(self):
         with connect(admin=True) as admin:
             admin.execute(
@@ -394,7 +458,7 @@ class P90CausalPostgresTests(unittest.TestCase):
                 source, symbol="LTCUSDT", observed_at=datetime.now(UTC),
             )
 
-    def test_runtime_db_role_cannot_mutate_exchange_ownership(self):
+    def test_reader_only_fixture_cannot_mutate_exchange_ownership(self):
         with connect() as c, self.assertRaises(
             psycopg.errors.InsufficientPrivilege
         ):
