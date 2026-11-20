@@ -334,7 +334,7 @@ def run_c2(
                 manifest["failures"] = len(result.failures)
                 manifest["errors"] = len(result.errors)
                 manifest["skipped"] = len(result.skipped)
-                if not result.wasSuccessful() or result.testsRun < 12 or result.skipped:
+                if not result.wasSuccessful() or result.testsRun < 13 or result.skipped:
                     raise C2Blocked("C2_SQL_TEST_SUITE_FAILED")
                 manifest["state"] = "PASS"
                 print("C2_PG16_SOURCE_LOCK_ROLE=PASS tests=" + str(result.testsRun), flush=True)
