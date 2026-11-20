@@ -11,7 +11,8 @@ def test_dashboard_live_actions_use_strategy_owned_symbols_not_monitor_checkbox_
     assert "'/api/r1/unified/micro-live'" in html
     assert "r1?'/api/r1/micro-live':'/api/live/gate'" in html
     assert "livePostTimed(endpoint,{enabled,confirmed:" in html
-    assert "Список монет задаётся только StrategyCard" in html
+    assert 'id="coinMonitorSection"' not in html
+    assert 'id="tradeOperatorBar"' in html
     assert "Нельзя открыть шлюз: не выбрана ни одна торговая монета" not in html
     for legacy_id in (
         "tradeStake",
@@ -27,11 +28,9 @@ def test_dashboard_live_actions_use_strategy_owned_symbols_not_monitor_checkbox_
     assert 'id="tradeGateReasons"' in html
     assert "select at least one trading symbol before re-arm" not in app
     assert "нельзя открыть шлюз: не выбрана ни одна торговая монета" not in app
-    monitor_start = html.index('id="coinMonitorSection"')
-    monitor_end = html.index('id="signalObservationSection"', monitor_start)
-    monitor = html[monitor_start:monitor_end]
-    assert "auto-check" not in monitor
-    assert "setAuto(" not in monitor
+    assert 'id="coinMonitorSection"' not in html
+    assert "setAuto(" not in html
+    assert "setAllAuto(" not in html
 
 
 def test_live_state_polling_is_single_flight_and_operations_are_bounded() -> None:
@@ -43,7 +42,8 @@ def test_live_state_polling_is_single_flight_and_operations_are_bounded() -> Non
     assert "fetchWithTimeout(path,{cache:'no-store'},8000)" in html
     assert "const deadline=Date.now()+20000" in html
     assert "Глобальный допуск новых реальных входов открыт" in html
-    assert "Список монет задаётся только StrategyCard" in html
+    assert 'id="coinMonitorSection"' not in html
+    assert 'id="tradeOperatorBar"' in html
     assert html.count("fetch('/api/live/state'") == 0
 
 
@@ -61,7 +61,7 @@ def test_live_polling_adapts_to_visible_trade_page_and_skips_hidden_dom() -> Non
     assert "if(activeTradePage()==='open')positionRows.innerHTML" in html
     assert "if(activeTradePage()==='closed')realClosedRows.innerHTML" in html
     assert "if(activeTradePage()==='signals')renderSignalObservation" in html
-    assert "if(page==='monitor'||page==='open')renderStrategyMonitor(d.strategy_monitor)" in html
+    assert "renderStrategyMonitor(d.strategy_monitor)" not in html
     assert "Сервис работает, но новые сигналы временно заблокированы" in html
     assert "Flow ${flowReady}/${flowRequired}" in html
     assert "OI ${oiReady}/${oiRequired}" in html
