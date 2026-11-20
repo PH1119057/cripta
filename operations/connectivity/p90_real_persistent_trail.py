@@ -321,6 +321,28 @@ def run_p90_persistent_trail_once(
             ) == P90_TRAIL_RECOVERY_POLICY,
             "DURABLE_ELIGIBILITY_MISSING",
         )
+        # Signed private GET and its credential/UID/instrument checks can take
+        # longer than the immutable original quote's 2-second validity.
+        # Never reuse a stale pre-private quote to decide a live mutation.
+        # Re-pin a genuinely current MarketPublication under the same source
+        # session; keep the original TTL and signed-private checks intact.
+        proof_received_at = datetime.now(UTC)
+        quote_age = proof_received_at - quote.as_of_second
+        if not timedelta() <= quote_age <= timedelta(seconds=2):
+            prior_quote = quote
+            quote, renewed_session_id = _source_quote(
+                source_connection, symbol=symbol, observed_at=proof_received_at,
+            )
+            _require(
+                renewed_session_id == session_id
+                and quote.source_session_id == session_id
+                and quote.producer_release_commit == prior_quote.producer_release_commit
+                and quote.producer_release_commit in identity.approved_producers
+                and quote.publication_id >= prior_quote.publication_id
+                and quote.as_of_second >= prior_quote.as_of_second
+                and quote.field_times[0] >= prior_quote.field_times[0],
+                "CURRENT_ORIGINAL_QUOTE_REPIN_DRIFT",
+            )
         observation = build_p90_trail_recovery_observation(
             position=position, private=private, quote=quote,
             eligibility=P90_TRAIL_RECOVERY_POLICY,
