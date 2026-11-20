@@ -16,6 +16,30 @@ from pathlib import Path
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _TEST_MODULE = "test_p90_causal_release_preflight_865.py"
 
+_REQUIRED_CASES = frozenset({
+    "CandidateGraphTests.test_all_cross_owner_rails_exist_and_are_parseable",
+    "CandidateGraphTests.test_exit_consumer_orders_three_owners_and_does_not_post",
+    "CandidateGraphTests.test_gateway_and_guard_consume_exit_proof",
+    "CandidateGraphTests.test_installer_packages_and_verifies_candidate_tests_before_cutover",
+    "CandidateGraphTests.test_offline_candidate_rehearsal_preserves_live_ownership",
+    "CandidateGraphTests.test_original_ci_pg_schema_blocks_before_live_cutover",
+    "CausalSimulatedTests.test_already_armed_native_trailing_does_not_duplicate",
+    "CausalSimulatedTests.test_firstfill_window_can_expire_but_opted_in_recovery_reaches_decision",
+    "CausalSimulatedTests.test_gateway_exact_ready_flat_is_not_confused_with_recovery_failures",
+    "CausalSimulatedTests.test_signed_private_rotation_is_not_protection_drift",
+    "CausalSimulatedTests.test_stale_or_wrong_private_source_and_unsafe_position_fail_closed",
+})
+
+
+def _loaded_case_ids(suite: unittest.TestSuite) -> list[str]:
+    result: list[str] = []
+    for case in suite:
+        if isinstance(case, unittest.TestSuite):
+            result.extend(_loaded_case_ids(case))
+        else:
+            result.append(".".join(case.id().split(".")[-2:]))
+    return result
+
 
 def _stop(code: str) -> int:
     print("P90_CANDIDATE_PREFLIGHT=FAIL reason=" + code, flush=True)
@@ -66,8 +90,17 @@ def main(argv: list[str] | None = None) -> int:
         start_dir=str(expected / "tests"),
         pattern=_TEST_MODULE,
     )
+    discovered = _loaded_case_ids(suite)
+    if len(discovered) != len(_REQUIRED_CASES) or set(discovered) != _REQUIRED_CASES:
+        return _stop(
+            "C0_C1_TEST_INVENTORY_MISMATCH:discovered=" + str(len(discovered))
+        )
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    if not result.wasSuccessful() or result.testsRun < 6:
+    if (
+        not result.wasSuccessful()
+        or result.testsRun != len(_REQUIRED_CASES)
+        or result.skipped
+    ):
         return _stop(
             f"C0_OR_C1_FAILED:tests={result.testsRun}:failures={len(result.failures)}"
             f":errors={len(result.errors)}:skipped={len(result.skipped)}"
