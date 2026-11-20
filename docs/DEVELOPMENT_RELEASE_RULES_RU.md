@@ -3267,7 +3267,15 @@ migration progress index, exact candidate SHA and durable manifest.
 A PASS in this CI schema reproduction does NOT prove credential-local
 Private Runtime, pending network Bybit commands or C3 live.
 
-**Initial state:** introduced as OPTIONAL/DRAFT test source in #865/PR #868.
-Make it a mandatory release blocker **only after** exact server execution,
-QC, cleanup evidence, CI PASS and reconciliation of any schema/migration
-failure. The existing C0/C1/C2 barrier remains mandatory meanwhile.
+**CHECKED HERE 2026-11-20 — branch-staged validation only:** host robot,
+exact Git stage SHA `de7f51754cb9bb26e25865d3888b6da54e9a06bb`,
+job `job_df46d3dea191`, `66/66` original CI migrations,
+`53` modeled tables, `prestart_actual_code_sql=PASS`, no production
+DB or Exchange mutation, `cluster_stopped=true`. Durable manifest
+`/data/cripta/research/testenvs/p90_causal_pg16/runs/20261120T002748Z_a5ce019570.json`.
+This is executable evidence for **the exact CI 66-migration schema**, not
+later migration parity, actual private Bybit readback or full live chain.
+After this proof the **PR branch** candidate runner now requires this stage
+after C0/C1 and synthetic C2 but BEFORE any production service/DB/symlink
+cutover. It is still NOT DEPLOYED, and the **new combined archive SHA**
+must pass its own full on-host rehearsal before merge or release.
