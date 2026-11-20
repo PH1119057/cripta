@@ -829,23 +829,36 @@ function p90RailH9Proximity(item){
 }
 // Stable presentation-only ordering: never infer a live fill from cached geometry.
 const p90RailPreviousOrder=new Map(),p90RailLastH9Distance=new Map(),p90RailKnownOpen=new Set();
+const p90RailConfirmedGone=new Map();
+const P90_RAIL_FIXED_SYMBOLS=new Set(['LTCUSDT','INJUSDT','DOTUSDT','ARBUSDT','APTUSDT']);
 function p90RailStableRows(items){
   const rows=Array.isArray(items)?[...items]:[];
   const prior=new Map(p90RailPreviousOrder);
   for(const item of rows){
     const key=String(item?.symbol||''),state=String(item?.state||'');
     if(!key)continue;
-    if(state==='OPEN'&&item?.position)p90RailKnownOpen.add(key);
-    // An explicit fresh account inventory can safely end a prior UI pin.
-    // An UNKNOWN inventory cannot prove FLAT; keep the rank, not a green OPEN claim.
-    else if(item?.account_inventory_verified===true)p90RailKnownOpen.delete(key);
+    if(state==='OPEN'&&item?.position&&item?.account_inventory_verified===true){
+      p90RailKnownOpen.add(key);
+      p90RailConfirmedGone.delete(key);
+    }else if(item?.account_inventory_verified===true&&
+             ['NO_CURRENT_EXCHANGE_POSITION','EXCHANGE_UNATTRIBUTED'].includes(item?.position_attribution)){
+      // One transient COMPLETE read-model response is not enough to physically
+      // reorder a previously OPEN card. This only pins the display position:
+      // the card itself always renders the CURRENT state, never cached green/PnL.
+      const seen=(p90RailConfirmedGone.get(key)||0)+1;
+      p90RailConfirmedGone.set(key,seen);
+      if(seen>=3)p90RailKnownOpen.delete(key);
+    }else{
+      // Unknown/incomplete inventory is neither a new fill nor confirmed flat.
+      p90RailConfirmedGone.delete(key);
+    }
     const distance=p90RailH9Proximity(item);
     if(Number.isFinite(distance))p90RailLastH9Distance.set(key,distance);
   }
   const rank=item=>{
     const key=String(item?.symbol||''),state=String(item?.state||'');
-    if(state==='OPEN'||(p90RailKnownOpen.has(key)&&item?.account_inventory_verified===false))return 0;
-    return state==='EXTERNAL'?1:2;
+    if((state==='OPEN'&&item?.position)||p90RailKnownOpen.has(key))return 0;
+    return 1;
   };
   rows.sort((a,b)=>{
     const ra=rank(a),rb=rank(b);
@@ -853,7 +866,9 @@ function p90RailStableRows(items){
     const ak=String(a?.symbol||''),bk=String(b?.symbol||'');
     const oldA=prior.get(ak),oldB=prior.get(bk);
     const previous=oldA!==undefined&&oldB!==undefined?oldA-oldB:null;
-    if(ra===0&&previous!==null)return previous;
+    // Keep same-rank cards in the exact prior order across all background polls.
+    // The initial H9 sort is useful; silently reshuffling it on each tick is not.
+    if(previous!==null)return previous;
     const liveA=p90RailH9Proximity(a),liveB=p90RailH9Proximity(b);
     // A missing calculation must not send a card to the end and back next poll.
     if((!Number.isFinite(liveA)||!Number.isFinite(liveB))&&previous!==null)return previous;
@@ -873,6 +888,39 @@ function p90RailStableRows(items){
   rows.forEach((item,i)=>p90RailPreviousOrder.set(String(item?.symbol||''),i));
   return rows;
 }
+function patchP90RailNode(node,next){
+  if(node.nodeType!==next.nodeType||node.nodeName!==next.nodeName){
+    node.replaceWith(next);
+    return next;
+  }
+  if(node.nodeType===3){
+    if(node.nodeValue!==next.nodeValue)node.nodeValue=next.nodeValue;
+    return node;
+  }
+  if(node.nodeType!==1)return node;
+  // An actively edited trailing control is owned by the user until blur.
+  if(node===document.activeElement&&['SELECT','INPUT','TEXTAREA'].includes(node.nodeName))return node;
+  for(const attr of [...node.attributes]){
+    if(!next.hasAttribute(attr.name))node.removeAttribute(attr.name);
+  }
+  for(const attr of [...next.attributes]){
+    if(node.getAttribute(attr.name)!==attr.value)node.setAttribute(attr.name,attr.value);
+  }
+  let oldChild=node.firstChild,newChild=next.firstChild;
+  while(newChild){
+    const nextNew=newChild.nextSibling,oldNext=oldChild?oldChild.nextSibling:null;
+    if(oldChild)patchP90RailNode(oldChild,newChild);
+    else node.appendChild(newChild);
+    oldChild=oldNext;
+    newChild=nextNew;
+  }
+  while(oldChild){
+    const following=oldChild.nextSibling;
+    node.removeChild(oldChild);
+    oldChild=following;
+  }
+  return node;
+}
 function patchP90RailDom(rail,html){
   const template=document.createElement('template');
   template.innerHTML=html;
@@ -884,15 +932,8 @@ function patchP90RailDom(rail,html){
     const key=next.dataset.p90Symbol;
     if(!key)continue;
     current.add(key);
-    const node=prior.get(key)||next;
-    if(node!==next){
-      node.className=next.className;
-      // Never replace the whole scroll rail on a one-second quote/geometry update.
-      // Keep focused trade controls intact until the operator finishes editing.
-      if(!node.contains(document.activeElement)&&node.innerHTML!==next.innerHTML){
-        node.innerHTML=next.innerHTML;
-      }
-    }
+    let node=prior.get(key)||next;
+    if(node!==next)node=patchP90RailNode(node,next);
     const target=previous?previous.nextSibling:rail.firstChild;
     if(node!==target)rail.insertBefore(node,target);
     previous=node;
@@ -903,7 +944,21 @@ const p90TpReadbacks=new Map();
 function renderP90RailPositions(items,positions,diagnostic=window.ownerFullContourDiagnosticLatest||null){
   const rail=document.getElementById('openRailPositions'),count=document.getElementById('openRailCount');
   if(!rail||!count)return;
-  const rows=p90RailStableRows(items);
+  const incoming=Array.isArray(items)?items:[];
+  const complete=incoming.length===P90_RAIL_FIXED_SYMBOLS.size&&
+    new Set(incoming.map(x=>String(x?.symbol||''))).size===P90_RAIL_FIXED_SYMBOLS.size&&
+    incoming.every(x=>P90_RAIL_FIXED_SYMBOLS.has(String(x?.symbol||'')));
+  if(!complete&&rail.dataset.p90Rendered==='true'){
+    // Preserve keyed cards and scroll through a missing/partial read-model poll.
+    // Never substitute a generic rail or claim this stale projection is current.
+    rail.setAttribute('aria-busy','true');
+    rail.title='Последний снимок P90 · ожидается полное обновление';
+    return;
+  }
+  rail.removeAttribute('aria-busy');
+  rail.removeAttribute('title');
+  const rows=p90RailStableRows(incoming);
+  if(complete)rail.dataset.p90Rendered='true';
   count.textContent=String(rows.length||5);
   const openSymbols=new Set(rows.filter(x=>x.state==='OPEN').map(x=>x.symbol));
   for(const symbol of expandedRailPositions)if(!openSymbols.has(symbol))expandedRailPositions.delete(symbol);
@@ -1708,7 +1763,8 @@ function renderLiveState(d){
   tradeEquity.textContent=wallet?num(wallet.total_equity):'нет данных';tradeAvailable.textContent=wallet?num(wallet.available_balance):'нет данных';livePositions.textContent=positions.length;const positionReserve=wallet?Number(wallet.reserved_for_positions||0):0,orderReserve=wallet?Number(wallet.reserved_for_orders||0):0,inUse=positionReserve+orderReserve;tradeInUse.textContent=wallet?`${inUse.toFixed(2)} USDT`:'нет данных';tradeInUseDetail.textContent=wallet?`позиции ${positionReserve.toFixed(2)} + заявки ${orderReserve.toFixed(2)} USDT`:'нет account snapshot';tradeBalanceDetail.textContent=wallet?`баланс без текущего результата: ${Number(wallet.wallet_balance||0).toFixed(2)} USDT`:'account snapshot отсутствует';updateOperatorConnection();
   const positionKeys=new Set(positions.map(p=>p.symbol+':'+p.side)),savedPositionKeys=localStorage.getItem('cripta-open-position-keys');if(lastOpenPositions===null&&savedPositionKeys){try{lastOpenPositions=new Set(JSON.parse(savedPositionKeys))}catch(_e){lastOpenPositions=null}}if(lastOpenPositions!==null){for(const key of positionKeys)if(!lastOpenPositions.has(key))entrySound()}lastOpenPositions=positionKeys;localStorage.setItem('cripta-open-position-keys',JSON.stringify([...positionKeys]));
   window.ownerFullContourDiagnosticLatest=lt.owner_full_contour_diagnostic||null;
-  if(lt.p90_rail?.items?.length)renderP90RailPositions(lt.p90_rail?.items||[],positions);
+  if(Array.isArray(lt.p90_rail?.items)||document.getElementById('openRailPositions')?.dataset.p90Rendered==='true')
+    renderP90RailPositions(lt.p90_rail?.items||[],positions);
   else renderOpenRailPositions(positions);
   if(activeTradePage()==='open')positionRows.innerHTML=positions.length?positions.map(p=>{const entry=Number(p.entry_price),mark=Number(p.mark_price),size=Number(p.size),leverage=Number(p.leverage||1),direction=p.side==='Buy'?1:-1,supervisorState=({WARMUP:'прогрев',HEALTHY:'нормально',WARNING:'предупреждение',RECOVERY:'восстановление',PROVEN:'движение подтверждено',RUNNER:'сильное движение',BROKEN:'идея сломана',BLOCKED:'данных недостаточно',ERROR:'ошибка'})[p.supervisor?.state]||p.supervisor?.state||'—',move=entry>0&&mark>0?direction*(mark/entry-1)*100:null,stop=Number(p.stop_loss||0),stopMove=entry>0&&stop>0?direction*(stop/entry-1)*100:null,trail=Number(p.trailing_stop||0),trailPct=mark>0&&trail>0?trail/mark*100:null,trailTrigger=Number(p.trailing_trigger_price||0),trailTriggerMove=entry>0&&trailTrigger>0?direction*(trailTrigger/entry-1)*100:null,notional=entry*size,bybitMargin=Number(p.bybit_position_im||0),actualMargin=bybitMargin>0?bybitMargin:leverage>0?notional/leverage:null,pnl=p.net_pnl_to_close==null?null:Number(p.net_pnl_to_close),marginReturn=actualMargin>0&&pnl!=null?pnl/actualMargin*100:null,age=Math.max(0,Math.round((Date.now()-Number(p.refreshed_at_epoch_ms||0))/1000));return `<tr><td><a href="https://www.bybit.kz/trade/usdt/${p.symbol}" target="_blank" rel="noopener"><b>${p.symbol}</b></a><br><small class="muted">данные ${age} сек. назад</small></td><td>${p.strategy_name?`<span class="strategy-name-chip">${safe(p.strategy_name)}</span><br><small class="muted">${safe(p.strategy_version||'')}</small>`:p.strategy_id?`<small>${safe(p.strategy_id)} · ${safe(p.strategy_version)}</small>`:'<span class="muted">не привязана</span>'}</td><td><span class="pill">${safe(supervisorState)}</span></td><td>${p.side==='Buy'?'покупка':'продажа'}</td><td>${p.size}<br><small class="muted">объём ${notional.toFixed(2)} USDT<br>маржа ≈ ${actualMargin==null?'—':actualMargin.toFixed(2)} USDT</small></td><td>${entry.toFixed(4)}</td><td>${p.break_even_price?Number(p.break_even_price).toFixed(4):'—'}</td><td>${mark?mark.toFixed(4):'—'}</td><td>${stop?stop.toFixed(4):'не установлен'}${stopMove==null?'':`<br><b class="${stopMove>=0?'ok':'warn'}">${stopMove>=0?'+':''}${stopMove.toFixed(3)}% от входа</b>`}${trailPct==null?'':`<br><span class="ok">отступ плавающего стопа: ${trailPct.toFixed(3)}%</span>`}${trailTrigger>0?`<br><b class="ok">плавающий стоп сейчас: ${trailTrigger.toFixed(4)} (${trailTriggerMove==null?'—':(trailTriggerMove>=0?'+':' ')+trailTriggerMove.toFixed(3)+'% от входа'})</b><br><small class="muted">подтверждено Bybit</small>`:trail>0?`<br><span class="warn">цена плавающего стопа ещё не получена</span>`:''}</td><td><b class="${pnl==null?'muted':pnl>0?'ok':pnl<0?'loss':''}">${pnl==null?'—':(pnl>0?'+':'')+pnl.toFixed(4)+' USDT'}</b><br><small class="muted">после комиссий · закрытие тейкером (оценка)${marginReturn==null?'':' · '+(marginReturn>0?'+':'')+marginReturn.toFixed(2)+'% маржи'}</small></td><td><button class="action" onclick="tradeCommand('break_even','${p.symbol}')">Безубыток</button> <button class="action" onclick="tradeCommand('current_stop','${p.symbol}')">Стоп −0,20%</button><br><select id="trail-${p.symbol}" title="Отступ плавающего стопа" onchange="rememberTrailing('${p.symbol}',this.value)">${trailingOptions(p.symbol)}</select> <button class="action" onclick="setTrailing('${p.symbol}',${trail<=0})">${trail>0?'Выключить плавающий стоп':'Включить плавающий стоп'}</button> <button class="action danger" onclick="tradeCommand('close','${p.symbol}')">Закрыть</button></td></tr>`}).join(''):'<tr><td colspan="12" class="muted">Открытых позиций на Bybit нет.</td></tr>';
   const reasonText={StopLoss:'стоп',TakeProfit:'цель',TrailingStop:'плавающий стоп',UNKNOWN:'закрыто вручную'};const closed=lt.recent_closed||[],closedKeys=new Set(closed.map(x=>String(x.cycle_key||((x.exec_ids||[]).join(":"))||x.symbol+":"+x.closed_at_epoch_ms)));
