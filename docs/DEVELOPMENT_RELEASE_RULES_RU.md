@@ -3227,3 +3227,47 @@ production schema constraints/trigger semantics/role hierarchy are
 `NOT CHECKED BY C2`; the existing independent full PostgreSQL CI
 suite is a separate protection, not a substitute for server runtime
 causal E2E.
+
+
+#### 59.7.6 CI PostgreSQL 16 original-migration parity on isolated server
+
+A separate `operations/infrastructure/p90_causal_fullschema_865.py`
+runner replays exactly the **66 ordered SQL migration files** listed in
+`.github/workflows/trade-lifecycle-postgres.yml`, following
+`tests/postgres_trade_lifecycle_bootstrap.sql` and the already documented
+`runtime.connection_events` fixture expansion. All bootstrap and CI
+workflow bytes must be archived and Git-blob-verified with candidate code;
+the list is parsed strictly, count/fingerprint exact and files resolved
+relative to that candidate. This is the **GitHub CI lifecycle schema subset**
+up through its last listed migration, NOT an automatic claim that it covers
+every later production migration or trigger.
+
+Test environment: the exact same already approved and isolated
+`/data/cripta/research/testenvs/p90_causal_pg16` cluster. Exact actor
+`cripta`; local PG16-test superuser `postgres` only within this private
+PGDATA/socket; no `sudo postgres`, production socket, real account keys,
+systemd or Exchange. READ: candidate `operations/sql/*.sql`, bootstrap,
+CI list and exact private runtime function. WRITE/CREATE/DELETE: only
+`cripta_integration` inside independently proven test PGDATA, plus
+`runs/*.tmp` manifest, test log and existing `.c2.lock`; RENAME = own
+JSON temp to result. The test must validate the PGDATA/socket/port/no-TCP
+identity **before** creating or dropping this disposable database, hold
+the exclusive testenv flock and stop the test cluster in a finally block.
+Any unexpected script/path, failure of one migration, missing runtime
+schema/role privileges, or first-fill recovery SQL mismatch => FAIL,
+not SKIP. Production ACL is *read-only compared* but never copied by
+issuing GRANT to production.
+
+Acceptance is independent of the existing subset synthetic C2. After
+all migration DDL, it must execute the **actual candidate
+`private_runtime.py::resolve_prestart_entry_commands` SQL** under
+the disposable `cripta` role and assert it returns no false evidence for
+a synthetic absent Entry/account. Retain count of actually created tables,
+migration progress index, exact candidate SHA and durable manifest.
+A PASS in this CI schema reproduction does NOT prove credential-local
+Private Runtime, pending network Bybit commands or C3 live.
+
+**Initial state:** introduced as OPTIONAL/DRAFT test source in #865/PR #868.
+Make it a mandatory release blocker **only after** exact server execution,
+QC, cleanup evidence, CI PASS and reconciliation of any schema/migration
+failure. The existing C0/C1/C2 barrier remains mandatory meanwhile.
