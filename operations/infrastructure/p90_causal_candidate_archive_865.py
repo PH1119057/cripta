@@ -28,6 +28,8 @@ _FILES = (
     "research/server/monitoring", "research/server/control", "pyproject.toml",
     "tests/test_p90_causal_release_preflight_865.py",
     "tests/test_p90_causal_pg16_865.py",
+    "tests/postgres_trade_lifecycle_bootstrap.sql",
+    ".github/workflows/trade-lifecycle-postgres.yml",
 )
 
 
