@@ -3198,3 +3198,32 @@ reader-only fixture deliberately does *not* model all production grants:
 The complete production-equivalent PostgreSQL 16 lifecycle bootstrap and
 credential-local private actor are still open evidence, and no extra
 production privilege is implied by fixture tests.
+
+**PRODUCTION_EFFECTIVE_GRANTS read-only smoke 2026-11-20:** the exact
+Unix actor `cripta` connected by local PostgreSQL socket as
+`current_user=cripta, current_database=cripta, inet_server_addr=NULL`;
+in READ ONLY transaction `has_table_privilege` returned:
+
+| Target | SELECT | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| runtime.trade_commands | YES | YES | YES | YES |
+| runtime.position_ownership | YES | YES | YES | NO |
+| strategy_exit.exit_decisions | YES | YES | NO | NO |
+| strategy_exit.execution_requests | YES | YES | NO | NO |
+| strategy_exit.execution_dispatches | YES | YES | NO | NO |
+| analytics.native_public_trade_source_sessions | YES | YES | YES | NO |
+| analytics.market_publications | YES | YES | NO | NO |
+| analytics.public_market_source_seconds | YES | YES | NO | NO |
+
+These are **observed effective ACL**, NOT a request to broaden
+permissions. The server test C2 for these exact eight modeled relations
+must assert the same matrix and exercise a positive native session
+`INSERT/UPDATE`, positive publication `INSERT` and positive
+position ownership `UPDATE`, plus ownership `DELETE` refusal.
+Prior C2 `SELECT`-only ownership fixture incorrectly classified actual
+runtime `UPDATE` as forbidden; this was a **TEST_MODEL_DIVERGENCE**,
+not evidence of production rights failure. All additional real
+production schema constraints/trigger semantics/role hierarchy are
+`NOT CHECKED BY C2`; the existing independent full PostgreSQL CI
+suite is a separate protection, not a substitute for server runtime
+causal E2E.
