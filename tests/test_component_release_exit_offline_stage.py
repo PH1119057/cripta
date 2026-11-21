@@ -149,11 +149,10 @@ class OfflineExitSourceTreeTests(unittest.TestCase):
         ):
             with tempfile.TemporaryDirectory() as temp:
                 parent = Path(temp)
-                with self.subTest(extra=extra, duplicate=duplicate):
-                    with self.assertRaises(ValueError):
-                        self.stage(parent, bundle_bytes(
-                            extra=extra, duplicate=duplicate,
-                        ))
+                with self.subTest(extra=extra, duplicate=duplicate), self.assertRaises(ValueError):
+                    self.stage(parent, bundle_bytes(
+                        extra=extra, duplicate=duplicate,
+                    ))
                 self.assertFalse((parent / ("exit_" + SHA)).exists())
 
     def test_symlink_and_incomplete_dynamic_closure_denied(self) -> None:
@@ -164,11 +163,10 @@ class OfflineExitSourceTreeTests(unittest.TestCase):
         ):
             with tempfile.TemporaryDirectory() as temp:
                 parent = Path(temp)
-                with self.subTest(mode=mode, missing=missing):
-                    with self.assertRaises(ValueError):
-                        self.stage(parent, bundle_bytes(
-                            mode_override=mode, missing=missing,
-                        ))
+                with self.subTest(mode=mode, missing=missing), self.assertRaises(ValueError):
+                    self.stage(parent, bundle_bytes(
+                        mode_override=mode, missing=missing,
+                    ))
 
     def test_missing_or_symlinked_sandbox_parent_denied(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
