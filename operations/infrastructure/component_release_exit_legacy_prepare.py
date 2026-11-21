@@ -379,6 +379,168 @@ def _verify_legacy_fixture(
     }
 
 
+
+def _seal_verified_old_stage(
+    *, staging: Path, candidate: Path, unit: str,
+    expected_archive_sha256: str, expected_venv_fingerprint: str,
+    owner_uid: int, service_gid: int,
+) -> dict[str, object]:
+    """Seal one verified complete stage; never install a systemd unit."""
+    if staging.is_symlink() or candidate.exists() or candidate.is_symlink():
+        _deny("CANDIDATE_OR_STAGE_UNTRUSTED")
+    pinned = staging / _UNIT
+    with pinned.open("xb") as handle:
+        handle.write(unit.encode("utf-8"))
+        handle.flush()
+        os.fsync(handle.fileno())
+    _normalize_root_owned_tree(staging, owner_uid, service_gid)
+    report = {
+        "state": "PROTECTED_OLD_EXIT_CANDIDATE_STAGED",
+        "source_commit": OLD_EXIT_COMMIT,
+        "candidate_root": str(candidate),
+        "input_archive_sha256": expected_archive_sha256,
+        "source_unit_sha256": _OLD_UNIT_SHA,
+        "isolated_venv_input_fingerprint": expected_venv_fingerprint,
+        "pinned_unit_sha256": hashlib.sha256(unit.encode()).hexdigest(),
+        "candidate_payload_sha256": _payload_digest(
+            staging, owner_uid, service_gid,
+        ),
+        "rollback_ready": False,
+        "systemd_unit_installed": False,
+        "runtime_behavior_verified": False,
+        "financial_mutation_authorized": False,
+        "component_installed": False,
+        "component_loaded": False,
+        "signed_exchange_protection_verified": False,
+    }
+    manifest = staging / _MANIFEST
+    with manifest.open("xb") as handle:
+        handle.write((json.dumps(report, sort_keys=True, indent=2) + "\n").encode())
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chown(manifest, owner_uid, service_gid, follow_symlinks=False)
+    os.chmod(manifest, 0o640)
+    os.replace(staging, candidate)
+    return _verify_legacy_fixture(
+        candidate_root=candidate,
+        expected_archive_sha256=expected_archive_sha256,
+        expected_venv_fingerprint=expected_venv_fingerprint,
+        owner_uid=owner_uid,
+        service_gid=service_gid,
+    ) | {"state": "PROTECTED_OLD_EXIT_CANDIDATE_STAGED"}
+
+
+def _check_exact_partial_stage(
+    *, stage: Path, members: list[tuple[str, bytes | None, bool]],
+    owner_uid: int,
+) -> None:
+    """Reject extra, missing or changed data before sealing an interrupted copy."""
+    if stage.is_symlink() or not stage.is_dir():
+        _deny("PARTIAL_STAGE_ABSENT")
+    info = stage.lstat()
+    if (
+        info.st_uid != owner_uid
+        or not stat.S_ISDIR(info.st_mode)
+        or stat.S_IMODE(info.st_mode) != 0o700
+    ):
+        _deny("PARTIAL_STAGE_OWNER_MODE")
+    expected_files: dict[str, bytes] = {}
+    expected_dirs: set[str] = set()
+    for rel, content, is_dir in members:
+        parts = PurePosixPath(rel).parts
+        if not parts:
+            _deny("PARTIAL_STAGE_PATH")
+        for n in range(1, len(parts)):
+            expected_dirs.add("/".join(parts[:n]))
+        if is_dir:
+            expected_dirs.add(rel)
+        else:
+            if content is None or rel in expected_files:
+                _deny("PARTIAL_STAGE_INPUT")
+            expected_files[rel] = content
+    actual_files: set[str] = set()
+    actual_dirs: set[str] = set()
+    for current, dirs, files in os.walk(stage, followlinks=False):
+        base = Path(current)
+        if base == stage:
+            if ".venv" not in dirs:
+                _deny("PARTIAL_STAGE_VENV_MISSING")
+            dirs.remove(".venv")  # independently fingerprinted below
+        for name in dirs + files:
+            entry = base / name
+            rel = entry.relative_to(stage).as_posix()
+            meta = entry.lstat()
+            if meta.st_uid != owner_uid or stat.S_ISLNK(meta.st_mode):
+                _deny("PARTIAL_STAGE_UNTRUSTED_OWNER_OR_LINK")
+            if stat.S_ISDIR(meta.st_mode):
+                if rel not in expected_dirs:
+                    _deny("PARTIAL_STAGE_UNEXPECTED_DIRECTORY")
+                actual_dirs.add(rel)
+            elif stat.S_ISREG(meta.st_mode):
+                if rel not in expected_files:
+                    _deny("PARTIAL_STAGE_UNEXPECTED_FILE")
+                actual_files.add(rel)
+                if _file_hash(entry, _MAX_INPUT_BYTES) != hashlib.sha256(
+                    expected_files[rel]
+                ).hexdigest():
+                    _deny("PARTIAL_STAGE_CHANGED_FILE")
+            else:
+                _deny("PARTIAL_STAGE_SPECIAL_FILE")
+    if actual_files != set(expected_files) or actual_dirs != expected_dirs:
+        _deny("PARTIAL_STAGE_INCOMPLETE")
+
+
+def _resume_legacy_fixture(
+    *,
+    archive: Path, source_unit: Path, isolated_venv: Path,
+    rollback_parent: Path, lock_path: Path,
+    expected_archive_sha256: str, expected_venv_fingerprint: str,
+    owner_uid: int, service_gid: int, lock_gid: int,
+) -> dict[str, object]:
+    """Fixture-scoped recovery of an EXACT partial stage, not a second copy."""
+    if not _is_sha256(expected_archive_sha256) or not _is_sha256(
+        expected_venv_fingerprint
+    ):
+        _deny("EXPECTED_HASH_INVALID")
+    if rollback_parent.is_symlink() or not rollback_parent.is_dir():
+        _deny("PARENT")
+    parent = rollback_parent.lstat()
+    if (
+        parent.st_uid, parent.st_gid, stat.S_IMODE(parent.st_mode)
+    ) != (owner_uid, service_gid, 0o750):
+        _deny("PARENT_METADATA")
+    with _hold_shared_release_lock(path=lock_path, uid=owner_uid, gid=lock_gid):
+        candidate = rollback_parent / OLD_EXIT_COMMIT
+        stage = rollback_parent / (".stage-" + OLD_EXIT_COMMIT)
+        if candidate.exists() or candidate.is_symlink():
+            _deny("CANDIDATE_EXISTS")
+        if not stage.is_dir() or stage.is_symlink():
+            _deny("PARTIAL_STAGE_MISSING")
+        source_before = _fingerprint_venv(isolated_venv)
+        if source_before["fingerprint"] != expected_venv_fingerprint:
+            _deny("VENV_HASH")
+        unit = build_pinned_old_exit_unit(source_unit.read_bytes())
+        members = _validated_tar_members(archive, expected_archive_sha256)
+        _check_exact_partial_stage(
+            stage=stage, members=members, owner_uid=owner_uid,
+        )
+        stage_venv = _fingerprint_venv(stage / ".venv")
+        source_after = _fingerprint_venv(isolated_venv)
+        if (
+            source_before["fingerprint"] != stage_venv["fingerprint"]
+            or source_before["fingerprint"] != source_after["fingerprint"]
+        ):
+            _deny("PARTIAL_STAGE_VENV_MISMATCH")
+        # This is the first and only filesystem mutation on the resumed path.
+        return _seal_verified_old_stage(
+            staging=stage, candidate=candidate, unit=unit,
+            expected_archive_sha256=expected_archive_sha256,
+            expected_venv_fingerprint=expected_venv_fingerprint,
+            owner_uid=owner_uid, service_gid=service_gid,
+        )
+
+
+
 def _prepare_legacy_fixture(
     *,
     archive: Path,
@@ -434,42 +596,12 @@ def _prepare_legacy_fixture(
                 or venv_before["fingerprint"] != venv_after["fingerprint"]
             ):
                 _deny("VENV_CHANGED_DURING_COPY")
-            (staging / _UNIT).write_text(unit, encoding="utf-8")
-            _normalize_root_owned_tree(staging, owner_uid, service_gid)
-            report = {
-                "state": "PROTECTED_OLD_EXIT_CANDIDATE_STAGED",
-                "source_commit": OLD_EXIT_COMMIT,
-                "candidate_root": str(candidate),
-                "input_archive_sha256": expected_archive_sha256,
-                "source_unit_sha256": _OLD_UNIT_SHA,
-                "isolated_venv_input_fingerprint": expected_venv_fingerprint,
-                "pinned_unit_sha256": hashlib.sha256(unit.encode()).hexdigest(),
-                "candidate_payload_sha256": _payload_digest(
-                    staging, owner_uid, service_gid,
-                ),
-                "rollback_ready": False,
-                "systemd_unit_installed": False,
-                "runtime_behavior_verified": False,
-                "financial_mutation_authorized": False,
-                "component_installed": False,
-                "component_loaded": False,
-                "signed_exchange_protection_verified": False,
-            }
-            manifest = staging / _MANIFEST
-            with manifest.open("xb") as handle:
-                handle.write((json.dumps(report, sort_keys=True, indent=2) + "\n").encode())
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.chown(manifest, owner_uid, service_gid, follow_symlinks=False)
-            os.chmod(manifest, 0o640)
-            os.replace(staging, candidate)
-            return _verify_legacy_fixture(
-                candidate_root=candidate,
+            return _seal_verified_old_stage(
+                staging=staging, candidate=candidate, unit=unit,
                 expected_archive_sha256=expected_archive_sha256,
                 expected_venv_fingerprint=expected_venv_fingerprint,
-                owner_uid=owner_uid,
-                service_gid=service_gid,
-            ) | {"state": "PROTECTED_OLD_EXIT_CANDIDATE_STAGED"}
+                owner_uid=owner_uid, service_gid=service_gid,
+            )
         except Exception:
             # If anything failed after mkdir/rename, preserve the partial
             # exact path for human/independent reconciliation, never retry.
@@ -525,4 +657,58 @@ def prepare_legacy_exit_rollback_once() -> dict[str, object]:
         owner_uid=0,
         service_gid=group,
         lock_gid=0,  # shared root:root lock, unlike root:cripta rollback
+    )
+
+
+
+def finalize_reconciled_partial_legacy_exit_once() -> dict[str, object]:
+    """One exact root-only partial-stage reconciliation; NEVER restart Exit."""
+    if os.geteuid() != 0:
+        _deny("ROOT_REQUIRED")
+    if inspect_exit_root_tree()["state"] != "ROOT_TREE_PREPARED_METADATA_ONLY":
+        _deny("PRODUCTION_ROOT_NOT_PROTECTED")
+    import grp
+    import pwd
+
+    group = grp.getgrnam("cripta").gr_gid
+    actor = pwd.getpwnam("cripta").pw_uid
+    if _INPUT.is_symlink() or not _INPUT.is_dir():
+        _deny("PROTECTED_INPUT_MISSING")
+    z = _INPUT.lstat()
+    if (z.st_uid, z.st_gid, stat.S_IMODE(z.st_mode)) != (0, group, 0o750):
+        _deny("PROTECTED_INPUT_OWNER")
+    for name in ("legacy_runtime.tar", "legacy_unit.service", "INPUT_SNAPSHOT.json"):
+        f = _INPUT / name
+        if f.is_symlink() or not f.is_file():
+            _deny("PROTECTED_INPUT_FILE")
+        z = f.lstat()
+        if (z.st_uid, z.st_gid, stat.S_IMODE(z.st_mode)) != (0, group, 0o640):
+            _deny("PROTECTED_INPUT_FILE_METADATA")
+    marker = json.loads((_INPUT / "INPUT_SNAPSHOT.json").read_text("utf-8"))
+    if (
+        marker.get("state") != "PROTECTED_LEGACY_EXIT_INPUT_ONLY_NOT_RECOVERABLE"
+        or marker.get("source_commit") != OLD_EXIT_COMMIT
+        or marker.get("archive_sha256") != _SOURCE_ARCHIVE_SHA
+        or marker.get("systemd_unit_sha256") != _OLD_UNIT_SHA
+        or marker.get("rollback_ready") is not False
+    ):
+        _deny("PROTECTED_INPUT_MARKER")
+    venv = _VENV.lstat()
+    if (
+        not stat.S_ISDIR(venv.st_mode)
+        or venv.st_uid != actor
+        or _fingerprint_venv(_VENV)["fingerprint"] != _ISOLATED_VENV_FINGERPRINT
+    ):
+        _deny("ISOLATED_VENV_INPUT")
+    return _resume_legacy_fixture(
+        archive=_INPUT / "legacy_runtime.tar",
+        source_unit=_INPUT / "legacy_unit.service",
+        isolated_venv=_VENV,
+        rollback_parent=_ROOT,
+        lock_path=_LOCK,
+        expected_archive_sha256=_SOURCE_ARCHIVE_SHA,
+        expected_venv_fingerprint=_ISOLATED_VENV_FINGERPRINT,
+        owner_uid=0,
+        service_gid=group,
+        lock_gid=0,
     )
