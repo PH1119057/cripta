@@ -624,6 +624,38 @@ def _select_scoped_purpose(
     """Classify only exact verified source differences; never silently swap a writer."""
     if not SHA.fullmatch(target) or not SHA.fullmatch(runtime_baseline):
         raise ControllerError("RELEASE_SCOPE_IDENTITY_INVALID")
+
+    # #849 / ARCH §50.1 / DEV §50.6: the currently installed legacy FULL
+    # installer restarts unrelated owners. A per-component source delta must
+    # NEVER reach FULL or Native/Dashboard through a permissive fallback.
+    # This gate is NOT an independent Exit installer. The reviewed, pinned,
+    # no-argument component management rail + immutable rollback and C3
+    # are required before removing these explicit blocking results.
+    # --no-renames exposes both old and new paths from a Git rename.
+    component_delta = tuple(line for line in _git(
+        "diff", "--name-only", "--no-renames",
+        runtime_baseline, target, "--",
+    ).splitlines() if line)
+    exit_exact = frozenset((
+        "operations/connectivity/universal_exit_consumer.py",
+        "operations/connectivity/p90_real_independent_exit.py",
+        "operations/connectivity/p90_real_persistent_trail.py",
+        "operations/connectivity/p90_r06_exit_owner.py",
+        "operations/connectivity/p90l90_real_postfill_source_client.py",
+    ))
+    tooling_exact = frozenset((
+        "operations/infrastructure/exit_component_requirements.lock",
+        "operations/infrastructure/cripta-release-controller",
+    ))
+    if any(path in exit_exact or path.startswith(
+        "src/bybit_workbench/universal_exit/"
+    ) for path in component_delta):
+        raise ControllerError("EXIT_COMPONENT_RELEASE_RAIL_NOT_INSTALLED")
+    if any(path in tooling_exact or path.startswith(
+        "operations/infrastructure/component_release_"
+    ) for path in component_delta):
+        raise ControllerError("COMPONENT_RELEASE_TOOLING_NOT_DEPLOYABLE")
+
     # An inactive Source must not block an ordinary release that leaves the
     # installed producer ABI byte-for-byte unchanged. Only a real producer
     # delta requires proving the currently loaded writer before GAP/cutover.
