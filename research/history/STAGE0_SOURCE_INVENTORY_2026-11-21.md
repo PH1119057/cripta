@@ -138,3 +138,48 @@ Streaming full gzip/CSV read + SHA256 compressed source; `row timestamp` в пр
 `GATE_0=NOT_PASSED`. Stage 0 read-only coverage and two-file gzip QC have meaningful evidence. **NEXT_ONE_ACTION:** reconcile stale #866/#646 research job outcome through approved runner/manifest read rail, and finish a bounded deeper discovery of cold/migrated trade sources without global filesystem walk; separately notify storage owner of failed native hot retention with exact failure evidence before bulk compute. Then decide smallest measured memory/SSD-safe pilot.
 
 `NOT CHECKED HERE`: full exact native source capture chain and current reader fingerprints; every input day; detailed job trace/lock and review of successful/failed runner runs; source/position/Exit native parity; recent producer archive provenance; service failure root cause. No gate promotion.
+
+## 9. Runner/outcome/other archive gates — 2026-11-21 11:43–11:47 UTC (read-only)
+
+**BASE exact GitHub main:** `c8eea34b3d49e99c147d3d8f7195684e6d7c6be8`. Source scope: Issue #878 and previously merged #883 evidence. **NOT** a new research job or service incident repair.
+
+### 9.1 Approved runner semantics and external task ownership
+
+Read the **actual loaded** `/data/cripta/research/tooling/current/research/server/jobs/runner.py` (3,480 bytes) as `cripta`. Its `main()` handles queued jobs serially via `next_job()`, each `execute()` runs a `subprocess.run`, persists `status.json`/`result.json` and moves the job directory to `completed` or `failed`. An old `running` directory **without terminal result** is not successful research evidence.
+
+At this check:
+- Runner service PID **4136843** (active) and `/proc/4136843/task/4136843/children` contains exactly **483140**. Child command names `C2-R866-HS10TO2-LS-183D-20261121/bundle/job_launcher.py`. Job manifest is Issue **#866**, 183d 36-portfolio LONG/SHORT HS −10…−2 sweep; its report `stdout.log` had just advanced to **27,170,751 / expected 197,794,465 ticks**, and stderr was empty. **LIVE JOB RUNNING** as observed, no completion/QC assertion. Do not launch #878 competing heavy worker.
+- `C2-R866-H9CONT-3P-10CASE-20261120` still in `jobs/running`, `status.json: running`; corresponding stdout last updated about **118,204 seconds** before 11:44 UTC, ends during 90d at `day_epoch=20647`, has no `result.json` and no matching separate worker in observed `/proc`; runner has only the other child. **ORPHANED/STALE CANDIDATE — OUTCOME UNKNOWN**, not `FAILED` or `COMPLETE`. Do not delete, resubmit or alter another issue's state.
+- `C2-R646-H29-PILOT-20261114A` still under `jobs/running`, has no canonical `status.json`; `bundle/pilot_status.json` says `SMOKE_EXIT_ZERO` for PID 244808, no native runner report dir for this exact name. Historical smoke exit is **not** proof of accepted runner terminal status. **OWNER/CLEANUP OUTCOME UNRESOLVED**. No mutation.
+- Exact predecessor `C2-R866-S48-183D-FULL1-20261120` is under `jobs/completed`; `status.json` and `/srv/cripta-share/reports/jobs/<id>/result.json` both record `completed`, `exit_code=0`, finished epoch 1795135305. Its research-output QC **NOT CHECKED IN #878**.
+- `jobs/queued` contains **0 directories** at this instant; `jobs/running` **3** dirs (two stale/unresolved + one verified active). A directory count does not override exact PID/job evidence.
+
+### 9.2 Additional cold/cache source inventory
+
+- Additional bounded, metadata-only scan over `/data/cripta/script_archive`: **3,500 directories, 8,249 files**, name-match hits for the five target symbols/`public_trades` **0** in visited nodes. Two protected OS/PostgreSQL archive directories gave actor `cripta` Unix `Permission denied`; **64 directories remained pending at scan cap**. Does **not** scan internal ZIP/TAR payloads and does **not** prove no relevant archive beyond cap.
+- `/data/cripta/research/cache/r158_spot_firstmonth_20261030/{symbol}` contains 30 compressed files for each target symbol, names `2026-05-18..2026-06-16`; header `id,timestamp,price,volume,side,rpi`. This cache belongs to **#158 SPOT first-month**, not a verified LINEAR native exact-price-event equivalent and not a new calendar range (those dates already lie inside WARM90). It must not silently fill target LINEAR raw gaps.
+- Metadata sum of all **logical** compressed `public_trades` files across BULL25 193d + WARM90 100d + RECENT29 39d for 5 symbols = **13,306,684,338 bytes** (7,925,391,431 + 3,038,474,839 + 2,342,818,068). Of these, WARM90 has **91 symlinks/symbol** and RECENT29 **32 symlinks/symbol**. This is **not** unique physical disk consumption, and using it as `du` would double-count shared originals. It is a **rough logical input budget**, not a measured exact compact-source worker footprint.
+
+### 9.3 Independent capacity + retention observations
+
+At check, `df -B1`: `/data/cripta` free **13,302,910,976 bytes** (94% used), system `/` free 3,765,387,264 bytes; `free -b`: available RAM **2,527,444,992 bytes**, swap **0**. These values are snapshots only, not reserved capacity.
+
+Native producer and runner service were operational in previous checks; read-only `systemctl status` reconfirmed runner active with its current child. Critically, timer-driven `cripta-market-hot-retention.service` independently **FAILED AGAIN** at **2026-11-21 11:46:43 UTC**: first `cripta-market-source-hot-retention.py --apply --batch-limit 15000` ExecStart exit 0, second `cripta-native-public-trade-hot-retention.py --apply --batch-limit 15000` exit 1. Root cause/traceback remain `NOT VERIFIED` through current actor/tool; no restart, repair, ACL/DB/deletion or other service mutation in #878. Existing owner route: #642.
+
+### 9.4 Status and one next action
+
+**`GATE_0=NOT_PASSED`; `ACTIVE_STAGE=0`; `TASK_RESUME=RESUME_FOUND`; `RESEARCH_JOB_#878=NOT_STARTED`.** Source naming gaps still 357 dates/symbol in visited source roots, unproven globally; no full source integrity/event replay parity.
+
+**NEXT_ONE_ACTION:** use approved read-only owner/runner rail to reconcile **two stale external job records #866/#646** with their owners (without job mutation); independently follow #642 retention failure and reserve safe bytes before any new data acquisition. Continue only finite cold-source manifest/ZIP entry listing when preflight supports bounded I/O; then choose tiny exact native-pilot scope/worker budget. No new full-history download yet.
+
+**CHECKED HERE:** GitHub main SHA, actual runner Python/worker PID/child, job dirs and stdout/result paths, bounded metadata-only archive/cache search, logical compressed byte budget, df/free, retention unit state. **NOT CHECKED HERE:** cold archive ZIP/TAR interiors, complete 689-day source calendar across all providers, exact lineage of SPOT cache, independent replay parity, retention traceback, existing #866 downstream QC, actual safe writer free-space reservation. All production trading/exchange/DB/Strategy/Live surfaces untouched by #878.
+
+## 10. Reuse provenance — existing run manifests, without repeated native full scan
+
+Read-only source identity at `/data/cripta/research/runs`:
+
+1. **2025 BULL25:** `p90l90_bull_2025_holdout_v1/run_manifest.json` records `acquisition_stage=FULL_QC_PASS`, `archive_object_count=965` (193 UTC dates × 5 symbols), `archive_trade_rows=204446371`, `status=INPUT_COMPLETE_QC_PASS_NO_STRATEGY_REPLAY`, provider template `https://public.bybit.com/trading/{symbol}/{symbol}{YYYY-MM-DD}.csv.gz`, and immutable `source_snapshot_sha256` mapping. Independently inspected `qc_full.json` records `stage=ACQUISITION_QC_PASS`, `files=965`, `total_native_trades=204446371`. Historical documented input QC is useful reuse evidence, **not independent new full-sample QC by #878**. Exact fresh `sha256` of `ARBUSDT2025-03-22.csv.gz` matches `inputs/MANIFEST.json` entry `646aa8c8da0ed698db06cb4e7f65a5bfa703b520a9994f5a616dd2e0191b7ce7`.
+2. **2026 WARM90:** `p90l90_90d_warmup_v2_20261024/run_manifest.json` has `independent_input_qc.status=ALL_FIVE_PASS` for **500 object-days** May08–Aug15 (5 × 100 days). The historical QC contract explicitly includes per-file SHA256, gzip CRC, rows, first/last UTC timestamps, contiguous 100 dates, **9 regular files and 91 SHA-linked files per symbol**. Recorded totals: APT 14,904,155, ARB 19,280,482, DOT 17,282,499, INJ 22,032,057, LTC 7,630,879 native rows. **No fresh full readback** of all 500 inputs performed in #878.
+3. **2026 RECENT29:** `p90l90_prev7d_29d_20261025/inputs/manifest_{symbol}.json` contains **39 per-symbol file records** (Sep11–Oct19), with date, bytes, row count, SHA256 and first/last timestamp; 7 `new_download` entries/symbol. Recorded row totals: LTC 5,901,497; INJ 10,946,663; DOT 9,308,909; ARB 25,014,881; APT 10,692,442. Fresh full read `LTCUSDT2026-09-11.csv.gz` SHA256 matches its manifest entry `8f55b94adca40585dcb3ee5f3bfef3c5bd7562932120569e41a86729b843254f`. **195 hashes recorded ≠ independently revalidated today;** preservation of trade row order and exact source reader remains mandatory.
+
+**Data reuse decision:** inputs for known 332-day calendar have substantial historical QC/provenance and two independently revalidated examples. Use existing source objects/manifests with version-fingerprinted consumers, not duplicate downloads, while performing the remaining independent QC/fidelity checks. **Do not infer** continuous 689-day coverage or native Entry/Exit replay parity. `GATE_0=NOT_PASSED`.
