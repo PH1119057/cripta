@@ -199,8 +199,14 @@ def test_missing_exact_component_lock_fails_before_archive(
 def test_exit_component_lock_exact_external_dependencies() -> None:
     lock = (ROOT / "operations/infrastructure/exit_component_requirements.lock")
     text = lock.read_text(encoding="utf-8")
-    assert "psycopg==3.1.17 --hash=sha256:96b7b13af6d5a514118b759a66b2799a8a4aa78675fa6bb0d3f7d52d67eff002" in text
-    assert "websocket-client==1.7.0 --hash=sha256:f4c3d22fec12a2461427a29957ff07d35098ee2d976d3ba244e688b8b4057588" in text
+    assert (
+        "psycopg==3.1.17 --hash=sha256:"
+        "96b7b13af6d5a514118b759a66b2799a8a4aa78675fa6bb0d3f7d52d67eff002"
+    ) in text
+    assert (
+        "websocket-client==1.7.0 --hash=sha256:"
+        "f4c3d22fec12a2461427a29957ff07d35098ee2d976d3ba244e688b8b4057588"
+    ) in text
 
 
 def test_same_component_candidate_produces_identical_zip_bytes(
