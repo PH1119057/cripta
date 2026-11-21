@@ -40,6 +40,18 @@ def repo_pair(tmp_path: Path) -> tuple[Path, str, str]:
     ops = repo / "operations" / "connectivity"
     ops.mkdir(parents=True)
     (ops / "universal_exit_consumer.py").write_text("EXIT_SCRIPT_BASE\n", encoding="utf-8")
+    for sibling in (
+        "p90_real_independent_exit.py",
+        "p90_real_persistent_trail.py",
+        "p90_r06_exit_owner.py",
+        "p90l90_real_postfill_source_client.py",
+    ):
+        (ops / sibling).write_text("SCRIPT_" + sibling + "\n", encoding="utf-8")
+    runtime = repo / "operations" / "runtime"
+    runtime.mkdir(parents=True)
+    (runtime / "runtime_requirements.lock").write_text(
+        "# SYNTHETIC TEST LOCK ONLY\n", encoding="utf-8"
+    )
     _git(repo, "add", ".")
     _git(repo, "commit", "-m", "baseline")
     base = _git(repo, "rev-parse", "HEAD")
@@ -76,6 +88,61 @@ def test_exit_bundle_is_content_verified_and_does_not_modify_entry(
         assert "operations/sql/anything.sql" not in bundle.namelist()
     entry_path = repo / "src" / "bybit_workbench" / "universal_entry" / "engine.py"
     assert entry_path.read_text() == "ENTRY_BASELINE\n"
+
+
+
+def test_exit_bundle_requires_dynamic_siblings_and_lock(
+    repo_pair: tuple[Path, str, str], tmp_path: Path,
+) -> None:
+    """A candidate without these code paths cannot execute real Universal Exit."""
+    repo, baseline, target = repo_pair
+    output = tmp_path / "complete-exit.zip"
+    manifest = stage_component_bundle(
+        repo=repo, baseline=baseline, target=target,
+        component="EXIT", output=output,
+    )
+    required = (
+        "operations/connectivity/universal_exit_consumer.py",
+        "operations/connectivity/p90_real_independent_exit.py",
+        "operations/connectivity/p90_real_persistent_trail.py",
+        "operations/connectivity/p90_r06_exit_owner.py",
+        "operations/connectivity/p90l90_real_postfill_source_client.py",
+        "operations/runtime/runtime_requirements.lock",
+    )
+    with zipfile.ZipFile(output) as archive:
+        assert set(required) <= set(archive.namelist())
+        assert manifest["entrypoint"] == required[0]
+        assert manifest["dependency_lock"] == required[-1]
+        assert manifest["dependency_lock_sha256"] == hashlib.sha256(
+            archive.read(required[-1])
+        ).hexdigest()
+        for name in required:
+            assert manifest["blob_sha256"][name] == hashlib.sha256(
+                archive.read(name)
+            ).hexdigest()
+    assert manifest["install_authorized"] is False
+    assert manifest["status"] == "STAGED_ONLY_NOT_DEPLOYABLE"
+
+
+def test_exit_bundle_rejects_missing_dynamic_sibling_before_creating_artifact(
+    repo_pair: tuple[Path, str, str], tmp_path: Path,
+) -> None:
+    repo, baseline, _old_target = repo_pair
+    missing = (
+        repo / "operations" / "connectivity"
+        / "p90l90_real_postfill_source_client.py"
+    )
+    missing.unlink()
+    _git(repo, "add", "-u")
+    _git(repo, "commit", "-m", "remove required exit dynamic import")
+    broken_target = _git(repo, "rev-parse", "HEAD")
+    output = tmp_path / "must-not-create.zip"
+    with pytest.raises(ValueError, match="BUNDLE_EXIT_CLOSURE_MISSING"):
+        stage_component_bundle(
+            repo=repo, baseline=baseline, target=broken_target,
+            component="EXIT", output=output,
+        )
+    assert not output.exists()
 
 
 def test_same_component_candidate_produces_identical_zip_bytes(
