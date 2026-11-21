@@ -24,7 +24,7 @@ SHA = "a" * 40
 PREVIOUS = "b" * 40
 LOCK_SHA = "c" * 64
 CONTENT_SHA = "d" * 64
-ROOT_PATH = "/srv/cripta/runtime/components/exit/releases/" + SHA
+ROOT_PATH = "/srv/cripta/components/exit/releases/" + SHA
 ENTRY_SCRIPT = "operations/connectivity/universal_exit_consumer.py"
 LOCK_PATH = "operations/infrastructure/exit_component_requirements.lock"
 UNIT = "cripta-universal-exit-consumer.service"
@@ -184,6 +184,8 @@ class ExitIdentityContractTests(unittest.TestCase):
             ("artifact", "component", "ENTRY"),
             ("unit", "component_id", "ENTRY"),
             ("unit", "component_release_root", "/srv/cripta/runtime/current"),
+            ("unit", "component_release_root",
+             "/srv/cripta/runtime/components/exit/releases/" + SHA),
             ("unit", "unit_text", "a different unreviewed unit"),
             ("artifact", "dependency_lock", "operations/runtime/runtime_requirements.lock"),
             ("artifact", "status", "DEPLOYED"),
