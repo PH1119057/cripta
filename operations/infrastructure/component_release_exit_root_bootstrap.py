@@ -15,10 +15,12 @@ from __future__ import annotations
 import errno
 import os
 import stat
-from contextlib import ExitStack
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 _ANCHOR = Path("/srv/cripta")
+_SHARED_LOCK = Path("/run/lock/cripta-install-verified-release.lock")
 _COMPONENTS = ("components", "exit", "releases", "rollback")
 _TREE = (
     "components",
@@ -263,6 +265,51 @@ def inspect_exit_root_tree() -> dict[str, object]:
         )
 
 
+@contextmanager
+def _hold_shared_release_lock(
+    *, path: Path, uid: int, gid: int,
+) -> Iterator[None]:
+    """Required shared installer lock; no new lockfile is ever created.
+
+    The variable path/UID adapter is PRIVATE for disposable actor-owned test
+    fixtures. Production caller uses the one exact fixed OS path and root
+    identity; no CLI or caller-selected lock is exposed.
+    """
+    if not isinstance(path, Path) or not path.is_absolute():
+        _deny("RELEASE_LOCK_PATH_INVALID")
+    import fcntl  # Linux-only; Windows CI does not invoke this function.
+
+    try:
+        fd = os.open(
+            path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_CLOEXEC", 0),
+        )
+    except OSError as exc:
+        raise ValueError("EXIT_ROOT_RELEASE_LOCK_MISSING_OR_UNTRUSTED") from exc
+    locked = False
+    try:
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != uid or info.st_gid != gid
+            or stat.S_IMODE(info.st_mode) != 0o644
+            or info.st_nlink != 1
+        ):
+            _deny("RELEASE_LOCK_OWNER_MODE_INVALID")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                raise ValueError("EXIT_ROOT_RELEASE_LOCK_BUSY") from exc
+            raise ValueError("EXIT_ROOT_RELEASE_LOCK_FAILED") from exc
+        locked = True
+        yield
+    finally:
+        if locked:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
 def bootstrap_exit_root_once() -> dict[str, object]:
     """Fixed root-only OS bootstrap. NOT a deploy command or installer.
 
@@ -273,9 +320,12 @@ def bootstrap_exit_root_once() -> dict[str, object]:
     """
     if os.geteuid() != 0:
         _deny("ROOT_REQUIRED")
-    with ExitStack() as opened:
-        anchor = _production_anchor_fd(opened)
-        return _bootstrap_from_fd(
-            anchor, anchor_uid=0, anchor_gid=0,
-            components_uid=0, components_gid=_service_group_gid(),
-        )
+    # This exact root-only bootstrap is mutually exclusive with the existing
+    # FULL/Dashboard/Native install owner, even though it starts no services.
+    with _hold_shared_release_lock(path=_SHARED_LOCK, uid=0, gid=0):
+        with ExitStack() as opened:
+            anchor = _production_anchor_fd(opened)
+            return _bootstrap_from_fd(
+                anchor, anchor_uid=0, anchor_gid=0,
+                components_uid=0, components_gid=_service_group_gid(),
+            )
