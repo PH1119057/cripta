@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `PLAN PUBLISHED / STAGE 0 PARTIAL / IMPLEMENTATION NOT STARTED` |
+| `TASK_STATUS` | `STAGE 0 LIVE INVENTORY PARTIAL / DATA QC NOT VERIFIED / LONG JOB NOT STARTED` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-20 UTC — публикация плана` |
+| `LAST_UPDATE` | `2026-11-21 06:47 UTC — Stage 0 evidence snapshot, #878` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
-| `LAST_LIVE_GITHUB_MAIN_CHECK` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` до публикации; **перепроверять каждый содержательный сеанс** |
+| `LAST_LIVE_GITHUB_MAIN_CHECK` | `e3717c4e8feddea94edfd4d9aebdbdfc3b9b9cdc` до Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY THIS TASK`; сторонние ongoing jobs не объявлены завершёнными |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Завершить **read-only** инвентаризацию текущих dataset/geometry/candidate/native-reference manifests, job/writer/worktree state и ресурсного бюджета; получить явную матрицу существующего покрытия пяти монет |
+| `NEXT_ONE_ACTION` | Завершить **read-only** поиск остальных migrated/current/cold native input roots и сверить outcome/actor двух старых `running` job records; после этого обновить календарь пяти монет. [Evidence Stage 0](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -56,8 +56,11 @@
 - [x] Прочитан base pre-read и профильные документы, включая INDEX §17 и DEV §50.4.
 - [x] Проверены GitHub Issues/PR и зарегистрированный server worktree list: 151 записей; прямого worktree нового плана по имени не обнаружено. Создан отдельный tracker #878; см. #454.
 - [x] Подтверждено, что host `robot` отвечает, а `cripta-job-intake.service` и `cripta-job-runner.service` значатся running; это **не** проверка их jobs/behavior.
+- [x] Выполнена первичная read-only инвентаризация `jobs/{running,queued,completed,failed}`: две записи в `running`, остальные состояния по каталогам; **outcome двух записей не доказан**, полное discovery остаётся открытым (см. [Stage 0 evidence](STAGE0_SOURCE_INVENTORY_2026-11-21.md)).
 - [ ] Просмотреть **все** действующие/незавершённые exact research jobs и durable locks/checkpoints, включая возможную незафиксированную работу других чатов; проверить owner/actor/writer и target paths.
+- [x] Зафиксированы read-only CPU=4, RAM=4.105GB / available=2.728GB, swap=0, `/data/cripta` free=13.317GB (94% use), Unix `cripta` uid107, базовые ACL и действующие job/intake services. **Нагрузка/peak RSS будущего worker ещё не измерялись.**
 - [ ] Зафиксировать RAM, CPU, доступные SSD bytes, I/O, системные рабочие службы, effective Unix UID, ACL, sandbox, source paths; изолировать исследование от активной торговли.
+- [x] По четырём native public-trade roots найдено **332 уникальных дня на монету** (2025 Mar22–Sep30, 2026 May8–Aug15 и Sep11–Oct19), без нулевых файлов и внутренних календарных разрывов. Обнаружены существующие L5-3 states/touches и Entry candidates; **не доказана полная coverage и независимая replay equivalence**.
 - [ ] Инвентаризовать datasets/manifests/reference/native geometry/Entry и мигрированные legacy sources; установить reuse scope #454 против нового `PriceEventStream`.
 - [ ] Составить exact actor/path, protected surface, source-and-reader version inventory и backlog пропусков.
 - **GATE 0:** `TASK_DISCOVERY=PASS`, task/worktree/job/writer identity без конфликтов, safe resource/write preflight доказан. До этого не начинать массовый compute и filesystem mutation.
@@ -148,6 +151,15 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+### 2026-11-21 — этап 0, первый live read-only источник
+- **CHECKED HERE:** [STAGE0_SOURCE_INVENTORY_2026-11-21.md](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — exact roots, actor, resource preflight, day intervals, raw header schema `RPI`, existing 2025 L5-3/Entry artifacts, job directory states. GitHub base `e3717c4e8feddea94edfd4d9aebdbdfc3b9b9cdc`; source mirror clean/HEAD same.
+- **Coverage:** 5 symbols × 332/689 UTC days by filename/positive size **in four sampled roots**; other 357 days **NOT FOUND IN SAMPLED ROOTS**, not proven absent globally. 2025 Apr–Sep existing geometry manifest status `RUNNING_NOT_VERIFIED`, not promoted to evidence pass.
+- **Capacity:** Data SSD available 13,317,492,736 bytes (94% used), RAM available 2,727,899,136 bytes, 4 CPU, no swap. Not authorized to download large chunks before worker/RSS/disk preflight.
+- **Jobs:** two `running` directories for other work (#866/#646); one old stale `running` status, other has `SMOKE_EXIT_ZERO` but still in `running`. `JOB_OUTCOME_UNKNOWN` until independent reconciliation, no extra worker started.
+- **Stage gate:** `GATE_0=NOT_PASSED`; `SOURCE_QC=NOT_VERIFIED`; no production/DB/Exchange/LIVE mutation and no raw purge.
+- **NEXT:** read-only migrated/cold/current source discovery and resolve exact external job ownership/status before any new runner.
+
 
 ### 2026-11-20 — план / исходный checkpoint
 - **Owner:** вести долгосрочный план и чек-лист прямо в GitHub `research/`, чтобы любой новый чат видел текущую стадию.
