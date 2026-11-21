@@ -29,7 +29,7 @@ from component_release_exit_root_bootstrap import (
 OLD_EXIT_COMMIT = "8bd45e9874d6ce811d7261ee152fc2c43729e1b9"
 _SOURCE_ARCHIVE_SHA = "f80c2329b7dec31dab276c3bbab12a41e4e5ed3c02e293915d8f5f0f416a029e"
 _OLD_UNIT_SHA = "c4a21004e637df794670d7d096c6ffa443c23a881c662b65bebfc11459433248"
-_ISOLATED_VENV_FINGERPRINT = "c539b994dc63689ea3b08b614d5347a69148cef9c5dcac5c33894b6464fe7c9b"
+_ISOLATED_VENV_FINGERPRINT = "2bda4b477370725d33f14a9d7fce3ec6b716d75764135a4b1bd82732c2606ae2"
 _ROOT = Path("/srv/cripta/components/exit/rollback")
 _INPUT = _ROOT / (".input-" + OLD_EXIT_COMMIT)
 _VENV = Path("/data/cripta/research/testenvs/component_release_849/exit_exact_component_lock_d40f/.venv")
@@ -86,6 +86,7 @@ def _fingerprint_venv(root: Path) -> dict[str, object]:
     if not root.is_dir():
         _deny("VENV_MISSING")
     h = hashlib.sha256()
+    records: list[tuple[str, str, int, int, str]] = []
     links: dict[str, str] = {}
     count = 0
     nbytes = 0
@@ -112,12 +113,14 @@ def _fingerprint_venv(root: Path) -> dict[str, object]:
             members += 1
             if members > _MAX_MEMBERS or nbytes > _MAX_VENV_BYTES:
                 _deny("VENV_BOUNDS")
-            h.update(
-                f"{kind}\0{rel}\0{stat.S_IMODE(z.st_mode):o}\0"
-                f"{z.st_size}\0{digest}\n".encode("utf-8")
-            )
+            records.append((
+                rel, kind, stat.S_IMODE(z.st_mode),
+                0 if kind == "D" else z.st_size, digest,
+            ))
     if links != _PYTHON_LINKS or count < 2:
         _deny("VENV_LINKS_OR_PACKAGES")
+    for rel, kind, mode, size, digest in sorted(records):
+        h.update(f"{kind}\0{rel}\0{mode:o}\0{size}\0{digest}\n".encode())
     config = root / "pyvenv.cfg"
     if config.is_symlink() or not config.is_file():
         _deny("VENV_CONFIG")
@@ -274,6 +277,7 @@ def _normalize_root_owned_tree(root: Path, uid: int, gid: int) -> None:
 
 def _payload_digest(root: Path, owner_uid: int, group_gid: int) -> str:
     h = hashlib.sha256()
+    records: list[tuple[str, str, int, int, str]] = []
     for base, dirs, files in os.walk(root, followlinks=False):
         for name in sorted(dirs + files):
             path = Path(base) / name
@@ -300,7 +304,9 @@ def _payload_digest(root: Path, owner_uid: int, group_gid: int) -> str:
                 kind, digest = "F", _file_hash(path, 64 * 1024 * 1024)
             else:
                 _deny("READBACK_SPECIAL_FILE")
-            h.update(f"{kind}\0{rel}\0{mode:o}\0{z.st_size}\0{digest}\n".encode())
+            records.append((rel, kind, mode, 0 if kind == "D" else z.st_size, digest))
+    for rel, kind, mode, size, digest in sorted(records):
+        h.update(f"{kind}\0{rel}\0{mode:o}\0{size}\0{digest}\n".encode())
     return h.hexdigest()
 
 
