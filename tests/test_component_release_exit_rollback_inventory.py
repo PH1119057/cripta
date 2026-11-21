@@ -5,7 +5,6 @@ Synthetic fixtures are disposable under the cripta-owned testenv only.
 from __future__ import annotations
 
 import os
-import stat
 import sys
 import tempfile
 import unittest
