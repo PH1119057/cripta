@@ -61,12 +61,12 @@ def _stat_dir(item: Path, owner: int, *, root: bool = False) -> os.stat_result:
 def _regular_hash(
     item: Path, owner: int, *, max_size: int = _MAX_ONE_FILE,
 ) -> tuple[str, int, int]:
-    if item.is_symlink():
-        _deny("REGULAR_FILE_SYMLINK")
     try:
         info = item.lstat()
     except OSError as exc:
-        raise ValueError("EXIT_ROLLBACK_INPUT_REQUIRED_FILE_MISSING") from exc
+        raise ValueError("EXIT_ROLLBACK_INPUT_REQUIRED_FILE_UNREADABLE") from exc
+    if stat.S_ISLNK(info.st_mode):
+        _deny("REGULAR_FILE_SYMLINK")
     if (
         not stat.S_ISREG(info.st_mode) or info.st_uid != owner
         or stat.S_IMODE(info.st_mode) & 0o022
@@ -114,10 +114,10 @@ def _regular_hash(
 def _audit_legacy_exit_input(
     *,
     release: Path,
-    unit: Path,
+    unit: Path | None,
     expected_sha: str,
     release_owner_uid: int,
-    unit_owner_uid: int,
+    unit_owner_uid: int | None,
 ) -> dict[str, object]:
     """Metadata+bytes snapshot of mutable inputs, NOT physical backup.
 
@@ -127,16 +127,25 @@ def _audit_legacy_exit_input(
     if (
         not isinstance(expected_sha, str) or not _SHA.fullmatch(expected_sha)
         or not isinstance(release, Path) or not release.is_absolute()
-        or not isinstance(unit, Path) or not unit.is_absolute()
+        or (unit is not None and (
+            not isinstance(unit, Path) or not unit.is_absolute()
+            or type(unit_owner_uid) is not int
+        ))
         or release.name != expected_sha
     ):
         _deny("BASELINE_IDENTITY_INVALID")
     info = _stat_dir(release, release_owner_uid, root=True)
     if not stat.S_ISDIR(info.st_mode):
         _deny("BASELINE_DIR_INVALID")
-    unit_sha, unit_size, _ = _regular_hash(unit, unit_owner_uid)
-    if unit_sha != _UNIT_HASH or unit_size < 100:
-        _deny("UNIT_HASH_UNAPPROVED")
+    # The legacy unit's parent /etc/systemd/system is 0700 root-owned.
+    # UID107 cannot read it. Actual runtime inventory MUST remain possible
+    # without pretending caller-supplied unit bytes are privileged proof.
+    unit_sha: str | None = None
+    if unit is not None:
+        assert isinstance(unit_owner_uid, int)
+        unit_sha, unit_size, _ = _regular_hash(unit, unit_owner_uid)
+        if unit_sha != _UNIT_HASH or unit_size < 100:
+            _deny("UNIT_HASH_UNAPPROVED")
     marker_sha, marker_size, _ = _regular_hash(
         release / "INSTALLED_COMMIT", release_owner_uid, max_size=256,
     )
@@ -200,12 +209,17 @@ def _audit_legacy_exit_input(
             f"{kind}\0{relative}\0{mode:o}\0{size}\0{digest}\n".encode("utf-8")
         )
     return {
-        "state": "LEGACY_ROLLBACK_INPUT_ONLY_UNPROTECTED",
+        "state": (
+            "LEGACY_ROLLBACK_INPUT_ONLY_UNPROTECTED" if unit is not None
+            else "LEGACY_ROLLBACK_INPUT_REQUIRES_ROOT_UNIT_READBACK"
+        ),
         "previous_commit": expected_sha,
         "legacy_source_root": str(release),
         "legacy_release_owner_uid": release_owner_uid,
         "legacy_release_mutable_by_runtime_actor": True,
         "unit_sha256": unit_sha,
+        "unit_readback_required_from_root": unit is None,
+        "unit_readback_independently_attested": False,
         "entrypoint": _ENTRY,
         "regular_file_count": file_count,
         "symlink_count": link_count,
@@ -236,14 +250,14 @@ def inspect_previous_exit_rollback_inputs() -> dict[str, object]:
         release = _CURRENT.resolve(strict=True)
     except OSError as exc:
         raise ValueError("EXIT_ROLLBACK_INPUT_CURRENT_MISSING") from exc
-    if release.parent != _RUNTIME_RELEASES or release.name not in {
-        item.name for item in (_RUNTIME_RELEASES / release.name,)
-    }:
+    if release.parent != _RUNTIME_RELEASES:
         _deny("BASELINE_RELEASE_PATH_UNTRUSTED")
+    # systemd unit identity must be read independently by root management:
+    # the runtime user cannot traverse /etc/systemd/system (0700).
     return _audit_legacy_exit_input(
         release=release,
-        unit=_UNIT_PATH,
+        unit=None,
         expected_sha=release.name,
         release_owner_uid=uid,
-        unit_owner_uid=0,
+        unit_owner_uid=None,
     )
