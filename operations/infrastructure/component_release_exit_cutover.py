@@ -18,7 +18,10 @@ _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _UNIT = "cripta-universal-exit-consumer.service"
 _ROOT = "/srv/cripta/components/exit/releases/"
 _ROLLBACK = "/srv/cripta/components/exit/rollback/"
-_NEIGHBORS = frozenset({"ENTRY", "PRIVATE_RUNTIME", "MARKET_SOURCE", "DASHBOARD"})
+_NEIGHBORS = frozenset({
+    "ENTRY", "PRIVATE_RUNTIME", "MARKET_SOURCE", "DASHBOARD",
+    "GATEWAY", "POSTGRESQL",
+})
 _EXCHANGE_ACCOUNTS = frozenset({"MAIN", "SUB"})
 _SHARED_RELEASE_LOCK = "/run/lock/cripta-install-verified-release.lock"
 
