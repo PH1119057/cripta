@@ -145,6 +145,7 @@ class OfflineExitSourceTreeTests(unittest.TestCase):
             ("/etc/cripta/fake", False),
             ("operations\\connectivity\\bad.py", False),
             ("operations/connectivity/other_owner.py", False),
+            ("operations/runtime/runtime_requirements.lock", False),
             (None, True),
         ):
             with tempfile.TemporaryDirectory() as temp:
