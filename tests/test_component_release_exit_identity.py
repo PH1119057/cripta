@@ -5,7 +5,9 @@ All snapshots are synthetic. A passing synthetic snapshot is never runtime proof
 from __future__ import annotations
 
 import copy
+import hashlib
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -14,6 +16,7 @@ sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 
 from component_release_exit_identity import (  # noqa: E402
     check_exit_identity_snapshot,
+    collect_exit_installed_file_evidence,
 )
 from component_release_exit_unit_spec import build_exit_unit_candidate  # noqa: E402
 
@@ -199,6 +202,118 @@ class ExitIdentityContractTests(unittest.TestCase):
             del observed[key]
             with self.subTest(key=key), self.assertRaises(ValueError):
                 self.verify(artifact, unit, observed)
+
+
+
+class ExitInstalledByteProofTests(unittest.TestCase):
+    @staticmethod
+    def create_fake_installed(
+        releases_parent: Path,
+    ) -> tuple[dict[str, object], Path]:
+        artifact, _proposal, _observed = coherent()
+        root = releases_parent / SHA
+        root.mkdir(parents=True)
+        contents = {
+            ENTRY_SCRIPT: b"immutable exit script\\n",
+            LOCK_PATH: b"one exact component lock\\n",
+        }
+        artifact["blob_sha256"] = {
+            name: hashlib.sha256(raw).hexdigest()
+            for name, raw in contents.items()
+        }
+        artifact["dependency_lock_sha256"] = artifact["blob_sha256"][LOCK_PATH]
+        for name, raw in contents.items():
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+        (root / "COMPONENT_INSTALLED_COMMIT").write_text(
+            SHA + "\\n", encoding="utf-8",
+        )
+        return artifact, root
+
+    def test_actual_bytes_and_independent_marker_verified(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            parent = Path(temp) / "releases"
+            parent.mkdir()
+            artifact, root = self.create_fake_installed(parent)
+            actual = collect_exit_installed_file_evidence(
+                artifact_manifest=artifact, releases_parent=parent,
+            )
+            self.assertEqual(actual["installed_marker"], SHA)
+            self.assertEqual(actual["installed_root"], str(root))
+            self.assertEqual(
+                actual["installed_file_sha256"], artifact["blob_sha256"],
+            )
+            self.assertEqual(
+                actual["installed_lock_sha256"],
+                artifact["dependency_lock_sha256"],
+            )
+            self.assertTrue(actual["installed_files_regular"])
+            self.assertFalse(actual["runtime_behavior_verified"])
+            self.assertFalse(actual["install_authorized"])
+
+    def test_missing_or_modified_installed_file_is_rejected(self) -> None:
+        for action in ("missing", "mutated", "missing_marker", "bad_marker"):
+            with tempfile.TemporaryDirectory() as temp:
+                parent = Path(temp) / "releases"
+                parent.mkdir()
+                artifact, root = self.create_fake_installed(parent)
+                target = root / ENTRY_SCRIPT
+                marker = root / "COMPONENT_INSTALLED_COMMIT"
+                if action == "missing":
+                    target.unlink()
+                elif action == "mutated":
+                    target.write_bytes(b"unreviewed bytes")
+                elif action == "missing_marker":
+                    marker.unlink()
+                else:
+                    marker.write_text(PREVIOUS + "\\n", encoding="utf-8")
+                with self.subTest(action=action), self.assertRaises(ValueError):
+                    collect_exit_installed_file_evidence(
+                        artifact_manifest=artifact, releases_parent=parent,
+                    )
+
+    def test_symlinked_file_or_marker_is_rejected(self) -> None:
+        for action in ("file", "marker"):
+            with tempfile.TemporaryDirectory() as temp:
+                parent = Path(temp) / "releases"
+                parent.mkdir()
+                artifact, root = self.create_fake_installed(parent)
+                target = (
+                    root / ENTRY_SCRIPT if action == "file"
+                    else root / "COMPONENT_INSTALLED_COMMIT"
+                )
+                outside = Path(temp) / "untrusted"
+                outside.write_bytes(target.read_bytes())
+                target.unlink()
+                try:
+                    target.symlink_to(outside)
+                except (OSError, NotImplementedError):
+                    self.skipTest("symlink creation not permitted")
+                with self.subTest(action=action), self.assertRaises(ValueError):
+                    collect_exit_installed_file_evidence(
+                        artifact_manifest=artifact, releases_parent=parent,
+                    )
+
+    def test_untrusted_artifact_path_and_absent_release_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            parent = Path(temp) / "releases"
+            parent.mkdir()
+            artifact, _root = self.create_fake_installed(parent)
+            files = artifact["blob_sha256"]
+            assert isinstance(files, dict)
+            files["../elsewhere"] = "f" * 64
+            with self.assertRaises(ValueError):
+                collect_exit_installed_file_evidence(
+                    artifact_manifest=artifact, releases_parent=parent,
+                )
+            files.pop("../elsewhere")
+            other_parent = Path(temp) / "not-installed"
+            other_parent.mkdir()
+            with self.assertRaises(ValueError):
+                collect_exit_installed_file_evidence(
+                    artifact_manifest=artifact, releases_parent=other_parent,
+                )
 
 
 if __name__ == "__main__":
