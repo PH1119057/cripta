@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 LIVE INVENTORY PARTIAL / DATA QC NOT VERIFIED / LONG JOB NOT STARTED` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / 2-file NATIVE SAMPLE QC PASS / FULL QC NOT VERIFIED / NO JOB STARTED` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 06:47 UTC — Stage 0 evidence snapshot, #878` |
+| `LAST_UPDATE` | `2026-11-21 ~10:10 UTC — Stage 0 extra path discovery + two-file source QC` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
 | `LAST_LIVE_GITHUB_MAIN_CHECK` | `e3717c4e8feddea94edfd4d9aebdbdfc3b9b9cdc` до Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY THIS TASK`; сторонние ongoing jobs не объявлены завершёнными |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Завершить **read-only** поиск остальных migrated/current/cold native input roots и сверить outcome/actor двух старых `running` job records; после этого обновить календарь пяти монет. [Evidence Stage 0](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Сверить через approved runner/manifest read rail **outcome/owner** старых #866/#646 jobs и продолжить bounded cold source discovery; уведомить storage owner (#642) о failed native-hot-retention service до планирования массовых данных. [Evidence Stage 0](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,15 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+### 2026-11-21 — этап 0, дополнительный read-only discovery и native source sample QC
+- **CHECKED HERE:** 276 run dirs, bounded `inputs/data/source` path scan: 15 target `public_trades` directory hits, **0 новых ranges**; top-level migrated/current/cold paths checked with limited depth. Два отдельных compressed native files прочитаны полностью: 2025-03-22 ARBUSDT 41,745 trades и 2026-09-11 LTCUSDT 118,896 trades, SHA256, UTC/price/nondecreasing timestamp checks pass; `RPI` schema difference confirmed. Equal-timestamp adjacent pairs **26,157** и **80,507** соответственно → exact original source row order обязателен.
+- **Capacity:** Data SSD 94% used, 13,317,177,344 B free at check; RAM available 2,721,501,184 B, zero swap. Existing #866 and #646 running directories not reconciled; no runner job submitted.
+- **Adjacent risk:** `cripta-market-hot-retention.service` failed 2026-11-21 10:06:59 UTC (second native retention ExecStart status 1), root cause unknown, no change under #878. Owner #642 must assess separately; guard against new bulk data.
+- **GATE 0:** NOT PASSED (0/11), daily coverage outside inspected roots remains UNKNOWN, full native parity NOT VERIFIED. Detailed [Stage 0 evidence §8](STAGE0_SOURCE_INVENTORY_2026-11-21.md).
+- **NEXT:** reconcile exact stale job owners/outcomes, bounded cold/migrated source discovery, then minimal measured pilot without touching prod/raw retention.
+
+
 
 ### 2026-11-21 — этап 0, первый live read-only источник
 - **CHECKED HERE:** [STAGE0_SOURCE_INVENTORY_2026-11-21.md](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — exact roots, actor, resource preflight, day intervals, raw header schema `RPI`, existing 2025 L5-3/Entry artifacts, job directory states. GitHub base `e3717c4e8feddea94edfd4d9aebdbdfc3b9b9cdc`; source mirror clean/HEAD same.
