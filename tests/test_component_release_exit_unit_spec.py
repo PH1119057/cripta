@@ -98,13 +98,12 @@ class ExitPinnedUnitContractTests(unittest.TestCase):
             template + "ExecStartPre=/usr/bin/touch /tmp/unapproved\n",
             template.replace("StateDirectory=cripta-p90-r06-exit", "", 1),
         ):
-            with self.subTest(changed=changed[:50]):
-                with self.assertRaises(ValueError):
-                    build_exit_unit_candidate(
-                        source_unit=changed,
-                        component_commit=SOURCE_COMMIT,
-                        component_lock_sha256=LOCK_SHA,
-                    )
+            with self.subTest(changed=changed[:50]), self.assertRaises(ValueError):
+                build_exit_unit_candidate(
+                    source_unit=changed,
+                    component_commit=SOURCE_COMMIT,
+                    component_lock_sha256=LOCK_SHA,
+                )
 
     def test_unknown_sha_or_hash_never_prepares_a_unit(self) -> None:
         for sha, digest in (
@@ -113,13 +112,12 @@ class ExitPinnedUnitContractTests(unittest.TestCase):
             (SOURCE_COMMIT, "bad-lock"),
             (SOURCE_COMMIT, "f" * 63),
         ):
-            with self.subTest(sha=sha, digest=digest):
-                with self.assertRaises(ValueError):
-                    build_exit_unit_candidate(
-                        source_unit=self.template(),
-                        component_commit=sha,
-                        component_lock_sha256=digest,
-                    )
+            with self.subTest(sha=sha, digest=digest), self.assertRaises(ValueError):
+                build_exit_unit_candidate(
+                    source_unit=self.template(),
+                    component_commit=sha,
+                    component_lock_sha256=digest,
+                )
 
 
 if __name__ == "__main__":
