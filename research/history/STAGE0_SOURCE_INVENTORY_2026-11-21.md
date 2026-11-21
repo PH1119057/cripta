@@ -248,3 +248,11 @@ All 10 returned `HTTP/2 200`, with a nonempty `Last-Modified` response header; f
 These dates were previously `NOT FOUND IN SAMPLED LOCAL ROOTS`, **not** proven unavailable from Bybit. The provider **has** objects on tested gap boundary/interior dates, so the future acquisition planner should first query remote existence/size/provenance for targeted exact missing ranges and avoid redundant downloads for verified local days.
 
 **GATES:** 5-symbol start/end provider object presence `HEAD_PASS_10/10`; 3 additional interior LTC gap probes `HEAD_PASS_3/3`. This is **not** 357-days × 5-symbol provider coverage, nor source integrity or dataset acquisition. `GATE_0=NOT_PASSED` due existing research-job owner/cleanup and disk/native-retention issues; no download started.
+
+## 13. External runner transition observed, not #878 E2E — 2026-11-21 13:32:56 UTC
+
+At the next read-only check using `cripta`, the separate `#866` job `C2-R866-HS10TO2-LS-183D-20261121` was under `/data/cripta/jobs/completed` (**not** `running`) with durable `status.json` and `/srv/cripta-share/reports/jobs/<id>/result.json`: `status=completed`, `exit_code=0`, `finished_at_epoch=1795267901`, `duration_seconds=7477`, `error=""`. Its `stdout.log` reported `status=QC_PASS`, `ticks=197794465`, `rows=27475` under `hs_depth_183d`. Runner `4136843` had **no child** in `/proc/4136843/task/4136843/children` at the time of check.
+
+This is **verified terminal completion and self-reported job QC for an external #866 calculation**, **not** independent verification of its entire result ledger by #878, and **not** any Stage 0 or native-price-codec acceptance. The legacy `C2-R866-H9CONT-3P-10CASE-20261120` and `C2-R646-H29-PILOT-20261114A` terminal/cleanup outcomes **remain unresolved**; do not falsely mark all `running` dirs as active, nor silently clean up.
+
+**Still blocked:** native-hot-retention repeatedly failing under #642 and data SSD at 94% use. `GATE_0=NOT_PASSED`; `#878_COMPUTE_JOB=NOT_STARTED`. Any future job requires fresh resource/actor/writer preflight and separate approved intake manifest after storage gate.
