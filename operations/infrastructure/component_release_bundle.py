@@ -18,8 +18,19 @@ from pathlib import Path
 from component_release_plan import git_changed_paths, plan_paths
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
+_EXIT_ENTRYPOINT = "operations/connectivity/universal_exit_consumer.py"
+# Exact local dynamic imports inspected in the installed Exit process.
+# Not a wildcard over connectivity: other files contain separate owners.
+_EXIT_DYNAMIC_SIBLINGS = (
+    "operations/connectivity/p90_real_independent_exit.py",
+    "operations/connectivity/p90_real_persistent_trail.py",
+    "operations/connectivity/p90_r06_exit_owner.py",
+    "operations/connectivity/p90l90_real_postfill_source_client.py",
+)
+_EXIT_REQUIREMENTS_LOCK = "operations/runtime/runtime_requirements.lock"
+_EXIT_REQUIRED = (_EXIT_ENTRYPOINT, *_EXIT_DYNAMIC_SIBLINGS, _EXIT_REQUIREMENTS_LOCK)
 _COMPONENT_SOURCES: dict[str, tuple[str, ...]] = {
-    "EXIT": ("src/", "operations/connectivity/universal_exit_consumer.py"),
+    "EXIT": ("src/", *_EXIT_REQUIRED),
     "ENTRY": ("src/", "operations/connectivity/universal_entry_consumer.py"),
     "ENTRY_OBSERVER": ("src/", "operations/monitoring/universal_entry_shadow.py"),
     "DISPATCHER": ("src/", "operations/dispatcher_v2/"),
@@ -83,13 +94,20 @@ def stage_component_bundle(
         raise ValueError("BUNDLE_SYMLINK_OR_UNSUPPORTED_FILE")
     if not tracked:
         raise ValueError("BUNDLE_SOURCES_MISSING")
+    if component == "EXIT":
+        selected = {path for path, _mode in tracked}
+        if any(path not in selected for path in _EXIT_REQUIRED):
+            raise ValueError("BUNDLE_EXIT_CLOSURE_MISSING")
     if component != "DASHBOARD_PRESENTATION" and not any(
         path.startswith("src/") for path, _mode in tracked
     ):
         raise ValueError("BUNDLE_PYTHON_SOURCE_MISSING")
-    if not any(path == selector or (
-        selector.endswith("/") and path.startswith(selector)
-    ) for path, _mode in tracked for selector in selectors[-1:]):
+    executable_selector = (
+        _EXIT_ENTRYPOINT if component == "EXIT" else selectors[-1]
+    )
+    if not any(path == executable_selector or (
+        executable_selector.endswith("/") and path.startswith(executable_selector)
+    ) for path, _mode in tracked):
         raise ValueError("BUNDLE_ENTRYPOINT_MISSING")
 
     files: dict[str, str] = {}
@@ -121,6 +139,17 @@ def stage_component_bundle(
                 "postgresql_compatibility": "NOT_ATTESTED",
                 "install_authorized": False,
             }
+            if component == "EXIT":
+                manifest.update({
+                    "entrypoint": _EXIT_ENTRYPOINT,
+                    "dynamic_import_siblings": list(_EXIT_DYNAMIC_SIBLINGS),
+                    "dependency_lock": _EXIT_REQUIREMENTS_LOCK,
+                    "dependency_lock_sha256": files[_EXIT_REQUIREMENTS_LOCK],
+                    # Archive provenance is not a compatible pinned Python
+                    # environment, independently installed unit, or rollback.
+                    "runtime_dependency_abi": "NOT_ATTESTED",
+                    "unit_pinning": "NOT_ATTESTED",
+                })
             info = zipfile.ZipInfo("component_manifest.json", date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o444 << 16
