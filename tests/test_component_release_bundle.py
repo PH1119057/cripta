@@ -52,6 +52,11 @@ def repo_pair(tmp_path: Path) -> tuple[Path, str, str]:
     (runtime / "runtime_requirements.lock").write_text(
         "# SYNTHETIC TEST LOCK ONLY\n", encoding="utf-8"
     )
+    component = repo / "operations" / "infrastructure"
+    component.mkdir(parents=True)
+    (component / "exit_component_requirements.lock").write_text(
+        "# SYNTHETIC COMPONENT-LOCAL TEST LOCK ONLY\n", encoding="utf-8"
+    )
     _git(repo, "add", ".")
     _git(repo, "commit", "-m", "baseline")
     base = _git(repo, "rev-parse", "HEAD")
@@ -107,7 +112,7 @@ def test_exit_bundle_requires_dynamic_siblings_and_lock(
         "operations/connectivity/p90_real_persistent_trail.py",
         "operations/connectivity/p90_r06_exit_owner.py",
         "operations/connectivity/p90l90_real_postfill_source_client.py",
-        "operations/runtime/runtime_requirements.lock",
+        "operations/infrastructure/exit_component_requirements.lock",
     )
     with zipfile.ZipFile(output) as archive:
         assert set(required) <= set(archive.namelist())
@@ -143,6 +148,59 @@ def test_exit_bundle_rejects_missing_dynamic_sibling_before_creating_artifact(
             component="EXIT", output=output,
         )
     assert not output.exists()
+
+
+
+def test_component_local_lock_excludes_legacy_shared_runtime(
+    repo_pair: tuple[Path, str, str], tmp_path: Path,
+) -> None:
+    repo, base, target = repo_pair
+    output = tmp_path / "exit-locked.zip"
+    manifest = stage_component_bundle(
+        repo=repo, baseline=base, target=target,
+        component="EXIT", output=output,
+    )
+    assert manifest["dependency_lock"] == (
+        "operations/infrastructure/exit_component_requirements.lock"
+    )
+    with zipfile.ZipFile(output) as bundle:
+        assert manifest["dependency_lock"] in bundle.namelist()
+        assert "operations/runtime/runtime_requirements.lock" not in bundle.namelist()
+        assert manifest["dependency_lock_sha256"] == hashlib.sha256(
+            bundle.read(manifest["dependency_lock"])
+        ).hexdigest()
+    assert manifest["runtime_dependency_abi"] == "NOT_ATTESTED"
+    assert manifest["install_authorized"] is False
+
+
+def test_missing_exact_component_lock_fails_before_archive(
+    repo_pair: tuple[Path, str, str], tmp_path: Path,
+) -> None:
+    repo, _base, _target = repo_pair
+    lock = repo / "operations/infrastructure/exit_component_requirements.lock"
+    lock.unlink()
+    _git(repo, "add", "-u")
+    _git(repo, "commit", "-m", "remove component local lock")
+    without_lock_base = _git(repo, "rev-parse", "HEAD")
+    src = repo / "src/bybit_workbench/universal_exit/engine.py"
+    src.write_text("EXIT_V3\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "Exit change without lock")
+    target = _git(repo, "rev-parse", "HEAD")
+    output = tmp_path / "no-local-lock.zip"
+    with pytest.raises(ValueError, match="BUNDLE_EXIT_CLOSURE_MISSING"):
+        stage_component_bundle(
+            repo=repo, baseline=without_lock_base,
+            target=target, component="EXIT", output=output,
+        )
+    assert not output.exists()
+
+
+def test_exit_component_lock_exact_external_dependencies() -> None:
+    lock = (ROOT / "operations/infrastructure/exit_component_requirements.lock")
+    text = lock.read_text(encoding="utf-8")
+    assert "psycopg==3.1.17 --hash=sha256:96b7b13af6d5a514118b759a66b2799a8a4aa78675fa6bb0d3f7d52d67eff002" in text
+    assert "websocket-client==1.7.0 --hash=sha256:f4c3d22fec12a2461427a29957ff07d35098ee2d976d3ba244e688b8b4057588" in text
 
 
 def test_same_component_candidate_produces_identical_zip_bytes(
