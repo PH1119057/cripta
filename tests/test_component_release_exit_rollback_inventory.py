@@ -122,6 +122,25 @@ class LegacyExitRollbackInputTests(unittest.TestCase):
         self.assertNotEqual(before["input_tree_sha256"], after["input_tree_sha256"])
         self.assertEqual(entry.read_bytes(), original + b"changed\n")
 
+    def test_generated_bytecode_cache_excluded_from_source_fingerprint(self) -> None:
+        original = self.audit()
+        cache = self.release / "src/bybit_workbench/universal_exit/__pycache__"
+        cache.mkdir()
+        os.chmod(cache, 0o755)
+        bytecode = cache / "universal_exit.cpython-312.pyc"
+        bytecode.write_bytes(b"generated-bytecode-not-reviewed-source")
+        os.chmod(bytecode, 0o644)
+        next_scan = self.audit()
+        self.assertEqual(next_scan["input_tree_sha256"], original["input_tree_sha256"])
+        self.assertEqual(next_scan["excluded_bytecode_cache_directory_count"], 1)
+        self.assertIs(next_scan["immutable_rollback_ready"], False)
+
+    def test_symlinked_generated_cache_is_never_excluded(self) -> None:
+        cache = self.release / "src/bybit_workbench/universal_exit/__pycache__"
+        cache.symlink_to("/etc", target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "SYMLINK"):
+            self.audit()
+
     def test_marker_wrong_sha_or_root_name_denied(self) -> None:
         marker = self.release / "INSTALLED_COMMIT"
         marker.write_text("a" * 40 + "\n", encoding="ascii")
