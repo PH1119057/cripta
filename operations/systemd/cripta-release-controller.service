@@ -28,6 +28,8 @@ LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ReadWritePaths=/srv/cripta/source_checkout
 ReadWritePaths=/srv/cripta/runtime
+# Optional until the separate root-owned immutable component parent is installed.
+ReadWritePaths=-/srv/cripta/components
 ReadWritePaths=/srv/cripta/dashboard-ui
 ReadWritePaths=/data/cripta/research/tooling
 ReadWritePaths=/data/cripta/script_archive/release_backups
