@@ -14,6 +14,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "operations/infrastructure"))
@@ -141,10 +142,15 @@ class PreviousExitRollbackPreparationTests(unittest.TestCase):
                 folder = base / name
                 folder.mkdir(mode=0o755)
                 (folder / "__init__.py").write_text("VALUE = 1\n", encoding="ascii")
-        self.assertEqual(
-            _fingerprint_venv(self.venv)["fingerprint"],
-            _fingerprint_venv(mirror)["fingerprint"],
-        )
+        original_walk = os.walk
+
+        def reversed_walk(root: Path, *, followlinks: bool = False):
+            yield from reversed(list(original_walk(root, followlinks=followlinks)))
+
+        expected = _fingerprint_venv(self.venv)["fingerprint"]
+        with patch("component_release_exit_legacy_prepare.os.walk", reversed_walk):
+            actual = _fingerprint_venv(mirror)["fingerprint"]
+        self.assertEqual(expected, actual)
 
     def test_payload_digest_is_independent_of_directory_creation_order(self) -> None:
         roots = (self.base / "payload_left", self.base / "payload_right")
@@ -157,10 +163,15 @@ class PreviousExitRollbackPreparationTests(unittest.TestCase):
                 folder.mkdir(mode=0o750)
                 (folder / "code.py").write_text("VALUE = 1\n", encoding="ascii")
                 os.chmod(folder / "code.py", 0o640)
-        self.assertEqual(
-            _payload_digest(roots[0], self.owner, self.group),
-            _payload_digest(roots[1], self.owner, self.group),
-        )
+        original_walk = os.walk
+
+        def reversed_walk(root: Path, *, followlinks: bool = False):
+            yield from reversed(list(original_walk(root, followlinks=followlinks)))
+
+        expected = _payload_digest(roots[0], self.owner, self.group)
+        with patch("component_release_exit_legacy_prepare.os.walk", reversed_walk):
+            actual = _payload_digest(roots[1], self.owner, self.group)
+        self.assertEqual(expected, actual)
 
     def test_unexpected_symlink_is_rejected(self) -> None:
         (self.venv / "lib/python3.12/site-packages/unexpected").symlink_to(
