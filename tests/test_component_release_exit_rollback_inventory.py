@@ -98,6 +98,21 @@ class LegacyExitRollbackInputTests(unittest.TestCase):
         self.assertNotIn("unit_text", result)
         self.assertNotIn("environment", result)
 
+    def test_runtime_only_actor_does_not_claim_root_unit_proof(self) -> None:
+        result = _audit_legacy_exit_input(
+            release=self.release, unit=None, expected_sha=SHA,
+            release_owner_uid=self.uid, unit_owner_uid=None,
+        )
+        self.assertEqual(
+            result["state"],
+            "LEGACY_ROLLBACK_INPUT_REQUIRES_ROOT_UNIT_READBACK",
+        )
+        self.assertIsNone(result["unit_sha256"])
+        self.assertIs(result["unit_readback_required_from_root"], True)
+        self.assertIs(result["unit_readback_independently_attested"], False)
+        self.assertIs(result["immutable_rollback_ready"], False)
+        self.assertIs(result["install_authorized"], False)
+
     def test_inventory_fingerprint_changes_with_a_file_without_writing_it(self) -> None:
         before = self.audit()
         entry = self.release / "operations/connectivity/universal_exit_consumer.py"
