@@ -222,3 +222,29 @@ This naïve full-fact encoding **does not save space**, despite exact selected t
 ### 11.4 Gate / follow-up
 
 `GATE_0=NOT_PASSED`, `GATE_2=NOT_ATTEMPTED` (this is read-only preflight feasibility, **not** Stage 2 acceptance). **Next one action:** reconcile old #866/#646 job terminal/cleanup state under owner rail and retention failure #642 under existing approved service owner; then approve bounded resource budget for an independent test preserving consumer-required fields and proving exact native first-event parity. No new source data acquisition or raw deletion.
+
+## 12. Provider presence preflight — Bybit public archive HTTP HEAD only (2026-11-21 ~13:30 UTC)
+
+**Read-only network action:** actor SentinelX command `curl -I -L -sS --max-time 10|12` against exact public URL template `https://public.bybit.com/trading/{symbol}/{symbol}{YYYY-MM-DD}.csv.gz`; no GET, no archive payload, no source file/DB/server writes. Provider returns AmazonS3 / CloudFront headers. `HTTP 200` confirms the named object exists and a declared nonzero compressed response size at probe time; does **not** validate compressed bytes/CRC/schema/event continuity/first-event semantics.
+
+**All five symbols on target period's first and last completed UTC day:**
+
+| Symbol | 2025-01-01 | Content-Length B | 2026-11-20 | Content-Length B |
+|---|---|---:|---|---:|
+| LTCUSDT | HTTP 200 | 5,978,941 | HTTP 200 | 4,285,094 |
+| INJUSDT | HTTP 200 | 5,918,874 | HTTP 200 | 10,463,361 |
+| DOTUSDT | HTTP 200 | 7,665,120 | HTTP 200 | 6,862,727 |
+| ARBUSDT | HTTP 200 | 6,891,956 | HTTP 200 | 9,590,978 |
+| APTUSDT | HTTP 200 | 11,213,689 | HTTP 200 | 7,493,541 |
+
+All 10 returned `HTTP/2 200`, with a nonempty `Last-Modified` response header; final day 2026-11-20 was already fully closed at probe.
+
+**Representative interior missing-range probes (LTCUSDT only):**
+- `2026-04-15`: HTTP 200, 2,125,264 B.
+- `2026-08-20`: HTTP 200, 3,256,105 B.
+- `2026-10-20`: HTTP 200, 3,528,780 B.
+- `2025-01-01` above covers the 2025 initial missing range, 5,978,941 B.
+
+These dates were previously `NOT FOUND IN SAMPLED LOCAL ROOTS`, **not** proven unavailable from Bybit. The provider **has** objects on tested gap boundary/interior dates, so the future acquisition planner should first query remote existence/size/provenance for targeted exact missing ranges and avoid redundant downloads for verified local days.
+
+**GATES:** 5-symbol start/end provider object presence `HEAD_PASS_10/10`; 3 additional interior LTC gap probes `HEAD_PASS_3/3`. This is **not** 357-days × 5-symbol provider coverage, nor source integrity or dataset acquisition. `GATE_0=NOT_PASSED` due existing research-job owner/cleanup and disk/native-retention issues; no download started.
