@@ -17,7 +17,6 @@ import hashlib
 import io
 import json
 from pathlib import Path
-import sys
 
 SYMBOLS = ("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT")
 MAX_DATES = 3
@@ -165,6 +164,7 @@ def run(args: argparse.Namespace) -> dict:
                     require(buffer.tell() <= MAX_COMPACT_BYTES, "COMPACT_MEMORY_BOUND")
             require(row_count == meta["rows"], "SOURCE_ROW_COUNT_MISMATCH")
             from_compact = {}
+            decoded_rows = 0
             with gzip.GzipFile(fileobj=io.BytesIO(buffer.getvalue()), mode="rb") as packed:
                 for i, line in enumerate(packed):
                     values = line.decode("ascii").rstrip("\n").split("\t")
@@ -172,7 +172,8 @@ def run(args: argparse.Namespace) -> dict:
                             "COMPACT_ORDINAL_OR_FORMAT_MISMATCH")
                     if i in requested:
                         from_compact[i] = (values[1], values[2])
-                require(i + 1 == row_count, "COMPACT_ROW_COUNT_MISMATCH")
+                    decoded_rows += 1
+                require(decoded_rows == row_count, "COMPACT_ROW_COUNT_MISMATCH")
             for i, events in requested.items():
                 row = original.get(i)
                 require(row is not None and i in from_compact, "LEDGER_SOURCE_ROW_ABSENT")
