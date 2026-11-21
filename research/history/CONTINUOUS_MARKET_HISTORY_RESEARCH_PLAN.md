@@ -11,12 +11,12 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 PARTIAL / 2-SAMPLE PRICE-ORDER CODEC ROUNDTRIP PASS / FULL FIELDS GROW / STORAGE BLOCKED` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / 2-SAMPLE CODEC ROUNDTRIP PASS / BYBIT HEAD VERIFIED / STORAGE BLOCKED` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 ~13:30 UTC — two-sample codec smoke and 5-symbol Bybit HEAD source availability` |
+| `LAST_UPDATE` | `2026-11-21 ~13:33 UTC — two-sample compression, 5-symbol provider HEAD, #866 external completion` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
 | `LAST_LIVE_GITHUB_MAIN_CHECK` | `bc378567f90aa427e56a8b01b275eae4d8a75f66` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
-| `RESEARCH_JOB` | `NOT STARTED BY #878`; #866 **active child PID 483140** at check; два старых job records unresolved |
+| `RESEARCH_JOB` | `NOT STARTED BY #878`; separate #866 HS 183d job **completed exit0** at 13:31 UTC; two old job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
 | `NEXT_ONE_ACTION` | Доказать outcome/owner двух stale #866/#646 jobs и исправить storage gate #642 штатным actor; затем выделить маленький byte-bounded source chunk для полного consumer-field/native first-event QC, используя предварительно проверенную доступность Bybit. [Evidence Stage 0 §§11–12](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
@@ -151,6 +151,12 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+### 2026-11-21 — внешний #866 183d job достиг terminal `completed`
+- **CHECKED HERE:** [Stage0 §13](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — separate `C2-R866-HS10TO2-LS-183D-20261121` moved to `jobs/completed`, durable `status.json` and `result.json` say `exit_code=0`, finished at epoch `1795267901`. Worker `4136843` observed with no child; own `stdout.log` reports `QC_PASS`, `197,794,465` ticks and `27,475` rows. External job QC not independently verified by #878; do not close #866.
+- **GATE:** active external worker no longer in flight at observed instant, but two old #866/#646 orphan/cleanup records remain and native retention is still broken. `GATE_0=NOT_PASSED` (0/11); no #878 worker, code or raw-disk mutation.
+
+
 
 ### 2026-11-21 — Stage 0 remote Bybit object presence по границам истории
 - **CHECKED HERE:** [Stage0 §12](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — `curl -I` (**HEAD only**, no archive download) for all 5 symbols on `2025-01-01` and `2026-11-20`: **10/10 HTTP 200**, nonzero Content-Length. LTC additionally at `2026-04-15`, `2026-08-20`, `2026-10-20`: **3/3 HTTP 200**. All are outside sampled local covered dates and verify remote *object presence*, not complete provider day matrix, CRC, contents, native parity or actual acquisition.
