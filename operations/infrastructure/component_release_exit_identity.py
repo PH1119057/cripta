@@ -22,7 +22,7 @@ from typing import Any
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _EXIT_UNIT = "cripta-universal-exit-consumer.service"
-_RELEASE_PARENT = "/srv/cripta/runtime/components/exit/releases"
+_RELEASE_PARENT = "/srv/cripta/components/exit/releases"
 _EXIT_ENTRY = "operations/connectivity/universal_exit_consumer.py"
 _EXIT_LOCK = "operations/infrastructure/exit_component_requirements.lock"
 _FORBIDDEN_GLOBAL = "/srv/cripta/runtime/current"
