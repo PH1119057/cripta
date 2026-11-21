@@ -23,10 +23,12 @@ from component_release_exit_legacy_prepare import (  # noqa: E402
     OLD_EXIT_COMMIT,
     _fingerprint_venv,
     _payload_digest,
+    _resume_legacy_fixture,
     _prepare_legacy_fixture,
     _verify_legacy_fixture,
     build_pinned_old_exit_unit,
     prepare_legacy_exit_rollback_once,
+    finalize_reconciled_partial_legacy_exit_once,
 )
 
 ORIGINAL_UNIT = ROOT / "operations/systemd/cripta-universal-exit-consumer.service"
@@ -275,6 +277,60 @@ class PreviousExitRollbackPreparationTests(unittest.TestCase):
                 owner_uid=self.owner,
                 service_gid=self.group,
             )
+
+    def create_reconciled_copy_stage(self) -> Path:
+        stage = self.rollback / (".stage-" + OLD_EXIT_COMMIT)
+        stage.mkdir(mode=0o700)
+        with tarfile.open(self.archive, "r:") as tar:
+            for member in tar:
+                if member.name.startswith(".venv"):
+                    continue
+                target = stage / member.name
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                elif member.isfile():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    stream = tar.extractfile(member)
+                    assert stream is not None
+                    target.write_bytes(stream.read())
+        shutil.copytree(self.venv, stage / ".venv", symlinks=True)
+        return stage
+
+    def test_verified_partial_stage_is_finalized_without_recopied_inputs(self) -> None:
+        stage = self.create_reconciled_copy_stage()
+        before_source = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        result = _resume_legacy_fixture(**self.args())
+        self.assertEqual(result["state"], "PROTECTED_OLD_EXIT_CANDIDATE_STAGED")
+        self.assertFalse(result["rollback_ready"])
+        self.assertFalse(stage.exists())
+        self.assertEqual(
+            hashlib.sha256(self.archive.read_bytes()).hexdigest(), before_source,
+        )
+        self.assertTrue((self.rollback / OLD_EXIT_COMMIT / "legacy_exit_pinned.service").is_file())
+
+    def test_extra_file_in_partial_stage_blocks_without_delete(self) -> None:
+        stage = self.create_reconciled_copy_stage()
+        (stage / "src/untrusted.py").write_text("bad\n", encoding="ascii")
+        with self.assertRaisesRegex(ValueError, "PARTIAL_STAGE"):
+            _resume_legacy_fixture(**self.args())
+        self.assertTrue(stage.exists())
+        self.assertFalse((self.rollback / OLD_EXIT_COMMIT).exists())
+
+    def test_partial_stage_with_venv_change_blocks_without_delete(self) -> None:
+        stage = self.create_reconciled_copy_stage()
+        (stage / ".venv/pyvenv.cfg").write_text(
+            "include-system-site-packages = true\n", encoding="ascii",
+        )
+        with self.assertRaises(ValueError):
+            _resume_legacy_fixture(**self.args())
+        self.assertTrue(stage.exists())
+        self.assertFalse((self.rollback / OLD_EXIT_COMMIT).exists())
+
+    def test_partial_stage_production_wrapper_has_no_arguments(self) -> None:
+        self.assertEqual(finalize_reconciled_partial_legacy_exit_once.__code__.co_argcount, 0)
+        if os.geteuid() != 0:
+            with self.assertRaisesRegex(ValueError, "ROOT_REQUIRED"):
+                finalize_reconciled_partial_legacy_exit_once()
 
     def test_malformed_destination_or_untrusted_existing_partial_stage(self) -> None:
         args = self.args()
