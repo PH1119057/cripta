@@ -5,6 +5,7 @@ test root/sandbox authorization or install a release on production.
 """
 from __future__ import annotations
 
+import errno
 import os
 import stat
 import sys
@@ -39,6 +40,15 @@ class ExitRootBootstrapTests(unittest.TestCase):
         self.uid = os.geteuid()
         self.gid = os.getegid()
         os.chmod(self.anchor, 0o755)
+        # The approved Data SSD testenv inherits unrelated sentinelx ACLs.
+        # Remove those on this disposable fixture only. Production must
+        # still reject unreviewed access/default ACLs without repairing them.
+        for key in ("system.posix_acl_access", "system.posix_acl_default"):
+            try:
+                os.removexattr(self.anchor, key)
+            except OSError as exc:
+                if exc.errno != errno.ENODATA:
+                    raise
 
     def _inspect(self) -> dict[str, object]:
         return _inspect_under_verified_anchor(
