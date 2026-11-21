@@ -315,3 +315,53 @@ One additional standalone `sudo -u cripta python3` read-only scan on host `robot
 **CHECKED HERE:** all 615 symlinks resolved to existing regular files, and their paths are physically outside the corresponding `WARM90`/`RECENT29` family root. Logical total `13,306,684,338` bytes from file `stat` (follows symlinks) matches historical prior scan exactly, but **is not physical disk consumption**. Known roots have no internal filename-date holes. This validates file/manifest *metadata integrity*, not underlying bytes, source order for all objects, remote provider completeness, original order for repeated timestamps beyond tested samples, or any full native Strategy replay.
 
 **NOT CHECKED HERE:** every-file hash recalculation and gzip CRC; source-event row semantics/venue consistency, continuity of the unobserved 357/689 UTC dates per symbol, archive content inside unscanned ZIPs, durable retained data after future purge, consumer/position/Exit parity. `GATE_0=NOT_PASSED`; safe storage/financial gates unchanged.
+
+## 16. Exact native ledger pointer QC — actual Entry/Exit anchors, two eval days (2026-11-21)
+
+**Task:** #878 (research-only), **BASE:** GitHub `main=9bf479284d81ce02c9a91a504d106d8578a2f583`; server source checkout HEAD exact at read-only preflight, clean. **Actor:** `cripta` UID 107, only read-only native gzip, immutable #866 ledger/result, and existing source snapshot. This verifies a **bounded link from stored historical event pointers to original Bybit prints**. It is *not* a regenerated independent Strategy Entry/Exit policy replay.
+
+### 16.1 Reconcile separate stale jobs without altering their state
+
+**#866 H9CONT three-period job** `C2-R866-H9CONT-3P-10CASE-20261120` remains under `/data/cripta/jobs/running`, `status.json=running`, no job-level `result.json` and no matching live worker. Its *internal 183d period* `/srv/cripta-share/reports/jobs/<job>/h9_continuity_183d/result.json` is present, `status=QC_PASS`, `native_ticks=197794465`, `ledger_rows=13052` and ten portfolio scenarios. Independently streamed SHA256 over full **9,033,269 B** `trade_ledger.jsonl` is **`1541f1c2ddd68a5ae04ab080d72d6f9ff74dbbb9d7615e97ee710c158dfc0b31`**, exactly the declared result hash. Its next `90d` progress stopped at `day_epoch=20647`, `ticks=54343593`, stdout last modified 2026-11-20 **02:54:27 UTC**; no 90d final QC or 29d run-result was observed. Current runner service started at **06:54:46 UTC** that day, after partial-work timestamps, but actual death/restart cause **NOT VERIFIED**. Do not rerun finished 183d blindly; overall job **OUTCOME UNKNOWN / PARTIALLY RECONCILED**.
+
+**#646 historical pilot** `C2-R646-H29-PILOT-20261114A` has only a direct SentinelX `bundle/pilot.log`/`pilot_status.json`, showing `SMOKE_PASS_NO_WRITES`, **130,697 native ticks, 18 scenarios**, historical PID 244808, `SMOKE_EXIT_ZERO`, elapsed 90.1s. Its `pilot_metadata.json` declares `execution=direct tracked SentinelX background cripta Python pilot`, `mode=smoke`. It is **not** an approved runner-completed full 29d job: no canonical `status.json` or `/srv/cripta-share/reports/jobs/<id>/result.json`, and the stale directory remains in `running`. No cleanup/resubmit. These exact findings were separately posted to #866 and #646.
+
+### 16.2 Correct source-order contract verified against pinned code
+
+The 2025 native reader in `scripts/research/p90l90_bull2025_portfolio_v1.py` `native_ticks` increments `seq += 1` for each original CSV record **including warmup**, so `source_order` is **one-based global per-symbol**, not zero-based physical per-day row index. Correct 0-based local index for source date D is:
+
+```text
+native_day_row_index = ledger.source_order
+                       - sum(manifest.rows of that symbol strictly before D) - 1
+```
+
+The frozen source Entry reader uses `trade_index += 1` and `rec["trdMatchID"]` as Entry identifier. SHA256 of four current read-only source scripts `p90l90_bull2025_portfolio_v1.py`, `p90l90_bull2025_entry_v1.py`, `p90l90_tp_only_second48_v1.py`, `p90l90_portfolio_pause_v1.py` exactly matched the saved 183d result's `source_snapshot_sha256` for each. **The earlier naive zero-based alignment was a verifier indexing mistake, not demonstrated trading-code drift.**
+
+The pinned `p90l90_tp_only_second48_v1.py` `tp_only_on_trade` returns:
+- `HARD_STOP` at original first trade **print price**;
+- `RESTING_TP` at the previously placed **limit TP price**, when current first eligible native print *crosses* the limit (maker), so recorded exit price may differ from the print;
+- `MARKETABLE_TP` at current native print when eligible.
+The H9CONT custom extension records `SOFT_STOP` at current print. **Do not compare RESTING_TP limit fill price for strict equality to crossing print**; compare first eligible source pointer/order/time and directional crossing.
+
+### 16.3 Independent stored native-ledger event-pointer parity (not strategy replay)
+
+Read all original five-symbol gzips for **2025-04-01** and **2025-05-30**, two evaluation days, **10 files, 2,259,413 original trade rows**. Independently rehashed the full **89,316,092 B** of original compressed bytes; all **10/10 SHA256 + sizes** matched the existing `qc_full.json` metadata. For each date: use per-symbol warmup-inclusive manifest prefix, locate each actual saved ledger Entry/Exit by one-based source order in native CSV; construct a separate `row_ordinal<TAB>timestamp<TAB>price` gzip stream **in memory**, then compare the same original print/time/source-order against its decoded version and the frozen ledger.
+
+| UTC evaluation day | Native ledger Entry references | Exit references | Unique Entry/Exit event identities | Result |
+|---|---:|---:|---:|---|
+| 2025-04-01 | **110** | **90** | **20** | all pass |
+| 2025-05-30 | **53** | **84** | **22** | all pass |
+| **TOTAL** | **163** | **174** | **42** | **337/337 pass** |
+
+The 337 references include repetition of the same actual event in ten independent portfolio scenarios; **42** is the count of distinct event identities. Full breakdown: **163/163 Entry** source time/print/real `trdMatchID` exact; **174/174 Exit** source order/time exact; of exits **24/24 HARD_STOP** print price exact, **24/24 SOFT_STOP** print price exact, **126/126 RESTING_TP** maker price-crossing condition exact. **10 references** (one underlying distinct INJUSDT LONG RESTING_TP event repeated across scenarios) have expected fill-price-vs-print difference `8.9890` vs `8.9900`; this is explained by the frozen limit-fill code, not unexplained drift. **Zero unexplained mismatches.** In-memory price stream **13,668,520 B** vs original gzips **89,316,092 B**, ratio **15.304%** for these two days. No stable persisted compact object was created on server.
+
+### 16.4 Reproducible RESEARCH-only bounded audit instrument
+
+A new, separate **non-production** instrument `research/history/native_ledger_pointer_qc.py` now encodes the source-of-truth-sensitive checks: explicit CLI input roots/dates (max 3 days), original gzip max 32 MiB/file, in-memory compact stream max 32 MiB/file, `qc_full.json` manifest/size/hash and saved result/ledger hash, one-based source order, strict Entry print/trade ID, and maker RESTING_TP directional print crossing. It emits machine-readable JSON PASS/FAIL to stdout; does **not** download, write files, touch PostgreSQL, submit jobs or call Bybit. First actual in-memory execution of its exact source code under `cripta` yielded `SELFTEST_PASS` and `PASS_BOUNDED_EVENT_POINTER_QC` on the above two dates (337 references/42 unique, 10 files, 2,259,413 rows, 0 server writes). Exact code was then published to the research branch, followed by an empty-stream safety refinement and a `tests/research/test_native_ledger_pointer_qc.py` regression suite (unit, strict wrong trade ID/hash/zero-based source order/non-crossed maker, date bounds). **New GitHub CI/suite results are not yet verified at this checkpoint.**
+
+**Important NOT VERIFIED:** independent regeneration of candidate eligibility/geometry/position state, full source-order detection of first achievable stop vs TP across all events, checkpointed 29/90/183d trade-by-trade replay, costs/simulated execution realism; 357 unobserved local dates per symbol; all 1,660 fresh source-hash reads; protected orders and Exit still open in production. Task **Stage 0 remains OPEN, 0/11**. Related #642 native retention remains financially fail-closed due hot orders; raw deletion/capacity remediation is **not** part of this research change.
+
+
+### 16.5 GitHub workstream-boundary validation
+
+First merge attempt of PR #887 was **BLOCKED** by required `scope` check despite four passing `quality` jobs. Exact trusted main policy `.github/scripts/workstream-scope.js` classifies plain `tests/` as **CORE** and `tests/research/` as **RESEARCH**; the first test path `tests/test_research_native_ledger_pointer_qc.py` was therefore cross-contour in the `research/*` branch. The original test file existed **only in the PR branch**, not `main`. The same tests were moved without logic changes to `tests/research/test_native_ledger_pointer_qc.py` and the import repository-root path adjusted from `parents[1]` to `parents[2]`. The old branch-only `tests/` file was removed; the complete PR-vs-main diff now contains exclusively `research/history/*` and `tests/research/*` paths. **No security/workstream check was disabled or bypassed.** New branch HEAD full `scope`/`quality` run and independent merge confirmation remain required before `MERGED` can be claimed.
