@@ -58,6 +58,8 @@ def fixture() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
             "PRIVATE_RUNTIME": (103, 0),
             "MARKET_SOURCE": (104, 0),
             "DASHBOARD": (105, 0),
+            "GATEWAY": (106, 0),
+            "POSTGRESQL": (107, 0),
         },
     }
     return candidate, rollback, observed
@@ -83,6 +85,8 @@ class ExitOnlyCutoverPreviewTests(unittest.TestCase):
         self.assertNotIn("PRIVATE_RUNTIME", plan["affected_units"])
         self.assertNotIn("MARKET_SOURCE", plan["affected_units"])
         self.assertNotIn("DASHBOARD", plan["affected_units"])
+        self.assertIn("GATEWAY", plan["unaffected_owners"])
+        self.assertIn("POSTGRESQL", plan["unaffected_owners"])
         self.assertIn("ROLLBACK_EXIT_ONLY_ON_FAILED_POSTCHECK", plan["steps"])
 
     def test_wrong_candidate_identity_scope_or_git_gate_denied(self) -> None:
