@@ -40,7 +40,7 @@ def _selector(changed: tuple[str, ...]):
             if "--no-renames" not in args:
                 return ""
             if args[3] == UI:
-                return ""
+                return "\n".join(changed)
             if args[3] == BASE:
                 return "\n".join(changed)
         raise AssertionError("Unexpected fake Git operation: " + repr(args))
@@ -129,12 +129,9 @@ def test_unrelated_full_contour_path_unchanged() -> None:
 
 
 def test_existing_dashboard_only_path_is_still_scoped() -> None:
-    # The fake dashboard baseline must have a Dashboard-only source delta;
-    # switch to a real Dashboard base to exercise native classifier route.
-    # This checks the existing source-only method, not physical UI deployment.
     select = _selector(("operations/dashboard/index.html",))
-    assert select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=None) == (
-        "FULL", False,
+    assert select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI) == (
+        "DASHBOARD", False,
     )
 
 
