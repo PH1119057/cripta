@@ -322,10 +322,12 @@ def bootstrap_exit_root_once() -> dict[str, object]:
         _deny("ROOT_REQUIRED")
     # This exact root-only bootstrap is mutually exclusive with the existing
     # FULL/Dashboard/Native install owner, even though it starts no services.
-    with _hold_shared_release_lock(path=_SHARED_LOCK, uid=0, gid=0):
-        with ExitStack() as opened:
-            anchor = _production_anchor_fd(opened)
-            return _bootstrap_from_fd(
-                anchor, anchor_uid=0, anchor_gid=0,
-                components_uid=0, components_gid=_service_group_gid(),
-            )
+    with (
+        _hold_shared_release_lock(path=_SHARED_LOCK, uid=0, gid=0),
+        ExitStack() as opened,
+    ):
+        anchor = _production_anchor_fd(opened)
+        return _bootstrap_from_fd(
+            anchor, anchor_uid=0, anchor_gid=0,
+            components_uid=0, components_gid=_service_group_gid(),
+        )
