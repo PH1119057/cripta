@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 
 from component_release_exit_root_bootstrap import (  # noqa: E402
     _bootstrap_under_verified_anchor,
+    _hold_shared_release_lock,
     _inspect_under_verified_anchor,
     bootstrap_exit_root_once,
 )
@@ -207,6 +208,60 @@ class ExitRootBootstrapTests(unittest.TestCase):
                 components_uid=self.uid, components_gid=self.gid,
             )
         self.assertFalse((self.anchor / "components").exists())
+
+    def _test_lock_path(self) -> Path:
+        lock = self.anchor / "exact-release.lock"
+        with lock.open("xb") as stream:
+            stream.flush()
+        os.chmod(lock, 0o644)
+        return lock
+
+    def test_preexisting_exact_shared_lock_can_be_acquired_readonly(self) -> None:
+        lock = self._test_lock_path()
+        before = lock.stat()
+        with _hold_shared_release_lock(
+            path=lock, uid=self.uid, gid=self.gid,
+        ):
+            self.assertEqual(lock.stat().st_ino, before.st_ino)
+            self.assertEqual(lock.read_bytes(), b"")
+        self.assertEqual(stat.S_IMODE(lock.stat().st_mode), 0o644)
+
+    def test_release_lock_contention_blocks_even_when_root_tree_missing(self) -> None:
+        import fcntl
+
+        lock = self._test_lock_path()
+        with lock.open("r+b") as stream:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(ValueError, "RELEASE_LOCK_BUSY"):
+                with _hold_shared_release_lock(
+                    path=lock, uid=self.uid, gid=self.gid,
+                ):
+                    self.fail("lock collision unexpectedly passed")
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        self.assertFalse((self.anchor / "components").exists())
+
+    def test_release_lock_missing_wrong_mode_or_symlink_denied(self) -> None:
+        lock = self.anchor / "exact-release.lock"
+        with self.assertRaisesRegex(ValueError, "RELEASE_LOCK"):
+            with _hold_shared_release_lock(
+                path=lock, uid=self.uid, gid=self.gid,
+            ):
+                self.fail("missing lock allowed")
+        lock = self._test_lock_path()
+        os.chmod(lock, 0o666)
+        with self.assertRaisesRegex(ValueError, "RELEASE_LOCK"):
+            with _hold_shared_release_lock(
+                path=lock, uid=self.uid, gid=self.gid,
+            ):
+                self.fail("writable lock allowed")
+        os.chmod(lock, 0o644)
+        lock.unlink()
+        lock.symlink_to(Path(self.tmp.name) / "nowhere")
+        with self.assertRaisesRegex(ValueError, "RELEASE_LOCK"):
+            with _hold_shared_release_lock(
+                path=lock, uid=self.uid, gid=self.gid,
+            ):
+                self.fail("symlink lock allowed")
 
     def test_only_root_owned_directory_contract_has_no_trading_side_effect(self) -> None:
         result = self._prepare()
