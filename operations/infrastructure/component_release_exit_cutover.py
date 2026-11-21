@@ -119,7 +119,12 @@ def build_exit_cutover_preview(
         and _digest(rollback.get("backup_unit_sha256"))
         and rollback.get("backup_root_host_attested") is True
         and rollback.get("previous_unit_bytes_verified") is True
-        and rollback.get("previous_runtime_recoverable") is True,
+        and rollback.get("previous_runtime_recoverable") is True
+        and rollback.get("previous_backup_blob_manifest_verified") is True
+        and rollback.get("previous_python_isolated") is True
+        and rollback.get("previous_dependency_abi_attested") is True
+        and rollback.get("previous_pinned_unit_exec_verified") is True
+        and rollback.get("previous_exit_import_recovery_smoke") == "PASS",
         "PROTECTED_ROLLBACK_NOT_VERIFIED",
     )
     _require(
