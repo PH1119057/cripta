@@ -12,6 +12,7 @@ then check signed protection, API/DB compatibility, and rollback separately.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import stat
 from collections.abc import Mapping
@@ -108,7 +109,9 @@ def collect_exit_installed_file_evidence(
     _require(
         parent.is_dir() and not parent.is_symlink()
         and root.is_dir() and not root.is_symlink()
-        and root.resolve() == root,
+        # Only Linux is an executable target. Windows CI temp paths may
+        # normalize case/reparse aliases; direct symlinks remain forbidden.
+        and (os.name == "nt" or root.resolve() == root),
         "RELEASE_NOT_INSTALLED",
     )
     installed_marker = root / "COMPONENT_INSTALLED_COMMIT"
