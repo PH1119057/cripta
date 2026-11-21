@@ -97,6 +97,7 @@ class PreviousExitRollbackPreparationTests(unittest.TestCase):
             "expected_venv_fingerprint": _fingerprint_venv(self.venv)["fingerprint"],
             "owner_uid": self.owner,
             "service_gid": self.group,
+            "lock_gid": self.group,
         }
 
     def test_pinned_old_unit_preserves_sandbox_and_changes_only_exit_path(self) -> None:
@@ -208,6 +209,13 @@ class PreviousExitRollbackPreparationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "LOCK"):
                 _prepare_legacy_fixture(**self.args())
             fcntl.flock(locked, fcntl.LOCK_UN)
+        self.assertFalse((self.rollback / OLD_EXIT_COMMIT).exists())
+
+    def test_lock_gid_is_independent_from_candidate_group(self) -> None:
+        args = self.args()
+        args["lock_gid"] = self.group + 1
+        with self.assertRaisesRegex(ValueError, "LOCK"):
+            _prepare_legacy_fixture(**args)
         self.assertFalse((self.rollback / OLD_EXIT_COMMIT).exists())
 
     def test_tampered_candidate_readback_rejects(self) -> None:
