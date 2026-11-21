@@ -137,7 +137,10 @@ class LegacyExitRollbackInputTests(unittest.TestCase):
 
     def test_writable_generated_cache_is_excluded_only_as_untrusted_runtime_data(self) -> None:
         original = self.audit()
-        cache = self.release / "src/bybit_workbench/market_data/__pycache__"
+        parent = self.release / "src/bybit_workbench/market_data"
+        parent.mkdir()
+        os.chmod(parent, 0o755)
+        cache = parent / "__pycache__"
         cache.mkdir()
         os.chmod(cache, 0o775)
         item = cache / "source.cpython-312.pyc"
