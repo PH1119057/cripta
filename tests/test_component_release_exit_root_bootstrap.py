@@ -7,11 +7,15 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from operations.infrastructure.component_release_exit_root_bootstrap import (
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "operations/infrastructure"))
+
+from component_release_exit_root_bootstrap import (  # noqa: E402
     _bootstrap_under_verified_anchor,
     _inspect_under_verified_anchor,
     bootstrap_exit_root_once,
