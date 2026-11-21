@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import ast
 import re
+import unittest
 from pathlib import Path
 
-import pytest
 
 CONTROLLER = (
     Path(__file__).resolve().parents[1]
@@ -60,82 +60,91 @@ def _selector(changed: tuple[str, ...]):
     return scope["_select_scoped_purpose"]
 
 
-@pytest.mark.parametrize(
-    "path",
-    (
-        "operations/connectivity/universal_exit_consumer.py",
-        "operations/connectivity/p90_real_independent_exit.py",
-        "operations/connectivity/p90_real_persistent_trail.py",
-        "operations/connectivity/p90_r06_exit_owner.py",
-        "operations/connectivity/p90l90_real_postfill_source_client.py",
-        "src/bybit_workbench/universal_exit/p90l90_real_v3.py",
-    ),
-)
-def test_exit_delta_never_implicitly_deploys_global_runtime(path: str) -> None:
-    select = _selector((path,))
-    with pytest.raises(
-        ControllerScopeDenied, match="EXIT_COMPONENT_RELEASE_RAIL_NOT_INSTALLED",
-    ):
-        select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI)
+class ExitControllerRouteTests(unittest.TestCase):
+    def test_exit_delta_never_implicitly_deploys_global_runtime(self) -> None:
+        paths = (
+            "operations/connectivity/universal_exit_consumer.py",
+            "operations/connectivity/p90_real_independent_exit.py",
+            "operations/connectivity/p90_real_persistent_trail.py",
+            "operations/connectivity/p90_r06_exit_owner.py",
+            "operations/connectivity/p90l90_real_postfill_source_client.py",
+            "src/bybit_workbench/universal_exit/p90l90_real_v3.py",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                select = _selector((path,))
+                with self.assertRaisesRegex(
+                    ControllerScopeDenied,
+                    "EXIT_COMPONENT_RELEASE_RAIL_NOT_INSTALLED",
+                ):
+                    select(
+                        target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI,
+                    )
+
+    def test_component_tooling_never_implicitly_deploys_global_runtime(self) -> None:
+        paths = (
+            "operations/infrastructure/component_release_bundle.py",
+            "operations/infrastructure/component_release_exit_identity.py",
+            "operations/infrastructure/component_release_exit_process_readback.py",
+            "operations/infrastructure/component_release_exit_offline_stage.py",
+            "operations/infrastructure/component_release_plan.py",
+            "operations/infrastructure/exit_component_requirements.lock",
+            "operations/infrastructure/cripta-release-controller",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                select = _selector((path,))
+                with self.assertRaisesRegex(
+                    ControllerScopeDenied,
+                    "COMPONENT_RELEASE_TOOLING_NOT_DEPLOYABLE",
+                ):
+                    select(
+                        target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI,
+                    )
+
+    def test_mixed_exit_and_private_runtime_still_blocks_full(self) -> None:
+        select = _selector((
+            "operations/connectivity/p90_real_persistent_trail.py",
+            "operations/connectivity/private_runtime.py",
+        ))
+        with self.assertRaisesRegex(
+            ControllerScopeDenied, "EXIT_COMPONENT_RELEASE_RAIL_NOT_INSTALLED",
+        ):
+            select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=None)
+
+    def test_mixed_infra_and_dashboard_blocks_implicit_full(self) -> None:
+        select = _selector((
+            "operations/infrastructure/component_release_bundle.py",
+            "operations/dashboard/index.html",
+        ))
+        with self.assertRaisesRegex(
+            ControllerScopeDenied, "COMPONENT_RELEASE_TOOLING_NOT_DEPLOYABLE",
+        ):
+            select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI)
+
+    def test_unrelated_full_contour_path_unchanged(self) -> None:
+        select = _selector(("operations/connectivity/private_runtime.py",))
+        self.assertEqual(
+            select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=None),
+            ("FULL", False),
+        )
+
+    def test_existing_dashboard_only_path_is_still_scoped(self) -> None:
+        select = _selector(("operations/dashboard/index.html",))
+        self.assertEqual(
+            select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI),
+            ("DASHBOARD", False),
+        )
+
+    def test_bad_input_identity_is_still_rejected(self) -> None:
+        select = _selector((
+            "operations/infrastructure/component_release_bundle.py",
+        ))
+        with self.assertRaisesRegex(
+            ControllerScopeDenied, "RELEASE_SCOPE_IDENTITY_INVALID",
+        ):
+            select(target="not-a-commit", runtime_baseline=BASE, dashboard_baseline=UI)
 
 
-@pytest.mark.parametrize(
-    "path",
-    (
-        "operations/infrastructure/component_release_bundle.py",
-        "operations/infrastructure/component_release_exit_identity.py",
-        "operations/infrastructure/component_release_exit_process_readback.py",
-        "operations/infrastructure/component_release_exit_offline_stage.py",
-        "operations/infrastructure/component_release_plan.py",
-        "operations/infrastructure/exit_component_requirements.lock",
-        "operations/infrastructure/cripta-release-controller",
-    ),
-)
-def test_component_tooling_never_implicitly_deploys_global_runtime(path: str) -> None:
-    select = _selector((path,))
-    with pytest.raises(
-        ControllerScopeDenied, match="COMPONENT_RELEASE_TOOLING_NOT_DEPLOYABLE",
-    ):
-        select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI)
-
-
-def test_mixed_exit_and_private_runtime_still_blocks_full() -> None:
-    select = _selector((
-        "operations/connectivity/p90_real_persistent_trail.py",
-        "operations/connectivity/private_runtime.py",
-    ))
-    with pytest.raises(
-        ControllerScopeDenied, match="EXIT_COMPONENT_RELEASE_RAIL_NOT_INSTALLED",
-    ):
-        select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=None)
-
-
-def test_mixed_infra_and_dashboard_blocks_implicit_full() -> None:
-    select = _selector((
-        "operations/infrastructure/component_release_bundle.py",
-        "operations/dashboard/index.html",
-    ))
-    with pytest.raises(
-        ControllerScopeDenied, match="COMPONENT_RELEASE_TOOLING_NOT_DEPLOYABLE",
-    ):
-        select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI)
-
-
-def test_unrelated_full_contour_path_unchanged() -> None:
-    select = _selector(("operations/connectivity/private_runtime.py",))
-    assert select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=None) == (
-        "FULL", False,
-    )
-
-
-def test_existing_dashboard_only_path_is_still_scoped() -> None:
-    select = _selector(("operations/dashboard/index.html",))
-    assert select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI) == (
-        "DASHBOARD", False,
-    )
-
-
-def test_bad_input_identity_is_still_rejected() -> None:
-    select = _selector(("operations/infrastructure/component_release_bundle.py",))
-    with pytest.raises(ControllerScopeDenied, match="RELEASE_SCOPE_IDENTITY_INVALID"):
-        select(target="not-a-commit", runtime_baseline=BASE, dashboard_baseline=UI)
+if __name__ == "__main__":
+    unittest.main()
