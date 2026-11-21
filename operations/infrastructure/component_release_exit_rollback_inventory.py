@@ -163,6 +163,7 @@ def _audit_legacy_exit_input(
     file_count = 0
     byte_count = 0
     excluded_cache_dirs = 0
+    excluded_mutable_cache_dirs = 0
     regular_seen: set[str] = set()
     link_seen: set[str] = set()
     for base in _SURFACES:
@@ -178,15 +179,22 @@ def _audit_legacy_exit_input(
                 meta = cache.lstat()
                 if stat.S_ISLNK(meta.st_mode):
                     _deny("GENERATED_CACHE_SYMLINK_UNTRUSTED")
+                cache_mode = stat.S_IMODE(meta.st_mode)
+                accepted_cache_mode = (
+                    (meta.st_uid == 0 and cache_mode == 0o755)
+                    or (meta.st_uid == release_owner_uid
+                        and cache_mode in (0o755, 0o775))
+                )
                 if (
                     not stat.S_ISDIR(meta.st_mode)
-                    or meta.st_uid not in (0, release_owner_uid)
                     or meta.st_dev != info.st_dev
-                    or stat.S_IMODE(meta.st_mode) & 0o022
+                    or not accepted_cache_mode
                 ):
                     _deny("GENERATED_CACHE_OWNER_MODE_OR_MOUNT_INVALID")
                 names.remove("__pycache__")
                 excluded_cache_dirs += 1
+                if cache_mode == 0o775:
+                    excluded_mutable_cache_dirs += 1
             for name in sorted(names + files):
                 item = Path(directory) / name
                 relative = item.relative_to(release).as_posix()
@@ -245,6 +253,7 @@ def _audit_legacy_exit_input(
         "symlink_count": link_count,
         "regular_file_bytes": byte_count,
         "excluded_bytecode_cache_directory_count": excluded_cache_dirs,
+        "excluded_mutable_cache_directory_count": excluded_mutable_cache_dirs,
         "bytecode_cache_excluded_not_backup_attested": True,
         "input_tree_sha256": fingerprint.hexdigest(),
         "inputs_read_only": True,
