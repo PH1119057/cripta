@@ -13,7 +13,7 @@
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
 | `TASK_STATUS` | `STAGE 0 PARTIAL / 10-FILE NATIVE PRICE/ORDER SMOKE PASS / RETENTION FAIL-CLOSED HOT_ORDERS=2` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 ~14:58 UTC — 10-file exact generic first-contact test + retention hot-order guard` |
+| `LAST_UPDATE` | `2026-11-21 — 10-file price/order + full-field QC, 1,660 manifest↔FS checks, retention HOT_ORDER_PRESENT` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
 | `LAST_LIVE_GITHUB_MAIN_CHECK` | `d38ac3aa06aa6c2e5bf3f9132ef9ad3dbcf2749c` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; separate #866 HS 183d job **completed exit0** at 13:31 UTC; two old job records unresolved |
@@ -151,6 +151,13 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+### 2026-11-21 — all-known-native-source manifest / filesystem integrity audit
+- **CHECKED HERE:** [Stage0 evidence §15](STAGE0_SOURCE_INVENTORY_2026-11-21.md). All **1,660** logical known original file-days (965 BULL25, 500 WARM90, 195 RECENT29) verified via normalized manifests against current filesystem: strict filename/calendar, path/size positive and matching, SHA256 field present, all symlinks resolvable, no per-range gaps or duplicates. **0 metadata discrepancies**; 615 paths are symlinks, so logical gzip bytes 13,306,684,338 must not be mistaken for physical `du`.
+- **NOT CHECKED HERE:** 1,660 new SHA256/CRC payload reads, entire native source-order/Entry/Exit parity, 357 unsampled UTC dates per symbol, provider data/retention proof. Do not upgrade existing historical manifests to fresh full QC by this metadata-only audit.
+- **GATE:** still `STAGE_0=IN_PROGRESS`, `GATE_0=NOT_PASSED` and `0/11`; no server write, bulk source download or financial mutation. The `HOT_ORDER_PRESENT` safeguard remains under #642, while old #866/#646 terminal/cleanup ownership remains open.
+
+
 
 ### 2026-11-21 — Stage0 расширенный sample + точный защитный gate retention
 - **CHECKED HERE:** [Stage0 §14](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — 10 original native files (5 symbols × 2025-03-22 / 2026-09-11), 2,160,751 native trades, exact price/timestamp/source-ordinal roundtrip and **80/80 synthetic threshold first-contact matches**, weighted price stream 12,141,377 vs original gzip 81,926,194 B = **14.82%**. Generic price-contact test, **not** real Strategy native first-event parity. Single-process sampled peak RSS ≈26 MiB.
