@@ -42,7 +42,9 @@ class LegacyExitRollbackInputTests(unittest.TestCase):
         self.unit = self.parent / "legacy-exit.service"
         self.unit.write_bytes(SOURCE_UNIT.read_bytes())
         os.chmod(self.unit, 0o644)
-        (self.release / "INSTALLED_COMMIT").write_text(SHA + "\n", encoding="ascii")
+        marker = self.release / "INSTALLED_COMMIT"
+        marker.write_text(SHA + "\n", encoding="ascii")
+        os.chmod(marker, 0o640)
         items = (
             "src/bybit_workbench/universal_exit/p90l90_real_v3.py",
             "operations/connectivity/universal_exit_consumer.py",
@@ -53,7 +55,15 @@ class LegacyExitRollbackInputTests(unittest.TestCase):
             dest = self.release / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(rel.encode("ascii") + b"\n")
+            os.chmod(dest, 0o644)
         (self.release / ".venv/bin").mkdir(parents=True, exist_ok=True)
+        # The Data SSD testenv inherits unrelated group-write/default ACL.
+        # These are disposable objects; the inventory code is never relaxed.
+        for current, dirs, _files in os.walk(self.release):
+            for name in dirs:
+                folder = Path(current) / name
+                if not folder.is_symlink():
+                    os.chmod(folder, 0o755)
         for rel, target in _LINKS.items():
             (self.release / rel).symlink_to(target)
 
