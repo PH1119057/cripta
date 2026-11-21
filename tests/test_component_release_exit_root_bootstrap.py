@@ -8,10 +8,12 @@ from __future__ import annotations
 import errno
 import os
 import stat
+import struct
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "operations/infrastructure"))
@@ -158,6 +160,53 @@ class ExitRootBootstrapTests(unittest.TestCase):
         if self.uid != 0:
             with self.assertRaisesRegex(ValueError, "ROOT_REQUIRED"):
                 bootstrap_exit_root_once()
+        self.assertFalse((self.anchor / "components").exists())
+
+    def test_partial_interruption_requires_manual_reconciliation(self) -> None:
+        original_mkdir = os.mkdir
+
+        def interrupted(name: str, mode: int = 0o777, *, dir_fd: int | None = None) -> None:
+            if name == "releases":
+                raise PermissionError("synthetic mid-bootstrap failure")
+            original_mkdir(name, mode, dir_fd=dir_fd)
+
+        with patch(
+            "component_release_exit_root_bootstrap.os.mkdir",
+            side_effect=interrupted,
+        ):
+            with self.assertRaisesRegex(ValueError, "BOOTSTRAP_OUTCOME_UNKNOWN"):
+                self._prepare()
+        self.assertEqual(self._inspect()["state"], "ROOT_TREE_PARTIAL_BLOCKED")
+        with self.assertRaisesRegex(ValueError, "ROOT_TREE_PARTIAL_BLOCKED"):
+            self._prepare()
+        self.assertFalse((self.anchor / "components/exit/releases").exists())
+        self.assertFalse((self.anchor / "components/exit/rollback").exists())
+
+    def test_unreviewed_default_acl_is_never_auto_removed(self) -> None:
+        # Linux POSIX ACL version 2, three base entries (user/group/other).
+        acl = struct.pack("<I", 2) + b"".join((
+            struct.pack("<HHI", 0x01, 7, 0xFFFFFFFF),
+            struct.pack("<HHI", 0x04, 5, 0xFFFFFFFF),
+            struct.pack("<HHI", 0x20, 5, 0xFFFFFFFF),
+        ))
+        try:
+            os.setxattr(self.anchor, "system.posix_acl_default", acl)
+        except OSError as exc:
+            if exc.errno in (errno.EOPNOTSUPP, errno.ENOSYS):
+                self.skipTest("Linux filesystem has no POSIX ACL support")
+            raise
+        with self.assertRaisesRegex(ValueError, "UNREVIEWED_ACL"):
+            self._prepare()
+        self.assertFalse((self.anchor / "components").exists())
+
+    def test_symlinked_anchor_is_never_followed(self) -> None:
+        alias = Path(self.tmp.name) / "alias"
+        alias.symlink_to(self.anchor, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "ANCHOR_UNAVAILABLE"):
+            _bootstrap_under_verified_anchor(
+                alias, anchor_uid=self.uid, anchor_gid=self.gid,
+                components_uid=self.uid, components_gid=self.gid,
+            )
         self.assertFalse((self.anchor / "components").exists())
 
     def test_only_root_owned_directory_contract_has_no_trading_side_effect(self) -> None:
