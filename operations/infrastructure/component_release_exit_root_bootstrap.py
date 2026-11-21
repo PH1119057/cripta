@@ -138,6 +138,9 @@ def _make_child(
             _check_dir(
                 fd, uid=uid, gid=gid, mode=_EXPECTED_CHILD_MODE, dev=dev,
             )
+            # Persist each new directory's owner/mode before its parent
+            # entry; a crash must not masquerade as a complete bootstrap.
+            os.fsync(fd)
             os.fsync(parent_fd)
             return fd
         except BaseException:
