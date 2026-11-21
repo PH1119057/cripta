@@ -170,12 +170,11 @@ class ExitRootBootstrapTests(unittest.TestCase):
                 raise PermissionError("synthetic mid-bootstrap failure")
             original_mkdir(name, mode, dir_fd=dir_fd)
 
-        with patch(
-            "component_release_exit_root_bootstrap.os.mkdir",
-            side_effect=interrupted,
+        with (
+            patch("component_release_exit_root_bootstrap.os.mkdir", side_effect=interrupted),
+            self.assertRaisesRegex(ValueError, "BOOTSTRAP_OUTCOME_UNKNOWN"),
         ):
-            with self.assertRaisesRegex(ValueError, "BOOTSTRAP_OUTCOME_UNKNOWN"):
-                self._prepare()
+            self._prepare()
         self.assertEqual(self._inspect()["state"], "ROOT_TREE_PARTIAL_BLOCKED")
         with self.assertRaisesRegex(ValueError, "ROOT_TREE_PARTIAL_BLOCKED"):
             self._prepare()
