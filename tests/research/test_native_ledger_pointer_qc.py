@@ -158,3 +158,85 @@ def test_short_limit_crossing_and_hard_stop(validator):
         "exit_ts": "100.25", "exit_price": "8.9900", "exit_reason": "HARD_STOP"
     }
     assert validator.check_event("exit", hard, row)[0] == "HARD_STOP_EXACT"
+
+
+def _same_day_hardstop_sample(sample, prices, *, side="LONG"):
+    """Synthetic archive with an exact one-based same-timestamp native hardstop."""
+    args, root, row, refresh = sample
+    sym = "LTCUSDT"
+    source = root / sym / "public_trades" / (sym + DAY + ".csv.gz")
+    with gzip.open(source, "wt", newline="") as stream:
+        writer = csv.DictWriter(
+            stream, fieldnames=("timestamp", "price", "trdMatchID", "symbol")
+        )
+        writer.writeheader()
+        for i, price in enumerate(prices):
+            trade_id = sym + "-entry" if i == 0 else sym + "-print-" + str(i)
+            writer.writerow({
+                "timestamp": START, "price": price,
+                "trdMatchID": trade_id, "symbol": sym,
+            })
+    manifest_file = Path(args.qc_manifest)
+    manifest = json.loads(manifest_file.read_text())
+    source_key = sym + "/public_trades/" + source.name
+    manifest["by_day"][source_key] = {
+        "rows": len(prices),
+        "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "size_bytes": source.stat().st_size,
+    }
+    manifest_file.write_text(json.dumps(manifest))
+    refresh({
+        **row, "side": side,
+        "exit_source_order": len(prices),
+        "exit_price": prices[-1], "exit_reason": "HARD_STOP",
+        "maker_exit": False,
+    })
+    result_file = Path(args.ledger_result)
+    result = json.loads(result_file.read_text())
+    result["source_snapshot_sha256"] = {
+        "p90l90_exit_90d_v2.py": validator_hardstop_source_sha()
+    }
+    result_file.write_text(json.dumps(result))
+    args.verify_hardstop_first_hit = True
+    return args
+
+
+def validator_hardstop_source_sha():
+    # Frozen historical research model hash, not a production-execution capability.
+    return "3f8e768cf4c6d9cf6ea0d25ecb1fe23c69fbfc2b072e43192ae00d52d8a43a10"
+
+
+def test_same_timestamp_long_hardstop_first_crossing(validator, sample):
+    args = _same_day_hardstop_sample(sample, ["10.0", "9.5", "8.9"])
+    result = validator.run(args)
+    assert result["comparisons"]["HARD_STOP_EXACT"] == 1
+    assert result["hardstop_first_hit"]["unique_same_day_first_crossings"] == 1
+    assert result["hardstop_first_hit"]["scenario_references"] == 1
+    assert result["hardstop_first_hit"]["result"] == (
+        "PASS_FIRST_CROSSING_SOURCE_AND_COMPACT"
+    )
+
+
+def test_same_timestamp_short_hardstop_first_crossing(validator, sample):
+    args = _same_day_hardstop_sample(
+        sample, ["10.0", "10.5", "11.1"], side="SHORT"
+    )
+    result = validator.run(args)
+    assert result["hardstop_first_hit"]["unique_same_day_first_crossings"] == 1
+
+
+def test_rejects_hardstop_when_earlier_crossing_existed(validator, sample):
+    args = _same_day_hardstop_sample(sample, ["10.0", "8.9", "8.8"])
+    # Event-pointers by themselves match the third row, but the FIRST hit was row 2.
+    with pytest.raises(ValueError, match="HARDSTOP_FIRST_CROSSING_NATIVE_MISMATCH"):
+        validator.run(args)
+
+
+def test_rejects_unpinned_historical_stop_model(validator, sample):
+    args = _same_day_hardstop_sample(sample, ["10.0", "9.5", "8.9"])
+    result_file = Path(args.ledger_result)
+    record = json.loads(result_file.read_text())
+    record["source_snapshot_sha256"]["p90l90_exit_90d_v2.py"] = "0" * 64
+    result_file.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="HARDSTOP_MODEL_SOURCE_UNPINNED"):
+        validator.run(args)

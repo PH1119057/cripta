@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 PARTIAL / 337/337 STORED NATIVE LEDGER POINTERS PASS / #866 PARTIAL OUTCOME / #642 FINANCIAL RETENTION BLOCK` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / 337 STORED POINTERS PASS + 5/5 NATIVE FIRST HARDSTOP PASS / STORAGE GUARD ACTIVE` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 — rescued #866 183d QC ledger; 337 real Entry/Exit pointers exact; research read-only checker` |
+| `LAST_UPDATE` | `2026-11-21 — independent 5 historical -10% HARD_STOP first-hit source/order parity + optional bounded QC mode` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
-| `LAST_LIVE_GITHUB_MAIN_CHECK` | `9bf479284d81ce02c9a91a504d106d8578a2f583` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
+| `LAST_LIVE_GITHUB_MAIN_CHECK` | `240b4fe3e0215dd96be955dcf279161e34cdf34f` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; separate #866 HS 183d job **completed exit0** at 13:31 UTC; two old job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Провести независимый GitHub CI/negative regressions для `native_ledger_pointer_qc.py`; сохранить partial 183d #866 immutable ledger (не перезапускать); затем по #642/#866/#646 отдельно согласовать безопасные storage/job ownership gates перед полноценным causal Strategy replay. [Evidence Stage0 §16](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Пройти полный GitHub scope/quality на расширенном read-only first-hit validator (Stage0 §17); затем ограниченно проверить причинную активацию динамического RESTING_TP и SOFT_STOP по exact frozen source без массового compute. Параллельные #642/#866/#646 safety/job gates сохраняются. [Evidence Stage0 §17](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,15 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+
+### 2026-11-21 — independent historical first-HARD_STOP event pilot
+- **CHECKED HERE:** [Stage0 §17](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — frozen historical source SHA256 3f8e768cf4c6d9cf6ea0d25ecb1fe23c69fbfc2b072e43192ae00d52d8a43a10 matches reference #866 183d result; independent scan from original Entry strictly to Exit confirms **5/5 unique native -10% first crossings** (2 SHORT/3 LONG), 26 scenario references, no earlier stop crossing, exact compact source-order/time/price parity. Five selected gz files, 1,402,199 rows; 55,929,628 original vs 8,373,752 compressed price-order bytes; measured peak RSS ≈25,272 KiB.
+- **Expanded existing checker:** `native_ledger_pointer_qc.py --verify-hardstop-first-hit` pinned to frozen model, fail-closed on unpinned SHA, incorrect ordinal, absent/earlier cross, >32 same-day probes; short in-memory run over all five symbols on 2025-05-08/2025-09-22: 10 files, 2,616,045 native rows, **209/209 actual pointer checks**, 5/5 unique first hardstops, 102,556,474 B native / 15,388,968 B compact, 0 server writes. Selftest 7 cases, targeted LONG/SHORT/negative cases added under `tests/research/`; **GitHub full CI NOT YET VERIFIED** at this checkpoint.
+- **No gate promotion:** sample deliberately selected; not independent dynamic TP, SOFT_STOP, geometry, new Entry candidate, portfolio or economics replay; `GATE_0=NOT_PASSED`, 0/11. #642 hot-order protection, disk 94% used, two old #866/#646 record ownership/outcome unresolved. No new research job/production/DB/Exchange/LIVE mutation.
+- **NEXT:** CI/scope review, exact PR merge only if PASS, then bounded dynamic TP/SOFT_STOP causal reference proof; no bulk download/purge.
+
+
 
 **CI scope note #887:** `quality` passed on initial head but required `scope` rejected `tests/` (CORE) in `research/*`. Test moved to canonical `tests/research/` without logic changes; old path deleted. New full scope/quality PASS and independent merge still NOT CHECKED.
 
