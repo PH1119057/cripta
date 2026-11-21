@@ -9,7 +9,6 @@ import re
 import unittest
 from pathlib import Path
 
-
 CONTROLLER = (
     Path(__file__).resolve().parents[1]
     / "operations/infrastructure/cripta-release-controller"
@@ -112,13 +111,23 @@ class ExitControllerRouteTests(unittest.TestCase):
         ):
             select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=None)
 
-    def test_mixed_infra_and_dashboard_blocks_implicit_full(self) -> None:
+    def test_mixed_infra_and_dashboard_preserves_original_deny_reason(self) -> None:
         select = _selector((
             "operations/infrastructure/component_release_bundle.py",
             "operations/dashboard/index.html",
         ))
         with self.assertRaisesRegex(
-            ControllerScopeDenied, "COMPONENT_RELEASE_TOOLING_NOT_DEPLOYABLE",
+            ControllerScopeDenied, "DASHBOARD_MIXED_EXECUTABLE_SCOPE",
+        ):
+            select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI)
+
+    def test_mixed_exit_and_dashboard_preserves_original_deny_reason(self) -> None:
+        select = _selector((
+            "operations/connectivity/universal_exit_consumer.py",
+            "operations/dashboard/index.html",
+        ))
+        with self.assertRaisesRegex(
+            ControllerScopeDenied, "DASHBOARD_MIXED_EXECUTABLE_SCOPE",
         ):
             select(target=TARGET, runtime_baseline=BASE, dashboard_baseline=UI)
 
