@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 PARTIAL / 10-FILE NATIVE PRICE/ORDER SMOKE PASS / RETENTION FAIL-CLOSED HOT_ORDERS=2` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / 337/337 STORED NATIVE LEDGER POINTERS PASS / #866 PARTIAL OUTCOME / #642 FINANCIAL RETENTION BLOCK` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 — 10-file price/order + full-field QC, 1,660 manifest↔FS checks, retention HOT_ORDER_PRESENT` |
+| `LAST_UPDATE` | `2026-11-21 — rescued #866 183d QC ledger; 337 real Entry/Exit pointers exact; research read-only checker` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
-| `LAST_LIVE_GITHUB_MAIN_CHECK` | `d38ac3aa06aa6c2e5bf3f9132ef9ad3dbcf2749c` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
+| `LAST_LIVE_GITHUB_MAIN_CHECK` | `9bf479284d81ce02c9a91a504d106d8578a2f583` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; separate #866 HS 183d job **completed exit0** at 13:31 UTC; two old job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Защитить существующие hot-orders/позицию: #642 штатно согласует безопасный retention/capacity при `HOT_ORDER_PRESENT`; #866/#646 owners установят terminal/cleanup outcomes, после чего #878 выбирает formal native first-event/complete-consumer-field pilot с контролем диска. [Evidence Stage0 §14](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Провести независимый GitHub CI/negative regressions для `native_ledger_pointer_qc.py`; сохранить partial 183d #866 immutable ledger (не перезапускать); затем по #642/#866/#646 отдельно согласовать безопасные storage/job ownership gates перед полноценным causal Strategy replay. [Evidence Stage0 §16](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,15 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+### 2026-11-21 — первый реальный native Entry/Exit source-pointer тест, immutable partial job rescue
+- **CHECKED HERE:** [Stage0 forensic §16](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — отдельный старый #866 H9CONT 183d partial `QC_PASS` result (`197794465` ticks, `13052` ledger lines), verified complete ledger SHA256 `1541f1c2ddd68a5ae04ab080d72d6f9ff74dbbb9d7615e97ee710c158dfc0b31`. Subsequent 90d progress stale; full three-period runner job **NOT COMPLETED**, active worker absent. #646 direct 1h smoke reports `SMOKE_EXIT_ZERO` / `130697` ticks/18 scenarios, not a canonical runner-completed 29d job. Both owners notified, zero cleanup/restarts.
+- **Real evaluation days (2025-04-01 and 2025-05-30)** — ten original gzip archives fresh hash/size verified against historical `qc_full` `10/10`, original `2259413` rows, saved ledger Entry **163/163** exact source-order/time/price/trdMatchID; Exit **174/174** source time/order and correct execution-price contract: HARD_STOP 24, SOFT_STOP 24 exact prints, RESTING_TP 126 directional limit crossings (10 expected limit-vs-print differences, one unique event). **337 ledger references, 42 unique event identities; zero unexplained diff**. Frozen source hashes for relevant readers and TP semantics matched ledger's `source_snapshot_sha256`. Strict one-based global source order recovered; previous naive zero-based mismatch is a verifier bug, not code regression. Price-only in-memory gzip 15.304% of original gzip on these days.
+- **Source engineering:** `research/history/native_ledger_pointer_qc.py` with explicit read-only CLI and bounded per-file limits (max 3 dates, 32MiB gzip source + 32MiB in-memory stream/file), immutable result/source hashes and fail-closed row/event assertions. Exact script source selftest and two-day source-mode PASS without server writes. New `tests/test_research_native_ledger_pointer_qc.py` regression suite staged in GitHub branch; CI **NOT YET VERIFIED** at this checkpoint.
+- **NOT CHECKED HERE:** full independent dynamic Strategy Entry/Exit/portfolio replay, all three periods' checkpoint parity, API/Exchange, full calendar; FINANCIAL retention guard still `HOT_ORDER_PRESENT` (2 hot orders/one open position at previous read-only check). `GATE_0=NOT_PASSED`, `0/11`. No DB/Trading/Exchange/LIVE/server filesystem mutation under #878.
+- **NEXT ONE ACTION:** pass code regression/CI, merge exact research-only source/evidence if PASS, then resolve external stale job metadata and #642 financial-safe storage budget before heavy work.
+
+
 
 ### 2026-11-21 — all-known-native-source manifest / filesystem integrity audit
 - **CHECKED HERE:** [Stage0 evidence §15](STAGE0_SOURCE_INVENTORY_2026-11-21.md). All **1,660** logical known original file-days (965 BULL25, 500 WARM90, 195 RECENT29) verified via normalized manifests against current filesystem: strict filename/calendar, path/size positive and matching, SHA256 field present, all symlinks resolvable, no per-range gaps or duplicates. **0 metadata discrepancies**; 615 paths are symlinks, so logical gzip bytes 13,306,684,338 must not be mistaken for physical `du`.
