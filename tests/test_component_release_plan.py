@@ -31,6 +31,26 @@ def test_exit_change_never_claims_entry_or_financial_privileges() -> None:
     assert result.requires_review == ()
 
 
+
+@pytest.mark.parametrize("source_path", [
+    "operations/connectivity/p90_real_independent_exit.py",
+    "operations/connectivity/p90_real_persistent_trail.py",
+    "operations/connectivity/p90_r06_exit_owner.py",
+    "operations/connectivity/p90l90_real_postfill_source_client.py",
+])
+def test_p90_exact_exit_owned_dynamic_modules_never_restart_entry(
+    source_path: str,
+) -> None:
+    """These are the real dynamic import dependencies of Universal Exit."""
+    result = plan_paths([source_path])
+    assert result.release_scope == "COMPONENT_CANDIDATE"
+    assert result.components == ("EXIT",)
+    assert result.candidate_units == ("cripta-universal-exit-consumer.service",)
+    assert not result.install_authorized
+    assert not result.database_mutation_authorized
+    assert not result.financial_mutation_authorized
+
+
 def test_entry_change_does_not_restart_exit_or_all_sub_services() -> None:
     result = plan_paths([
         "src/bybit_workbench/universal_entry/engine.py",
