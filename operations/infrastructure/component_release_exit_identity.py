@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+import stat
 from collections.abc import Mapping
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -60,6 +62,103 @@ def _neighbors(value: object) -> bool:
         and type(row[1]) is int and row[1] >= 0
         for row in value.values()
     )
+
+
+
+def collect_exit_installed_file_evidence(
+    *,
+    artifact_manifest: Mapping[str, Any],
+    releases_parent: Path | None = None,
+) -> dict[str, object]:
+    """Read immutable candidate files + marker; never activate or write.
+
+    The default root is the exact canonical component release parent.
+    An explicit alternate parent exists for disposable CI fixtures only:
+    the resulting evidence does not become production proof. This function
+    is one non-atomic read-only observation, not a systemd/Bybit attestation.
+    """
+    _require(isinstance(artifact_manifest, Mapping), "ARTIFACT_INVALID")
+    sha = artifact_manifest.get("target")
+    _require(
+        _sha(sha)
+        and artifact_manifest.get("component") == "EXIT"
+        and artifact_manifest.get("entrypoint") == _EXIT_ENTRY
+        and artifact_manifest.get("dependency_lock") == _EXIT_LOCK
+        and artifact_manifest.get("install_authorized") is False,
+        "ARTIFACT_SCOPE_INVALID",
+    )
+    assert isinstance(sha, str)
+    expected = artifact_manifest.get("blob_sha256")
+    _require(_exact_strings(expected), "ARTIFACT_FILES_INVALID")
+    assert isinstance(expected, Mapping)
+    _require(
+        _EXIT_ENTRY in expected and _EXIT_LOCK in expected
+        and artifact_manifest.get("dependency_lock_sha256")
+        == expected[_EXIT_LOCK],
+        "ARTIFACT_LOCK_INVALID",
+    )
+    parent = (
+        Path(_RELEASE_PARENT) if releases_parent is None else releases_parent
+    )
+    _require(
+        isinstance(parent, Path) and parent.is_absolute(),
+        "RELEASE_PARENT_UNTRUSTED",
+    )
+    root = parent / sha
+    _require(
+        parent.is_dir() and not parent.is_symlink()
+        and root.is_dir() and not root.is_symlink()
+        and root.resolve() == root,
+        "RELEASE_NOT_INSTALLED",
+    )
+    installed_marker = root / "COMPONENT_INSTALLED_COMMIT"
+    _require(
+        installed_marker.is_file() and not installed_marker.is_symlink(),
+        "INSTALLED_MARKER_MISSING",
+    )
+    try:
+        marker_stat = installed_marker.stat()
+        _require(stat.S_ISREG(marker_stat.st_mode), "INSTALLED_MARKER_INVALID")
+        _require(
+            installed_marker.read_bytes() == (sha + "\n").encode("ascii"),
+            "INSTALLED_MARKER_MISMATCH",
+        )
+        actual: dict[str, str] = {}
+        for relative, pinned in expected.items():
+            _require(isinstance(relative, str), "INSTALLED_PATH_INVALID")
+            directory = root
+            parts = PurePosixPath(relative).parts
+            for name in parts[:-1]:
+                directory = directory / name
+                _require(
+                    directory.is_dir() and not directory.is_symlink(),
+                    "INSTALLED_DIRECTORY_UNTRUSTED",
+                )
+            file = root.joinpath(*parts)
+            _require(
+                file.is_file() and not file.is_symlink(),
+                "INSTALLED_FILE_UNTRUSTED",
+            )
+            info = file.stat()
+            _require(
+                stat.S_ISREG(info.st_mode) and info.st_size <= 128 * 1024 * 1024,
+                "INSTALLED_FILE_INVALID",
+            )
+            digest = hashlib.sha256(file.read_bytes()).hexdigest()
+            _require(digest == pinned, "INSTALLED_FILE_HASH_MISMATCH")
+            actual[relative] = digest
+    except OSError as exc:
+        raise ValueError("EXIT_IDENTITY_INSTALLED_READ_FAILED") from exc
+    return {
+        "installed_root": str(root),
+        "installed_marker": sha,
+        "installed_file_sha256": actual,
+        "installed_lock_sha256": actual[_EXIT_LOCK],
+        "installed_files_regular": True,
+        "canonical_release_parent": parent == Path(_RELEASE_PARENT),
+        "install_authorized": False,
+        "runtime_behavior_verified": False,
+    }
 
 
 def check_exit_identity_snapshot(
