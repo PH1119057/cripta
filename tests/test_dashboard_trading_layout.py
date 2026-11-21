@@ -8,7 +8,7 @@ def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
     assert (
         "tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,"
         "openTradesSection,closedTradesSection,strategyPaperOpenSection,strategyPaperClosedSection,"
-        "coinMonitorSection,signalObservationSection,bybitLogSection)"
+        "signalObservationSection,bybitLogSection)"
     ) in SOURCE
     assert 'id="tradeSubnav" class="trade-subnav"' in SOURCE
     for section_id in (
@@ -18,7 +18,6 @@ def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
         "closedTradesSection",
         "strategyPaperOpenSection",
         "strategyPaperClosedSection",
-        "coinMonitorSection",
         "signalObservationSection",
         "bybitLogSection",
     ):
@@ -73,7 +72,7 @@ def test_trading_uses_sticky_operator_bar_and_real_subpages() -> None:
         "openTradesSection"
     ) in SOURCE
     assert "bybitLogSection.before(ownerTestEntrySection)" in SOURCE
-    assert "open:[openTradesSection,coinMonitorSection,marketIndicatorSection]" in SOURCE
+    assert "open:[openTradesSection,marketIndicatorSection]" in SOURCE
     assert (
         "control:[strategyTradeControlSection]"
         in SOURCE
@@ -89,16 +88,14 @@ def test_trading_uses_sticky_operator_bar_and_real_subpages() -> None:
         assert legacy not in SOURCE
 
 
-def test_strategy_monitor_is_read_only_and_has_no_symbol_permission_checkbox() -> None:
-    start = SOURCE.index('id="coinMonitorSection"')
-    end = SOURCE.index('id="signalObservationSection"', start)
-    monitor = SOURCE[start:end]
-    assert 'id="strategyMonitorFilter"' in monitor
-    assert 'id="strategyMonitorNear"' in monitor
-    assert "Список монет задаётся только StrategyCard" in monitor
-    assert "auto-check" not in monitor
-    assert "setAuto(" not in monitor
-    assert "setAllAuto(" not in monitor
+def test_unused_entryplan_monitor_is_removed_without_altering_strategy() -> None:
+    assert 'id="coinMonitorSection"' not in SOURCE
+    assert 'data-trade-page="monitor"' not in SOURCE
+    assert "monitor:[coinMonitorSection]" not in SOURCE
+    assert "renderStrategyMonitor(d.strategy_monitor);" not in SOURCE
+    assert 'id="marketIndicatorSection"' in SOURCE
+    assert "Стратегии реальной торговли" in SOURCE
+    assert "entry_candidates" in APP_SOURCE or "entry_candidates" in SOURCE
 
 
 def test_legacy_global_entry_policy_is_not_exposed_on_trade_page() -> None:

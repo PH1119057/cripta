@@ -78,9 +78,6 @@
     .market-indicator-note{margin-top:12px;border:1px dashed var(--line);border-radius:8px;padding:12px;color:var(--muted)}
     @media(min-width:1250px){
       main:has(#liveDesk.active) #openTradesSection{display:none!important}
-      main:has(#liveDesk.active) #coinMonitorSection .signal-scroll{max-height:none!important;overflow:visible!important}
-      main:has(#liveDesk.active) #coinMonitorSection table{min-width:0!important;table-layout:fixed;font-size:11px}
-      main:has(#liveDesk.active) #coinMonitorSection td,main:has(#liveDesk.active) #coinMonitorSection th{padding:6px 4px;overflow-wrap:anywhere}
     }
     @media(max-width:1249px){.workspace-rail{display:none!important}}
 
@@ -223,7 +220,7 @@
     <div id="openRailPositions" class="rail-scroll" aria-live="polite"><div class="rail-placeholder">Загрузка P90 monitor…</div></div>
   </aside>
 <section id="liveDesk" class="grid panel">
-    <div id="tradeSubnav" class="trade-subnav" aria-label="Подстраницы торговли"><button type="button" data-trade-page="open">Открытые сделки</button><button type="button" data-trade-page="closed">Завершённые сделки</button><button type="button" data-trade-page="paper_open">Открытые псевдосделки</button><button type="button" data-trade-page="paper_closed">Завершённые псевдосделки</button><button type="button" data-trade-page="monitor">Монитор EntryPlan</button><button type="button" data-trade-page="control">Управление Strategy</button><button type="button" data-trade-page="signals">Наблюдение за сигналами</button><button type="button" data-trade-page="bybit_log">Лог Bybit</button></div>
+    <div id="tradeSubnav" class="trade-subnav" aria-label="Подстраницы торговли"><button type="button" data-trade-page="open">Открытые сделки</button><button type="button" data-trade-page="closed">Завершённые сделки</button><button type="button" data-trade-page="paper_open">Открытые псевдосделки</button><button type="button" data-trade-page="paper_closed">Завершённые псевдосделки</button><button type="button" data-trade-page="control">Управление Strategy</button><button type="button" data-trade-page="signals">Наблюдение за сигналами</button><button type="button" data-trade-page="bybit_log">Лог Bybit</button></div>
     <div id="tradeOperatorBar" class="trade-operator-bar">
       <div class="trade-operator-grid">
         <div class="trade-operator-metric"><span class="muted">Общий баланс</span><span id="tradeEquity" class="value">—</span><small id="tradeBalanceDetail" class="live-detail">account snapshot</small></div>
@@ -289,11 +286,10 @@
     </article>
     <article id="openTradesSection" class="card full core-trading-table"><h2>Открытые сделки Bybit</h2><div class="muted" style="margin-bottom:10px">Нажмите треугольник слева, чтобы раскрыть полную карту сделки. Основная строка остаётся компактной и обновляется примерно раз в секунду.</div><table><thead><tr><th aria-label="Карта сделки"></th><th>Монета</th><th>Стратегия</th><th>Состояние</th><th>Сторона</th><th>Размер</th><th>Вход</th><th>Безубыточность Bybit</th><th>Текущая цена</th><th>Текущий стоп</th><th>Результат</th><th>Действия</th></tr></thead><tbody id="positionRows"></tbody></table></article>
     <article id="strategyPaperOpenSection" class="card full core-trading-table"><h2>Открытые псевдосделки</h2><div id="strategyPaperOpenSummary" class="metric">—</div><div class="muted" style="margin:6px 0 12px">ACTIVE Strategy оцениваются по реальному рынку. Execution OFF означает: реального ордера нет, но Entry/Exit/Hedge lifecycle и PnL считаются как у сделки.</div><div id="strategyPaperByStrategy" class="position-card-grid"></div><div id="strategyPaperOpen" class="paper-card-scroll" style="margin-top:12px"></div></article><article id="strategyPaperClosedSection" class="card full core-trading-table"><h2>Завершённые псевдосделки</h2><div id="strategyPaperClosedSummary" class="metric">—</div><div id="strategyPaperClosed" class="paper-card-scroll" style="margin-top:12px"></div></article>
-    <article id="coinMonitorSection" class="card full core-trading-table"><h2>Монитор EntryPlan · монеты и направления</h2><div id="entryShadowSummary" class="metric">—</div><div id="entryShadowDetail" class="muted" style="margin:6px 0 10px">Загрузка состояния Universal Entry…</div><div class="signal-monitor-toolbar"><label>Стратегия<select id="strategyMonitorFilter"><option value="all">Все активные Strategy</option></select></label><label>Ближе к Entry<select id="strategyMonitorNear"><option value="0.25">0,25%</option><option value="0.5">0,50%</option><option value="1" selected>1,00%</option><option value="2">2,00%</option><option value="999">все</option></select></label><label>Зелёный ≤<select id="strategyMonitorGreen" onchange="onStrategyMonitorGreenChange()"><option value="0.25">0,25%</option><option value="0.3">0,30%</option><option value="0.5" selected>0,50%</option><option value="1">1,00%</option></select></label><span class="muted">Светофор — только визуализация readiness; EntryPlan не меняется. Список монет задаётся только StrategyCard.</span></div><div class="signal-scroll" style="max-height:650px;overflow:auto"><table style="min-width:1620px"><thead><tr><th>EntryPlan / Strategy</th><th>Монета</th><th>Направление</th><th>Готовность</th><th>Состояние</th><th>Цена сейчас</th><th>Entry</th><th>До Entry</th><th>Кандидат / зоны</th><th>Flow / OI</th><th>Cooldown / embargo</th><th>Обновлено</th></tr></thead><tbody id="entryShadowRows"></tbody></table></div></article>
     <article id="signalObservationSection" class="card full core-trading-table"><h2>Независимое наблюдение за сигналами</h2><div class="signal-monitor-toolbar"><label>Стратегия<select id="signalStrategyFilter"><option value="all">Все стратегии</option></select></label><div id="signalWindowLabel" class="muted">Последние 24 часа · загрузка…</div></div><div id="signalStats" class="signal-stat-grid"></div><div id="signalStrategyBreakdown" class="position-card-grid signal-strategy-summary"></div><div class="signal-scroll" style="max-height:620px;overflow:auto;scrollbar-gutter:stable"><table style="min-width:1250px"><thead><tr><th>Время сигнала</th><th data-signal-strategy-col>Стратегия</th><th>Монета</th><th>Направление</th><th>Статус</th><th>Цена входа</th><th>Текущая / выход</th><th>Результат</th><th>После комиссий</th><th>MFE</th><th>MAE</th></tr></thead><tbody id="liveRows"></tbody></table></div></article>
     <article id="marketIndicatorSection" class="card full core-trading-table market-indicator-section">
       <h2>Рыночные индикаторы</h2>
-      <div class="muted">Общий рынок и сигналы наблюдения отображаются под торговыми таблицами, без отдельной боковой прокрутки. Монитор EntryPlan расположен выше.</div>
+      <div class="muted">Общий рынок и сигналы наблюдения отображаются под торговыми таблицами, без отдельной боковой прокрутки. </div>
       <div class="market-indicator-note">Рыночные сигналы пока не настроены. Готовность монет и условия Entry находятся в таблице «Монитор EntryPlan».</div>
     </article>
     <article id="closedTradesSection" class="card full core-trading-table"><h2>Завершённые сделки Bybit</h2><div class="muted" style="margin-bottom:10px">Сверху видны сделки за сегодня. Более старые записи находятся ниже во внутренней прокрутке; вся страница из-за них не растягивается. Нажмите строку, чтобы раскрыть причинную карточку.</div><div class="closed-scroll"><table><thead><tr><th>Время</th><th>Монета</th><th>Закрыто</th><th>Цена</th><th>Причина стратегии</th><th>Причина биржи</th><th>После комиссий</th></tr></thead><tbody id="realClosedRows"></tbody></table></div></article>
@@ -748,10 +744,10 @@ async function pollTradingExportJob(jobId,status){try{const r=await fetch(`/api/
 async function exportTradingTable(table,selectId,statusId){const status=document.getElementById(statusId),period=document.getElementById(selectId).value;status.textContent='готовится…';try{const out=await livePost('/api/trading/export',{table,period});if(table==='signals'&&out.job_id){status.textContent='сервер собирает причинный архив…';pollTradingExportJob(out.job_id,status);return}status.textContent=`сохранено в K:\\Reports · ${out.rows} строк`;window.location.href=out.url}catch(e){status.textContent=`ошибка: ${e.message}`}}
 function installExportControl(title,table,prefix){const heading=[...document.querySelectorAll('#liveDesk h2')].find(x=>x.childNodes[0]?.textContent.trim()===title);if(!heading||document.getElementById(prefix+'ExportPeriod'))return;const box=document.createElement('small');box.style.marginLeft='12px';const periods=table==='signals'?'<option value="day">сутки</option><option value="72h">72 часа</option><option value="week">неделя</option><option value="all">весь период</option>':'<option value="day">за сутки</option><option value="week">за неделю</option><option value="all">за весь период</option>';const label=table==='signals'?'Скачать аналитический ZIP':'Скачать ZIP';box.innerHTML=`<select id="${prefix}ExportPeriod">${periods}</select> <button class="action" type="button" onclick="exportTradingTable('${table}','${prefix}ExportPeriod','${prefix}ExportStatus')">${label}</button> <span id="${prefix}ExportStatus" class="muted"></span>`;heading.appendChild(box)}
 installExportControl('Независимое наблюдение за сигналами','signals','signals');installExportControl('Завершённые сделки Bybit','closed','closed');
-tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,openTradesSection,closedTradesSection,strategyPaperOpenSection,strategyPaperClosedSection,coinMonitorSection,signalObservationSection,bybitLogSection);
+tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,openTradesSection,closedTradesSection,strategyPaperOpenSection,strategyPaperClosedSection,signalObservationSection,bybitLogSection);
 bybitLogSection.before(ownerTestEntrySection);
 const marketIndicatorSection=document.getElementById('marketIndicatorSection');
-const tradePages={open:[openTradesSection,coinMonitorSection,marketIndicatorSection],closed:[closedTradesSection],paper_open:[strategyPaperOpenSection],paper_closed:[strategyPaperClosedSection],monitor:[coinMonitorSection],control:[strategyTradeControlSection],signals:[signalObservationSection],bybit_log:[ownerTestEntrySection,bybitLogSection]};
+const tradePages={open:[openTradesSection,marketIndicatorSection],closed:[closedTradesSection],paper_open:[strategyPaperOpenSection],paper_closed:[strategyPaperClosedSection],control:[strategyTradeControlSection],signals:[signalObservationSection],bybit_log:[ownerTestEntrySection,bybitLogSection]};
 const expandedRailPositions=new Set();
 function toggleRailPosition(symbol){
   const open=expandedRailPositions.has(symbol);
@@ -831,19 +827,149 @@ function p90RailH9Proximity(item){
     .filter(value=>Number.isFinite(value)&&value>=0);
   return values.length?Math.min(...values):Number.POSITIVE_INFINITY;
 }
+// Stable presentation-only ordering: never infer a live fill from cached geometry.
+const p90RailPreviousOrder=new Map(),p90RailPreviousRank=new Map();
+const p90RailLastH9Distance=new Map(),p90RailKnownOpen=new Set();
+const p90RailConfirmedGone=new Map();
+const P90_RAIL_FIXED_SYMBOLS=new Set(['LTCUSDT','INJUSDT','DOTUSDT','ARBUSDT','APTUSDT']);
+function p90RailStableRows(items){
+  const rows=Array.isArray(items)?[...items]:[];
+  const prior=new Map(p90RailPreviousOrder),priorRank=new Map(p90RailPreviousRank);
+  for(const item of rows){
+    const key=String(item?.symbol||''),state=String(item?.state||'');
+    if(!key)continue;
+    if(state==='OPEN'&&item?.position&&item?.account_inventory_verified===true){
+      p90RailKnownOpen.add(key);
+      p90RailConfirmedGone.delete(key);
+    }else if(item?.account_inventory_verified===true&&
+             ['NO_CURRENT_EXCHANGE_POSITION','EXCHANGE_UNATTRIBUTED'].includes(item?.position_attribution)){
+      // One transient COMPLETE read-model response is not enough to physically
+      // reorder a previously OPEN card. This only pins the display position:
+      // the card itself always renders the CURRENT state, never cached green/PnL.
+      const seen=(p90RailConfirmedGone.get(key)||0)+1;
+      p90RailConfirmedGone.set(key,seen);
+      if(seen>=3)p90RailKnownOpen.delete(key);
+    }else{
+      // Unknown/incomplete inventory is neither a new fill nor confirmed flat.
+      p90RailConfirmedGone.delete(key);
+    }
+    const distance=p90RailH9Proximity(item);
+    if(Number.isFinite(distance))p90RailLastH9Distance.set(key,distance);
+  }
+  const rank=item=>{
+    const key=String(item?.symbol||''),state=String(item?.state||'');
+    if((state==='OPEN'&&item?.position)||p90RailKnownOpen.has(key))return 0;
+    return 1;
+  };
+  rows.sort((a,b)=>{
+    const ra=rank(a),rb=rank(b);
+    if(ra!==rb)return ra-rb;
+    const ak=String(a?.symbol||''),bk=String(b?.symbol||'');
+    const oldA=prior.get(ak),oldB=prior.get(bk);
+    const previous=oldA!==undefined&&oldB!==undefined?oldA-oldB:null;
+    // A confirmed close moves below currently non-open rows once, not on
+    // every background price/geometry update.
+    const movedA=priorRank.has(ak)&&priorRank.get(ak)!==ra;
+    const movedB=priorRank.has(bk)&&priorRank.get(bk)!==rb;
+    if(movedA!==movedB)return movedA?1:-1;
+    // Keep same-rank cards in their exact prior order across all polls.
+    // An automatic H9 reshuffle must never bounce the five cards on screen.
+    if(previous!==null)return previous;
+    const liveA=p90RailH9Proximity(a),liveB=p90RailH9Proximity(b);
+    // A missing calculation must not send a card to the end and back next poll.
+    if((!Number.isFinite(liveA)||!Number.isFinite(liveB))&&previous!==null)return previous;
+    const da=Number.isFinite(liveA)?liveA:(p90RailLastH9Distance.get(ak)??Infinity);
+    const db=Number.isFinite(liveB)?liveB:(p90RailLastH9Distance.get(bk)??Infinity);
+    if(Number.isFinite(da)&&Number.isFinite(db)){
+      // 0.05 percentage-point hysteresis suppresses noisy reorder at equal proximity.
+      if(Math.abs(da-db)>0.05)return da-db;
+      if(previous!==null)return previous;
+    }else if(Number.isFinite(da)!==Number.isFinite(db)&&previous===null){
+      return Number.isFinite(da)?-1:1;
+    }
+    if(previous!==null)return previous;
+    return ak.localeCompare(bk);
+  });
+  p90RailPreviousOrder.clear();
+  p90RailPreviousRank.clear();
+  rows.forEach((item,i)=>{
+    const key=String(item?.symbol||'');
+    p90RailPreviousOrder.set(key,i);
+    p90RailPreviousRank.set(key,rank(item));
+  });
+  return rows;
+}
+function patchP90RailNode(node,next){
+  if(node.nodeType!==next.nodeType||node.nodeName!==next.nodeName){
+    node.replaceWith(next);
+    return next;
+  }
+  if(node.nodeType===3){
+    if(node.nodeValue!==next.nodeValue)node.nodeValue=next.nodeValue;
+    return node;
+  }
+  if(node.nodeType!==1)return node;
+  // An actively edited trailing control is owned by the user until blur.
+  if(node===document.activeElement&&['SELECT','INPUT','TEXTAREA'].includes(node.nodeName))return node;
+  for(const attr of [...node.attributes]){
+    if(!next.hasAttribute(attr.name))node.removeAttribute(attr.name);
+  }
+  for(const attr of [...next.attributes]){
+    if(node.getAttribute(attr.name)!==attr.value)node.setAttribute(attr.name,attr.value);
+  }
+  let oldChild=node.firstChild,newChild=next.firstChild;
+  while(newChild){
+    const nextNew=newChild.nextSibling,oldNext=oldChild?oldChild.nextSibling:null;
+    if(oldChild)patchP90RailNode(oldChild,newChild);
+    else node.appendChild(newChild);
+    oldChild=oldNext;
+    newChild=nextNew;
+  }
+  while(oldChild){
+    const following=oldChild.nextSibling;
+    node.removeChild(oldChild);
+    oldChild=following;
+  }
+  return node;
+}
+function patchP90RailDom(rail,html){
+  const template=document.createElement('template');
+  template.innerHTML=html;
+  const fresh=[...template.content.children];
+  const prior=new Map([...rail.children].filter(x=>x.dataset.p90Symbol).map(x=>[x.dataset.p90Symbol,x]));
+  const current=new Set();
+  let previous=null;
+  for(const next of fresh){
+    const key=next.dataset.p90Symbol;
+    if(!key)continue;
+    current.add(key);
+    let node=prior.get(key)||next;
+    if(node!==next)node=patchP90RailNode(node,next);
+    const target=previous?previous.nextSibling:rail.firstChild;
+    if(node!==target)rail.insertBefore(node,target);
+    previous=node;
+  }
+  for(const node of [...rail.children])if(!current.has(node.dataset.p90Symbol))node.remove();
+}
 const p90TpReadbacks=new Map();
 function renderP90RailPositions(items,positions,diagnostic=window.ownerFullContourDiagnosticLatest||null){
   const rail=document.getElementById('openRailPositions'),count=document.getElementById('openRailCount');
   if(!rail||!count)return;
-  const rows=Array.isArray(items)?[...items]:[];
-  rows.sort((a,b)=>{
-    const aOpen=String(a?.state||'')==='OPEN',bOpen=String(b?.state||'')==='OPEN';
-    if(aOpen!==bOpen)return aOpen?-1:1;
-    if(aOpen&&bOpen)return 0;
-    const aDistance=p90RailH9Proximity(a),bDistance=p90RailH9Proximity(b);
-    if(aDistance!==bDistance)return aDistance-bDistance;
-    return String(a?.symbol||'').localeCompare(String(b?.symbol||''));
-  });
+  const incoming=Array.isArray(items)?items:[];
+  const complete=incoming.length===P90_RAIL_FIXED_SYMBOLS.size&&
+    new Set(incoming.map(x=>String(x?.symbol||''))).size===P90_RAIL_FIXED_SYMBOLS.size&&
+    incoming.every(x=>P90_RAIL_FIXED_SYMBOLS.has(String(x?.symbol||'')));
+  if(!complete&&rail.dataset.p90Rendered==='true'){
+    // Preserve keyed cards and scroll through a missing/partial read-model poll.
+    // Never substitute a generic rail or claim this stale projection is current.
+    rail.setAttribute('aria-busy','true');
+    rail.title='Последний снимок P90 · ожидается полное обновление';
+    return;
+  }
+  rail.removeAttribute('aria-busy');
+  rail.removeAttribute('title');
+  const rows=p90RailStableRows(incoming);
+  if(complete)rail.dataset.p90Rendered='true';
   count.textContent=String(rows.length||5);
   const openSymbols=new Set(rows.filter(x=>x.state==='OPEN').map(x=>x.symbol));
   for(const symbol of expandedRailPositions)if(!openSymbols.has(symbol))expandedRailPositions.delete(symbol);
@@ -858,7 +984,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
     if(v>=1)return v.toFixed(4);
     return v.toFixed(5);
   };
-  rail.innerHTML=rows.map(item=>{
+  patchP90RailDom(rail,rows.map(item=>{
     const symbol=safe(item.symbol),state=String(item.state||'FAR'),nearest=item.nearest_entry||null;
     const geometryStale=state==='STALE'||item.geometry_fresh===false;
     const external=state==='EXTERNAL'||item.external_position_present===true;
@@ -871,7 +997,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
     const current=price(item.current_price);
     if(state!=='OPEN'){
       if(inventoryUnknown){
-        return '<div class="rail-open-position p90-far">'+
+        return '<div class="rail-open-position p90-far" data-p90-symbol="'+symbol+'">'+
           '<div class="rail-position-summary"><span><span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state far">BYBIT: СОСТОЯНИЕ НЕ ПОДТВЕРЖДЕНО</small></span></div>'+
           '<div class="rail-position-meta">Нет свежего COMPLETE/PROVEN слепка торгового аккаунта. UNKNOWN — не FLAT и не OPEN.</div>'+
           '<div class="rail-position-meta">Исторические позиции не показаны как текущие; торговые решения и PnL не вычисляются.</div>'+
@@ -880,7 +1006,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
       if(external){
         // Exchange exposure is real; its Strategy owner is NOT proven.
         // Never show Strategy PnL/Exit protection for a manual or mismatched cycle.
-        return '<div class="rail-open-position p90-far">'+
+        return '<div class="rail-open-position p90-far" data-p90-symbol="'+symbol+'">'+
           '<div class="rail-position-summary"><span><span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state far">BYBIT: ВНЕ STRATEGY</small></span>'+
           '<span class="rail-position-pnl">'+current+'</span></div>'+
           '<div class="rail-position-meta">Позиция существует на торговом аккаунте, но её точная принадлежность этой стратегии не доказана.</div>'+
@@ -891,7 +1017,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
         const checkpointTime=item.checkpoint_updated_at?new Date(item.checkpoint_updated_at).toLocaleString('ru-RU'):'нет checkpoint';
         const marketTime=item.current_price_source_time_max?new Date(item.current_price_source_time_max).toLocaleString('ru-RU'):'нет свежей цены';
         const source=item.current_price_source==='MARKET_PUBLICATION'?'MarketPublication':item.current_price_source==='R06_NATIVE_PUBLIC_TRADE'?'R06 native trade':'текущая цена недоступна';
-        return '<div class="rail-open-position p90-far">'+
+        return '<div class="rail-open-position p90-far" data-p90-symbol="'+symbol+'">'+
           '<div class="rail-position-summary"><span><span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state far">ГЕОМЕТРИЯ УСТАРЕЛА</small></span>'+
           '<span class="rail-position-pnl">'+current+'<br><small class="rail-position-meta">'+safe(source)+'</small></span></div>'+
           '<div class="rail-position-meta">Рыночная цена: '+current+' · источник '+safe(marketTime)+'</div>'+
@@ -954,7 +1080,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
           '<button class="action" type="button" onclick="ownerFullContourDiagnostic(\''+symbol+'\',\'LONG\')">Сквозной LONG</button>'+
           '<button class="action" type="button" onclick="ownerFullContourDiagnostic(\''+symbol+'\',\'SHORT\')">Сквозной SHORT</button>'+
         '</div>';
-      return '<div class="rail-open-position '+stateClass+'">'+
+      return '<div class="rail-open-position '+stateClass+'" data-p90-symbol="'+symbol+'">'+
         '<div class="rail-position-summary">'+
           '<span><span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state '+tone+'">'+stateText+'</small></span>'+
           '<span class="rail-position-pnl"><span class="p90-rail-distance">'+safe(distanceText)+'</span><br><small class="rail-position-meta">'+safe(h9NearestSide||'—')+'</small></span>'+
@@ -1014,7 +1140,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
         '<a class="action" href="https://www.bybit.kz/trade/usdt/'+symbol+'" target="_blank" rel="noopener">Bybit ↗</a>';
       void stop;
     }
-    return '<div class="rail-open-position '+stateClass+'">'+
+    return '<div class="rail-open-position '+stateClass+'" data-p90-symbol="'+symbol+'">'+
       '<button type="button" class="rail-position-summary" id="rail-toggle-'+symbol+'" onclick="toggleRailPosition(\''+symbol+'\')" aria-expanded="'+expanded+'" aria-controls="rail-open-'+symbol+'">'+
         '<span>'+arrow+'<span class="rail-symbol">'+symbol+'</span><br><small class="p90-rail-state '+tone+'">'+stateText+' · '+direction+'</small></span>'+
         '<span class="rail-position-pnl '+pnlClass+'">'+pnlText+'<br><small class="rail-position-meta">после комиссий</small></span>'+
@@ -1030,7 +1156,7 @@ function renderP90RailPositions(items,positions,diagnostic=window.ownerFullConto
           '<span>Аккаунт: '+safe(item.trading_account_id||'—')+'</span><span>'+basis+'</span></div>'+
         '<div class="rail-position-controls">'+controls+'</div>'+
       '</div></div>';
-  }).join('');
+  }).join(''));
 }
 let livePollTimer=null;
 function activePanelName(){return document.querySelector('main > .panel.active')?.id||'infra'}
@@ -1647,8 +1773,10 @@ function renderLiveState(d){
   document.getElementById('gateEventMessage').textContent=liveGateOpen?'Mainnet gate OPEN · разрешения определяет exact P90 arm-state':'Mainnet gate CLOSED · реальные Entry сейчас запрещены';renderLiveCriticalEvents(lt);renderMiniLogFeed(lt);tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
   tradeEquity.textContent=wallet?num(wallet.total_equity):'нет данных';tradeAvailable.textContent=wallet?num(wallet.available_balance):'нет данных';livePositions.textContent=positions.length;const positionReserve=wallet?Number(wallet.reserved_for_positions||0):0,orderReserve=wallet?Number(wallet.reserved_for_orders||0):0,inUse=positionReserve+orderReserve;tradeInUse.textContent=wallet?`${inUse.toFixed(2)} USDT`:'нет данных';tradeInUseDetail.textContent=wallet?`позиции ${positionReserve.toFixed(2)} + заявки ${orderReserve.toFixed(2)} USDT`:'нет account snapshot';tradeBalanceDetail.textContent=wallet?`баланс без текущего результата: ${Number(wallet.wallet_balance||0).toFixed(2)} USDT`:'account snapshot отсутствует';updateOperatorConnection();
   const positionKeys=new Set(positions.map(p=>p.symbol+':'+p.side)),savedPositionKeys=localStorage.getItem('cripta-open-position-keys');if(lastOpenPositions===null&&savedPositionKeys){try{lastOpenPositions=new Set(JSON.parse(savedPositionKeys))}catch(_e){lastOpenPositions=null}}if(lastOpenPositions!==null){for(const key of positionKeys)if(!lastOpenPositions.has(key))entrySound()}lastOpenPositions=positionKeys;localStorage.setItem('cripta-open-position-keys',JSON.stringify([...positionKeys]));
-  renderOpenRailPositions(positions);
-  window.ownerFullContourDiagnosticLatest=lt.owner_full_contour_diagnostic||null;renderP90RailPositions(lt.p90_rail?.items||[],positions);
+  window.ownerFullContourDiagnosticLatest=lt.owner_full_contour_diagnostic||null;
+  if(Array.isArray(lt.p90_rail?.items)||document.getElementById('openRailPositions')?.dataset.p90Rendered==='true')
+    renderP90RailPositions(lt.p90_rail?.items||[],positions);
+  else renderOpenRailPositions(positions);
   if(activeTradePage()==='open')positionRows.innerHTML=positions.length?positions.map(p=>{const entry=Number(p.entry_price),mark=Number(p.mark_price),size=Number(p.size),leverage=Number(p.leverage||1),direction=p.side==='Buy'?1:-1,supervisorState=({WARMUP:'прогрев',HEALTHY:'нормально',WARNING:'предупреждение',RECOVERY:'восстановление',PROVEN:'движение подтверждено',RUNNER:'сильное движение',BROKEN:'идея сломана',BLOCKED:'данных недостаточно',ERROR:'ошибка'})[p.supervisor?.state]||p.supervisor?.state||'—',move=entry>0&&mark>0?direction*(mark/entry-1)*100:null,stop=Number(p.stop_loss||0),stopMove=entry>0&&stop>0?direction*(stop/entry-1)*100:null,trail=Number(p.trailing_stop||0),trailPct=mark>0&&trail>0?trail/mark*100:null,trailTrigger=Number(p.trailing_trigger_price||0),trailTriggerMove=entry>0&&trailTrigger>0?direction*(trailTrigger/entry-1)*100:null,notional=entry*size,bybitMargin=Number(p.bybit_position_im||0),actualMargin=bybitMargin>0?bybitMargin:leverage>0?notional/leverage:null,pnl=p.net_pnl_to_close==null?null:Number(p.net_pnl_to_close),marginReturn=actualMargin>0&&pnl!=null?pnl/actualMargin*100:null,age=Math.max(0,Math.round((Date.now()-Number(p.refreshed_at_epoch_ms||0))/1000));return `<tr><td><a href="https://www.bybit.kz/trade/usdt/${p.symbol}" target="_blank" rel="noopener"><b>${p.symbol}</b></a><br><small class="muted">данные ${age} сек. назад</small></td><td>${p.strategy_name?`<span class="strategy-name-chip">${safe(p.strategy_name)}</span><br><small class="muted">${safe(p.strategy_version||'')}</small>`:p.strategy_id?`<small>${safe(p.strategy_id)} · ${safe(p.strategy_version)}</small>`:'<span class="muted">не привязана</span>'}</td><td><span class="pill">${safe(supervisorState)}</span></td><td>${p.side==='Buy'?'покупка':'продажа'}</td><td>${p.size}<br><small class="muted">объём ${notional.toFixed(2)} USDT<br>маржа ≈ ${actualMargin==null?'—':actualMargin.toFixed(2)} USDT</small></td><td>${entry.toFixed(4)}</td><td>${p.break_even_price?Number(p.break_even_price).toFixed(4):'—'}</td><td>${mark?mark.toFixed(4):'—'}</td><td>${stop?stop.toFixed(4):'не установлен'}${stopMove==null?'':`<br><b class="${stopMove>=0?'ok':'warn'}">${stopMove>=0?'+':''}${stopMove.toFixed(3)}% от входа</b>`}${trailPct==null?'':`<br><span class="ok">отступ плавающего стопа: ${trailPct.toFixed(3)}%</span>`}${trailTrigger>0?`<br><b class="ok">плавающий стоп сейчас: ${trailTrigger.toFixed(4)} (${trailTriggerMove==null?'—':(trailTriggerMove>=0?'+':' ')+trailTriggerMove.toFixed(3)+'% от входа'})</b><br><small class="muted">подтверждено Bybit</small>`:trail>0?`<br><span class="warn">цена плавающего стопа ещё не получена</span>`:''}</td><td><b class="${pnl==null?'muted':pnl>0?'ok':pnl<0?'loss':''}">${pnl==null?'—':(pnl>0?'+':'')+pnl.toFixed(4)+' USDT'}</b><br><small class="muted">после комиссий · закрытие тейкером (оценка)${marginReturn==null?'':' · '+(marginReturn>0?'+':'')+marginReturn.toFixed(2)+'% маржи'}</small></td><td><button class="action" onclick="tradeCommand('break_even','${p.symbol}')">Безубыток</button> <button class="action" onclick="tradeCommand('current_stop','${p.symbol}')">Стоп −0,20%</button><br><select id="trail-${p.symbol}" title="Отступ плавающего стопа" onchange="rememberTrailing('${p.symbol}',this.value)">${trailingOptions(p.symbol)}</select> <button class="action" onclick="setTrailing('${p.symbol}',${trail<=0})">${trail>0?'Выключить плавающий стоп':'Включить плавающий стоп'}</button> <button class="action danger" onclick="tradeCommand('close','${p.symbol}')">Закрыть</button></td></tr>`}).join(''):'<tr><td colspan="12" class="muted">Открытых позиций на Bybit нет.</td></tr>';
   const reasonText={StopLoss:'стоп',TakeProfit:'цель',TrailingStop:'плавающий стоп',UNKNOWN:'закрыто вручную'};const closed=lt.recent_closed||[],closedKeys=new Set(closed.map(x=>String(x.cycle_key||((x.exec_ids||[]).join(":"))||x.symbol+":"+x.closed_at_epoch_ms)));
   const soundSeenStorageKey='cripta-seen-closed-cycles-v1',storedCycleKeys=localStorage.getItem(soundSeenStorageKey);
@@ -1698,7 +1826,7 @@ function renderMayak(m){m=m||{};const pct=v=>v==null?'—':(100*Number(v)).toFix
 function renderSharedMarketContext(c){const e=document.getElementById('sharedMarketContext');if(!e)return;if(!c){e.textContent='Снимок ещё не создан.';return}e.innerHTML=`<b>${c.market_context_id}</b> · наблюдался ${new Date(c.observed_at).toLocaleString('ru-RU')} · качество ${c.data_quality} · версия ${c.schema_version}<br><small>Это общий объективный снимок без торговой команды. Каждая стратегия интерпретирует его отдельно.</small>`}
 function tradingViewport(){return {closed:document.querySelector('.closed-scroll')?.scrollTop||0,signals:document.querySelector('.signal-scroll')?.scrollTop||0}}
 function restoreTradingViewport(v){requestAnimationFrame(()=>{const closed=document.querySelector('.closed-scroll'),signals=document.querySelector('.signal-scroll');if(closed)closed.scrollTop=v.closed;if(signals)signals.scrollTop=v.signals})}
-async function refreshEntryShadow(){if(gateChanging)return;const viewport=tradingViewport(),d=await fetchLiveStateData(),page=activeTradePage(),selected=window.getSelection()?.anchorNode,tableSelected=selected&&(positionRows.contains(selected)||realClosedRows.contains(selected)||liveRows.contains(selected));if(!tableSelected){renderLiveState(d);installPositionCards()}if(page==='monitor'||page==='open')renderStrategyMonitor(d.strategy_monitor);if(page==='paper_open'||page==='paper_closed')renderStrategyPaper(d.paper_strategy);if(page==='open')applyLiquidityLabels();processAudio(d);restoreTradingViewport(viewport)}
+async function refreshEntryShadow(){if(gateChanging)return;const viewport=tradingViewport(),d=await fetchLiveStateData(),page=activeTradePage(),selected=window.getSelection()?.anchorNode,tableSelected=selected&&(positionRows.contains(selected)||realClosedRows.contains(selected)||liveRows.contains(selected));if(!tableSelected){renderLiveState(d);installPositionCards()}if(page==='paper_open'||page==='paper_closed')renderStrategyPaper(d.paper_strategy);if(page==='open')applyLiquidityLabels();processAudio(d);restoreTradingViewport(viewport)}
 async function resolveObserverFault(faultId){
   const reason=prompt('Причина явного resolution durable observer fault:');
   if(reason===null)return;
@@ -1736,15 +1864,20 @@ function renderObserverFaults(model){
   const summary=document.getElementById('observerFaultSummary');
   const body=document.getElementById('observerFaultItems');
   const value=model||{state:'unavailable',items:[],error:'read-model отсутствует'};
-  const items=Array.isArray(value.items)?value.items:[];
-  const historical=Array.isArray(value.archived_items)?value.archived_items:[];
+  const allItems=Array.isArray(value.items)?value.items:[];
+  // Old operator incidents stay OPEN in the durable journal but move to a
+  // collapsed history after an independently successful later P90 operation.
+  // Unknown or current-operation faults must remain prominent.
+  const items=allItems.filter(x=>x.p90_operation_relation!=='BEFORE_CURRENT_P90_OPERATION');
+  const historical=Array.isArray(value.archived_items)?[...value.archived_items]:[];
+  historical.push(...allItems.filter(x=>x.p90_operation_relation==='BEFORE_CURRENT_P90_OPERATION'));
   const archive=document.getElementById('observerFaultArchive');
   if(archive){
     archive.hidden=value.state==='unavailable'||historical.length===0;
     if(historical.length){
       document.getElementById('observerFaultArchiveSummary').textContent=
-        'История до '+new Date(value.attention_reset_at).toLocaleString('ru-RU')+
-        ' · '+historical.length+' незакрытых записей (не новые уведомления)';
+        'История прежних запусков / до сброса внимания · '+
+        historical.length+' НЕЗАКРЫТЫХ записей · журнал не изменён';
       const archiveKey=historical.map(x=>String(x.fault_id)+':'+String(x.last_seen_at)+':'+String(x.occurrence_count)).join('|');
       if(archive.dataset.renderKey!==archiveKey){
         // Keep the operator's expanded archive/details stable across polling.

@@ -484,6 +484,16 @@ def test_owner_reviewed_recovery_delta_is_immutable_git_blob(
         "2290b2aec351de43e69b02565588e076024c8352",
         "ccc5f7629a3a80e6daf2e59952cb67a5bb7dd8de33d5bc8c6c83017706dfd279",
     ),
+    # Frozen current-before-#862 R06 consumer bytes, independently checked
+    # from the exact immutable 7068bd5... Git tree (99 files).
+    (
+        "c25c2d433757842d7415fbe21bdb1d2a420f45b1",
+        "7ac7dbbf11c14c1c1d9fecb387ecb932bc3236da4d64f7622e634c290ae37ddd",
+    ),
+    (
+        "7068bd5bfc8971d4fb22b69c93e6347e0010019c",
+        "7ac7dbbf11c14c1c1d9fecb387ecb932bc3236da4d64f7622e634c290ae37ddd",
+    ),
 ])
 def test_20261108_historical_valid_consumer_attestation_is_not_corruption(
     release: str, historic_digest: str,
@@ -516,6 +526,22 @@ def test_20261108_historical_valid_consumer_attestation_is_not_corruption(
         )
 
 
+# Frozen #824 historical Exit/IPC attestation remains bound to its own
+# unchanged Git objects after the owner-approved #860 NEW recovery contract.
+# The current HEAD deliberately has different reviewed consumer bytes.
+_R14_OLD_P90_EXIT_RELEASE = "7068bd5bfc8971d4fb22b69c93e6347e0010019c"
+
+
+def _old_reviewed_exit_blob(relative: str) -> bytes:
+    try:
+        return subprocess.check_output([
+            "git", "show",
+            f"{_R14_OLD_P90_EXIT_RELEASE}:src/bybit_workbench/{relative}",
+        ])
+    except subprocess.CalledProcessError:
+        pytest.skip("historical R14 Git object missing in shallow checkout")
+
+
 def test_20261108_source_origin_allows_only_exact_reviewed_exit_ipc_bytes(
     tmp_path: Path,
 ) -> None:
@@ -541,9 +567,7 @@ def test_20261108_source_origin_allows_only_exact_reviewed_exit_ipc_bytes(
         current.parent.mkdir(parents=True, exist_ok=True)
         original.write_bytes(b"# immutable synthetic origin\n")
         current.write_bytes(
-            subprocess.check_output([
-                "git", "show", f"HEAD:src/bybit_workbench/{relative}",
-            ])
+            _old_reviewed_exit_blob(relative)
             if relative in edited else original.read_bytes()
         )
     for relative in edited:
@@ -565,10 +589,9 @@ def test_20261108_source_origin_allows_only_exact_reviewed_exit_ipc_bytes(
         compat.verify_reviewed_bugfix_delta(
             current_root=loaded, origin_root=origin,
         )
-    changed.write_bytes(subprocess.check_output([
-        "git", "show",
-        "HEAD:src/bybit_workbench/universal_exit/p90l90_real_exit_execution.py",
-    ]))
+    changed.write_bytes(_old_reviewed_exit_blob(
+        "universal_exit/p90l90_real_exit_execution.py",
+    ))
 
     # No extra consumer and no foreign historical origin may inherit approval.
     extra = loaded / "src/bybit_workbench/universal_exit/unreviewed.py"
@@ -616,9 +639,8 @@ def test_20261108_git_origin_uses_exact_reviewed_two_file_delta(
         new.parent.mkdir(parents=True, exist_ok=True)
         old.write_bytes(b"# original immutable source evidence\n")
         new.write_bytes(
-            subprocess.check_output([
-                "git", "show", f"HEAD:src/bybit_workbench/{relative}",
-            ]) if relative in edited else old.read_bytes()
+            _old_reviewed_exit_blob(relative)
+            if relative in edited else old.read_bytes()
         )
     subprocess.run(
         ("git", "-C", str(original), "init"),

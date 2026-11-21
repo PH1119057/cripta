@@ -24,7 +24,6 @@ from operations.monitoring.r06_entry_publication_shadow_probe import (
     EXISTING_P90_COLD_COUNTS,
     FIVE,
 )
-from operations.monitoring.r06_fresh_entry_boundary import _require_no_exposure_or_requests
 
 APPROVED_BASELINE = "b47aa43d9333083fb83bb16f191e16e1ff97bd33"
 _SEMANTIC_PATHS = (
@@ -202,24 +201,60 @@ def _approved_release_set(
     return identity.approved_producers
 
 
+def _require_safe_existing_checkpoint_bridge(connection: Any) -> None:
+    """No fresh epoch or order: release adoption needs DISARM, not FLAT.
+
+    An existing protected OPEN position and its outstanding Exit requests are
+    owned by the private/Exit lifecycle, not by the R06 no-order decision
+    cursor. Require zero *effective new Entry authority*: mainnet gate OFF
+    and no ACTIVE global owner-arm; no undelivered older Entry request and no
+    uncertain owned position. DEV §44–46 require a verified ordinary installer
+    to preserve enabled permissions and old account ARM rows, so their mere
+    existence cannot veto adoption of this NO_ORDER observer-only checkpoint.
+    Neither this bridge nor the installer writes gates/permissions/ARM/Exchange.
+    Fresh-epoch creation still uses the independent signed MAIN/SUB FLAT
+    preflight and exposure gate.
+    """
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
+    global_arms = connection.execute(
+        "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'"
+    ).fetchone()
+    pending_entry = connection.execute(
+        """SELECT count(*) FROM strategy_entry.execution_requests r
+           WHERE r.strategy_id=ANY(%s) AND NOT EXISTS (
+             SELECT 1 FROM strategy_entry.execution_dispatches d
+              WHERE d.execution_request_id=r.execution_request_id)""",
+        ([MAIN_ID, SUB_ID],),
+    ).fetchone()
+    uncertain = connection.execute(
+        """SELECT count(*) FROM runtime.position_ownership
+            WHERE strategy_id=ANY(%s) AND state='RECONCILIATION_REQUIRED'""",
+        ([MAIN_ID, SUB_ID],),
+    ).fetchone()
+    if (
+        gate != (False,) or global_arms != (0,)
+        or pending_entry != (0,) or uncertain != (0,)
+    ):
+        raise R06ResumeBlocked("R06_RESUME_RELEASE_GATE_NOT_SAFE")
+
+
 def bridge_checkpoint_release(
     connection: Any, *, bundles: tuple[Any, ...], session: str,
     producer: str, target: str, source_checkout: Path,
 ) -> None:
-    """Signed, atomic adoption of two EXISTING cursors, with durable audit.
+    """Attested atomic adoption of two EXISTING cursors, with durable audit.
 
-    Called only by the exclusive, advisory-locked same-unit R06 worker.
-    An epoch, plan, frame, publication, last exec ID or causal state is NEVER
-    replaced. Both release fields and both audit rows commit or roll back.
+    The exclusive same-unit R06 no-order worker may retain an already-protected
+    OPEN position on a release restart. The signed FLAT preflight is only for
+    creating a NEW source/decision epoch, not adopting the release SHA of two
+    already persisted cursors. Do not alter source epoch, causal state or cursor.
     """
-    from operations.monitoring.p90l90_real_source_bootstrap import (
-        preflight_p90_real_private_flat_source,
-    )
-
     if len(bundles) != 2 or {b.card.strategy_id for b in bundles} != {MAIN_ID, SUB_ID}:
         raise R06ResumeBlocked("R06_RESUME_PLAN_SCOPE_INVALID")
-    preflight_p90_real_private_flat_source(connection, bundles=bundles)
     with connection.transaction():
+        _require_safe_existing_checkpoint_bridge(connection)
         approved_releases = _approved_release_set(
             connection, bundles=bundles, target=target,
         )
@@ -230,7 +265,6 @@ def bridge_checkpoint_release(
         ).fetchone()
         if source != ("ACTIVE", producer):
             raise R06ResumeBlocked("R06_RESUME_SOURCE_EPOCH_CHANGED")
-        _require_no_exposure_or_requests(connection)
         rows = connection.execute(
             "SELECT strategy_id,strategy_version,entry_plan_fingerprint,"
             "exit_plan_fingerprint,consumer_release_commit,frame_number,frame_index,"

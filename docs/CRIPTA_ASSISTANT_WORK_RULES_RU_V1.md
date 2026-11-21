@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 3.9 · 2026-11-17
+**Версия:** 3.10 · 2026-11-20
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -410,6 +410,11 @@ POSITION / RE-ENTRY / TERMINAL HANDLING
 или явно поставить `BLOCKED / NOT CHECKED HERE`.
 
 ## 13. Main process principle
+
+Обязательное операционное условие для каждого нового чата/новой задачи:
+`CANON_READ_RECEIPT` по META §17.6 до действий, а не пересказ канона по памяти.
+Завершение CORE задачи подтверждается `RUNTIME BEHAVIOR VERIFIED`, не одним CI,
+коммитом, деплоем, PID или отсутствием ошибок (DEV §52.8–52.11).
 
 ```text
 UNDERSTAND THE ENVIRONMENT ONCE

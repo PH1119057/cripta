@@ -34,6 +34,79 @@ def test_prearm_requires_fresh_p90_exit_owner_status() -> None:
     assert "p90_r06_exit_owner" in source
 
 
+@pytest.mark.parametrize(
+    ("state", "raw_result", "error", "expected_result", "expected_recovery"),
+    [
+        (
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            "RECOVERY=P90_TRAIL_RECOVERY_NO_ELIGIBLE_POSITION|"
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            None,
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            "P90_TRAIL_RECOVERY_NO_ELIGIBLE_POSITION",
+        ),
+        (
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            "RECOVERY=P90_TRAIL_RECOVERY_BLOCKED:P90_SIGNED_PROOF_MISSING|"
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            None,
+            "RECOVERY=P90_TRAIL_RECOVERY_BLOCKED:P90_SIGNED_PROOF_MISSING|"
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            None,
+        ),
+        (
+            "P90_R06_EXIT_OWNER_RUNNING",
+            "RECOVERY=P90_TRAIL_RECOVERY_NO_ELIGIBLE_POSITION|"
+            "P90_R06_EXIT_OWNER_RUNNING",
+            None,
+            "RECOVERY=P90_TRAIL_RECOVERY_NO_ELIGIBLE_POSITION|"
+            "P90_R06_EXIT_OWNER_RUNNING",
+            None,
+        ),
+        (
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            "RECOVERY=P90_TRAIL_RECOVERY_NO_ELIGIBLE_POSITION|"
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            "P90_R06_EXIT_ERROR",
+            "RECOVERY=P90_TRAIL_RECOVERY_NO_ELIGIBLE_POSITION|"
+            "P90_R06_EXIT_OWNER_READY_FLAT",
+            None,
+        ),
+    ],
+)
+def test_r06_exit_published_flat_result_keeps_gateway_exact_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    state: str,
+    raw_result: str,
+    error: str | None,
+    expected_result: str,
+    expected_recovery: str | None,
+) -> None:
+    # #860 regression: old READY_FLAT producer was made non-exact by
+    # a harmless recovery prefix. Gateway itself is intentionally untouched.
+    from operations.connectivity import universal_exit_consumer as consumer
+
+    status_path = tmp_path / "p90-r06-exit-status.json"
+    monkeypatch.setattr(consumer, "P90_R06_OWNER", "ENABLED")
+    monkeypatch.setattr(consumer, "CONSUMER_ARM", "DISABLED")
+    monkeypatch.setattr(consumer, "LOADED_COMMIT", "a" * 40)
+    monkeypatch.setattr(consumer, "STATUS_PATH", status_path)
+    consumer._p90_status(state=state, result=raw_result, error=error)
+    status = consumer.json.loads(status_path.read_text(encoding="utf-8"))
+
+    assert status["state"] == state
+    assert status["result"] == expected_result
+    assert status["recovery_result"] == expected_recovery if expected_recovery else (
+        "recovery_result" not in status
+    )
+    assert status["error"] == error
+    assert status["release_commit"] == "a" * 40
+    assert status["generic_consumer"] == "DISABLED"
+    assert status["p90_r06_exit_owner"] == "ENABLED"
+
+
+
 def test_r06_exit_owner_module_has_no_public_exchange_network_client() -> None:
     source = (
         ROOT / "operations/connectivity/p90_r06_exit_owner.py"

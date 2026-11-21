@@ -25,6 +25,7 @@ from typing import Any
 
 from psycopg.rows import tuple_row
 
+from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.lifecycle_ack import claim_exit_position
 from bybit_workbench.market_data.entry_publication_reader import (
@@ -280,6 +281,34 @@ def _runtime_scope(
     return _RuntimeScope(bundles=bundles, routes=routes, identity=identity)
 
 
+def _flat_scoped_source_acceptable(source: NativeSourceEvidence) -> bool:
+    """Keep a FLAT Exit ready through a quiet symbol, not a broken producer.
+
+    The source reader has proved one ACTIVE epoch, approved producer, and
+    original cursor identity; an individual cursor can be older than its
+    strategy TTL when no trade occurred. Never relax this for OPEN positions,
+    drift, a missing cursor, or all five unusable scopes. A current immutable
+    publication and source-session parity are still checked by the caller.
+    """
+    if (
+        source.market_source_id != BYBIT_PUBLIC_MARKET_SOURCE_ID
+        or not source.session_id or not source.producer_release_commit
+        or set(source.by_symbol) != set(_SYMBOLS)
+    ):
+        return False
+    fresh = 0
+    for symbol, evidence in source.by_symbol.items():
+        if evidence.symbol != symbol:
+            return False
+        if evidence.ready:
+            if evidence.reason != "NATIVE_SOURCE_COMMITTED_CURRENT":
+                return False
+            fresh += 1
+        elif evidence.reason != "NATIVE_SOURCE_CURSOR_NOT_FRESH":
+            return False
+    return fresh > 0
+
+
 def _flat_source_ready(
     source_connection: Any,
     *,
@@ -303,7 +332,10 @@ def _flat_source_ready(
             observed_at=source_now,
             max_lag=min(ttls.values()),
         )
-        _need(source.ready, "P90_R06_EXIT_NATIVE_SOURCE_NOT_READY")
+        _need(
+            _flat_scoped_source_acceptable(source),
+            "P90_R06_EXIT_NATIVE_SOURCE_NOT_READY",
+        )
         pin = read_entry_publication_pin(
             source_connection,
             observed_at=source_now,
@@ -359,6 +391,24 @@ def _last_closed_boundary(connection: Any, position: StrategyPosition) -> dateti
     return value.astimezone(UTC)
 
 
+def _pinned_closed_5m_is_settling(pin: EntryPublicationPin, symbol: str) -> bool:
+    """One real committed 5m boundary must settle for 15s before R03 seed.
+
+    A pinned publication may already reference the new closed boundary while
+    load_verified_r03_native_closed_seed intentionally settles at as_of - 15s.
+    Only that exact bounded window is a harmless WAIT, not an Exit outage.
+    All other source/history mismatches remain fail-closed.
+    """
+    try:
+        boundary = datetime.fromisoformat(pin.closed_refs[symbol]["5"])
+        if boundary.utcoffset() != timedelta(0):
+            return False
+        seconds = (pin.as_of_second - boundary).total_seconds()
+        return 0 <= seconds < 15
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
+
+
 def _source_snapshot(
     source_connection: Any,
     *,
@@ -399,6 +449,13 @@ def _source_snapshot(
             pin.source_session_id == source.session_id
             and pin.producer_release_commit == source.producer_release_commit,
             "P90_R06_EXIT_PUBLICATION_SOURCE_DRIFT",
+        )
+        # The publisher may point to a freshly committed 5m close before
+        # R03's mandatory 15-second settlement grace. Do not call it source
+        # corruption or consume that candle early; retry at a settled boundary.
+        _need(
+            not _pinned_closed_5m_is_settling(pin, position.symbol),
+            "P90_R06_EXIT_CLOSED_5M_SETTLING",
         )
         # Read extra VERIFIED history only for bounded causal catch-up after
         # a technical outage. Strategy geometry still consumes exactly RAW36
@@ -1195,14 +1252,22 @@ def run_p90_r06_exit_once(
         )
         last_closed = _last_closed_boundary(connection, position)
         expected = _next_closed_boundary(position.fill_at, last_closed)
-        snapshot = _source_snapshot(
-            source_connection,
-            scope=scope,
-            position=position,
-            latest=latest,
-            causal_boundary=expected,
-            now=current,
-        )
+        try:
+            snapshot = _source_snapshot(
+                source_connection,
+                scope=scope,
+                position=position,
+                latest=latest,
+                causal_boundary=expected,
+                now=current,
+            )
+        except P90R06ExitBlocked as exc:
+            if str(exc) != "P90_R06_EXIT_CLOSED_5M_SETTLING":
+                raise
+            # No decision, no new trade/position mutation. Retry same causal
+            # boundary when the independently verified seed becomes settled.
+            results.append(f"P90_R06_EXIT_CLOSED_5M_SETTLING:{position.symbol}")
+            continue
         if snapshot.closed_at > expected:
             # A technical outage may leave one or more CLOSED boundaries
             # behind the current publication. Process EXACTLY the next durable

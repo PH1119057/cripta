@@ -16,6 +16,111 @@ import pytest
 from bybit_workbench.universal_entry import p90l90_real_source_compatibility as compat
 
 
+def test_r14_860_new_trail_exact_r06_origin_bytes_and_negative_paths(
+    tmp_path: Path,
+) -> None:
+    # Independently checked on cripta-owned exact #862 Git checkout.
+    # The frozen #854 seven-file vector must remain byte-identical.
+    previous = compat._REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256
+    reviewed = compat._REVIEWED_R06_P90_TRAIL035_PERSISTENT_860_SHA256
+    added = {
+        "universal_exit/p90l90_exchange_safety.py",
+        "universal_exit/p90l90_real_trail_reconcile.py",
+        "universal_exit/p90l90_real_recovery_send.py",
+    }
+    edited = {
+        "universal_exit/p90l90_real_v3.py",
+        "universal_exit/p90l90_real_exit_execution.py",
+    }
+    assert len(previous) == 7
+    assert len(reviewed) == 10
+    assert set(reviewed) == set(previous) | added
+    assert all(
+        reviewed[relative] == digest
+        for relative, digest in previous.items()
+        if relative not in edited
+    )
+    assert compat._reviewed_delta_for_origin(
+        set(reviewed), origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+        current_hashes=reviewed,
+    ) == reviewed
+
+    # Windows worktrees may have CRLF while immutable Git blobs use LF.
+    # R14 binds Git-object bytes, not platform-specific checkout bytes.
+    git_root = Path(__file__).resolve().parents[1]
+    blobs = {
+        relative: subprocess.check_output([
+            "git", "-C", str(git_root), "show",
+            f"HEAD:src/bybit_workbench/{relative}",
+        ])
+        for relative in reviewed
+    }
+    for relative, digest in reviewed.items():
+        assert hashlib.sha256(blobs[relative]).hexdigest() == digest
+
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat._reviewed_delta_for_origin(
+            set(reviewed) | {"universal_exit/unreviewed.py"},
+            origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+        )
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat._reviewed_delta_for_origin(
+            set(reviewed), origin_commit="0" * 40,
+        )
+
+    # Exercise the real full-inventory verifier, not only the map selector.
+    origin = tmp_path / compat._REVIEWED_R06_SOURCE_ORIGIN
+    current = tmp_path / ("f" * 40)
+    for relative in sorted(reviewed):
+        item = current / "src/bybit_workbench" / relative
+        item.parent.mkdir(parents=True, exist_ok=True)
+        item.write_bytes(blobs[relative])
+        if relative not in added:
+            old = origin / "src/bybit_workbench" / relative
+            old.parent.mkdir(parents=True, exist_ok=True)
+            old.write_bytes(b"# original pre-stabilization consumer bytes\\n")
+    for relative in (
+        "strategy_position.py",
+        "exchange_position_identity.py",
+        "domain/models.py",
+        "market_data/shared_closed_candles.py",
+    ):
+        for root in (origin, current):
+            item = root / "src/bybit_workbench" / relative
+            item.parent.mkdir(parents=True, exist_ok=True)
+            item.write_bytes(b"# unchanged required shared consumer\\n")
+
+    compat.verify_reviewed_bugfix_delta(
+        current_root=current, origin_root=origin,
+    )
+    tampered = current / "src/bybit_workbench/universal_exit/p90l90_real_recovery_send.py"
+    original = tampered.read_bytes()
+    tampered.write_bytes(original + b"\\n# unreviewed change\\n")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="REVIEWED_BUGFIX_CONTENT_DRIFT",
+    ):
+        compat.verify_reviewed_bugfix_delta(
+            current_root=current, origin_root=origin,
+        )
+    tampered.write_bytes(original)
+    extra = current / "src/bybit_workbench/universal_exit/unreviewed.py"
+    extra.write_bytes(b"# unexpected consumer\\n")
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat.verify_reviewed_bugfix_delta(
+            current_root=current, origin_root=origin,
+        )
+
+
 def test_r14_r06_origin_accepts_only_exact_reviewed_four_file_delta() -> None:
     expected = compat._REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256
     assert set(expected) == {
@@ -50,13 +155,55 @@ def test_r14_r06_origin_accepts_only_exact_reviewed_four_file_delta() -> None:
         )
 
 
-def test_r14_reviewed_r06_r07_r10_hashes_bind_current_exact_git_bytes() -> None:
-    reviewed = compat._REVIEWED_R07_R10_PUBLIC_SOURCE_SHA256
+def test_r14_854_reviewed_p90_consumer_hashes_bind_current_exact_git_bytes() -> None:
+    # Historical #470/#820/#824 hash vectors must stay frozen. The sole
+    # changed consumer in #854 is the reviewed P90 protection check.
+    old = compat._REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256
+    reviewed = compat._REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256
+    path = "universal_entry/p90l90_real_contract_v3.py"
+    assert old[path] == "2bdd80448ae7cc6274078939f8b41ebd706b09e089824ec69c99052416395ac7"
+    assert reviewed[path] == "eeee1198827b8c42f233c9dd0faef66febbf97cffb1d882a173d54a7bb30ab21"
+    assert set(old) == set(reviewed)
+    assert all(
+        old[key] == new_sha for key, new_sha in reviewed.items() if key != path
+    )
+    # The pre-#860 R10 consumer map is IMMUTABLE historical evidence.
+    # Current HEAD intentionally contains new owner-approved Exit recovery
+    # bytes, which must receive their own new explicit reviewed hash vector.
+    previous_release = "7068bd5bfc8971d4fb22b69c93e6347e0010019c"
     for relative, expected in reviewed.items():
-        blob = subprocess.check_output([
-            "git", "show", f"HEAD:src/bybit_workbench/{relative}",
-        ])
-        assert hashlib.sha256(blob).hexdigest() == expected
+        result = subprocess.run(
+            ["git", "show",
+             f"{previous_release}:src/bybit_workbench/{relative}"],
+            capture_output=True, check=False,
+        )
+        if result.returncode != 0:
+            pytest.skip("exact prior R14 release missing in shallow checkout")
+        assert hashlib.sha256(result.stdout).hexdigest() == expected
+
+    assert compat._reviewed_delta_for_origin(
+        set(reviewed),
+        origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+        current_hashes=reviewed,
+    ) == reviewed
+    # One unreviewed extra file or a single altered byte must never inherit
+    # the #854 source-origin compatibility exemption.
+    with pytest.raises(
+        compat.P90RealSourceCompatibilityUnverified,
+        match="UNREVIEWED_CONSUMER_DELTA",
+    ):
+        compat._reviewed_delta_for_origin(
+            set(reviewed) | {"universal_entry/unreviewed.py"},
+            origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+            current_hashes=reviewed,
+        )
+    changed = dict(reviewed)
+    changed[path] = "0" * 64
+    assert compat._reviewed_delta_for_origin(
+        set(reviewed),
+        origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
+        current_hashes=changed,
+    ) == old
 
 
 def test_r14_r06_origin_accepts_exact_account_lock_order_delta() -> None:
@@ -93,11 +240,11 @@ def test_r14_r06_origin_accepts_exact_protected_exit_recovery_delta() -> None:
         set(reviewed),
         origin_commit=compat._REVIEWED_R06_SOURCE_ORIGIN,
     ) == reviewed
-    for relative, expected in reviewed.items():
-        blob = subprocess.check_output([
-            "git", "show", f"HEAD:src/bybit_workbench/{relative}",
-        ])
-        assert hashlib.sha256(blob).hexdigest() == expected
+    # This is a preserved historical SHA vector, not a statement about
+    # the new HEAD after the explicitly reviewed #854 P90 consumer change.
+    assert reviewed["universal_entry/p90l90_real_contract_v3.py"] == (
+        "2bdd80448ae7cc6274078939f8b41ebd706b09e089824ec69c99052416395ac7"
+    )
 
 
 _R06_PRE_PROTECTED_EXIT_RECOVERY_RELEASES = (
@@ -230,3 +377,64 @@ def test_r14_post_promotion_attestations_keep_exact_historical_digest(
 
 def test_r14_unlisted_release_does_not_inherit_post_promotion_digest() -> None:
     assert "f" * 40 not in compat._REVIEWED_HISTORICAL_CONSUMERS
+
+
+# #854 release-preparation regression: the older active R06 source epoch
+# already contains these exact append-only release attestations. Both values
+# were reconstructed independently from 99 consumer Git blobs for EACH SHA.
+_R06_PRE_R10_HISTORICAL_RELEASES = (
+    "21385b16898190d8a222b0ee3fa01a48ea514d5f",
+    "46cf79ac2ac53872548c8d5e960bacded877a98a",
+    "549ba6863556e47adcfab71cee8753b941455b5f",
+    "643410ccbf8b97d1a564c95fe3c64eebbd67cdb6",
+    "66c35fb0177a929573776b9349a0f28fc318778b",
+    "6b49ba6ef6bf3c3041c8b0f5ddee9f4879cd5acd",
+    "6feadeef3f3308b7ed45a6d0202105007568f5a5",
+    "7608434c84a2bf5546be75bf682e3d212b5f5865",
+    "e25e455038aed397507818f0508b9bbfbabc3568",
+    "e9d71bfb0729c642707168b74d97c8640f0bb8bf",
+)
+_R06_PRE_R10_HISTORICAL_DIGEST = (
+    "173df8aab8a71bf329c560e010f068618f3abb0ba8722018edd321349211b6a8"
+)
+
+
+def test_r14_r10_release_historical_attestations_exact_allowlist() -> None:
+    assert len(_R06_PRE_R10_HISTORICAL_RELEASES) == 10
+    assert len(set(_R06_PRE_R10_HISTORICAL_RELEASES)) == 10
+    assert compat._R06_20261118_PRE_R10_HISTORICAL_DIGEST == (
+        _R06_PRE_R10_HISTORICAL_DIGEST
+    )
+    assert all(
+        compat._REVIEWED_HISTORICAL_CONSUMERS.get(release)
+        == _R06_PRE_R10_HISTORICAL_DIGEST
+        for release in _R06_PRE_R10_HISTORICAL_RELEASES
+    )
+    # No lineage-prefix or arbitrary same-looking new release is admitted.
+    assert compat._REVIEWED_HISTORICAL_CONSUMERS.get("0" * 40) is None
+    assert compat._REVIEWED_HISTORICAL_CONSUMERS.get(
+        "6c4027ca77811df3bafd42516df1cbd05f5c385b"
+    ) is None
+
+
+@pytest.mark.parametrize("release", _R06_PRE_R10_HISTORICAL_RELEASES)
+def test_r14_r10_historical_99_consumer_git_objects_exact(
+    release: str,
+) -> None:
+    root = Path.cwd()
+    if not (root / ".git").is_dir():
+        pytest.skip("full Git checkout unavailable")
+    result = subprocess.run(
+        ["git", "cat-file", "-e", f"{release}^{{commit}}"],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.skip("exact historical commit missing in checkout")
+    inventory = compat._consumer_inventory_from_git(root, release)
+    assert len(inventory) == 99
+    digest = hashlib.sha256(compat.CONTRACT_VERSION.encode())
+    for relative in sorted(inventory):
+        digest.update(relative.encode() + b"\0")
+        digest.update(hashlib.sha256(inventory[relative]).digest())
+    assert digest.hexdigest() == _R06_PRE_R10_HISTORICAL_DIGEST

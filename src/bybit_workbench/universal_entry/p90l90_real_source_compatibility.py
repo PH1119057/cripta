@@ -141,6 +141,47 @@ _REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
 ), _R06_PRE_ACCOUNT_LOCK_ORDER_HISTORICAL_DIGEST))
 
 
+# #854 post-merge production release diagnostic 2026-11-19: before the
+# verified R10 consumer change, ten already-registered ACTIVE-R06-source
+# releases shared one immutable 99-file consumer inventory. Every digest
+# below was RECOMPUTED directly from its own immutable Git commit objects
+# by the approved read-only cripta actor (not trusted from production SQL).
+# Preserve their append-only historical attestations exactly as written.
+# This is NOT approval to reuse an old digest for the newly loaded release:
+# inspect_real_source_identity separately demands the current consumer
+# contract for the exact new release, and unknown releases still fail closed.
+_R06_20261118_PRE_R10_HISTORICAL_DIGEST = (
+    "173df8aab8a71bf329c560e010f068618f3abb0ba8722018edd321349211b6a8"
+)
+_REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
+    "21385b16898190d8a222b0ee3fa01a48ea514d5f",
+    "46cf79ac2ac53872548c8d5e960bacded877a98a",
+    "549ba6863556e47adcfab71cee8753b941455b5f",
+    "643410ccbf8b97d1a564c95fe3c64eebbd67cdb6",
+    "66c35fb0177a929573776b9349a0f28fc318778b",
+    "6b49ba6ef6bf3c3041c8b0f5ddee9f4879cd5acd",
+    "6feadeef3f3308b7ed45a6d0202105007568f5a5",
+    "7608434c84a2bf5546be75bf682e3d212b5f5865",
+    "e25e455038aed397507818f0508b9bbfbabc3568",
+    "e9d71bfb0729c642707168b74d97c8640f0bb8bf",
+), _R06_20261118_PRE_R10_HISTORICAL_DIGEST))
+
+
+# #862 first production attempt (2026-11-19) stopped before code cutover:
+# two previously registered releases under the ACTIVE R06 physical origin
+# have the same exact 99-file historical consumer inventory. Independent
+# cripta-owned immutable Git worktree 7068bd5... recomputed this SHA256
+# contract digest; c25c2d... -> 7068bd5... changes no consumer paths.
+# Preserve their DB attestations verbatim. This does NOT authorize using the
+# old digest for the new loaded release, nor grant any ARM/Exchange permission.
+_R06_PRE_TRAIL035_860_HISTORICAL_DIGEST = (
+    "7ac7dbbf11c14c1c1d9fecb387ecb932bc3236da4d64f7622e634c290ae37ddd"
+)
+_REVIEWED_HISTORICAL_CONSUMERS.update(dict.fromkeys((
+    "c25c2d433757842d7415fbe21bdb1d2a420f45b1",
+    "7068bd5bfc8971d4fb22b69c93e6347e0010019c",
+), _R06_PRE_TRAIL035_860_HISTORICAL_DIGEST))
+
 # These wiring adapters are reviewed in the release diff. All Strategy,
 # Entry/Exit algorithms, codecs, contracts, account and private-proof modules
 # below remain byte-identical to the retained origin release.
@@ -269,13 +310,57 @@ _REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256 = {
 }
 
 
+# #854 owner-approved R10 P90 pre-send proof adds one deterministic, reviewed
+# consumer byte change. The retained R06 physical source origin, all original
+# historical producer attestations and earlier reviewed hash vectors remain
+# unchanged. The adapter/reader edits outside this consumer inventory are
+# covered by the release diff and independent R10/Exit negative tests.
+_REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256 = {
+    **_REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256,
+    "universal_entry/p90l90_real_contract_v3.py":
+        "eeee1198827b8c42f233c9dd0faef66febbf97cffb1d882a173d54a7bb30ab21",
+}
+
+
+# #860: exact cripta-actor SHA256 attestation of the current full consumer
+# delta against the ACTIVE physical R06 source origin. Historical reviewed
+# hash vectors remain frozen; this is not ARM or Exchange authorization.
+_REVIEWED_R06_P90_TRAIL035_PERSISTENT_860_SHA256 = {
+    **_REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256,
+    "universal_exit/p90l90_real_v3.py":
+        "a553b1695a7c5588d43cf92a1a7443739ea4e816ef2aa51b05cec9634d806b21",
+    "universal_exit/p90l90_real_exit_execution.py":
+        "2aa05359cf468f41087374d694ec21967949c7dfb0b0bd8ac3fc671cf139a348",
+    "universal_exit/p90l90_exchange_safety.py":
+        "9470a4798a20247ac92471a740f0dc7f25888d0d92b6688f69257ce17162c543",
+    "universal_exit/p90l90_real_trail_reconcile.py":
+        "d015f0cf66edea2b7147576c5c16e694be1fd71d964f77094414e86bc2830f53",
+    "universal_exit/p90l90_real_recovery_send.py":
+        "43ee81841f0d215c51f14a761bb5b428ba5be984c5bf779357ed07f43d829aec",
+}
+
+
 def _reviewed_delta_for_origin(
     changed: set[str], *, origin_commit: str,
+    current_hashes: dict[str, str] | None = None,
 ) -> dict[str, str]:
+    if (
+        origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
+        and changed == set(_REVIEWED_R06_P90_TRAIL035_PERSISTENT_860_SHA256)
+    ):
+        return _REVIEWED_R06_P90_TRAIL035_PERSISTENT_860_SHA256
     if (
         origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
         and changed == set(_REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256)
     ):
+        # Select a frozen reviewed vector only when the entire exact byte
+        # inventory matches it. Never infer compatibility from changed paths
+        # alone, and never relabel old historical attestations.
+        if current_hashes is not None and all(
+            current_hashes.get(relative) == sha
+            for relative, sha in _REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256.items()
+        ):
+            return _REVIEWED_R06_ACCOUNT_LOCK_ORDER_R10_854_SHA256
         return _REVIEWED_R06_ACCOUNT_LOCK_ORDER_SHA256
     if (
         origin_commit == _REVIEWED_R06_SOURCE_ORIGIN
@@ -364,7 +449,12 @@ def verify_reviewed_bugfix_delta(*, current_root: Path, origin_root: Path) -> No
     if not changed:
         return
     reviewed = _reviewed_delta_for_origin(
-        changed, origin_commit=origin_root.resolve().name,
+        changed,
+        origin_commit=origin_root.resolve().name,
+        current_hashes={
+            relative: hashlib.sha256(current[relative].read_bytes()).hexdigest()
+            for relative in changed if relative in current
+        },
     )
     for relative, expected in reviewed.items():
         item = current.get(relative)
@@ -476,7 +566,12 @@ def verify_reviewed_bugfix_delta_from_git(
     if not changed:
         return
     reviewed = _reviewed_delta_for_origin(
-        changed, origin_commit=origin_commit,
+        changed,
+        origin_commit=origin_commit,
+        current_hashes={
+            relative: hashlib.sha256(current[relative].read_bytes()).hexdigest()
+            for relative in changed if relative in current
+        },
     )
     for relative, expected in reviewed.items():
         item = current.get(relative)

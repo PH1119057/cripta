@@ -19,6 +19,8 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
 
 from .contracts import ExitActionKind, ExitObservation
 
+P90_TRAIL_RECOVERY_POLICY = "P90_TRAIL035_PERSISTENT_V1"
+
 
 class P90RealExitUnverified(ValueError):
     """Exact real position, source or protection evidence is insufficient."""
@@ -53,6 +55,7 @@ def project_p90l90_real_exit(
     An unverified observation is rejected, never modeled as a paper fill.
     """
     postfill = observation.event_kind == "P90L90_REAL_POSTFILL"
+    recovery = observation.event_kind == "P90L90_REAL_TRAIL_RECOVERY"
     if (
         position.strategy_id not in ALLOWED_SYMBOLS
         or position.strategy_version != VERSION
@@ -68,11 +71,11 @@ def project_p90l90_real_exit(
         or not position.strategy_execution_binding_id
         or position.position_idx != 0
         or position.initial_protection_confirmed_at is None
-        or (observation.event_at < position.fill_at if postfill
+        or (observation.event_at < position.fill_at if (postfill or recovery)
             else observation.event_at <= position.fill_at)
         or observation.event_kind not in {
             "P90L90_REAL_NATIVE_TRADE", "P90L90_REAL_CLOSED_5M",
-            "P90L90_REAL_POSTFILL",
+            "P90L90_REAL_POSTFILL", "P90L90_REAL_TRAIL_RECOVERY",
         }
     ):
         raise P90RealExitUnverified("P90_REAL_EXIT_POSITION_OR_SOURCE_NOT_VERIFIED")
@@ -110,7 +113,11 @@ def project_p90l90_real_exit(
         or real.get("actual_fill_confirmed") is not True
         or real.get("protection_exchange_confirmed") is not True
         or (real.get("fill_to_postfill_source_verified") is not True
-            if postfill else real.get("durable_cursor_verified") is not True)
+            if postfill else (
+                real.get("current_trailing_recovery_verified") is not True
+                or real.get("current_original_ltp_verified") is not True
+                or real.get("trailing_recovery_policy") != P90_TRAIL_RECOVERY_POLICY
+            ) if recovery else real.get("durable_cursor_verified") is not True)
         or (postfill and (
             not isinstance(real.get("signed_fill_execution_ids"), list)
             or not real["signed_fill_execution_ids"]
@@ -125,15 +132,23 @@ def project_p90l90_real_exit(
         and real.get("postfill_no_native_trade_rest_verified") is True
     )
     last = (
-        _positive(real.get("postfill_signed_mark_price"), "SIGNED_MARK")
-        if zero_native
-        else _positive(real.get("native_trade_price"), "NATIVE_PRICE")
+        _positive(real.get("current_original_ltp"), "CURRENT_ORIGINAL_LTP")
+        if recovery else (
+            _positive(real.get("postfill_signed_mark_price"), "SIGNED_MARK")
+            if zero_native
+            else _positive(real.get("native_trade_price"), "NATIVE_PRICE")
+        )
     )
-    best = _positive(real.get("durable_best_favorable_price"), "MFE_PRICE")
+    entry = position.actual_avg_fill
+    # The present-time reconciliation deliberately does not reconstruct old MFE.
+    best = (
+        entry if recovery else
+        _positive(real.get("durable_best_favorable_price"), "MFE_PRICE")
+    )
     live_stop = _positive(real.get("exchange_stop_price"), "EXCHANGE_STOP")
     live_tp = _positive(real.get("exchange_tp_price"), "EXCHANGE_TP")
+    mark = _positive(real.get("exchange_mark_price"), "SIGNED_MARK")
     tick = _positive(real.get("tick_size"), "TICK_SIZE")
-    entry = position.actual_avg_fill
     if (
         not entry.is_finite() or entry <= 0
         or live_stop % tick != 0 or live_tp % tick != 0
@@ -161,12 +176,34 @@ def project_p90l90_real_exit(
         entry * (Decimal("1.005") if long else Decimal("0.995")),
         tick, up=long,
     )
+    if recovery:
+        if live_trailing == expected_distance:
+            return None  # Already armed on Bybit: idempotent, never POST twice.
+        if live_trailing != 0 or not (
+            live_stop < mark < live_tp and live_stop < last < live_tp
+            if long else live_tp < mark < live_stop
+            and live_tp < last < live_stop
+        ):
+            raise P90RealExitUnverified(
+                "P90_REAL_TRAIL_RECOVERY_SIGNED_PRICE_OR_GUARD_UNVERIFIED"
+            )
+        # Bybit supports omitting activePrice: starts trailing from its current
+        # LTP when +0.5% is already satisfied. Otherwise wait at the original
+        # Entry-relative threshold; NEVER replay a past high-watermark.
+        mutation: dict[str, object] = {
+            "distance": str(expected_distance), "tpsl_mode": "Full",
+        }
+        if not (last >= activation if long else last <= activation):
+            mutation["active_price"] = str(activation)
+        return (
+            ExitActionKind.SET_TRAILING, mutation,
+            "P90L90_REAL_BYBIT_NATIVE_TRAIL035_RECONCILE",
+        )
     if live_trailing == 0 and observation.event_kind in {
         "P90L90_REAL_NATIVE_TRADE", "P90L90_REAL_POSTFILL",
     }:
         # Arm once, before the trigger: Exchange activePrice will activate the
         # autonomous trailing on +0.5%. No repeated SET_STOP proxy is allowed.
-        mark = _positive(real.get("exchange_mark_price"), "SIGNED_MARK")
         if favorable >= Decimal("0.5") or (mark >= activation if long else mark <= activation):
             # A past high/low watermark cannot be reconstructed into an
             # Exchange-native stop after price has already retraced.

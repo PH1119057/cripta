@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.10
-**Дата:** 2026-11-18
+**Версия:** 3.11
+**Дата:** 2026-11-19
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -1293,6 +1293,55 @@ Runtime actor `cripta` не получает table-wide DELETE на
 Новый v3 run по-прежнему начинается только explicit authenticated owner click.
 Assistant/server maintenance action не подменяет owner trigger.
 
+
+### 4.8.4 Diagnostic account scope and the P90 TRAIL035 proof boundary — OWNER CLARIFICATION 2026-11-19 (#865)
+
+Владелец уточнил: два существующих dedicated Bybit TradingAccount **MAIN**
+и **SUB** — те самые специальные торговые аккаунты для REAL diagnostic.
+Разрешены ограниченные тестовые входы по **10 USDT на позицию**,
+**isolated 1x**, на инструменте из уже разрешённого соответствующему
+аккаунту набора: MAIN LTCUSDT/INJUSDT; SUB DOTUSDT/ARBUSDT/APTUSDT.
+Для будущих отдельных реальных торговых аккаунтов владелец сообщит
+об изменении scope; это уточнение не переносит permission на них, не
+расширяет current instrument list, не снимает капитал/слот/identity
+и не разрешает неограниченную серию автоматических Exchange orders.
+
+**Авторизация и метод:** 10 USDT — разрешённая граница риска, а не
+способ подменить контрольный вход. Для §4.8.3 применяются существующие
+`OWNER_FULL_CONTOUR_TRIGGER`, authenticated owner action, отдельная
+StrategyVersion v3 и все её MAIN/SUB private, admission, current
+source, mode, slot, protection, signed readback и lifetime gates. В
+частности, v3 имеет **свой** SL/TP ±0.2%, а не P90 stop -10% и
+TRAIL035. §4.8 execution smoke (без StrategySignal/Exit lineage) —
+только transport smoke, не полный контур. Нельзя запустить оба
+через произвольный root/SQL/sentinel_exec/pytest или выдать
+диагностическое approval за general owner ARM. Изолированная
+серверная test-среда не содержит настоящих Bybit credentials и
+не вправе отправлять реальные ордера.
+
+**Для проверки P90 TRAIL035** требуется отдельная, неизменённая
+production P90 StrategyVersion с разрешённым current MAIN/SUB
+scope и *обычным* ENTRY/EXIT/financial gate по §4.15.1,
+либо будущий explicit reviewed diagnostic contract, использующий
+именно исходный P90 ExitPlan без подделки P90 stats. Тест
+`OWNER_FULL_CONTOUR_TRIGGER` v3 с ExitPlan ±0.2% **никогда**
+не считается тестом TRAIL035. Решение только после реального
+eligible fill, подтверждённого SL/TP, оригинальных market
+facts, signed private account, native trailing-stop POST и
+**независимого** signed GET trailingStop с сохранённым SL/TP;
+невозможность получить безопасный eligible fill фиксируется
+`NOT EXERCISED`, а не подменяется принудительной сделкой.
+
+Это согласие не даёт разрешения менять уже OPEN позицию,
+отменять текущую защиту, переармливать закрытый owner gate или
+обходить `UNKNOWN`/failed protection. Изменение конкретного
+Entry/Exit/Strategy risk contract потребует отдельной immutable
+версии и §4.15/ARCH review. Разрешение пользователя от
+2026-11-19 фиксирует тестовый account scope, но не утверждает,
+что diagnostic v3 уже установлен/работает, и не является
+доказательством LIVE E2E.
+
+
 ## 4.9 PAPER / REAL execution mode — OWNER DECISION 2026-10-06
 
 Execution mode — это выбор среды исполнения одной активной Strategy, а не
@@ -1740,6 +1789,17 @@ from this value; all §4.7/§7.6.3 gates remain mandatory.
 - Закрытые 5m свечи остаются источником динамической противоположной RAW L5-3 **TP**, не источником обновления Exchange trailing. Действующие начальный TP и аварийный SL нельзя молча отменить/ослабить во время постановки или обновления TP; отдельные Exchange mutation/fill races, partial fill, very-fast TP и restart должны пройти отрицательные и end-to-end проверки. При потере private WS/источника/подтверждения защиты — fail-closed и существующий fault/reconciliation процесс, без придуманного market close.
 
 Настоящее решение не даёт автоматического LIVE-arm, permission, регистрации активной стратегии или права обойти Observer/Execution hardstop. До live-equivalence обязательны реальные MAIN/SUB account-local proof, post-fill handoff, native/candle continuity, Bybit-side TRAIL035 readback, recovery и §4.7 gates.
+
+**OWNER DECISION 2026-11-19 — persistent TRAIL035 reconciliation after restart/outage (Issue #860; supersedes only the terminal late-arm prohibition above).** The first-fill quick arm remains preferred, but expiration of its 15-second proof window is a *diagnostic incident*, **not** permanent loss of a protected OPEN position's TRAIL035 obligation. The recovery owner rechecks every exact eligible OPEN StrategyPosition on each bounded reconciliation cycle and after private-runtime / Exit restart, regardless of elapsed time (minutes/hours). When the exact StrategyPosition+immutable ExitPlan require TRAIL035 but signed Bybit `/v5/position/list` reports `trailingStop=0`, an authorized account-scoped Universal Exit / Execution path must attempt the missing native trailing after independent current proofs. It does not replay a historical first-fill observation and does not use stale MFE/high-watermark to fabricate an already-running stop. No 15-second terminal suppression for **new-policy eligible** positions.
+
+- **Fresh position/protection identity:** authenticated current MAIN/SUB TradingAccount/connector/UID, matching immutable StrategyVersion/ExitPlan, Exchange positionIdx, symbol, side, avgFill, qty, OPEN ownership/slot, signed initial SL+TP and current effective protective orders, no pending or unknown order/fill/mutation, and one durable account/position lock. A stale private projection or Exchange ACK alone is insufficient. Current original MarketSource Last Traded Price must have a fresh, provenance-bound snapshot, tick size and valid trading state; historical full native replay is separately required only for consumers that genuinely depend on it. A new trail activation is a present-time protection action, not a claim that missed historical profits were preserved.
+- **Price/activation:** leave immutable Entry-relative `activation_profit_pct=0.5` and `distance_pct=0.35` unchanged. Native Bybit `trailingStop` is an **absolute price distance** from `actual_avg_fill * 0.0035`, normalized safely to current instrument tick, not `0.35` in Bybit price units. If fresh original LTP is at/above the LONG threshold (at/below SHORT), submit `POST /v5/position/trading-stop` with `trailingStop` and **no `activePrice`**: Bybit starts tracking at its *current* LTP when it accepts the command. If the current LTP is not yet favorable enough, submit the original Entry-relative threshold as `activePrice` for **future** activation. A formerly reached but now lost favorable high is never reconstructed as today's activation price; prior maximum alone cannot force immediate execution. Unknown LTP/qty/protection/tick/source -> per-position BLOCKED, with retry only after a new valid evidence set, not a silent drop of the obligation.
+- **Exactly once and protection:** present signed `trailingStop>0` with the expected distance means **no further POST**, irrespective of prior local audit. A known pending/unknown prior Exchange mutation must be reconciled, not blindly retried. Requests are account-scoped `category=linear`, `tpslMode=Full`, `positionIdx=0`; do not send stopLoss/takeProfit cancellation/reset fields. Existing SL and TP must remain effective and must be reverified after every accepted trail; ACK is not proof. Any Exchange incompatibility that would weaken protection, conflict with a pending TP execution, exceed current account permission or inadvertently close/increase exposure remains a hard block. Only the normal Exchange-native TRAIL035 owner may submit, and no LIVE-arm/new Entry is inferred.
+- **Owner scope / rollout:** OWNER explicitly reserves handling of the already OPEN **INJUSDT** position from 2026-11-19 to himself. This code/canon task authorizes **no modification** to that existing position. Automatic persistent recovery applies only to futures positions carrying a **durable opt-in eligibility marker written at their original fill under the new deployed contract** (or a separately explicit later owner-approved position-specific opt-in). Absent marker = no mutation; never infer consent from a deploy or from historic MFE. Marker persists across restart so positions filled under the new contract are still eligible hours later.
+- **E2E proof:** tests for protection just after fill, 30-minute and 1-hour restart, current price above/below threshold, signed Bybit `trailingStop` readback, activePrice omitted/present as appropriate, unknown/stale/pending/partial-fill/no-permission/TP-race, duplicate runs, exact original OPEN INJ exclusion, and Main/Sub isolation. New entry remains DISARMED unless owner separately authorizes it. Documentation merge, CI and runtime installation are not live Exchange behavior evidence.
+
+The preceding older text requiring immediate first-fill remains a performance/quality objective; its unconditional prohibition of all subsequent native arm attempts and any generic `P90_REAL_NATIVE_TRAILING_LATE_ARM_UNVERIFIED` terminal veto are superseded **only for these strictly eligible protected positions**. Unverified future-protection or other market/position safety gates remain fail-closed.
+
 
 ## 4.12 OWNER authorization и automatic technical recovery — OWNER DECISION 2026-11-04 (Issue #415)
 
@@ -2248,3 +2308,11 @@ R06 candidate
 Historical/source-only backlog до baseline запрещено исполнять. Если Consumer после ARM видит candidate старше Strategy-owned request freshness, он не создаёт поздний request и durable продвигает promotion cursor к текущей verified R06 границе. SECOND48, account safety, exact binding, slot ownership, capital, request TTL, initial protection, source provenance и R07 transaction fence остаются независимыми fail-closed gates.
 
 R06 bootstrap OFF/no-exposure gate не является постоянным запретом уже после принятого source checkpoint: финансовые requests/positions могут существовать downstream, пока сам R06 сохраняет `trading_effect=NONE` и не выполняет admission. Ни этот handoff, ни технический PREARM автоматически не открывают mainnet или execution permissions. Architecture owner — ARCH §60.5.3; терминология — GLOSSARY §47.
+
+### 4.19.3 R10 fresh executable quote vs unchanged lastPrice — OWNER DECISION 2026-11-19 (#854)
+
+For the existing five P90 REAL LINEAR instruments, Execution-side initial-protection check immediately before first Bybit Exchange mutation uses the **one same native PostgreSQL `MarketPublication`**. Exact R10 source/epoch/producer/symbol/reference and physical `bid1Price` + `ask1Price` timestamps remain mandatory **<= 2 seconds** at the current pre-send clock; quotes must be positive, finite and noncrossed. Preserve the original `lastPrice` **with its actual unchanged source-field timestamp**; its age alone does not deny a new Entry if the current original bid/ask and whole publication pass. Never re-stamp or fabricate it, infer a missing trade, silently increase the stale price TTL or fetch an independent public market ticker from Exchange REST/WS.
+
+P90 initial attached protection remains calculated by the existing immutable Strategy/EntryPlan and checked against **last, bid and ask simultaneously**: LONG `SL < min(last,bid,ask)` and `TP > max(last,bid,ask)`; SHORT `TP < min(last,bid,ask)` and `SL > max(last,bid,ask)`. Invalid tick/TP/SL, absent last price, aged bid/ask, missing physical row, stale source/ref, source gap, account/signed protection uncertainty or mixed epoch are **BLOCKED before mutation**; no post-hoc Entry and no relaxation of the R07 transaction fence. Store the precise sanitized pre-send reason for audit and latency attribution, not only the exception class. This is a narrowly scoped correction of **Execution R10 quote evidence**, not a change in Strategy Entry/Exit/TP/SL economic policy, R08 Exit source contract, LIVE authority or previous signals.
+
+Canonical owner: ARCH §60.5.4. Implementation/CI/physical release and independent runtime proof are separate; **no automatic LIVE ARM**. `OWNER_DECISION=YES`; `CANON_AFTER_MERGE=YES`; `IMPLEMENTED_BY_DOCS=NO`; `LIVE_CHANGE=NO`.

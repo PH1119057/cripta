@@ -1817,6 +1817,50 @@ RUNTIME BEHAVIOR VERIFIED     = YES [UI hot-swap + gate/permission invariance]
 TRADING BEHAVIOR CHANGED      = NO
 ```
 
+## 24.1 OWNER DECISION 2026-11-20 (#871): permanent Dashboard-only release, implementation tracked separately
+
+**Current GitHub authority at decision:** `3236ac75e85410b1aab0d9b55ec145bd3c1776e7`.
+Owner made the earlier one-off direct canonical Dashboard installation
+(#869, merged PR #870) a **permanent requirement for the authorized
+no-argument release workflow**, not permanent use of arbitrary root scripts.
+
+**Verified physical baseline after #869 (2026-11-20T04:31:56Z):**
+`DASHBOARD_UI_COMMIT=3236ac75e85410b1aab0d9b55ec145bd3c1776e7`,
+GitHub/SOURCE_HEAD same, `INSTALLED_COMMIT` trading runtime
+`dd9f081511782d25fff9ee55908288252ace2d66`.
+Dashboard HTML source/live sha256
+`96e5155da69420301d40331d17a7567b4e0bbe648bb12e485cb26be7a5c75ae7`.
+Canonical standalone UI verifier/deployer returned PASS,
+`DASHBOARD_RESTARTED=0`, trading restarts=0,
+`mainnet gate=1` unchanged, execution permissions=2 unchanged.
+This is evidence for that **one UI release**, not evidence the permanent
+controller classifier has already been changed.
+
+**Known implementation gap / exact owner:** installed
+`/usr/local/libexec/cripta-release-controller/cripta-release-controller`
+still matches global runtime baseline; its
+`_select_scoped_purpose()` tests raw changed paths since last
+`DASHBOARD_UI_COMMIT` and treats accompanying `tests/test_*.py`
+as cause for `FULL`. DEV §8.1.1/§50.5 now require a verified
+UI+non-executable docs/tests classification without trading deploy,
+and fail-closed mixed/unknown path handling. This must be
+implemented/tested and **independently installed with proof**; source
+merge alone is not a runtime release.
+
+**Separate future stage:** ARCH §50.1 / DEV §50.6 (#849) require
+isolating the Dashboard PostgreSQL SELECT-only projection owner from
+authenticated financial/control API and from shared runtime dependencies.
+Current combined Dashboard backend is still transitional; do not claim
+three-process resource isolation just because static UI hot-swap works.
+
+STATUS at decision:
+`OWNER_DECISION=APPROVED`,
+`CANON_UPDATE=IN_PROGRESS` until protected GitHub main merge,
+`UI_STATIC_INDEPENDENCE=DEPLOYED`,
+`PERMANENT_CONTROLLER_CLASSIFIER=NOT_IMPLEMENTED`,
+`DASHBOARD_BACKEND_ISOLATION=NOT_IMPLEMENTED`.
+No owner ARM, Exchange or trading runtime mutation is implied.
+
 # 25. Real Entry account-state generation repair — OWNER DECISION 2026-10-06
 
 OWNER DECISION:

@@ -358,6 +358,50 @@ def validate_real_v3_attached_protection_at_original_price(
     return last_price
 
 
+
+def validate_real_v3_attached_protection_at_original_quote(
+    *,
+    symbol: str,
+    side: str,
+    instrument_tick: Decimal,
+    stop_loss: Decimal,
+    take_profit: Decimal | None,
+    last_price: Decimal,
+    bid_price: Decimal,
+    ask_price: Decimal,
+) -> Decimal:
+    """R10 pre-send: original last plus BOTH independently fresh book sides.
+
+    The R10 reader is solely responsible for proving original source/epoch,
+    immutable publication, source clocks and quote freshness. This pure
+    protection check must not rewrite a Strategy-owned target or stop.
+    """
+    last = validate_real_v3_attached_protection_at_original_price(
+        symbol=symbol, side=side,
+        instrument_tick=instrument_tick,
+        stop_loss=stop_loss, take_profit=take_profit,
+        last_price=last_price,
+    )
+    if (
+        not isinstance(bid_price, Decimal)
+        or not isinstance(ask_price, Decimal)
+        or not bid_price.is_finite()
+        or not ask_price.is_finite()
+        or bid_price <= 0
+        or ask_price <= 0
+        or bid_price > ask_price
+    ):
+        raise ValueError("P90_REAL_ATTACHED_CURRENT_QUOTE_INVALID")
+    assert take_profit is not None  # Proven by initial-protection check.
+    if not (
+        stop_loss < bid_price <= ask_price < take_profit
+        if side == "Buy" else
+        take_profit < bid_price <= ask_price < stop_loss
+    ):
+        raise ValueError("P90_REAL_ATTACHED_CURRENT_QUOTE_TP_SL_CROSSED")
+    return last
+
+
 def validate_real_v3_instrument_lot(
     *, symbol: str, instrument: Mapping[str, object],
     quantity: Decimal, signal_price: Decimal,

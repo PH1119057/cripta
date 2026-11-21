@@ -33,6 +33,7 @@ from .execution_store import (
     publish_runtime_exit_command,
 )
 from .loader import load_exit_binding
+from .p90l90_real_v3 import P90_TRAIL_RECOVERY_POLICY
 
 
 class P90RealExitExecutionUnverified(RuntimeError):
@@ -134,7 +135,7 @@ class P90RealExitExecutionPort:
             or observation.strategy_position_id != position.strategy_position_id
             or observation.event_kind not in (
                 "P90L90_REAL_NATIVE_TRADE", "P90L90_REAL_CLOSED_5M",
-                "P90L90_REAL_POSTFILL",
+                "P90L90_REAL_POSTFILL", "P90L90_REAL_TRAIL_RECOVERY",
             )
             or not isinstance(details, Mapping)
             or details.get("trading_account_id") != approved
@@ -144,15 +145,31 @@ class P90RealExitExecutionPort:
                != position.exchange_position_key
             or details.get("actual_fill_confirmed") is not True
             or details.get("protection_exchange_confirmed") is not True
-            or (details.get("fill_to_postfill_source_verified") is not True
-                if observation.event_kind == "P90L90_REAL_POSTFILL"
-                else details.get("durable_cursor_verified") is not True)
+            or (
+                observation.event_kind == "P90L90_REAL_POSTFILL"
+                and details.get("fill_to_postfill_source_verified") is not True
+            )
+            or (
+                observation.event_kind not in (
+                    "P90L90_REAL_POSTFILL", "P90L90_REAL_TRAIL_RECOVERY",
+                )
+                and details.get("durable_cursor_verified") is not True
+            )
             or (observation.event_kind == "P90L90_REAL_POSTFILL" and (
                 not isinstance(details.get("signed_fill_execution_ids"), list)
                 or not details["signed_fill_execution_ids"]
                 or decision.source_refs != observation.source_refs
                 or decision.action_kind.value != "SET_TRAILING"
                 or not any(ref.startswith("bybit:execution:list:exact-order:")
+                           for ref in observation.source_refs)
+            ))
+            or (observation.event_kind == "P90L90_REAL_TRAIL_RECOVERY" and (
+                decision.action_kind.value != "SET_TRAILING"
+                or details.get("current_trailing_recovery_verified") is not True
+                or details.get("current_original_ltp_verified") is not True
+                or details.get("trailing_recovery_policy")
+                   != P90_TRAIL_RECOVERY_POLICY
+                or not any(ref.startswith("bybit:market-publication:")
                            for ref in observation.source_refs)
             ))
             or details.get("pending_exit_mutation") is not False
@@ -210,6 +227,17 @@ class P90RealExitExecutionPort:
             prepared = prepare_runtime_exit_command(
                 request, position, now=now
             )
+            if observation.event_kind == "P90L90_REAL_TRAIL_RECOVERY":
+                if decision.rule_id != "P90L90_REAL_BYBIT_NATIVE_TRAIL035_RECONCILE":
+                    raise P90RealExitExecutionUnverified(
+                        "P90_REAL_EXIT_RECOVERY_RULE_MISMATCH"
+                    )
+                # Marker alone cannot authorize mutation. private_runtime
+                # independently checks immutable per-fill eligibility, exact
+                # decision+source, fresh current LTP and signed Bybit position.
+                prepared.payload["trail_recovery_policy"] = (
+                    P90_TRAIL_RECOVERY_POLICY
+                )
             persist_exit_execution_request(self._db, request)
             publish_runtime_exit_command(
                 self._db, prepared, now=now

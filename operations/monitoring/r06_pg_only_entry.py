@@ -454,6 +454,35 @@ def _process_publication(
     return signals, blocked
 
 
+def _published_r06_observer_state(
+    blocked: dict[str, str], strategy_ids: tuple[str, ...],
+) -> str:
+    """A stopped *strategy* is not a stopped shared R06 publisher.
+
+    _process_publication has already suppressed every affected candidate;
+    no synthetic trade or stale Entry is admitted. Keep other strategies
+    running while at least one is causally current. An unavailable/ambiguous
+    global source or every strategy blocked remains not-ready.
+    """
+    expected = set(strategy_ids)
+    benign = {
+        "NATIVE_SOURCE_CURSOR_NOT_FRESH",
+        "R06_SCOPE_AWAITING_POST_BOOTSTRAP_NATIVE_EVENT",
+        "R06_SCOPE_AWAITING_CONFIRMED_CANDLE",
+    }
+    if (
+        not expected or len(expected) != len(strategy_ids)
+        or not set(blocked).issubset(expected)
+        or not set(blocked.values()).issubset(benign)
+    ):
+        return "R06_PG_NO_ORDER_DEGRADED"
+    # All strategies can be locally waiting during a quiet market. This
+    # state is ONLY reached after a current immutable MarketPublication pin;
+    # no stale candidate is emitted, and independent FLAT/OPEN Exit proofs
+    # remain mandatory for the financial gate.
+    return "R06_PG_NO_ORDER_SOURCE_ONLY"
+
+
 def _has_durable_decision_checkpoint(writer: Any) -> bool:
     row = writer.execute(
         "SELECT count(*) FROM strategy_entry.p90_scoped_native_consumer_checkpoints "
@@ -654,8 +683,9 @@ def run_pg_only(
                 first_cursor_accepted = True
                 if time.monotonic()-last_status > 2.0:
                     write_status(
-                        state=("R06_PG_NO_ORDER_DEGRADED" if blocked
-                               else "R06_PG_NO_ORDER_SOURCE_ONLY"),
+                        state=_published_r06_observer_state(
+                            blocked, tuple(b.card.strategy_id for b in bundles),
+                        ),
                         epoch_id=pin.source_session_id,
                         active_bundles=bundles,symbols=FIVE,signals=signals,
                         fact_source_id=_SOURCE,

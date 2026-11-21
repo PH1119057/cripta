@@ -21,6 +21,7 @@ from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
     bybit_instrument_id,
 )
+from bybit_workbench.universal_entry import p90l90_real_contract_v3 as p90
 
 AT = datetime(2026, 11, 14, 11, 12, 10, tzinfo=UTC)
 CLOSED = datetime(2026, 11, 14, 11, 10, tzinfo=UTC)
@@ -113,10 +114,8 @@ class FakePG:
 def ports(monkeypatch: pytest.MonkeyPatch):
     primary = pin()
     monkeypatch.setattr(
-        r10, "read_exit_ticker_last_price",
-        lambda _db, *, symbol, observed_at: (
-            Decimal("100"), primary,
-        ),
+        r10, "read_market_publication_pin",
+        lambda _db, *, symbol, observed_at: primary,
     )
     candles = tuple(
         SimpleNamespace(
@@ -173,8 +172,6 @@ def test_exact_original_bid_ask_last_price_source_and_ttl(ports) -> None:
         ), "REF_OR_AGE"),
         (lambda p, db: db.original.update(lastPrice="0"),
          "ORIGINAL_PRICE_INVALID"),
-        (lambda p, db: db.original.update(lastPrice="101"),
-         "CROSSED_OR_UNVERIFIED"),
         (lambda p, db: db.original.update(bid1Price="102"),
          "CROSSED_OR_UNVERIFIED"),
         (lambda p, db: db.original.update(ask1Price="NaN"),
@@ -204,8 +201,8 @@ def test_quote_fails_closed_on_provenance_ttl_market_or_price(
     db = FakePG()
     change(base, db)
     monkeypatch.setattr(
-        r10, "read_exit_ticker_last_price",
-        lambda *_args, **_kw: (Decimal("100"), base),
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kw: base,
     )
     with pytest.raises(r10.R10ExecutionPublicationUnavailable, match=reason):
         quote(db)
@@ -291,6 +288,119 @@ def test_r1_no_closed_history_blocks_and_does_not_use_rest(
             history_limit=220,
         )
 
+
+
+def test_stale_original_lastprice_field_does_not_veto_fresh_bid_ask(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = pin()
+    original.compact_quality["TICKER"]["fields"]["lastPrice"] = "STALE"
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times["lastPrice"] = (AT - timedelta(minutes=20)).isoformat()
+    result = quote(db)
+    assert result.last_price == Decimal("100")
+    assert result.bid_price == Decimal("99")
+    assert result.ask_price == Decimal("101")
+    # The original time remains intact; it must not be forged as current.
+    assert result.field_times[0] == AT - timedelta(minutes=20)
+    assert result.field_times[1:] == (SECOND, SECOND)
+
+
+@pytest.mark.parametrize("side", ("bid1Price", "ask1Price"))
+def test_stale_current_quote_side_still_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, side: str,
+) -> None:
+    original = pin()
+    original.compact_quality["TICKER"]["fields"]["lastPrice"] = "STALE"
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times["lastPrice"] = (AT - timedelta(minutes=10)).isoformat()
+    db.field_times[side] = (AT - timedelta(seconds=3)).isoformat()
+    with pytest.raises(r10.R10ExecutionPublicationUnavailable, match="FIELD_TTL_EXPIRED"):
+        quote(db)
+
+
+@pytest.mark.parametrize("field", ("lastPrice", "bid1Price", "ask1Price"))
+def test_future_original_field_clock_is_never_accepted(
+    monkeypatch: pytest.MonkeyPatch, field: str,
+) -> None:
+    original = pin()
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times[field] = (AT + timedelta(seconds=1)).isoformat()
+    with pytest.raises(r10.R10ExecutionPublicationUnavailable, match="FIELD_TTL_EXPIRED"):
+        quote(db)
+
+
+
+
+def test_r1_outstanding_signal_validity_keeps_strict_last_trade_ttl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = pin()
+    original.compact_quality["TICKER"]["fields"]["lastPrice"] = "STALE"
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times["lastPrice"] = (AT - timedelta(seconds=20)).isoformat()
+    # New P90 execution-quote semantic accepts the immutable last trade.
+    assert quote(db).last_price == Decimal("100")
+    # Legacy R1 target-reached SIGNAL_VALIDITY still fails closed.
+    with pytest.raises(
+        r10.R10ExecutionPublicationUnavailable,
+        match="R10_R1_LAST_PRICE_FIELD_STALE",
+    ):
+        r10.read_r10_exact_r1_causal_snapshot(
+            db, symbol=SYMBOL, observed_at=AT, history_limit=220,
+        )
+
+
+
+
+@pytest.mark.parametrize(
+    "side,stop,target",
+    [("Buy", "95", "105"), ("Sell", "105", "95")],
+)
+def test_real_p90_original_publication_pre_send_chain_accepts_stale_last(
+    monkeypatch: pytest.MonkeyPatch,
+    side: str,
+    stop: str,
+    target: str,
+) -> None:
+    """Positive R10 quote -> real P90 SL/TP boundary, no Exchange mutation."""
+    original = pin()
+    original.compact_quality["TICKER"]["fields"]["lastPrice"] = "STALE"
+    monkeypatch.setattr(
+        r10, "read_market_publication_pin",
+        lambda *_args, **_kwargs: original,
+    )
+    db = FakePG()
+    db.field_times["lastPrice"] = (AT - timedelta(minutes=10)).isoformat()
+    original_quote = quote(db)
+    assert p90.validate_real_v3_attached_protection_at_original_quote(
+        symbol=SYMBOL,
+        side=side,
+        instrument_tick=Decimal("0.1"),
+        stop_loss=Decimal(stop),
+        take_profit=Decimal(target),
+        last_price=original_quote.last_price,
+        bid_price=original_quote.bid_price,
+        ask_price=original_quote.ask_price,
+    ) == Decimal("100")
+    assert len(db.queries) == 1
+    assert all("INSERT " not in sql and "UPDATE " not in sql for sql in db.queries)
 
 def test_r10_source_module_has_no_independent_exchange_feed() -> None:
     code = Path(

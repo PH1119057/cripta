@@ -20,13 +20,13 @@ def test_strategy_table_shows_capital_leverage_and_actual_gate_state() -> None:
 
 
 def test_open_subpage_contains_only_real_open_positions() -> None:
-    assert "open:[openTradesSection,coinMonitorSection,marketIndicatorSection]" in HTML
+    assert "open:[openTradesSection,marketIndicatorSection]" in HTML
     assert (
         "control:[strategyTradeControlSection]"
         in HTML
     )
     assert "bybit_log:[ownerTestEntrySection,bybitLogSection]" in HTML
-    assert "monitor:[coinMonitorSection]" in HTML
+    assert "monitor:[coinMonitorSection]" not in HTML
 
 
 def test_operational_strategy_table_excludes_inactive_historical_versions() -> None:

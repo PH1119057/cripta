@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.15
-**Дата:** 2026-11-18
+**Версия:** 3.16
+**Дата:** 2026-11-19
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -610,6 +610,33 @@ Read-only backend change может перезапустить только Dash
 Authentication, control/mutation handlers, Exchange mutation, gates,
 permissions, Strategy/Entry/Exit/Execution semantics и decision-affecting code
 остаются частью application/trading runtime и проходят полный release gate.
+
+**OWNER DECISION 2026-11-20 (#871) — permanent Dashboard release independence.**
+The static/presentation Dashboard release is a separate versioned component, not a
+trading/application release. Exact reviewed UI-only changes and their
+**non-executable** tests, documentation and review evidence MUST be eligible for
+`DASHBOARD_PRESENTATION_RELEASE` while `mainnet gate=OPEN`, without stopping,
+restarting, re-arming, disarming or reloading Entry/Exit, MarketSource,
+Dispatcher, MAYAK, Supervisors, Private Runtime or PostgreSQL. The standalone
+Dashboard installer preserves independent `DASHBOARD_UI_COMMIT` and immutable
+UI hashes; static-only deployment must not restart Dashboard either.
+
+Repository test/documentation changes do not independently grant permission to
+deploy an executable component or authorize a FULL cutover. The release planner
+must classify the **operational executable diff**, with a strictly reviewed
+non-executable path exclusion. Changed trading/control/auth/SQL/systemd/shared
+dependencies, unknown paths, or any changed test/data that actually executes
+inside a production service are **not** Dashboard-only. A mixed change is
+`RELEASE_SCOPE_BLOCKED` until its genuine component owners and compatibility
+gates are reviewed; it is never automatic permission for a monolithic trading
+restart.
+
+This decision preserves the stronger target in §50.1: independent read-only
+Dashboard query process with SELECT-only DB role and separate authenticated
+financial control plane. The current combined Dashboard backend remains a
+documented transitional implementation; **static release independence does
+not yet prove backend process/resource isolation**. DEV §8.1/§50.5/§50.6
+own executable release gates, rollback and deployment proof.
 
 ## 9.1 Lifecycle Supervisor
 
@@ -1345,7 +1372,7 @@ Every deployed component requires an immutable, **component-local** executable a
 - **Dashboard:** strictly separate three owners: (1) static/presentation artifact, (2) read-only projection/query service, (3) authenticated financial/control API. The projection service uses dedicated least-privilege **SELECT-only** PostgreSQL role, bounded connection count, statement/lock/idle transaction timeouts, and cgroup memory/CPU/request concurrency budgets; no direct DDL/DML or trading API control. The authenticated control service retains its existing financial/security gates and cannot inherit read-model release scope. PostgreSQL remains an independent DB owner, never part of Dashboard service restart.
 - **PostgreSQL:** schema evolution belongs to authorized migration role with versioned, backward-compatible expand/contract phases and explicit compatible readers/writers; an unrelated service release cannot execute the full production migration list or restart PostgreSQL.
 
-**Release invariants:** exact Git tree/CI, immutable content digest, dependency closure, per-component version, validated manifest/signature, no unexpected unit/role/DB/financial mutation, measured unaffected-service PID/NRestarts and fresh post-release behavior, exact rollback with old artifact and contract. Source sync, docs/research commits and Dashboard-presentation commits are not executable release triggers. Real OPEN position protection, signed Exchange inventory and financial ownership are preserved across all releases.
+**Release invariants:** exact Git tree/CI, immutable content digest, dependency closure, per-component version, validated manifest/signature, no unexpected unit/role/DB/financial mutation, measured unaffected-service PID/NRestarts and fresh post-release behavior, exact rollback with old artifact and contract. Source sync, docs/research commits and Dashboard-presentation commits are not executable release triggers. Real OPEN position protection, signed Exchange inventory and financial ownership are preserved across all releases. **The existence of an OPEN position is not a ban on releasing software**: §44–46 allow deployment with positions/orders present, with the independent current protection and recovery contracts preserved. A flat Exchange inventory is never a prerequisite just to deploy.
 
 **Migration status:** `OWNER_DECISION=APPROVED`; `ARCHITECTURE_TARGET=CANON`; `LEGACY_MONOLITHIC_CORE_INSTALLER=STILL_INSTALLED`; `INDEPENDENT_COMPONENT_DEPLOY=NOT_IMPLEMENTED_YET` until exact tests, CI, per-service unit and artifact migration plus runtime verification. DEV §50.6 owns the release method; TC §4.15.2 protects the current P90 Entry/Gateway checkpoint; INDEX §19 routes Dashboard split. No LIVE changes follow from publishing this decision.
 
@@ -1779,7 +1806,10 @@ Execution, ExitPlan, MFE, source sequence/ownership и состоянием за
 ордеров. Priority recovery: текущая position/protection/Exit → необходимые
 исторические/source данные → новые Entry. Биржевые SL/TP остаются
 самостоятельной защитой, **но не заменяют** доказанную работоспособность
-обязательного Universal Exit owner. При неполном exact native replay
+обязательного Universal Exit owner.
+
+**OWNER DECISION 2026-11-19 — persistent native TRAIL035 Exit recovery (Issue #860).** Existing-position-first is a permanent obligation until independently signed CLOSED, not a one-time first-fill temporal privilege. The independent account-scoped signed Bybit private reconciliation owner detects `OPEN + immutable eligible ExitPlan requiring native trailing + signed trailingStop=0`; Universal Exit/Execution separately validates current exact account/protection/no-pending state and a fresh original LTP and submits an Exchange-native one-time protection request through its existing credential-owning owner. An original 15-second first-fill source gap remains durable fault evidence but **must not permanently veto a present-time trailing activation**. This capability does not invent missing past native trade IDs, replay lost MFE, replace dynamic RAW TP/Exit or transfer Exchange mutation ownership to Observer/Dashboard/Position Supervisor. Every check stays account/position-scoped under a durable lock. Signed Bybit nonzero trailing and preserved SL/TP are necessary after mutation; unresolved/unknown mutation remains BLOCKED. Current position exclusion: the existing 2026-11-19 OPEN INJUSDT belongs to a separate owner decision and must not be mutated automatically by this release. Only positions with a persisted per-fill new-contract eligibility marker, or explicit separately authorized per-position opt-in, are included; mere source/release upgrade is not sufficient. Exact calculation, above/below threshold behavior and required negative tests are owned by TRADING_CONTOUR §7.6.5. No automatic new Entry/ARM or service restart is implied by this architecture change.
+ При неполном exact native replay
 не объявлять Exit VERIFIED, не заменять MFE свечным приближением; сохранить
 Exchange protection и открыть отдельный bounded repair для affected
 position/source. Открытый unrelated repair не останавливает рабочие
@@ -1908,6 +1938,20 @@ R06 cutover prerequisite `mainnet=OFF + execution_permissions=0 + no OPEN/RECONC
 Promotion и R07 dispatch используют exact тот же source session/publication/original native event и immutable Strategy/EntryPlan/ExitPlan identities. Source epoch drift, missing candidate payload, ambiguous same-native-event signal, stale candidate, отсутствующий account arm/safety/generation/binding, slot/capital rejection или unknown transaction outcome — fail-closed. Historical R06 rows без нового immutable candidate payload являются SOURCE_ONLY evidence и никогда не promoted.
 
 Этот owner decision закрывает architecture capability gap из Issue #642, но сам по себе **не включает LIVE**. Required order остаётся CANON -> implementation/tests -> protected GitHub merge -> migration/deploy exact commit -> runtime evidence -> отдельный current owner-controlled re-arm. R07 §60.5.2 остаётся dispatch/fence owner уже созданного `EntryExecutionRequest`, а не producer финансового решения.
+
+
+### 60.5.4 R10 current-quote proof for P90 pre-send protection — OWNER DECISION 2026-11-19 (Issue #854)
+
+**Scope and cause.** P90 Entry may be rare; accepted account-scoped Entry must not be rejected solely because the last native publicTrade, and hence original ticker `lastPrice` field update, is older than two seconds while the current best-bid and best-ask are independently fresh. Original ticker deltas update field clocks only for fields explicitly changed. This is a defect in equating *last traded-price update time* to *current executable-quote freshness*, not permission to fabricate a new trade or timestamp. On 2026-11-18T23:50:45Z LTCUSDT SHORT failed pre-mutation R10; the historical exact inner reason was not durably preserved and must not be asserted retrospectively.
+
+**Approved R10 proof for NEW P90 Entry** within one immutable native PostgreSQL `MarketPublication`, from the unique ACTIVE source epoch and exact LINEAR symbol/instrument/producer: the physical original `bid1Price` and `ask1Price` values and *their own original field timestamps* must each be fresh **at most 2 seconds** at the pre-send verification clock; reference/source/publication timing, identity, coverage, non-crossed positive prices and physically committed source facts remain verified. The original `lastPrice` remains positive, finite, exactly recorded and stamped with its unchanged original field timestamp, no future-time/source-session mismatch; **the age of that lastPrice field alone is NOT a 2-second veto**. A stale or absent current bid OR ask, stale physical current quote/reference, missing original lastPrice, source-gap/mixed epoch or failed provenance stays `BLOCKED`. A fresh quote never upgrades a stale original last trade into a new trade event.
+
+Before the first Exchange mutation the P90 initial attached `stopLoss/takeProfit` (already produced by immutable Strategy policy) must remain strictly on the safe side of **all three proven observations: last traded price, current best bid and current best ask**, with exact tick/side geometry: LONG `SL < min(last,bid,ask)` and `TP > max(last,bid,ask)`; SHORT `TP < min(last,bid,ask)` and `SL > max(last,bid,ask)`. There is no repricing or silent modification of TP/SL. Missing or crossed/invalid quotes, invalid instrument tick, invalid protection, contradictory identity/time or unknown Exchange/account state remain fail-closed. Independent signed Bybit account/order/position/protection reads and subsequent reconciliation are unchanged.
+
+**Ownership:** common MarketSource produces originals; Execution's R10 reader validates one PG publication and one exact physical compact-second row in READ ONLY REPEATABLE READ; Execution does not open Public REST/WS or synthesize prices. R08 Exit reading and original native publicTrade coverage are not weakened. R06 remains source-only; R07 remains transaction/epoch dispatch fence; no replay of historical Entry after ARM; no increase in capital/leverage, new TradingAccount, service permission, or automatic LIVE. Exact typed pre-send denial code must be persisted without raw credentials; transport/DB errors remain sanitized. Owner-approved canonical implementation path: CANON -> targeted regression + positive/negative synthetic tests -> protected CI/GitHub PR -> reviewed release only with trading-code deploy safety and explicit later owner-controlled ARM -> independent runtime proof and stability gate.
+
+**Status:** `OWNER_DECISION=YES`; `CANON=AFTER_MERGE`; `IMPLEMENTED=NOT_PROVEN_BY_THIS_SECTION`; `DEPLOYED=NO_BY_THIS_DECISION`; `LIVE_CHANGE=NO`.
+
 
 ## 61. Minimum production PostgreSQL: current Strategies only by default — OWNER DECISION 2026-11-14 (Issue #642)
 
