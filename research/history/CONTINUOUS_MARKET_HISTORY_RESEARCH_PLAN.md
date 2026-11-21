@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 PARTIAL / 2-file NATIVE SAMPLE QC PASS / FULL QC NOT VERIFIED / NO JOB STARTED` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / QC 2 FILES PASS / #866 OTHER JOB ACTIVE / STORAGE GATE BLOCKED` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 ~10:10 UTC — Stage 0 extra path discovery + two-file source QC` |
+| `LAST_UPDATE` | `2026-11-21 ~11:50 UTC — Stage 0 manifest provenance: 965/500/195 existing source records` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
-| `LAST_LIVE_GITHUB_MAIN_CHECK` | `e3717c4e8feddea94edfd4d9aebdbdfc3b9b9cdc` до Stage 0 PR; **перепроверять каждый содержательный сеанс** |
-| `RESEARCH_JOB` | `NOT STARTED BY THIS TASK`; сторонние ongoing jobs не объявлены завершёнными |
+| `LAST_LIVE_GITHUB_MAIN_CHECK` | `c8eea34b3d49e99c147d3d8f7195684e6d7c6be8` до нового Stage 0 PR; **перепроверять каждый содержательный сеанс** |
+| `RESEARCH_JOB` | `NOT STARTED BY #878`; #866 **active child PID 483140** at check; два старых job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Сверить через approved runner/manifest read rail **outcome/owner** старых #866/#646 jobs и продолжить bounded cold source discovery; уведомить storage owner (#642) о failed native-hot-retention service до планирования массовых данных. [Evidence Stage 0](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Установить с владельцами runner точное terminal/cleanup состояние stale #866/#646, дождаться разрешения storage gate #642 (native retention repeatedly fails), затем выбрать ограниченный native pilot при доказанном дисковом бюджете. [Evidence Stage 0 §9](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,23 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+### 2026-11-21 — найдено повторное использование старых source QC
+- **CHECKED HERE:** [Stage0 source inventory §10](STAGE0_SOURCE_INVENTORY_2026-11-21.md). Исторический 2025 BULL25 `965` files / `204,446,371` rows with `FULL_QC_PASS` evidence, 2026 WARM90 `500` files with `ALL_FIVE_PASS` independent-input-QC manifest; RECENT29 `195` per-file manifest entries with hashes/row counts, but fresh full independent QC not redone. Two fresh sample SHA256 matches old 2025/2026 manifests.
+- **REUSE RULE:** preserve exact source order and old manifests/fingerprints; do not acquire duplicates of known days; historical manifest PASS and two fresh samples **do not** pass all #878 native-entry/event parity.
+- **GATE 0:** remains `NOT_PASSED`; external job-state and disk/native retention gates outstanding.
+
+
+
+### 2026-11-21 — этап 0, live runner identity и холодные источники
+- **CHECKED HERE:** [STAGE0_SOURCE_INVENTORY_2026-11-21.md §9](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — actual loaded runner.py, PID 4136843 → единственный child PID 483140 #866 HS−10…−2 (183d, 36 scenarios), обновляемый stdout. Это **чужой активный job**; #878 новый не стартовал.
+- **EXTERNAL JOB OUTCOMES:** старый #866 H9CONT `running` без result/worker и ~33h старый stdout = **STALE/ORPHAN CANDIDATE, OUTCOME UNKNOWN**; #646 `SMOKE_EXIT_ZERO` в старом пилотном status, без canonical result, под `running` = **CLEANUP UNKNOWN**. Предшествующий #866 S48 183d имеет `completed, exit_code=0`, но research QC в #878 не доказан.
+- **Data sources:** 3,500 cold archive directories/8,249 files scanned by name (partial; 64 pending, no ZIP internals, 2 Unix permission denials). #158 SPOT 30d cache for each symbol duplicates target calendar dates but is **not** proven native LINEAR. Five-symbol logical gzip input bytes `13,306,684,338` across 332 days; symlink overlap, physical bytes **NOT VERIFIED**.
+- **Capacity/safety:** 13,302,910,976 B data SSD free, 94% used, 2,527,444,992 B RAM available, zero swap. `cripta-market-hot-retention.service` repeatedly failed in timer run at 11:46:43 UTC, second native hot retention phase exit1; owner #642. **No #878 core/trading/server mutation or data download.**
+- **GATE:** `0/11`, `GATE_0=NOT_PASSED`, remaining job cleanup, storage/cold-source and writer budget gates.
+- **NEXT:** reconcile exact stale jobs by owner/runner, resolve #642 storage blocker and only then bounded native acquisition/QC pilot.
+
+
 
 ### 2026-11-21 — этап 0, дополнительный read-only discovery и native source sample QC
 - **CHECKED HERE:** 276 run dirs, bounded `inputs/data/source` path scan: 15 target `public_trades` directory hits, **0 новых ranges**; top-level migrated/current/cold paths checked with limited depth. Два отдельных compressed native files прочитаны полностью: 2025-03-22 ARBUSDT 41,745 trades и 2026-09-11 LTCUSDT 118,896 trades, SHA256, UTC/price/nondecreasing timestamp checks pass; `RPI` schema difference confirmed. Equal-timestamp adjacent pairs **26,157** и **80,507** соответственно → exact original source row order обязателен.
