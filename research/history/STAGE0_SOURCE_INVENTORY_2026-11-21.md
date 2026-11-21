@@ -183,3 +183,42 @@ Read-only source identity at `/data/cripta/research/runs`:
 3. **2026 RECENT29:** `p90l90_prev7d_29d_20261025/inputs/manifest_{symbol}.json` contains **39 per-symbol file records** (Sep11–Oct19), with date, bytes, row count, SHA256 and first/last timestamp; 7 `new_download` entries/symbol. Recorded row totals: LTC 5,901,497; INJ 10,946,663; DOT 9,308,909; ARB 25,014,881; APT 10,692,442. Fresh full read `LTCUSDT2026-09-11.csv.gz` SHA256 matches its manifest entry `8f55b94adca40585dcb3ee5f3bfef3c5bd7562932120569e41a86729b843254f`. **195 hashes recorded ≠ independently revalidated today;** preservation of trade row order and exact source reader remains mandatory.
 
 **Data reuse decision:** inputs for known 332-day calendar have substantial historical QC/provenance and two independently revalidated examples. Use existing source objects/manifests with version-fingerprinted consumers, not duplicate downloads, while performing the remaining independent QC/fidelity checks. **Do not infer** continuous 689-day coverage or native Entry/Exit replay parity. `GATE_0=NOT_PASSED`.
+
+## 11. In-memory source-order compression feasibility (two representative dates) — 2026-11-21 ~13:25–13:27 UTC
+
+**Baseline:** GitHub `main=bc378567f90aa427e56a8b01b275eae4d8a75f66`, server mirror HEAD exact/clean. **Executor:** `sudo -u cripta python3` on `robot`; no new job and no durable server write. Exactly two previously read source files, one old 10-column and one new 11-column schema, were read again in bounded memory-only pilot.
+
+### 11.1 Lossless selected-price-event representation
+
+Experimental selected-event tuple per native row = `(original_csv_row_ordinal, timestamp_string, price_string)`, **no floats** and no reordering/sort. A tab-delimited UTF-8 stream was compressed using `gzip.GzipFile(..., compresslevel=3, mtime=0)` into `io.BytesIO`, decoded again and SHA256 compared over the full selected uncompressed stream; row count and sequential ordinal were checked. Repeated timestamps retain their native sequence because the ordinal is preserved.
+
+| Native source | Rows | Source gzip bytes | Selected price-event gzip bytes | Selected/source | Equal-timestamp adjacent pairs | Readback |
+|---|---:|---:|---:|---:|---:|---|
+| `BULL25 ARBUSDT 2025-03-22` | 41,745 | 1,748,556 | **249,698** | **14.28%** | 26,157 | count/ordinal/digest exact |
+| `RECENT29 LTCUSDT 2026-09-11` | 118,896 | 4,135,630 | **661,699** | **16.00%** | 80,507 | count/ordinal/digest exact |
+
+- ARB selected-stream SHA256 (original and decompressed match): `ae97c71baafb2bbf53f8c19b0cf1232b3c455b71418f235fb5321968378cf88c`.
+- LTC selected-stream SHA256: `8fa136d00beecea763ddd13f898e643992fba3da6a0dd2f3a7e45a206a33e3f6`.
+- **Strict scope:** neither representation contains `symbol/side/size/trdMatchID/tickDirection/grossValue/homeNotional/foreignNotional/RPI` when present, except identity implied by outer source/manifest. **Not** a complete MarketFacts source or a validated replacement for native, liquidation/OI/OB or native first-event semantics. Two days do not project savings to all symbols/days.
+
+### 11.2 Control experiment preserving all original trade fields
+
+Experimentally constructed a stream of `row_ordinal + ALL original csv.DictReader field strings` (10 original columns for ARB2025, 11 for LTC2026), with separator safety assert and exact uncompressed digest/ordinal/count equality on decompress:
+
+| Native source | Original gzip bytes | Full-field experiment gzip bytes | Relative |
+|---|---:|---:|---:|
+| `ARBUSDT 2025-03-22` | 1,748,556 | **2,052,994** | **117.41%** (+17.41%) |
+| `LTCUSDT 2026-09-11` | 4,135,630 | **5,017,869** | **121.33%** (+21.33%) |
+
+This naïve full-fact encoding **does not save space**, despite exact selected textual value preservation. It is not source byte-equivalent gzip and has not undergone consumer/first-event parity. **Architecture conclusion NOT YET AUTHORIZED:** use separately versioned exact price-path and full-fact/native source retained where needed; first prove all consumer requirements and formal parity before any substitution, migration or raw reclaim. No `GeometrySpec`, Entry/Exit code, native source, or service was changed.
+
+### 11.3 Other current gates observed
+
+- GitHub main + server source mirror = `bc378567f90aa427e56a8b01b275eae4d8a75f66` and clean (bounded preflight).
+- `/data/cripta` free **13,299,777,536 bytes** (94% use); RAM available **2,495,152,128 bytes**, swap 0.
+- Existing #866 183d native HS sweep continues; at 13:24:55 UTC `stdout.log` had progressed to **187,804,627 / 197,794,465** ticks with current child PID 483140 under runner 4136843. This is process/progress evidence, **not** completed.
+- `cripta-market-hot-retention.service` timer failed again at **13:24:26 UTC**, second native-retention phase exit1. Read-only inspection of installed `cripta-native-public-trade-hot-retention.py` shows `--apply` requires effective Unix `postgres` UID and fail-closed preflight; `systemctl show ... --property=User,Group` confirmed `User=postgres, Group=postgres`. **Root cause still UNKNOWN** (exact stderr inaccessible from current read actor); do not attribute failure to wrong Unix User. No service manipulation, re-arm or privileged apply attempted.
+
+### 11.4 Gate / follow-up
+
+`GATE_0=NOT_PASSED`, `GATE_2=NOT_ATTEMPTED` (this is read-only preflight feasibility, **not** Stage 2 acceptance). **Next one action:** reconcile old #866/#646 job terminal/cleanup state under owner rail and retention failure #642 under existing approved service owner; then approve bounded resource budget for an independent test preserving consumer-required fields and proving exact native first-event parity. No new source data acquisition or raw deletion.
