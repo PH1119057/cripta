@@ -13,13 +13,13 @@
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
 | `TASK_STATUS` | `STAGE 0 PARTIAL / 2-SAMPLE PRICE-ORDER CODEC ROUNDTRIP PASS / FULL FIELDS GROW / STORAGE BLOCKED` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 ~13:27 UTC — two-sample in-memory exact price/order stream feasibility` |
+| `LAST_UPDATE` | `2026-11-21 ~13:30 UTC — two-sample codec smoke and 5-symbol Bybit HEAD source availability` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
 | `LAST_LIVE_GITHUB_MAIN_CHECK` | `bc378567f90aa427e56a8b01b275eae4d8a75f66` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; #866 **active child PID 483140** at check; два старых job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Через approved owner rails завершить reconcile двух stale job records #866/#646 и root cause retention #642, после этого выполнить ограниченную проверку полного обязательного состава событий и native first-event parity; пока не скачивать данные. [Evidence Stage 0 §11](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Доказать outcome/owner двух stale #866/#646 jobs и исправить storage gate #642 штатным actor; затем выделить маленький byte-bounded source chunk для полного consumer-field/native first-event QC, используя предварительно проверенную доступность Bybit. [Evidence Stage 0 §§11–12](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,13 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+### 2026-11-21 — Stage 0 remote Bybit object presence по границам истории
+- **CHECKED HERE:** [Stage0 §12](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — `curl -I` (**HEAD only**, no archive download) for all 5 symbols on `2025-01-01` and `2026-11-20`: **10/10 HTTP 200**, nonzero Content-Length. LTC additionally at `2026-04-15`, `2026-08-20`, `2026-10-20`: **3/3 HTTP 200**. All are outside sampled local covered dates and verify remote *object presence*, not complete provider day matrix, CRC, contents, native parity or actual acquisition.
+- **Reuse:** BULL25/WARM90/RECENT29 local source remains preserved. These HEAD observations support a bounded future exact gap-only acquisition plan after storage/job gates, not blanket downloads.
+- **GATES:** `0/11`, `GATE_0=NOT_PASSED`, `GATE_2=NOT_ATTEMPTED`; no new research job/server write. NEXT: external job outcomes + native retention storage owner, then safe full-field/native event pilot.
+
+
 
 ### 2026-11-21 — Stage 0 feasibility: точный ценовой порядок без изменения сервера
 - **CHECKED HERE:** [Stage0 §11](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — два существующих native gzip прочитаны under `cripta`, цена/время/исходный порядковый номер сериализованы как строки в in-memory gzip, SHA256 + readback of all 41,745 and 118,896 rows **exact**; получено `14.28%` и `16.00%` от размеров native gzip. Native timestamp ties сохранились в source order.
