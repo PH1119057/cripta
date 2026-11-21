@@ -135,6 +135,21 @@ class LegacyExitRollbackInputTests(unittest.TestCase):
         self.assertEqual(next_scan["excluded_bytecode_cache_directory_count"], 1)
         self.assertIs(next_scan["immutable_rollback_ready"], False)
 
+    def test_writable_generated_cache_is_excluded_only_as_untrusted_runtime_data(self) -> None:
+        original = self.audit()
+        cache = self.release / "src/bybit_workbench/market_data/__pycache__"
+        cache.mkdir()
+        os.chmod(cache, 0o775)
+        item = cache / "source.cpython-312.pyc"
+        item.write_bytes(b"mutable-bytecode")
+        os.chmod(item, 0o664)
+        snapshot = self.audit()
+        self.assertEqual(snapshot["input_tree_sha256"], original["input_tree_sha256"])
+        self.assertEqual(snapshot["excluded_bytecode_cache_directory_count"], 1)
+        self.assertEqual(snapshot["excluded_mutable_cache_directory_count"], 1)
+        self.assertFalse(snapshot["immutable_rollback_ready"])
+        self.assertFalse(snapshot["runtime_behavior_verified"])
+
     def test_symlinked_generated_cache_is_never_excluded(self) -> None:
         cache = self.release / "src/bybit_workbench/universal_exit/__pycache__"
         cache.symlink_to("/etc", target_is_directory=True)
