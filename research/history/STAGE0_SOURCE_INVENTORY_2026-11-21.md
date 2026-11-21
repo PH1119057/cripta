@@ -256,3 +256,62 @@ At the next read-only check using `cripta`, the separate `#866` job `C2-R866-HS1
 This is **verified terminal completion and self-reported job QC for an external #866 calculation**, **not** independent verification of its entire result ledger by #878, and **not** any Stage 0 or native-price-codec acceptance. The legacy `C2-R866-H9CONT-3P-10CASE-20261120` and `C2-R646-H29-PILOT-20261114A` terminal/cleanup outcomes **remain unresolved**; do not falsely mark all `running` dirs as active, nor silently clean up.
 
 **Still blocked:** native-hot-retention repeatedly failing under #642 and data SSD at 94% use. `GATE_0=NOT_PASSED`; `#878_COMPUTE_JOB=NOT_STARTED`. Any future job requires fresh resource/actor/writer preflight and separate approved intake manifest after storage gate.
+
+## 14. Exact retention guard + 10-file in-memory synthetic first-contact parity — 2026-11-21 ~14:53–14:58 UTC
+
+**Exact baseline:** GitHub `main=d38ac3aa06aa6c2e5bf3f9132ef9ad3dbcf2749c`. Server mirror HEAD matched/clean at preflight. **Research actor:** `sudo -u cripta python3`. Read-only provenance of source paths, executable runtime service code, PostgreSQL state and native data; no production, Exchange, source archive, service or job mutation in #878.
+
+### 14.1 Why native hot-retention fails: observed fail-closed financial guard
+
+- Repeated `cripta-market-hot-retention.service` exit failure independently observed on **2026-11-21 14:52:25 UTC**: first market-source retention process exit0, second native-publicTrade retention `--apply --batch-limit 15000` exit1. Unit's exact captured `stderr` was **not** readable by this journal actor; do not assert that exact stderr equals the following independent check.
+- Read installed `/usr/local/libexec/cripta-native-public-trade-hot-retention.py` via exact `cripta` read rail. Both `collect_check()` and `run_apply()` call `_financial_consistency()` **before eligible native event deletion**. The function executes `SELECT count(*) FROM runtime.hot_orders`, then requires `hot_orders == 0`, otherwise throws `NativeTradeRetentionBlocked("NATIVE_TRADE_RETENTION_HOT_ORDER_PRESENT")`. In addition it checks hot_position vs nonclosed ownership counts and exact open pin identity.
+- Invoked only approved read-only command `sudo -u cripta python3 -B /usr/local/libexec/cripta-native-public-trade-hot-retention.py --check --batch-limit 1` on host `robot`. It returned **exit1**, structured `status=BLOCKED`, `error_class=NativeTradeRetentionBlocked`, `reason=NATIVE_TRADE_RETENTION_HOT_ORDER_PRESENT`. `--check` uses `BEGIN READ ONLY` in the script; **no deletion** was attempted by #878.
+- Independently executed a single `BEGIN READ ONLY` PostgreSQL transaction through approved Unix `cripta`, DB `current_user=cripta`, `current_database=cripta`. Aggregate-only counts: `runtime.hot_orders=2`, `runtime.hot_positions=1`, `runtime.position_ownership WHERE state<>'CLOSED' = 1`. Counts sampled at this instant only; they do **not** establish real exchange order state, order identifiers or whether protective orders belong to one specific position.
+- **FINDING:** current **read-only** retention gate is demonstrably blocked by active financial-order records, and the identical financial guard is called in `--apply`. This supports expected fail-closed behavior rather than a proven actor/permission defect. A separate apply stderr/role/environment cause is **NOT CHECKED HERE**, so no unsupported exact apply traceback assertion. Do **not** delete hot orders, tamper with open positions or remove protection to make retention pass. The storage owner remains Issue [#642](https://github.com/PH1119057/cripta/issues/642), which received a separate read-only evidence comment.
+
+### 14.2 Expanded native source-order parity feasibility across all five symbols
+
+**Sample inputs:** `BULL25` `2025-03-22` from `/data/cripta/research/runs/p90l90_bull_2025_holdout_v1/inputs/{symbol}/public_trades`; `RECENT29` `2026-09-11` from `/data/cripta/research/runs/p90l90_prev7d_29d_20261025/inputs/{symbol}/public_trades`; files `{symbol}{YYYY-MM-DD}.csv.gz`. All **ten** complete native gzip files read using streaming `csv.DictReader`. 2025 sample: 10 original fields, 2026: 11 including `RPI`. No copied source files persisted.
+
+**Selected source-order price event** `(native CSV row ordinal, original timestamp text, original price text)`. Encode using tab-delimited lines in `io.BytesIO` + `gzip.GzipFile(compresslevel=3,mtime=0)`. Decompress/read all rows, verify consecutive ordinals, exact SHA256 of the entire decoded textual stream, row count and adjacent timestamp-tie count against native. For each file, choose first original price as a no-lookahead reference and run **eight synthetic first-contact tests**: LONG/SHORT × symmetrical thresholds ±0.05%, ±0.10%, ±0.20%, ±0.50% (`Decimal` comparisons). Compare exact first-hit **ordinal, timestamp text, price text, favorable/adverse label** on native events and decoded compact events. These are **generic price-contact benchmarks, not Strategy Entry/Exit/Economic/Stop replay**.
+
+As a control for source-fact fidelity, an entirely separate `row ordinal + every original CSV field string` tab stream was gzip-encoded/decompressed, with full value-stream SHA256/row ordinal/number of columns asserted exactly (all ten cases). This control is text-value exact, **not original gzip byte identity**; the selected price stream omits side, qty, trade ID, tickDirection and optional RPI.
+
+| Family, symbol, UTC date | Native trade rows | Original gzip B | Price-order stream gzip B | All-fields+ordinal gzip B |
+|---|---:|---:|---:|---:|
+| BULL25 LTC 2025-03-22 | 113,214 | 3,989,716 | 645,609 | 4,814,495 |
+| BULL25 INJ 2025-03-22 | 105,632 | 4,204,591 | 666,397 | 4,975,787 |
+| BULL25 DOT 2025-03-22 | 129,771 | 5,219,220 | 830,236 | 6,175,608 |
+| BULL25 ARB 2025-03-22 | 41,745 | 1,748,556 | 249,698 | 2,052,994 |
+| BULL25 APT 2025-03-22 | 98,397 | 4,054,142 | 536,703 | 4,755,412 |
+| RECENT29 LTC 2026-09-11 | 118,896 | 4,135,630 | 661,699 | 5,017,869 |
+| RECENT29 INJ 2026-09-11 | 179,124 | 6,537,878 | 1,010,389 | 7,868,457 |
+| RECENT29 DOT 2026-09-11 | 438,095 | 16,067,557 | 2,426,744 | 19,334,745 |
+| RECENT29 ARB 2026-09-11 | 655,736 | 25,007,866 | 3,576,471 | 29,934,303 |
+| RECENT29 APT 2026-09-11 | 280,141 | 10,961,038 | 1,537,431 | 13,121,212 |
+| **TOTAL** | **2,160,751** | **81,926,194** | **12,141,377** | **98,050,882** |
+
+**Observed PASS (bounded):** ten of ten full original/selected textual readbacks, 80 of 80 synthetic exact first-contact comparisons, original-row order and tied timestamps preserved; 2,160,751 event rows. Selected price-order stream = **14.82%** of original gzip bytes weighted by compressed bytes. All-source-field+ordinal text control = **119.68%** of original gzip (19.68% larger). Python `resource.getrusage(...).ru_maxrss` in these single-process checks: about **25,996 KiB** price-path run and **80,620 KiB** all-field control. The experiments did not create outputs, call a trading API, open orders, write database rows or launch a runner job.
+
+**No generalization:** just two selected UTC days × five symbols, and one gzip text encoding. This is **not** validated retention format for all consumers, source identity/CRC/fidelity of absent dates, complete GeometrySpec, native Strategy Entry/Exit, actual hard-stop/TP first-event equivalence, side/size/ID/RPI semantics or economics after fees. Future codec architecture and raw deletion require independent parity + retention/restore gates; do not turn experiment into policy.
+
+### 14.3 Capacity implication and next bounded gate
+
+Point-in-time `df -B1`: data disk free **13,280,264,192 bytes**, **94% used**; system disk free 3,745,296,384 B; available RAM 2,734,866,432 B, swap 0. Historical sampled source file-days per five-symbol target = 1,660; 357×5 = 1,785 dates/symbol missing **in sampled local roots only**. Illustratively if unverified missing days had the **same mean compressed size** as the known 13,306,684,338 B / 1,660, their raw total would be ≈**14.31 GB**—already above currently free 13.28 GB, **before reserve/overheads**. This is **only a budget heuristic**, not a measured forecast of variable historical trade volume, and symlink/physical-accounting details remain separately tracked.
+
+**Decision:** no full-gap acquisition/full native replay when financial guard blocks cleanup and the SSD is 94% used. Continue existing-source, bounded in-memory validation only. `STAGE_0=IN_PROGRESS`, `GATE_0=NOT_PASSED`, `0/11`. Stale external #866 H9CONT/#646 job owner/terminal state still unresolved. Next exact action: preserve financial guards; #642 owner to reconcile safe retention/capacity with the live hot-order lifecycle, #866/#646 owners to reconcile old runner metadata, and only then use approved exact consumer contracts for the formal complete-field/native first-event pilot. **No production, source, service, Exchange or LIVE mutation by #878.**
+
+## 15. Source manifest ↔ live file-system metadata inventory for every known native day (bounded, read-only)
+
+One additional standalone `sudo -u cripta python3` read-only scan on host `robot` validated **every available logical file-day** in the three identified five-symbol `public_trades` roots. Historical BULL25 `inputs/MANIFEST.json` uses keyed entries, WARM90 and RECENT29 use `inputs/manifest_{symbol}.json` with distinct `size/bytes` field names. The validator normalized them for each of LTCUSDT, INJUSDT, DOTUSDT, ARBUSDT, APTUSDT and checked: path existence, target readable file type, actual `stat().st_size` equals manifest size and is positive, strict native filename/date equality, no duplicate or missing UTC dates **inside that family's specified range**, present 64-hex SHA256 manifest field and symlink resolution. No source data payload was opened for this inventory, so **not** a new full source hash/CRC verification.
+
+| Logical source root | UTC per-symbol dates | Logical files | Symlinked files | Manifest/FS/date/size defects |
+|---|---|---:|---:|---:|
+| BULL25 | 2025-03-22..2025-09-30 (193) | 965 | 0 | **0** |
+| WARM90 | 2026-05-08..2026-08-15 (100) | 500 | 455 (91/symbol) | **0** |
+| RECENT29 | 2026-09-11..2026-10-19 (39) | 195 | 160 (32/symbol) | **0** |
+| **TOTAL** | **332 distinct dates / symbol across these non-overlapping ranges** | **1,660** | **615** | **0** |
+
+**CHECKED HERE:** all 615 symlinks resolved to existing regular files, and their paths are physically outside the corresponding `WARM90`/`RECENT29` family root. Logical total `13,306,684,338` bytes from file `stat` (follows symlinks) matches historical prior scan exactly, but **is not physical disk consumption**. Known roots have no internal filename-date holes. This validates file/manifest *metadata integrity*, not underlying bytes, source order for all objects, remote provider completeness, original order for repeated timestamps beyond tested samples, or any full native Strategy replay.
+
+**NOT CHECKED HERE:** every-file hash recalculation and gzip CRC; source-event row semantics/venue consistency, continuity of the unobserved 357/689 UTC dates per symbol, archive content inside unscanned ZIPs, durable retained data after future purge, consumer/position/Exit parity. `GATE_0=NOT_PASSED`; safe storage/financial gates unchanged.
