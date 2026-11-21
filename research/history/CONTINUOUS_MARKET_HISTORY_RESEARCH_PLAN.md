@@ -13,7 +13,7 @@
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
 | `TASK_STATUS` | `STAGE 0 PARTIAL / QC 2 FILES PASS / #866 OTHER JOB ACTIVE / STORAGE GATE BLOCKED` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 ~11:47 UTC — Stage 0 runner/process/outcome reconciliation + bounded cold discovery` |
+| `LAST_UPDATE` | `2026-11-21 ~11:50 UTC — Stage 0 manifest provenance: 965/500/195 existing source records` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
 | `LAST_LIVE_GITHUB_MAIN_CHECK` | `c8eea34b3d49e99c147d3d8f7195684e6d7c6be8` до нового Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; #866 **active child PID 483140** at check; два старых job records unresolved |
@@ -151,6 +151,13 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+### 2026-11-21 — найдено повторное использование старых source QC
+- **CHECKED HERE:** [Stage0 source inventory §10](STAGE0_SOURCE_INVENTORY_2026-11-21.md). Исторический 2025 BULL25 `965` files / `204,446,371` rows with `FULL_QC_PASS` evidence, 2026 WARM90 `500` files with `ALL_FIVE_PASS` independent-input-QC manifest; RECENT29 `195` per-file manifest entries with hashes/row counts, but fresh full independent QC not redone. Two fresh sample SHA256 matches old 2025/2026 manifests.
+- **REUSE RULE:** preserve exact source order and old manifests/fingerprints; do not acquire duplicates of known days; historical manifest PASS and two fresh samples **do not** pass all #878 native-entry/event parity.
+- **GATE 0:** remains `NOT_PASSED`; external job-state and disk/native retention gates outstanding.
+
+
 
 ### 2026-11-21 — этап 0, live runner identity и холодные источники
 - **CHECKED HERE:** [STAGE0_SOURCE_INVENTORY_2026-11-21.md §9](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — actual loaded runner.py, PID 4136843 → единственный child PID 483140 #866 HS−10…−2 (183d, 36 scenarios), обновляемый stdout. Это **чужой активный job**; #878 новый не стартовал.
