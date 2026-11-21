@@ -226,8 +226,8 @@ class ExitInstalledByteProofTests(unittest.TestCase):
             path = root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
-        (root / "COMPONENT_INSTALLED_COMMIT").write_text(
-            SHA + "\n", encoding="utf-8",
+        (root / "COMPONENT_INSTALLED_COMMIT").write_bytes(
+            (SHA + "\n").encode("ascii"),
         )
         return artifact, root
 
@@ -267,7 +267,7 @@ class ExitInstalledByteProofTests(unittest.TestCase):
                 elif action == "missing_marker":
                     marker.unlink()
                 else:
-                    marker.write_text(PREVIOUS + "\n", encoding="utf-8")
+                    marker.write_bytes((PREVIOUS + "\n").encode("ascii"))
                 with self.subTest(action=action), self.assertRaises(ValueError):
                     collect_exit_installed_file_evidence(
                         artifact_manifest=artifact, releases_parent=parent,
