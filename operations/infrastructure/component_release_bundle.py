@@ -27,7 +27,7 @@ _EXIT_DYNAMIC_SIBLINGS = (
     "operations/connectivity/p90_r06_exit_owner.py",
     "operations/connectivity/p90l90_real_postfill_source_client.py",
 )
-_EXIT_REQUIREMENTS_LOCK = "operations/runtime/runtime_requirements.lock"
+_EXIT_REQUIREMENTS_LOCK = "operations/infrastructure/exit_component_requirements.lock"
 _EXIT_REQUIRED = (_EXIT_ENTRYPOINT, *_EXIT_DYNAMIC_SIBLINGS, _EXIT_REQUIREMENTS_LOCK)
 _COMPONENT_SOURCES: dict[str, tuple[str, ...]] = {
     "EXIT": ("src/", *_EXIT_REQUIRED),
