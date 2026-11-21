@@ -9,7 +9,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 
-from component_release_exit_unit_spec import build_exit_unit_candidate  # noqa: E402
+from component_release_exit_unit_spec import (  # noqa: E402
+    build_exit_unit_candidate,
+    check_protected_exit_parent_plan,
+)
 
 SOURCE_UNIT = ROOT / "operations/systemd/cripta-universal-exit-consumer.service"
 SOURCE_COMMIT = "69c64c0dae722d9e655f7cb4ce103ba434e20054"
@@ -31,7 +34,7 @@ class ExitPinnedUnitContractTests(unittest.TestCase):
         candidate = self.candidate()
         unit = candidate["unit_text"]
         root = (
-            "/srv/cripta/runtime/components/exit/releases/"
+            "/srv/cripta/components/exit/releases/"
             + SOURCE_COMMIT
         )
         self.assertEqual(candidate["component_id"], "EXIT")
@@ -118,6 +121,80 @@ class ExitPinnedUnitContractTests(unittest.TestCase):
                     component_commit=sha,
                     component_lock_sha256=digest,
                 )
+
+
+    def test_root_parent_is_not_controlled_by_runtime_actor(self) -> None:
+        # Synthetic metadata only; passing is NOT host ownership proof.
+        expected = (
+            "/srv", "/srv/cripta", "/srv/cripta/components",
+            "/srv/cripta/components/exit",
+            "/srv/cripta/components/exit/releases",
+        )
+        snapshots = {
+            path: {
+                "exists": index < 2,
+                "owner_uid": 0 if index < 2 else None,
+                "mode": 0o755 if index < 2 else None,
+                "is_symlink": False,
+                "runtime_actor_can_write": False,
+                "runtime_actor_can_traverse": index < 2,
+            }
+            for index, path in enumerate(expected)
+        }
+        result = check_protected_exit_parent_plan(snapshots)
+        self.assertEqual(result["state"], "ROOT_CHAIN_AWAITING_ROOT_OWNER_CREATION")
+        self.assertFalse(result["install_authorized"])
+        self.assertFalse(result["actual_host_preflight_attested"])
+        self.assertEqual(result["root_parent"], expected[-1])
+        for index, path in enumerate(expected[2:], start=2):
+            snapshots[path] = {
+                "exists": True,
+                "owner_uid": 0,
+                "mode": 0o755,
+                "is_symlink": False,
+                "runtime_actor_can_write": False,
+                "runtime_actor_can_traverse": True,
+            }
+        good = check_protected_exit_parent_plan(snapshots)
+        self.assertEqual(good["state"], "ROOT_CHAIN_CONSISTENCY_ONLY")
+        self.assertFalse(good["install_authorized"])
+
+    def test_mutable_or_traversal_denied_parent_is_rejected(self) -> None:
+        paths = (
+            "/srv", "/srv/cripta", "/srv/cripta/components",
+            "/srv/cripta/components/exit",
+            "/srv/cripta/components/exit/releases",
+        )
+        base = {
+            path: {
+                "exists": True, "owner_uid": 0, "mode": 0o755,
+                "is_symlink": False, "runtime_actor_can_write": False,
+                "runtime_actor_can_traverse": True,
+            } for path in paths
+        }
+        for key, value in (
+            ("owner_uid", 107), ("mode", 0o775),
+            ("runtime_actor_can_write", True),
+            ("runtime_actor_can_traverse", False),
+            ("is_symlink", True),
+        ):
+            for path in paths:
+                case = {key2: dict(value2) for key2, value2 in base.items()}
+                case[path][key] = value
+                with self.subTest(path=path, key=key), self.assertRaises(ValueError):
+                    check_protected_exit_parent_plan(case)
+        case = {key: dict(value) for key, value in base.items()}
+        case["/srv/cripta"]["exists"] = False
+        with self.assertRaises(ValueError):
+            check_protected_exit_parent_plan(case)
+        case = {key: dict(value) for key, value in base.items()}
+        case["/srv/cripta/components"]["exists"] = False
+        with self.assertRaises(ValueError):
+            check_protected_exit_parent_plan(case)
+        case = {key: dict(value) for key, value in base.items()}
+        case["/srv/cripta/runtime/components"] = dict(base["/srv"])
+        with self.assertRaises(ValueError):
+            check_protected_exit_parent_plan(case)
 
 
 if __name__ == "__main__":
