@@ -26,6 +26,14 @@ COMPONENT_PATHS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("ENTRY", "prefix", ("src/bybit_workbench/universal_entry/",)),
     ("DISPATCHER", "prefix", ("operations/dispatcher_v2/",)),
     ("EXIT", "exact", ("operations/connectivity/universal_exit_consumer.py",)),
+    # Exact dynamic sibling imports of the Universal Exit process; not a
+    # blanket operations/connectivity prefix (Private Runtime is another owner).
+    ("EXIT", "exact", (
+        "operations/connectivity/p90_real_independent_exit.py",
+        "operations/connectivity/p90_real_persistent_trail.py",
+        "operations/connectivity/p90_r06_exit_owner.py",
+        "operations/connectivity/p90l90_real_postfill_source_client.py",
+    )),
     ("ENTRY", "exact", ("operations/connectivity/universal_entry_consumer.py",)),
     ("ENTRY_OBSERVER", "exact", ("operations/monitoring/universal_entry_shadow.py",)),
     ("DASHBOARD_PRESENTATION", "exact", ("operations/dashboard/index.html",)),
