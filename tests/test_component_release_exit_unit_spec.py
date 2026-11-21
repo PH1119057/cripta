@@ -146,7 +146,7 @@ class ExitPinnedUnitContractTests(unittest.TestCase):
         self.assertFalse(result["install_authorized"])
         self.assertFalse(result["actual_host_preflight_attested"])
         self.assertEqual(result["root_parent"], expected[-1])
-        for index, path in enumerate(expected[2:], start=2):
+        for path in expected[2:]:
             snapshots[path] = {
                 "exists": True,
                 "owner_uid": 0,
