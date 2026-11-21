@@ -647,13 +647,28 @@ def _select_scoped_purpose(
         "operations/infrastructure/exit_component_requirements.lock",
         "operations/infrastructure/cripta-release-controller",
     ))
-    if any(path in exit_exact or path.startswith(
+    has_exit = any(path in exit_exact or path.startswith(
         "src/bybit_workbench/universal_exit/"
-    ) for path in component_delta):
-        raise ControllerError("EXIT_COMPONENT_RELEASE_RAIL_NOT_INSTALLED")
-    if any(path in tooling_exact or path.startswith(
+    ) for path in component_delta)
+    has_component_tooling = any(path in tooling_exact or path.startswith(
         "operations/infrastructure/component_release_"
-    ) for path in component_delta):
+    ) for path in component_delta)
+    # Preserve the pre-existing Dashboard security contract: a mixed
+    # Dashboard+non-UI executable delta must be explicitly rejected as
+    # DASHBOARD_MIXED_EXECUTABLE_SCOPE, never silently reclassified.
+    if (has_exit or has_component_tooling) and dashboard_baseline is not None:
+        dashboard_delta = tuple(line for line in _git(
+            "diff", "--name-only", "--no-renames",
+            dashboard_baseline, target, "--",
+        ).splitlines() if line)
+        if any(path in (
+            "operations/dashboard/index.html",
+            "operations/dashboard/app.py",
+        ) for path in dashboard_delta):
+            raise ControllerError("DASHBOARD_MIXED_EXECUTABLE_SCOPE")
+    if has_exit:
+        raise ControllerError("EXIT_COMPONENT_RELEASE_RAIL_NOT_INSTALLED")
+    if has_component_tooling:
         raise ControllerError("COMPONENT_RELEASE_TOOLING_NOT_DEPLOYABLE")
 
     # An inactive Source must not block an ordinary release that leaves the
