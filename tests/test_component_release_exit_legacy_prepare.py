@@ -23,12 +23,12 @@ from component_release_exit_legacy_prepare import (  # noqa: E402
     OLD_EXIT_COMMIT,
     _fingerprint_venv,
     _payload_digest,
-    _resume_legacy_fixture,
     _prepare_legacy_fixture,
+    _resume_legacy_fixture,
     _verify_legacy_fixture,
     build_pinned_old_exit_unit,
-    prepare_legacy_exit_rollback_once,
     finalize_reconciled_partial_legacy_exit_once,
+    prepare_legacy_exit_rollback_once,
 )
 
 ORIGINAL_UNIT = ROOT / "operations/systemd/cripta-universal-exit-consumer.service"
