@@ -8,7 +8,6 @@ from __future__ import annotations
 import hashlib
 import io
 import os
-import stat
 import sys
 import tarfile
 import tempfile
@@ -146,7 +145,9 @@ class PreviousExitRollbackPreparationTests(unittest.TestCase):
         self.assertFalse(report["financial_mutation_authorized"])
         candidate = self.rollback / OLD_EXIT_COMMIT
         self.assertTrue((candidate / "src/bybit_workbench/__init__.py").is_file())
-        self.assertTrue((candidate / "operations/connectivity/universal_exit_consumer.py").is_file())
+        self.assertTrue(
+            (candidate / "operations/connectivity/universal_exit_consumer.py").is_file()
+        )
         self.assertTrue((candidate / ".venv/pyvenv.cfg").is_file())
         self.assertTrue((candidate / "legacy_exit_pinned.service").is_file())
         self.assertFalse((candidate / "COMPONENT_INSTALLED_COMMIT").exists())
