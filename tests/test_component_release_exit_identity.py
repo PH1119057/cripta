@@ -5,7 +5,6 @@ All snapshots are synthetic. A passing synthetic snapshot is never runtime proof
 from __future__ import annotations
 
 import copy
-import hashlib
 import sys
 import unittest
 from pathlib import Path
@@ -16,12 +15,12 @@ sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 from component_release_exit_identity import (  # noqa: E402
     check_exit_identity_snapshot,
 )
+from component_release_exit_unit_spec import build_exit_unit_candidate  # noqa: E402
 
 SHA = "a" * 40
 PREVIOUS = "b" * 40
 LOCK_SHA = "c" * 64
 CONTENT_SHA = "d" * 64
-UNIT_SHA = "e" * 64
 ROOT_PATH = "/srv/cripta/runtime/components/exit/releases/" + SHA
 ENTRY_SCRIPT = "operations/connectivity/universal_exit_consumer.py"
 LOCK_PATH = "operations/infrastructure/exit_component_requirements.lock"
@@ -43,17 +42,13 @@ def coherent() -> tuple[dict[str, object], dict[str, object], dict[str, object]]
         "status": "STAGED_ONLY_NOT_DEPLOYABLE",
         "install_authorized": False,
     }
-    proposed_unit = {
-        "component_id": "EXIT",
-        "unit_instance": UNIT,
-        "source_commit": SHA,
-        "component_release_root": ROOT_PATH,
-        "component_lock_sha256": LOCK_SHA,
-        "unit_sha256": UNIT_SHA,
-        "unit_text": "Proposed only; not activated",
-        "status": "STAGED_ONLY_NOT_DEPLOYABLE",
-        "install_authorized": False,
-    }
+    proposed_unit = build_exit_unit_candidate(
+        source_unit=(
+            ROOT / "operations/systemd/cripta-universal-exit-consumer.service"
+        ).read_text(encoding="utf-8"),
+        component_commit=SHA,
+        component_lock_sha256=LOCK_SHA,
+    )
     observed: dict[str, object] = {
         "installed_root": ROOT_PATH,
         "installed_marker": SHA,
@@ -61,7 +56,7 @@ def coherent() -> tuple[dict[str, object], dict[str, object], dict[str, object]]
         "installed_lock_sha256": LOCK_SHA,
         "installed_files_regular": True,
         "unit_name": UNIT,
-        "unit_sha256": UNIT_SHA,
+        "unit_sha256": proposed_unit["unit_sha256"],
         "systemd_active_state": "active",
         "systemd_sub_state": "running",
         "pid": 2468,
@@ -155,7 +150,8 @@ class ExitIdentityContractTests(unittest.TestCase):
             ("pid", 0),
             ("pid_start_ticks", 0),
             ("process_executable", "/srv/cripta/runtime/current/.venv/bin/python"),
-            ("process_entrypoint", "/srv/cripta/runtime/current/operations/connectivity/universal_exit_consumer.py"),
+            ("process_entrypoint",
+             "/srv/cripta/runtime/current/operations/connectivity/universal_exit_consumer.py"),
             ("process_working_directory", "/srv/cripta/runtime/current"),
             ("process_pythonpath", "/srv/cripta/runtime/current/src"),
             ("loaded_runtime_root", "/srv/cripta/runtime/current"),
@@ -185,6 +181,7 @@ class ExitIdentityContractTests(unittest.TestCase):
             ("artifact", "component", "ENTRY"),
             ("unit", "component_id", "ENTRY"),
             ("unit", "component_release_root", "/srv/cripta/runtime/current"),
+            ("unit", "unit_text", "a different unreviewed unit"),
             ("artifact", "dependency_lock", "operations/runtime/runtime_requirements.lock"),
             ("artifact", "status", "DEPLOYED"),
         ):
