@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 PARTIAL / QC 2 FILES PASS / #866 OTHER JOB ACTIVE / STORAGE GATE BLOCKED` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / 2-SAMPLE PRICE-ORDER CODEC ROUNDTRIP PASS / FULL FIELDS GROW / STORAGE BLOCKED` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 ~11:50 UTC — Stage 0 manifest provenance: 965/500/195 existing source records` |
+| `LAST_UPDATE` | `2026-11-21 ~13:27 UTC — two-sample in-memory exact price/order stream feasibility` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
-| `LAST_LIVE_GITHUB_MAIN_CHECK` | `c8eea34b3d49e99c147d3d8f7195684e6d7c6be8` до нового Stage 0 PR; **перепроверять каждый содержательный сеанс** |
+| `LAST_LIVE_GITHUB_MAIN_CHECK` | `bc378567f90aa427e56a8b01b275eae4d8a75f66` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; #866 **active child PID 483140** at check; два старых job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Установить с владельцами runner точное terminal/cleanup состояние stale #866/#646, дождаться разрешения storage gate #642 (native retention repeatedly fails), затем выбрать ограниченный native pilot при доказанном дисковом бюджете. [Evidence Stage 0 §9](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Через approved owner rails завершить reconcile двух stale job records #866/#646 и root cause retention #642, после этого выполнить ограниченную проверку полного обязательного состава событий и native first-event parity; пока не скачивать данные. [Evidence Stage 0 §11](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,14 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+### 2026-11-21 — Stage 0 feasibility: точный ценовой порядок без изменения сервера
+- **CHECKED HERE:** [Stage0 §11](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — два существующих native gzip прочитаны under `cripta`, цена/время/исходный порядковый номер сериализованы как строки в in-memory gzip, SHA256 + readback of all 41,745 and 118,896 rows **exact**; получено `14.28%` и `16.00%` от размеров native gzip. Native timestamp ties сохранились в source order.
+- **CONTROL:** all original trade field strings + ordinal, same in-memory codec, is `117.41%` and `121.33%` of native source gzip: **увеличение**, не готовый компрессор full MarketFacts. Price-only stream lacks side, size, trade ID, RPI, OHLC/Geometry/Entry/Exit dependency evidence; cannot substitute native before consumer/QC gates.
+- **Capacity & jobs:** data free `13,299,777,536` B at observation, 94% used; #866 active 183d worker, no #878 job. Timer-driven native-hot-retention failed again at 13:24:26 UTC. Installed script requires `postgres` UID, and `systemctl show` says `User=postgres`; exact error cause unknown.
+- **GATES:** `GATE_0=NOT_PASSED`, `GATE_2=NOT_ATTEMPTED`; new code, disk writes, DB/Trading/Exchange changes and archive purges **none**. NEXT: close stale job/retention safety with respective owners and choose formal complete-field/native-event pilot.
+
+
 
 ### 2026-11-21 — найдено повторное использование старых source QC
 - **CHECKED HERE:** [Stage0 source inventory §10](STAGE0_SOURCE_INVENTORY_2026-11-21.md). Исторический 2025 BULL25 `965` files / `204,446,371` rows with `FULL_QC_PASS` evidence, 2026 WARM90 `500` files with `ALL_FIVE_PASS` independent-input-QC manifest; RECENT29 `195` per-file manifest entries with hashes/row counts, but fresh full independent QC not redone. Two fresh sample SHA256 matches old 2025/2026 manifests.
