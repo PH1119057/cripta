@@ -13,7 +13,78 @@ import re
 _SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _UNIT = "cripta-universal-exit-consumer.service"
-_COMPONENT_PARENT = "/srv/cripta/runtime/components/exit/releases"
+_COMPONENT_PARENT = "/srv/cripta/components/exit/releases"
+# Do not place Exit under /srv/cripta/runtime: it is owned by the
+# unprivileged service actor and can rename/unlink any root-owned child.
+# The sibling path is a *proposal*, not an installed/mounted release root.
+_PROTECTED_PARENT_CHAIN = (
+    "/srv",
+    "/srv/cripta",
+    "/srv/cripta/components",
+    "/srv/cripta/components/exit",
+    _COMPONENT_PARENT,
+)
+
+
+def check_protected_exit_parent_plan(
+    snapshots: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    """Check synthetic root-ancestor metadata, NEVER confer deploy rights.
+
+    The actual host collector must later recheck each path and actor ACL
+    just before a privileged install. This function neither reads filesystem
+    state nor creates or changes any path.
+    """
+    if not isinstance(snapshots, dict) or set(snapshots) != set(
+        _PROTECTED_PARENT_CHAIN
+    ):
+        raise ValueError("EXIT_PARENT_CHAIN_INCOMPLETE")
+    missing = False
+    for index, path in enumerate(_PROTECTED_PARENT_CHAIN):
+        row = snapshots[path]
+        if not isinstance(row, dict):
+            raise ValueError("EXIT_PARENT_METADATA_INVALID")
+        expected_keys = {
+            "exists", "owner_uid", "mode", "is_symlink",
+            "runtime_actor_can_write", "runtime_actor_can_traverse",
+        }
+        if set(row) != expected_keys or type(row["exists"]) is not bool:
+            raise ValueError("EXIT_PARENT_METADATA_INVALID")
+        if row["is_symlink"] is not False:
+            raise ValueError("EXIT_PARENT_SYMLINK_UNTRUSTED")
+        if row["exists"] is False:
+            if index < 2:
+                raise ValueError("EXIT_PARENT_TRUST_ANCHOR_MISSING")
+            if (
+                row["owner_uid"] is not None or row["mode"] is not None
+                or row["runtime_actor_can_write"] is not False
+                or row["runtime_actor_can_traverse"] is not False
+            ):
+                raise ValueError("EXIT_PARENT_ABSENT_METADATA_INVALID")
+            missing = True
+            continue
+        if missing:
+            raise ValueError("EXIT_PARENT_UNVERIFIED_GAP")
+        mode = row["mode"]
+        if (
+            type(row["owner_uid"]) is not int or row["owner_uid"] != 0
+            or type(mode) is not int or mode < 0 or mode > 0o7777
+            or mode & 0o022
+            or row["runtime_actor_can_write"] is not False
+            or row["runtime_actor_can_traverse"] is not True
+        ):
+            raise ValueError("EXIT_PARENT_MUTABLE_OR_UNREADABLE")
+    return {
+        "state": (
+            "ROOT_CHAIN_AWAITING_ROOT_OWNER_CREATION" if missing
+            else "ROOT_CHAIN_CONSISTENCY_ONLY"
+        ),
+        "root_parent": _COMPONENT_PARENT,
+        "actual_host_preflight_attested": False,
+        "install_authorized": False,
+        "rollback_attested": False,
+    }
+
 
 # Exact Git-main reviewed template for the legacy Exit unit. If its bytes
 # change, the trust/compatibility contract must be independently reviewed.
