@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 PARTIAL / 337 STORED POINTERS PASS + 5/5 NATIVE FIRST HARDSTOP PASS / STORAGE GUARD ACTIVE` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / 5/5 FIRST HARDSTOP + 4/4 CAUSAL TPOnly MARKETABLE / FINANCIAL RETENTION BLOCK` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 — independent 5 historical -10% HARD_STOP first-hit source/order parity + optional bounded QC mode` |
+| `LAST_UPDATE` | `2026-11-21 — 4/4 real causal first MARKETABLE_TP exits, closed-only L5-3, independent native vs compact` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
-| `LAST_LIVE_GITHUB_MAIN_CHECK` | `240b4fe3e0215dd96be955dcf279161e34cdf34f` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
+| `LAST_LIVE_GITHUB_MAIN_CHECK` | `13665d912f975a3afd10ecdfb2c82013daad0430` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; separate #866 HS 183d job **completed exit0** at 13:31 UTC; two old job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Пройти полный GitHub scope/quality на расширенном read-only first-hit validator (Stage0 §17); затем ограниченно проверить причинную активацию динамического RESTING_TP и SOFT_STOP по exact frozen source без массового compute. Параллельные #642/#866/#646 safety/job gates сохраняются. [Evidence Stage0 §17](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Пройти GitHub scope/quality для отдельного native_tp_causal_qc.py с 10 позитивными/отрицательными тестами; затем выбрать bounded SOFT_STOP/H9 causal pilot только на существующих оригинальных данных. #642/#866/#646 external gates сохраняются. [Evidence Stage0 §18](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,16 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+
+### 2026-11-21 — independent frozen closed-only L5-3 TPOnly first-market-exit recheck
+- **CHECKED HERE:** [Stage0 §18](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — exact #866 183d partial source fingerprints for historical TPOnly / base / 2025 portfolio match frozen code; original daily gzip source and separately frozen 5m L5-3 states hashes match archived QC/Entry manifests. Deterministic LOCAL historical TPOnly Exit transitions on four selected same-UTC-day CLASSIC_S48_OFF positions, with Entry fixed to ledger (not regenerated): first -10% HARD_STOP → old resting TP → newly available opposite RAW L5-3 candidate at next fully closed 5m bucket, marketable if reached. **4/4 MARKETABLE_TP first events exact original native vs decoded compact order/time/price and saved ledger**, no earlier stop/TP, 36/25/12/22 bucket transitions, 7/9/2/0 TP target changes for INJ LONG/LTC SHORT/DOT LONG/APT SHORT.
+- **Measured:** 4 original complete day files / 881,605 original native rows / 34,450,433 B gzip, selected Entry→Exit intervals only 353,318 B compressed. Previously observed pilot RSS ~29,032 KiB. The compact value is **not** a comparable full-day compressed ratio. All runs read-only on host cripta, no server/production output.
+- **Reproducible QC source:** research/history/native_tp_causal_qc.py, explicit source/frozen/Entry-manifest/ledger paths + max 4 cases, max6h/case, max32MiB source, max16MiB frozen state, max30k interval trade rows, max4MiB in-memory compact. Code selftest 5 PASS and all four real cases PASS from exact inline source; tests/research/test_native_tp_causal_qc.py includes 10 positive/negative fixture tests. **GitHub CI NOT YET VERIFIED** at this checkpoint.
+- **Limits:** no independent Entry/H9/ATR200 construction, SOFT_STOP, multi-symbol portfolios, money/Exchange fills; no Stage0 promotion (0/11), no bulk download/purge/runner; #642 safety-retention and #866/#646 job ownership remain unresolved.
+- **NEXT:** required GitHub scope + 4 quality jobs, then independent main readback; next small causal SOFT_STOP research candidate only after this release checkpoint.
+
+
 
 
 ### 2026-11-21 — independent historical first-HARD_STOP event pilot
