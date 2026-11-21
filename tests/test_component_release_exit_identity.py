@@ -295,6 +295,22 @@ class ExitInstalledByteProofTests(unittest.TestCase):
                         artifact_manifest=artifact, releases_parent=parent,
                     )
 
+    def test_symlinked_component_release_root_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            parent = Path(temp) / "releases"
+            parent.mkdir()
+            artifact, root = self.create_fake_installed(parent)
+            untrusted = parent / "untrusted-components"
+            root.rename(untrusted)
+            try:
+                root.symlink_to(untrusted, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlink creation not permitted")
+            with self.assertRaises(ValueError):
+                collect_exit_installed_file_evidence(
+                    artifact_manifest=artifact, releases_parent=parent,
+                )
+
     def test_untrusted_artifact_path_and_absent_release_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             parent = Path(temp) / "releases"
