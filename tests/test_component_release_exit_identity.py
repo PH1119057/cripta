@@ -214,8 +214,8 @@ class ExitInstalledByteProofTests(unittest.TestCase):
         root = releases_parent / SHA
         root.mkdir(parents=True)
         contents = {
-            ENTRY_SCRIPT: b"immutable exit script\\n",
-            LOCK_PATH: b"one exact component lock\\n",
+            ENTRY_SCRIPT: b"immutable exit script\n",
+            LOCK_PATH: b"one exact component lock\n",
         }
         artifact["blob_sha256"] = {
             name: hashlib.sha256(raw).hexdigest()
@@ -227,7 +227,7 @@ class ExitInstalledByteProofTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
         (root / "COMPONENT_INSTALLED_COMMIT").write_text(
-            SHA + "\\n", encoding="utf-8",
+            SHA + "\n", encoding="utf-8",
         )
         return artifact, root
 
@@ -267,7 +267,7 @@ class ExitInstalledByteProofTests(unittest.TestCase):
                 elif action == "missing_marker":
                     marker.unlink()
                 else:
-                    marker.write_text(PREVIOUS + "\\n", encoding="utf-8")
+                    marker.write_text(PREVIOUS + "\n", encoding="utf-8")
                 with self.subTest(action=action), self.assertRaises(ValueError):
                     collect_exit_installed_file_evidence(
                         artifact_manifest=artifact, releases_parent=parent,
