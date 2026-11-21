@@ -44,6 +44,11 @@ def fixture() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
         "backup_root_host_attested": True,
         "previous_unit_bytes_verified": True,
         "previous_runtime_recoverable": True,
+        "previous_backup_blob_manifest_verified": True,
+        "previous_python_isolated": True,
+        "previous_dependency_abi_attested": True,
+        "previous_pinned_unit_exec_verified": True,
+        "previous_exit_import_recovery_smoke": "PASS",
     }
     observed: dict[str, object] = {
         "old_exit_pid": 101,
@@ -126,6 +131,34 @@ class ExitOnlyCutoverPreviewTests(unittest.TestCase):
             candidate, rollback, observed = fixture()
             rollback[key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):
+                build_exit_cutover_preview(
+                    candidate=candidate, rollback=rollback, observed=observed,
+                )
+
+    def test_unisolated_previous_venv_denied(self) -> None:
+        for key, value in (
+            ("previous_backup_blob_manifest_verified", False),
+            ("previous_python_isolated", False),
+            ("previous_dependency_abi_attested", False),
+            ("previous_pinned_unit_exec_verified", False),
+            ("previous_exit_import_recovery_smoke", "NOT_VERIFIED"),
+        ):
+            candidate, rollback, observed = fixture()
+            rollback[key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                build_exit_cutover_preview(
+                    candidate=candidate, rollback=rollback, observed=observed,
+                )
+        for key in (
+            "previous_backup_blob_manifest_verified",
+            "previous_python_isolated",
+            "previous_dependency_abi_attested",
+            "previous_pinned_unit_exec_verified",
+            "previous_exit_import_recovery_smoke",
+        ):
+            candidate, rollback, observed = fixture()
+            del rollback[key]
+            with self.subTest(missing=key), self.assertRaises(ValueError):
                 build_exit_cutover_preview(
                     candidate=candidate, rollback=rollback, observed=observed,
                 )
