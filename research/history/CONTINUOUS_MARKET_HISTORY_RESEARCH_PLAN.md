@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 PARTIAL / 5/5 FIRST HARDSTOP + 4/4 CAUSAL TPOnly MARKETABLE / FINANCIAL RETENTION BLOCK` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / 5/5 FIRST HARDSTOP + 4/4 CAUSAL TPOnly + 2/2 RAW SOFT_STOP / FINANCIAL RETENTION BLOCK` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 — 4/4 real causal first MARKETABLE_TP exits, closed-only L5-3, independent native vs compact` |
+| `LAST_UPDATE` | `2026-11-21 — independent 2/2 first RAW L5-3 SOFT_STOP, original vs compact, 18h H9 timer excluded` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
-| `LAST_LIVE_GITHUB_MAIN_CHECK` | `13665d912f975a3afd10ecdfb2c82013daad0430` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
+| `LAST_LIVE_GITHUB_MAIN_CHECK` | `e278fa1f97bfc207cfa89f02c543ef842001400f` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; separate #866 HS 183d job **completed exit0** at 13:31 UTC; two old job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Пройти GitHub scope/quality для отдельного native_tp_causal_qc.py с 10 позитивными/отрицательными тестами; затем выбрать bounded SOFT_STOP/H9 causal pilot только на существующих оригинальных данных. #642/#866/#646 external gates сохраняются. [Evidence Stage0 §18](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Проверить GitHub required scope/quality по research/history/native_raw_softstop_qc.py + 12 отрицательным/позитивным тестам, слить только после PASS, затем выбрать ограниченную проверку H9_LOSS_CONTINUOUS таймера на существующем source. #642/#866/#646 gates сохраняются. [Evidence Stage0 §19](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,15 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+
+### 2026-11-21 — independent raw L53 softstop local causal first-event validation
+- **CHECKED HERE:** [Stage0 §19](STAGE0_SOURCE_INVENTORY_2026-11-21.md) — two selected *same-day* H9CONT_18H_S48_OFF SOFT_STOP records with `soft_stop_cause=L53_RAW_MINUS4_WIDTH4`, both holding <18h (so the competing continuous H9 loss timer cannot fire yet). Original BULL25 native row data + frozen causally closed 5m L53 SHA256 verified, exact historical source fingerprint matches reference #866 183d partial. Recomputed TPOnly/HARD_STOP precedence and RAW adverse <=−4% / working_width>=4 first SOFT_STOP on original and separately decoded compact stream; **2/2 earliest Exit reason/global source order/time/price exactly match saved ledger**, APT LONG 2025-04-06 (156 5m transitions, 10 TP changes) / INJ SHORT 2025-05-22 (180, 21), zero competing earlier exits.
+- **Measured:** 2 full-day raw source files, 449,284 trades, 18,054,108 original gzip B, selected Entry→Exit intervals compact 1,771,713 B (different denominators; no full-day compression claim); prior bounded pilot RSS ≈99,960 KiB. Exact new stdlib-only source `research/history/native_raw_softstop_qc.py` run via `sudo -u cripta python3 -B -c` returned SELFTEST_PASS5 and PASS_BOUNDED_RAW_L53_FIRST_SOFTSTOP2, 0 server writes. 12 research-only regression/negative fixture tests committed to branch. **Required GitHub CI NOT YET VERIFIED**.
+- **Limits:** H9 continuous timer genuinely NOT examined (790 scenario references), full 2025/2026 source universe, independent Entry/GeometrySpec/ATR, portfolio/fill/fees NOT checked. GATE0 NOT_PASSED (0/11), #642 financial retention HOT_ORDER_PRESENT and storage 94% used, stale #866/#646 owner states unresolved. No production, Exchange or long research compute mutation.
+- **NEXT:** exact scope+quality pass, merge/readback, then independent bounded H9 timer causal pilot.
+
+
 
 
 ### 2026-11-21 — independent frozen closed-only L5-3 TPOnly first-market-exit recheck
