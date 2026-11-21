@@ -57,6 +57,7 @@ SAFE_ENV = {
 EXPECTED_RW_PATHS = {
     "/srv/cripta/source_checkout",
     "/srv/cripta/runtime",
+    "/srv/cripta/components",
     "/srv/cripta/dashboard-ui",
     "/data/cripta/research/tooling",
     "/data/cripta/script_archive/release_backups",
