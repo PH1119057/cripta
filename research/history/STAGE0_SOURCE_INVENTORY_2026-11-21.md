@@ -122,7 +122,7 @@ Streaming full gzip/CSV read + SHA256 compressed source; `row timestamp` в пр
 
 - **Schema observed:** 2025 ARB = 10 columns, recent LTC = same fields plus `RPI`. This difference is proven only for the two inspected files; additional schema versions still require discovery.
 - **Crucial finding:** many trades share identical timestamps. Timestamp sort alone is **not** a valid exact event-order replacement; stable original row order/tie break and source provenance are obligatory. No first-event TP/Stop equivalence has been claimed.
-- **NOT VERIFIED:** independent symbol/side sizes, exact deduplication, full-file native row semantics vs provider, all 166+ million (?) events (not counted), per-day SHA256 over all 1,660 logical source-day instances, native cost/Entry/Exit parity, ongoing ingest of MarketSource. Do not extrapolate 2-file QC to 332-days coverage.
+- **NOT VERIFIED:** independent symbol/side sizes, exact deduplication, full-file native row semantics vs provider, all native events over the target calendar (not counted), per-day SHA256 over all 1,660 logical source-day instances, native cost/Entry/Exit parity, ongoing ingest of MarketSource. Do not extrapolate 2-file QC to 332-days coverage.
 
 ### 8.3 External job and storage safety
 
