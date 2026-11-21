@@ -384,6 +384,7 @@ def _prepare_legacy_fixture(
     expected_venv_fingerprint: str,
     owner_uid: int,
     service_gid: int,
+    lock_gid: int,
 ) -> dict[str, object]:
     """Test-path adapter; still enforces exclusive shared lock and no overwrites."""
     if not _is_sha256(expected_archive_sha256) or not _is_sha256(
@@ -397,7 +398,7 @@ def _prepare_legacy_fixture(
         owner_uid, service_gid, 0o750
     ):
         _deny("PARENT_METADATA")
-    with _hold_shared_release_lock(path=lock_path, uid=owner_uid, gid=service_gid):
+    with _hold_shared_release_lock(path=lock_path, uid=owner_uid, gid=lock_gid):
         candidate = rollback_parent / OLD_EXIT_COMMIT
         staging = rollback_parent / (".stage-" + OLD_EXIT_COMMIT)
         if candidate.exists() or candidate.is_symlink() or staging.exists() or staging.is_symlink():
@@ -517,4 +518,5 @@ def prepare_legacy_exit_rollback_once() -> dict[str, object]:
         expected_venv_fingerprint=_ISOLATED_VENV_FINGERPRINT,
         owner_uid=0,
         service_gid=group,
+        lock_gid=0,  # shared root:root lock, unlike root:cripta rollback
     )
