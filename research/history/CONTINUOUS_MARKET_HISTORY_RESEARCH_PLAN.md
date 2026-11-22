@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 PARTIAL / 5/5 HARDSTOP + 4/4 CAUSAL TPOnly + 2/2 RAW SOFT + 2/2 H9 18h / FINANCIAL RETENTION BLOCK` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / H9 1530 CLOSED BAR-EPISODES: 368 START/141 RESET EXACT / NATIVE RESET REPLAY BLOCKED / FINANCIAL RETENTION BLOCK` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-22 — 2/2 native cross-day H9_LOSS_CONTINUOUS LONG/SHORT first Exit, closed RAW H9 union, exact historical TPOnly semantics` |
+| `LAST_UPDATE` | `2026-11-22 — 1530 frozen closed-bar position H9 episodes independently reconstructed; starts 368 and resets 141 exactly match #866 historical QC; native 2/3-day reset replay NOT VERIFIED` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
-| `LAST_LIVE_GITHUB_MAIN_CHECK` | `c1273cabdea579ad618eed6329c7b4fc81a62ac0` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
+| `LAST_LIVE_GITHUB_MAIN_CHECK` | `7bac80f2d93e64e349a527a915e1f0078ddecc29` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; separate #866 HS 183d job **completed exit0** at 13:31 UTC; two old job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Проверить обязательные GitHub scope/quality для native_h9_continuous_qc.py и 18 тестов, слить только при PASS и независимо прочитать main. Далее — Stage0 consumer/coverage gate и отдельная безопасная reconciliation #642/#866/#646 без массового compute. [Evidence Stage0 §20](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Провести scope/quality для документационного Stage0 §21 (1530 H9 closed-bar episodes; 368/141 parity), слить только при PASS, затем проверить #642 storage и #866/#646 terminal state по отдельному approved read-only пути. Native reset/restart first-exit replay BLOCKED_UPSTREAM_OPENAI для exact invocation, не обходить. [Evidence Stage0 §21](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,16 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+
+### 2026-11-22 — entire frozen-bar H9 timer episode histogram vs saved 183d count
+
+- **CHECKED HERE:** [Stage0 §21](STAGE0_SOURCE_INVENTORY_2026-11-21.md). Existing historical #866 H9CONT_18H_S48_OFF **1530 closed positions**, five BULL25 frozen 5m source bars per symbol (55385 states each), original pinned closed RAW 108×5m and causal 15m anchor union. Against immutable Entry price/side and historical Entry→Exit bucket interval, independently counted unfavorable H9 starts and favorable resets per position: **(starts,resets) 0/0:1182, 1/0:217, 1/1:111, 2/1:10, 2/2:10**; aggregate **368 starts and 141 resets** EXACT saved #866 result timer audit counters. **20 actual reconstructed bar-level recovery/restart positions**; not 20 independently validated native tick paths. 153 saved H9 timer exits remain the old QC result, not 153 new first-event replays. One historical censored-open position excluded.
+- **Two evidence-target candidates:** APTUSDT SHORT (2025Sep2→Sep3, Entry order23461667, reset Sep2 12:50 UTC, restart Sep3 01:00 UTC, original recorded H9-timed exit order23618709); LTCUSDT LONG (2025Jun17→Jun19, Entry order14619894, reset Jun18 01:20 UTC, restart Jun18 10:30 UTC, original recorded H9-timed exit order14846419). Both recovered and restarted in independently rebuilt closed-bar H9 geometry; final start timestamps agree with independently read original ledger last-first-loss timestamps. **Original native 2/3-day first-event TP/Stop/RAW precedence for these is NOT VERIFIED.**
+- **Exact tool outcome:** attempted one non-mutating local import/in-memory 48h limit extension for the reviewed existing native H9 validator; OpenAI tool-security rejected the request with **BLOCKED_UPSTREAM_OPENAI**. No successful new native H9 case, no tool bypass or alternate actor/transport. Other read-only frozen-bar/ledger checks PASS. No persistent server writer, job or runtime mutation. Earlier #891 2/2 historical non-reset first H9 Exit native evidence remains valid and separate.
+- **Gates:** Stage0 GATE0 NOT_PASSED 0/11. #642 protected hot-order retention fails closed and data SSD is 94% used (~13.2GB available), #866/#646 old job directories have unknown terminal outcome. NEXT: required documentation PR scope/quality and exact main readback, then bounded approved read-only storage/job reconciliation, no bulk download/purge.
+
+
 
 
 ### 2026-11-22 — separate historical H9 18h first-Exit cross-day causal proof
