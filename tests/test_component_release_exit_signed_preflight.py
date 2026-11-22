@@ -184,6 +184,14 @@ class SignedExitPreflightTests(unittest.TestCase):
         self.assertEqual(collect_current_signed_exit_preflight_once.__code__.co_argcount, 0)
         with (
             patch("component_release_exit_signed_preflight.os.geteuid", return_value=0),
+            patch("pwd.getpwnam", return_value=SimpleNamespace(pw_uid=107)),
+            self.assertRaisesRegex(ValueError, "ACTOR_NOT_CRIPTA"),
+        ):
+            collect_current_signed_exit_preflight_once()
+
+    def test_absent_named_service_actor_fails_closed_in_ci(self) -> None:
+        with (
+            patch("pwd.getpwnam", side_effect=KeyError("cripta")),
             self.assertRaisesRegex(ValueError, "ACTOR_NOT_CRIPTA"),
         ):
             collect_current_signed_exit_preflight_once()
