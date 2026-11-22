@@ -460,3 +460,39 @@ H9 is independently reconstructed from raw source_high/source_low of **108 fully
 **Review gate history:** Initial PR #891 head ec0ffa9c30654f74d1821be3d246584af89250d8 had required scope PASS, but Python 3.12 and Python 3.13 Ruff regression gates FAILED on five new diagnostics, all confined to tests/research/test_native_h9_continuous_qc.py: E741 ambiguous variable l (2), F401 unused timedelta, I001 import ordering, UP017 datetime.UTC. Corrected only those named style defects without deleting tests. A second source review exposed the Entry-time TP seeding contract above; corrected before merge and re-ran exact new H9 validator on original ARBUSDT LONG and APTUSDT SHORT sources: SELFTEST_PASS6 and both native first events PASS unchanged (source/checksum/ledger evidence preserved). Added tests for initially eligible LONG and SHORT resting TP and subsequent marketable TP after initially ineligible Entry, total 18. **Fresh post-correction GitHub full scope+quality still NOT CHECKED** until new exact HEAD CI completes; no attempt to bypass required gates.
 
 **Gate:** Stage0 IN PROGRESS, GATE_0=NOT_PASSED, 0/11. #642 hot-order fail-closed retention, SSD data 94% used (13,279,727,616 bytes free at latest 2026-11-22 read); stale external #866/#646 job metadata still unresolved. No production/runtime/DB/Exchange mutation. **NEXT_ONE_ACTION:** review scoped GitHub PR, require PASS from scope and all four quality CI jobs, merge only on same exact HEAD and independently read back from main; then proceed with independent no-bulk OOS/coverage prerequisites while separate storage/job owners reconcile blockers.
+
+## 21. Frozen H9 favorable-reset episodes on ALL closed 183d H9CONT_18H_S48_OFF positions — 2026-11-22
+
+**Scope / authority:** Continuing #878 RESEARCH Stage0 on exact GitHub main baseline `7bac80f2d93e64e349a527a915e1f0078ddecc29`; server mirror same at first checked read. No production, Exchange, PostgreSQL, service, source/archive mutation or new job. This appendix is **bar-level episode parity**, NOT native first-trade acceptance for recovered positions.
+
+**Independent input and causal rule:** use immutable #866 183d partial ledger `/srv/cripta-share/reports/jobs/C2-R866-H9CONT-3P-10CASE-20261120/h9_continuity_183d/trade_ledger.jsonl`, exact scenario `H9CONT_18H_S48_OFF`, accepted Entry price/time/side and Exit time as immutable anchors; 1,530 *closed* positions (1,531 accepted, one censored open excluded). Independently read all five BULL25 L5-3 frozen files `/data/cripta/research/runs/p90l90_bull_2025_holdout_v1/results/l53_geometry_full_2025_v1/parts/states_{SYMBOL}.csv.gz`, APT/INJ/ARB/LTC/DOT, **55,385 contiguous closed 5m state records per symbol**. Files were SHA256 verified against their stored per-symbol Entry manifests during the preceding bounded preflight in this exact session. At every 5m bucket, compute trailing RAW high/low over **108 fully closed 5m source_high/source_low bars**, and combine with the preceding causal 15m anchor floor(bucket/900)*900 (H9 low=MIN(low5m_current, low5m_anchor), H9 high=MAX(high5m_current, high5m_anchor)). LONG is adverse when H9 high <= fixed Entry price; SHORT is adverse when H9 low >= fixed Entry price. Record a start at each false→true and reset at each true→false. Exact frozen historical H9 timer rules: adverse <=0% and favorable >0% resets; this is **not** a new general Strategy policy or an ATR200 reconstruction.
+
+### 21.1 Every closed historical position, exclusive bar-level episode classes
+
+| Starts (adverse H9) | Resets (favorable H9) | Positions |
+|---:|---:|---:|
+| 0 | 0 | 1,182 |
+| 1 | 0 | 217 |
+| 1 | 1 | 111 |
+| 2 | 1 | 10 |
+| 2 | 2 | 10 |
+| **ALL** | | **1,530** |
+
+Derived independently from frozen closed-bar geometry: `STARTS=217+111+2*10+2*10=368`, `RESETS=111+10+2*10=141`. Exact independent comparison with read-only saved #866 QC result `h9_timer_audit.H9CONT_18H_S48_OFF={starts:368,resets:141,h9_exit:153}`: **START/RESET COUNT PARITY=PASS (368/368, 141/141)**. This is *not* a 1,530-trade native tick first-Exit replay and does not test raw print alignment, accepted EntryCandidates, SOFT/TP preemption, portfolio or money. The 153 H9 exits belong to original QC self-report; §20 verifies independently only two specific non-reset first Exit paths. The 20 two-start cases are real independently reconstructed closed-bar episode candidates, not 20 validated market fills.
+
+### 21.2 Two bounded recovery→restart candidates; original native replay NOT VERIFIED
+
+| Source UTC window | Symbol/side | Global Entry order | Global Exit order | First adverse H9 (closed-bar) | Reset (closed-bar) | Restart (closed-bar and saved ledger last first_h9_loss_ts) | Original recorded Exit |
+|---|---|---:|---:|---|---|---|---|
+| 2025-09-02 → 09-03 | APTUSDT SHORT | 23,461,667 | 23,618,709 | 2025-09-02 12:00 UTC | 2025-09-02 12:50 UTC | 2025-09-03 01:00 UTC / `1756861200` | SOFT_STOP / H9_LOSS_CONTINUOUS, 4.3640 |
+| 2025-06-17 → 06-19 | LTCUSDT LONG | 14,619,894 | 14,846,419 | 2025-06-17 23:30 UTC | 2025-06-18 01:20 UTC | 2025-06-18 10:30 UTC / `1750242600` | SOFT_STOP / H9_LOSS_CONTINUOUS, 84.98 |
+
+The exact immutable saved ledger rows for both were separately read back under Unix `cripta`, including Entry and Exit source orders, fixed Entry prices (APT 4.2430, LTC 85.59), terminal cause and last adverse start; they match their reconstructed **last bucket**. APT spans 157,043 selected global native source ordinals / two UTC days; LTC spans 226,526 / three UTC days. Existing provider QC manifest lists full-day source files for both windows; no new acquisition and no claim that all their original prints were re-streamed. These examples require an allowed, independently reviewed 2–3-day causal first-event replay before exact TP/HARD_STOP/RAW-SOFT precedence or Exit parity can be asserted.
+
+### 21.3 Concrete tool blocker and safety status
+
+A proposed bounded read-only **execution** of the already-merged `research/history/native_h9_continuous_qc.py` via a Python in-process import with temporary increased `MAX_HOLD_SECONDS` (36h to 48h for the APT candidate) returned explicitly **“Этот вызов инструмента был заблокирован системами безопасности OpenAI”**. No successful execution response, Exit replay evidence or output file resulted from that request; classify **`BLOCKED_UPSTREAM_OPENAI` for this exact invocation**, NOT SentinelX `command_not_allowed`, Unix `EACCES`, GitHub failure, or bad H9 result. Did **not** retry under another actor, encode the command, change transport, disable any tool gate or modify production. The separate read-only ledger-bar-geometry screening was permitted and completed; do not conflate these outcomes.
+
+Separate protected finance #642 native retention still fail-closed with hot orders and 94% full data SSD; unrelated #866/#646 runner directories remain `running` without proven terminal result. **STAGE0 GATE_0=NOT_PASSED, 0/11**, no bulk data download/purge or Strategy/Entry/Exit/Execution change.
+
+**NEXT ONE ACTION:** publish this documentation-only bar-level checkpoint through required GitHub `scope` and all four `quality` gates; then reconcile already-existing external job and storage dependencies by approved read-only preflight. A future full 2/3-day native reset/restart first-event replay remains **NOT VERIFIED** until an actual allowed execution and independent QC.
