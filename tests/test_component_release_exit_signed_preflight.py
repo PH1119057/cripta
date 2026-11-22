@@ -180,6 +180,7 @@ class SignedExitPreflightTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.run_check(routes, proofs)
 
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux Unix pwd")
     def test_noarg_host_owner_rejects_non_cripta_actor(self) -> None:
         self.assertEqual(collect_current_signed_exit_preflight_once.__code__.co_argcount, 0)
         with (
@@ -189,9 +190,17 @@ class SignedExitPreflightTests(unittest.TestCase):
         ):
             collect_current_signed_exit_preflight_once()
 
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux Unix pwd")
     def test_absent_named_service_actor_fails_closed_in_ci(self) -> None:
         with (
             patch("pwd.getpwnam", side_effect=KeyError("cripta")),
+            self.assertRaisesRegex(ValueError, "ACTOR_NOT_CRIPTA"),
+        ):
+            collect_current_signed_exit_preflight_once()
+
+    def test_non_linux_platform_denied_before_unix_actor_lookup(self) -> None:
+        with (
+            patch("component_release_exit_signed_preflight.sys.platform", "win32"),
             self.assertRaisesRegex(ValueError, "ACTOR_NOT_CRIPTA"),
         ):
             collect_current_signed_exit_preflight_once()
