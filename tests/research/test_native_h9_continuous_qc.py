@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import argparse
 import csv
-from datetime import datetime, timedelta, timezone
 import gzip
 import hashlib
 import importlib.util
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,6 @@ import pytest
 SYMBOL = "LTCUSDT"
 DAY1 = "2025-04-01"
 DAY2 = "2025-04-02"
-UTC = timezone.utc
 ENTRY_TIME = datetime(2025, 4, 1, 10, 0, 20, tzinfo=UTC).timestamp()
 LOSS_TIME = datetime(2025, 4, 1, 10, 10, 10, tzinfo=UTC).timestamp()
 EXIT_TIME = datetime(2025, 4, 2, 4, 10, 15, tzinfo=UTC).timestamp()
@@ -106,12 +105,15 @@ def sample(tmp_path, monkeypatch, validator):
             b = int(first.timestamp()) + 300 * n
             if missing and b == LOSS_BUCKET + 300:
                 continue
-            h, l = source_high, source_low
+            bar_high, bar_low = source_high, source_low
             if recover and b == recover_bucket:
-                h, l = ("10.5", l) if side == "LONG" else (h, "9.5")
+                bar_high, bar_low = (
+                    ("10.5", bar_low) if side == "LONG"
+                    else (bar_high, "9.5")
+                )
             if high_override is not None:
-                h = high_override
-            r_high, r_low = h, l
+                bar_high = high_override
+            r_high, r_low = bar_high, bar_low
             if raw_soft:
                 r_high, r_low = (
                     ("9.5", "9.1") if side == "LONG" else ("10.8", "10.5")
@@ -120,7 +122,7 @@ def sample(tmp_path, monkeypatch, validator):
                 "state_effective_ts": b, "source_bar_end_ts": b,
                 "range_low": r_low, "range_high": r_high,
                 "working_width_pct_lower": "4.5" if raw_soft else "2.0",
-                "source_high": h, "source_low": l,
+                "source_high": bar_high, "source_low": bar_low,
             })
         gz_csv(frozen, ("state_effective_ts", "source_bar_end_ts",
                        "range_low", "range_high", "working_width_pct_lower",
