@@ -6,7 +6,6 @@ Synthetic proofs NEVER grant release or financial authorization.
 from __future__ import annotations
 
 import copy
-import os
 import sys
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -149,9 +148,8 @@ class SignedExitPreflightTests(unittest.TestCase):
             {"MAIN": proofs[0], "SUB": proofs[1]},
             None,
         ):
-            with self.subTest(value_type=type(value).__name__):
-                with self.assertRaises(ValueError):
-                    self.run_check(routes, value)
+            with self.subTest(value_type=type(value).__name__), self.assertRaises(ValueError):
+                self.run_check(routes, value)
 
     def test_fail_closed_position_without_protection_or_malformed_numbers(self) -> None:
         for key, value in (
