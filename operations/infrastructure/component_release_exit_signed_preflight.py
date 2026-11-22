@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -137,6 +138,8 @@ def _check_signed_exit_account_pair(
 
 def collect_current_signed_exit_preflight_once() -> dict[str, object]:
     """No-argument credential-local GET/SELECT; no POST or trading action."""
+    if sys.platform != "linux":
+        _deny("ACTOR_NOT_CRIPTA")
     import pwd
 
     actual_uid = os.geteuid()
