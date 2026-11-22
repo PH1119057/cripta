@@ -11,15 +11,15 @@
 | `TASK_ID` | `RESEARCH-HISTORY-20251120` |
 | `ISSUE` | `#878 OPEN` |
 | `ACTIVE_STAGE` | `0 — Инвентаризация и проверка существующих работ` |
-| `TASK_STATUS` | `STAGE 0 PARTIAL / 5/5 FIRST HARDSTOP + 4/4 CAUSAL TPOnly + 2/2 RAW SOFT_STOP / FINANCIAL RETENTION BLOCK` |
+| `TASK_STATUS` | `STAGE 0 PARTIAL / 5/5 HARDSTOP + 4/4 CAUSAL TPOnly + 2/2 RAW SOFT + 2/2 H9 18h / FINANCIAL RETENTION BLOCK` |
 | `STAGE_GATES_PASSED` | `0 / 11` |
-| `LAST_UPDATE` | `2026-11-21 — independent 2/2 first RAW L5-3 SOFT_STOP, original vs compact, 18h H9 timer excluded` |
+| `LAST_UPDATE` | `2026-11-22 — 2/2 native cross-day H9_LOSS_CONTINUOUS LONG/SHORT first Exit, closed RAW H9 union, exact historical TPOnly semantics` |
 | `SOURCE_BASELINE` | `7e387c7d06949f0f1c4627d5169c855bd3a1f42f` |
-| `LAST_LIVE_GITHUB_MAIN_CHECK` | `e278fa1f97bfc207cfa89f02c543ef842001400f` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
+| `LAST_LIVE_GITHUB_MAIN_CHECK` | `c1273cabdea579ad618eed6329c7b4fc81a62ac0` до current Stage 0 PR; **перепроверять каждый содержательный сеанс** |
 | `RESEARCH_JOB` | `NOT STARTED BY #878`; separate #866 HS 183d job **completed exit0** at 13:31 UTC; two old job records unresolved |
 | `EXECUTED_DATA_QC` | `NOT VERIFIED` для нового каркаса |
 | `PRODUCTION` | `UNTOUCHED BY THIS TASK` |
-| `NEXT_ONE_ACTION` | Проверить GitHub required scope/quality по research/history/native_raw_softstop_qc.py + 12 отрицательным/позитивным тестам, слить только после PASS, затем выбрать ограниченную проверку H9_LOSS_CONTINUOUS таймера на существующем source. #642/#866/#646 gates сохраняются. [Evidence Stage0 §19](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
+| `NEXT_ONE_ACTION` | Проверить обязательные GitHub scope/quality для native_h9_continuous_qc.py и 18 тестов, слить только при PASS и независимо прочитать main. Далее — Stage0 consumer/coverage gate и отдельная безопасная reconciliation #642/#866/#646 без массового compute. [Evidence Stage0 §20](STAGE0_SOURCE_INVENTORY_2026-11-21.md) |
 
 **Правило обновления:** после каждого доказанного промежуточного результата сначала изменять эту таблицу, затем checklist и журнал evidence ниже в одном Git changeset. Не повышать статус по плану, коммиту, CI или имени процесса без фактической проверки. При `UNKNOWN` — сначала восстановить outcome, не запускать повторно.
 
@@ -151,6 +151,20 @@
 **Рабочие корни:** Git source в разрешённом `research/**`; большие runs/manifests/caches в утверждённом `/data/cripta/research` под доказанным effective actor/ACL; source checkout — зеркало, а не writer. Новые data paths зависят от read-only preflight и текущего MAP, не от этого плана.
 
 ## 5. Журнал решений и evidence — дополнять, не подменять
+
+
+### 2026-11-22 — separate historical H9 18h first-Exit cross-day causal proof
+
+
+**Exact source-review correction before merge:** first PR #891 head ec0ffa9c30654f74d1821be3d246584af89250d8 had required scope SUCCESS but Python3.12+3.13 Ruff regression FAIL, 5 diagnostics only in research tests (E741 x2, F401, I001, UP017). Resolved those five named style errors without weakening a gate or test expectations. Further read of full pinned H9 Entry handler lines 165–171 showed initial_position creates tp=None but H9 handler immediately sets an Entry-time eligible opposite L5-3 TP (live strictly after Entry seq). Replaced incorrect generalization in validator, added three targeted positive preservation tests (LONG and SHORT seeded resting TP, no eligible Entry target followed by marketable next 5m); **18 tests total**. Exact corrected source was rerun on host as cripta in-memory with SELFTEST_PASS6 and native+compact 2-case PASS unchanged. Fresh full GitHub CI is still required and NOT VERIFIED as of this checkpoint.
+
+
+- **CHECKED HERE:** [Stage0 §20](STAGE0_SOURCE_INVENTORY_2026-11-21.md): original #866 partial 183d ledger H9CONT_18H_S48_OFF, immutable source hashes pinned, two original UTC days each for selected ARBUSDT LONG 2025-05-23→May24 and APTUSDT SHORT 2025-08-07→Aug08. Reconstructed exact historical RAW H9 108×5m + 15m anchored union from SHA-checked causally closed L53 frozen states and original Bybit public trades, preserving tied source-time physical row order. Historical initial_position() starts tp=None, but H9 Entry handler seeds eligible opposite RAW L53 resting TP immediately with tp_live_after_seq=Entry seq; thereafter local exact stop/resting/marketable/raw-soft/H9-timer precedence. **2/2 true first H9_LOSS_CONTINUOUS Exit exact original vs compact and frozen ledger** (global row order, timestamp, reason, price, first_h9_loss_ts) with 1 adverse start/0 reset each. LONG exit order7,519,733 at0.3967, adverse first1748033100; SHORT exit order20,257,485 at4.6840, adverse first1754628300.
+- **Bounded resource:** four whole original source days, 680,250 trades, original gzip28,255,482 B; selected Entry→Exit intervals 460,300 events / compressed2,533,247 B (not whole-day comparison); previous LONG-only RSS109,552 KiB, combined RSS NOT MEASURED. Executed exact new source in-memory under cripta: SELFTEST_PASS6, full 2-case PASS, 0 server writes. Git branch includes research/history/native_h9_continuous_qc.py and 18 targeted fixture/negative tests in tests/research/; full GitHub scope/quality **NOT YET VERIFIED**.
+- **No gate promotion:** old #866 153 H9_LOSS_CONTINUOUS result rows were only ledger-self-consistency checked; these are 2 hand-picked first-event paths, no independent Entry/Portfolio/ATR/full history. Stage0 0/11, #642 financial hot-order retention and 94% SSD, #866/#646 old running directories remain unreconciled, no bulk job/raw purge/trading mutation.
+- **NEXT ONE ACTION:** GitHub scope/quality, merge/readback only if mandatory tests pass; then owner-gated data/calendar/writer inventory for Stage0.
+
+
 
 
 ### 2026-11-21 — independent raw L53 softstop local causal first-event validation
