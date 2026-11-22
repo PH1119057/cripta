@@ -188,9 +188,11 @@ class ExitTransactionTests(unittest.TestCase):
     def test_bad_duplicate_or_equal_unit_material_forbidden(self) -> None:
         a, j = FakeExit(), FakeJournal()
         for old, new in ((OLD, OLD), (b"", NEW), (OLD, b""), (OLD, b"x" * 16385)):
-            with self.subTest(old=len(old), new=len(new)):
-                with self.assertRaisesRegex(ValueError, "UNIT_INPUT_INVALID"):
-                    _run_exit_only_transition(a, j, old_unit=old, new_unit=new)
+            with (
+                self.subTest(old=len(old), new=len(new)),
+                self.assertRaisesRegex(ValueError, "UNIT_INPUT_INVALID"),
+            ):
+                _run_exit_only_transition(a, j, old_unit=old, new_unit=new)
         self.assertEqual(a.calls, [])
 
     def test_public_noarg_cutover_fails_closed_no_candidate_before_os_writes(self) -> None:
