@@ -70,6 +70,7 @@ class FakeExit:
         if self.unit != expected or self.current not in ("OLD_STOPPED", "NEW_STOPPED"):
             raise RuntimeError("wrong current")
         self.unit = replacement
+        self.current = "OLD_STOPPED" if replacement == OLD else "NEW_STOPPED"
 
     def reload(self) -> None:
         self._hit("RELOAD")
