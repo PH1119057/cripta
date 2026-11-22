@@ -49,7 +49,8 @@ class ExitPrecutoverReadbackTests(unittest.TestCase):
     def test_noarg_owner_rejects_non_root_before_any_subprocess(self) -> None:
         self.assertEqual(collect_exit_only_owner_preflight_once.__code__.co_argcount, 0)
         with (
-            patch("component_release_exit_owner_preflight.os.geteuid", return_value=107),
+            patch("component_release_exit_owner_preflight.sys.platform", "linux"),
+            patch("component_release_exit_owner_preflight.os.geteuid", return_value=107, create=True),
             patch("component_release_exit_owner_preflight._snapshot_units") as scan,
             self.assertRaisesRegex(ValueError, "ROOT_REQUIRED"),
         ):
@@ -71,8 +72,9 @@ class ExitPrecutoverReadbackTests(unittest.TestCase):
 
     def collect(self, data: dict[str, object]) -> dict[str, object]:
         with (
+            patch("component_release_exit_owner_preflight.sys.platform", "linux"),
             patch("component_release_exit_owner_preflight.os.geteuid",
-                  return_value=0),
+                  return_value=0, create=True),
             patch("component_release_exit_owner_preflight._hold_shared_release_lock",
                   return_value=nullcontext()),
             patch("component_release_exit_owner_preflight.inspect_exit_root_tree",
@@ -146,8 +148,9 @@ class ExitPrecutoverReadbackTests(unittest.TestCase):
 
     def test_failed_acquire_lock_must_precede_any_readback(self) -> None:
         with (
+            patch("component_release_exit_owner_preflight.sys.platform", "linux"),
             patch("component_release_exit_owner_preflight.os.geteuid",
-                  return_value=0),
+                  return_value=0, create=True),
             patch("component_release_exit_owner_preflight._hold_shared_release_lock",
                   side_effect=ValueError("EXIT_ROOT_RELEASE_LOCK_BUSY")),
             patch("component_release_exit_owner_preflight.inspect_exit_root_tree") as inspect,
@@ -179,6 +182,13 @@ class ExitPrecutoverReadbackTests(unittest.TestCase):
         ):
             with self.subTest(invalid=invalid[:100]), self.assertRaises(ValueError):
                 _read_unit_state(invalid, _EXIT_UNIT)
+
+    def test_non_linux_platform_denied_before_unix_actor(self) -> None:
+        with (
+            patch("component_release_exit_owner_preflight.sys.platform", "win32"),
+            self.assertRaisesRegex(ValueError, "LINUX_ONLY"),
+        ):
+            collect_exit_only_owner_preflight_once()
 
     def test_source_contains_no_service_mutation_executor(self) -> None:
         path = ROOT / "operations/infrastructure/component_release_exit_owner_preflight.py"
