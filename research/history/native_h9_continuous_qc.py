@@ -79,9 +79,13 @@ def first_exit(record: dict, states: dict[int, tuple[D, D, D, D, D]],
     bucket = int(entry_time // 300) * 300
     need(bucket in states, "INITIAL_H9_STATE_MISSING")
 
-    # Exact frozen historical TPOnly Position starts with tp=None.
-    tp = None
-    tp_live_after = -1
+    # Frozen H9 handle seeds an eligible RAW L5-3 target on Entry itself.
+    # initial_position() starts tp=None, but H9 handle assigns it before the
+    # next source print; it becomes fill-eligible strictly after entry_seq.
+    raw_low, raw_high, _, _, _ = states[bucket]
+    initial_target = raw_high if side == "LONG" else raw_low
+    tp = initial_target if favorable(side, entry, initial_target) >= D("0.5") else None
+    tp_live_after = entry_seq if tp is not None else -1
     hard_stop = entry * (D("0.90") if side == "LONG" else D("1.10"))
     h9_first = None
     starts = resets = transitions = tp_changes = 0
