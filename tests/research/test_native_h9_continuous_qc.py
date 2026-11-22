@@ -212,7 +212,7 @@ def test_earlier_raw_soft_preempts_h9_timer(validator, sample):
         validator.run(args)
 
 
-def test_market_condition_tp_takes_precedence(validator, sample):
+def test_eligible_entry_tp_preempts_h9_timer(validator, sample):
     args, write_original, write_frozen, _, _ = sample
     write_original(middle="10.8")
     write_frozen(high_override="10.7")
@@ -294,3 +294,55 @@ def test_same_timestamp_source_order_preserved(validator):
     assert out is not None
     assert out["reason"] == "HARD_STOP"
     assert out["source_order"] == 2
+
+
+def test_frozen_entry_seeds_eligible_long_resting_tp(validator):
+    record = {"side": "LONG", "entry_price": "10.0",
+              "entry_source_order": 1, "entry_ts": "300.25"}
+    states = {
+        300: (validator.D("9"), validator.D("10.7"), validator.D("2"),
+              validator.D("8.9"), validator.D("10.8")),
+    }
+    close, _ = validator.first_exit(
+        record, states, [(1, "300.25", "10.0"), (2, "300.25", "10.8")]
+    )
+    assert close is not None
+    assert close["reason"] == "RESTING_TP"
+    assert close["maker_exit"] is True
+    assert close["source_order"] == 2
+    assert close["price"] == "10.7"
+
+
+def test_frozen_entry_seeds_eligible_short_resting_tp(validator):
+    record = {"side": "SHORT", "entry_price": "10.0",
+              "entry_source_order": 1, "entry_ts": "300.25"}
+    states = {
+        300: (validator.D("9.3"), validator.D("11"), validator.D("2"),
+              validator.D("9.2"), validator.D("11.1")),
+    }
+    close, _ = validator.first_exit(
+        record, states, [(1, "300.25", "10.0"), (2, "300.25", "9.2")]
+    )
+    assert close is not None
+    assert close["reason"] == "RESTING_TP"
+    assert close["maker_exit"] is True
+    assert close["source_order"] == 2
+    assert close["price"] == "9.3"
+
+
+def test_ineligible_entry_target_only_becomes_marketable_on_new_bucket(validator):
+    record = {"side": "LONG", "entry_price": "10.0",
+              "entry_source_order": 1, "entry_ts": "300.25"}
+    states = {
+        300: (validator.D("9"), validator.D("9.9"), validator.D("2"),
+              validator.D("8.9"), validator.D("9.9")),
+        600: (validator.D("9"), validator.D("10.6"), validator.D("2"),
+              validator.D("8.9"), validator.D("10.7")),
+    }
+    close, _ = validator.first_exit(
+        record, states, [(1, "300.25", "10.0"), (2, "600.25", "10.7")]
+    )
+    assert close is not None
+    assert close["reason"] == "MARKETABLE_TP"
+    assert close["maker_exit"] is False
+    assert close["source_order"] == 2
