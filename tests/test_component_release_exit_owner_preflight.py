@@ -5,7 +5,6 @@ Exchange, PostgreSQL, or writes a production path during tests.
 """
 from __future__ import annotations
 
-import hashlib
 import sys
 import unittest
 from contextlib import nullcontext
@@ -27,13 +26,12 @@ ENTRY = "cripta-universal-entry-consumer.service"
 PRIVATE = "cripta-private-runtime.service"
 NATIVE = "cripta-native-public-trade-source.service"
 SUB = "cripta-private-runtime@ta-" + "a" * 32 + ".service"
-UNIT_NAMES = (ENTRY, _EXIT_UNIT, PRIVATE, NATIVE, SUB)
 BASE = {
-    ENTRY: (4136853, 0),
-    _EXIT_UNIT: (4136855, 0),
-    PRIVATE: (4136850, 0),
-    NATIVE: (378530, 3),
-    SUB: (4136862, 0),
+    "ENTRY": (4136853, 0),
+    "EXIT": (4136855, 0),
+    "MAIN_PRIVATE": (4136850, 0),
+    "NATIVE": (378530, 3),
+    "SUB_PRIVATE": (4136862, 0),
 }
 OLD_READBACK = {
     "state": "OLD_EXIT_RECOVERY_STAGED_READBACK_PASS",
@@ -138,11 +136,11 @@ class ExitPrecutoverReadbackTests(unittest.TestCase):
             with self.subTest(units=units), self.assertRaises(ValueError):
                 self.collect(self._fixtures(sub_units=units))
         changed = BASE.copy()
-        changed[ENTRY] = (4136854, 1)
+        changed["ENTRY"] = (4136854, 1)
         with self.assertRaisesRegex(ValueError, "NEIGHBOR_CHANGED"):
             self.collect(self._fixtures(snapshot_after=changed))
         changed = BASE.copy()
-        changed[_EXIT_UNIT] = (4136890, 1)
+        changed["EXIT"] = (4136890, 1)
         with self.assertRaisesRegex(ValueError, "NEIGHBOR_CHANGED"):
             self.collect(self._fixtures(snapshot_after=changed))
 
