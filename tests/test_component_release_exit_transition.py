@@ -49,6 +49,7 @@ class FakeExit:
     def _hit(self, op: str) -> None:
         self.calls.append(op)
         if self.fail == op:
+            self.fail = ""  # one failed invocation, recovery is independent
             raise RuntimeError("injected " + op)
 
     def before(self) -> tuple[int, int]:
