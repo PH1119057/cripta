@@ -210,7 +210,7 @@ class _HostExitUnitIO:
             raise RuntimeError("EXIT_SYSTEMD_ACTION_FAILED")
         return result.stdout
 
-    def _show(self) -> dict[str, str]:
+    def _show(self, *, allow_reload_pending: bool = False) -> dict[str, str]:
         raw = self._cmd("show", _EXIT_UNIT, "--no-pager", *(
             "--property=" + key for key in _SYSTEMD_FIELDS
         ))
@@ -225,7 +225,9 @@ class _HostExitUnitIO:
         if (
             fields["Id"] != _EXIT_UNIT
             or fields["FragmentPath"] != str(_EXIT_UNIT_PATH)
-            or fields["NeedDaemonReload"] != "no"
+            or fields["NeedDaemonReload"] not in (
+                ("no", "yes") if allow_reload_pending else ("no",)
+            )
         ):
             raise RuntimeError("EXIT_SYSTEMD_UNIT_IDENTITY_DRIFT")
         return fields
@@ -363,7 +365,7 @@ class _HostExitUnitIO:
     def reconcile(self) -> str:
         try:
             unit = self._unit_bytes()
-            s = self._show()
+            s = self._show(allow_reload_pending=True)
         except Exception:
             return "UNKNOWN"
         if unit == self._old:
