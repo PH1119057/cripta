@@ -198,10 +198,20 @@ class ExitTransactionTests(unittest.TestCase):
     def test_public_noarg_cutover_fails_closed_no_candidate_before_os_writes(self) -> None:
         self.assertEqual(exit_only_cutover_once.__code__.co_argcount, 0)
         with (
+            patch("component_release_exit_transition.sys.platform", "linux"),
             patch("component_release_exit_transition._protected_real_admission",
                   side_effect=ValueError("EXIT_TRANSITION_RELEASE_NOT_MERGED")),
             patch("component_release_exit_transition._HostExitUnitIO") as adapter,
             self.assertRaisesRegex(ValueError, "RELEASE_NOT_MERGED"),
+        ):
+            exit_only_cutover_once()
+        adapter.assert_not_called()
+
+    def test_non_linux_public_entrypoint_denies_before_any_actor(self) -> None:
+        with (
+            patch("component_release_exit_transition.sys.platform", "win32"),
+            patch("component_release_exit_transition._HostExitUnitIO") as adapter,
+            self.assertRaisesRegex(ValueError, "ROOT_LINUX_REQUIRED"),
         ):
             exit_only_cutover_once()
         adapter.assert_not_called()
