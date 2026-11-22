@@ -16,8 +16,8 @@ sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 
 from component_release_exit_owner_preflight import (  # noqa: E402
     _EXIT_UNIT,
-    _ORIGINAL_UNIT_SHA256,
     _OLD_COMMIT,
+    _ORIGINAL_UNIT_SHA256,
     _read_unit_state,
     collect_exit_only_owner_preflight_once,
 )
