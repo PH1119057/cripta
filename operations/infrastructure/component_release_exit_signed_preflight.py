@@ -140,7 +140,10 @@ def collect_current_signed_exit_preflight_once() -> dict[str, object]:
     import pwd
 
     actual_uid = os.geteuid()
-    cripta_uid = pwd.getpwnam("cripta").pw_uid
+    try:
+        cripta_uid = pwd.getpwnam("cripta").pw_uid
+    except KeyError:
+        _deny("ACTOR_NOT_CRIPTA")
     if actual_uid != cripta_uid or actual_uid == 0:
         _deny("ACTOR_NOT_CRIPTA")
 
