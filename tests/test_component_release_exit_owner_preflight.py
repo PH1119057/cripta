@@ -50,7 +50,8 @@ class ExitPrecutoverReadbackTests(unittest.TestCase):
         self.assertEqual(collect_exit_only_owner_preflight_once.__code__.co_argcount, 0)
         with (
             patch("component_release_exit_owner_preflight.sys.platform", "linux"),
-            patch("component_release_exit_owner_preflight.os.geteuid", return_value=107, create=True),
+            patch("component_release_exit_owner_preflight.os.geteuid",
+                  return_value=107, create=True),
             patch("component_release_exit_owner_preflight._snapshot_units") as scan,
             self.assertRaisesRegex(ValueError, "ROOT_REQUIRED"),
         ):
