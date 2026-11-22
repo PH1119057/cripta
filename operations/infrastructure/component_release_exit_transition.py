@@ -272,7 +272,7 @@ class _HostExitUnitIO:
         self._cmd("stop", _EXIT_UNIT)
 
     def prove_stopped(self) -> None:
-        s = self._show()
+        s = self._show(allow_reload_pending=True)
         if (
             s["ActiveState"] != "inactive"
             or s["SubState"] != "dead"
@@ -295,7 +295,7 @@ class _HostExitUnitIO:
             raise RuntimeError("EXIT_UNIT_PARENT_UNTRUSTED")
         if self._unit_bytes() != expected:
             raise RuntimeError("EXIT_UNIT_PREIMAGE_CHANGED")
-        if self._show()["ActiveState"] != "inactive":
+        if self._show(allow_reload_pending=True)["ActiveState"] != "inactive":
             raise RuntimeError("EXIT_UNIT_SWAP_REQUIRES_STOPPED")
         tmp = _UNIT_PARENT / (
             ".cripta-exit-only-" + _digest(replacement)[:20] + ".pending"
