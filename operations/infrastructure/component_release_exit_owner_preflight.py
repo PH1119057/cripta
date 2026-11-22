@@ -17,6 +17,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 from component_release_exit_legacy_prepare import OLD_EXIT_COMMIT
@@ -80,7 +81,7 @@ def _read_unit_state(output: str, unit: str) -> tuple[int, int]:
         or not fragment.startswith("/etc/systemd/system/")
     ):
         _deny("SYSTEMD_UNIT_NOT_STABLE")
-    if unit == _EXIT_UNIT and fragment != str(_EXIT_UNIT_PATH):
+    if unit == _EXIT_UNIT and fragment != "/etc/systemd/system/" + _EXIT_UNIT:
         _deny("EXIT_UNIT_NOT_ORIGINAL_SYSTEMD_PATH")
     return int(attrs["MainPID"]), int(attrs["NRestarts"])
 
@@ -185,6 +186,8 @@ def _candidate_entries() -> tuple[str, ...]:
 
 def collect_exit_only_owner_preflight_once() -> dict[str, object]:
     """Single NO-ARGUMENT physical management observer, never a deployer."""
+    if sys.platform != "linux":
+        _deny("LINUX_ONLY")
     if os.geteuid() != 0:
         _deny("ROOT_REQUIRED")
     with _hold_shared_release_lock(path=_SHARED_LOCK, uid=0, gid=0):
