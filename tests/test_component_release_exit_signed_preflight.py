@@ -20,6 +20,8 @@ sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 from component_release_exit_signed_preflight import (  # noqa: E402
     _check_signed_exit_account_pair,
     _check_signed_exit_plan_recovery,
+    _compare_recovery_snapshots,
+    _recovery_snapshot,
     collect_current_signed_exit_preflight_once,
 )
 
@@ -243,6 +245,120 @@ class SignedExitPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "SIGNED_DB_POSITION_SET_MISMATCH"):
             _check_signed_exit_plan_recovery(
                 routes=routes, proofs=proofs, bindings=(),
+            )
+
+    def test_signed_open_main_pre_post_snapshot_preserves_exit_protection(self) -> None:
+        routes, proofs = fixture()
+        proofs[0].positions = (open_position(),)
+        position = SimpleNamespace(
+            trading_account_id=routes.main.trading_account_id,
+            symbol="LTCUSDT", identity_status="PROVEN",
+            position_idx=0, initial_protection_confirmed_at=NOW,
+            exit_plan_fingerprint="exit-fp", strategy_activation_id="activation",
+            strategy_position_id="POS-main-open", exchange_position_key="key-main",
+            direction=SimpleNamespace(value="LONG"), actual_qty=Decimal("1.1"),
+        )
+        plan = SimpleNamespace(
+            exit_plan_fingerprint="exit-fp", strategy_activation_id="activation",
+        )
+        before = _recovery_snapshot(
+            routes=routes, proofs=proofs, bindings=((position, plan),),
+            observed_at=NOW,
+        )
+        self.assertEqual(
+            before["state"], "SIGNED_EXIT_POSITION_SNAPSHOT_READ_ONLY",
+        )
+        self.assertEqual(before["account_position_counts"], {"MAIN": 1, "SUB": 0})
+        self.assertEqual(len(
+            before["account_position_identity_and_protection_sha256"]["MAIN"],
+        ), 64)
+        self.assertNotIn(routes.main.trading_account_id, str(before))
+        main, sub = proofs
+        main.observed_at = NOW + timedelta(seconds=5)
+        sub.observed_at = NOW + timedelta(seconds=5)
+        # Real-time mark-price movement must not look like position drift.
+        main.positions[0]["markPrice"] = "102"
+        after = _recovery_snapshot(
+            routes=routes, proofs=proofs, bindings=((position, plan),),
+            observed_at=NOW + timedelta(seconds=5),
+        )
+        proof = _compare_recovery_snapshots(before=before, after=after)
+        self.assertTrue(proof["signed_protection_snapshot_unchanged"])
+        self.assertEqual(proof["account_position_counts"], {"MAIN": 1, "SUB": 0})
+        for key in ("release_authorized", "rollback_ready",
+                    "runtime_behavior_verified", "financial_mutation_authorized"):
+            self.assertFalse(proof[key])
+
+        for field, value in (
+            ("stopLoss", "97"), ("takeProfit", "104"),
+            ("trailingStop", "0.35"), ("avgPrice", "99"),
+            ("size", "1.2"), ("side", "Sell"),
+        ):
+            routes2, proofs2 = fixture()
+            proofs2[0].positions = (open_position(),)
+            proofs2[0].positions[0][field] = value
+            proofs2[0].observed_at = NOW + timedelta(seconds=5)
+            proofs2[1].observed_at = NOW + timedelta(seconds=5)
+            # Bad side/quantity is rejected before producing any digest.
+            with self.subTest(field=field):
+                if field in ("side", "size"):
+                    with self.assertRaises(ValueError):
+                        _recovery_snapshot(
+                            routes=routes2, proofs=proofs2,
+                            bindings=((SimpleNamespace(
+                                **{**vars(position),
+                                   "trading_account_id": routes2.main.trading_account_id}
+                            ), plan),),
+                            observed_at=NOW + timedelta(seconds=5),
+                        )
+                else:
+                    modified = _recovery_snapshot(
+                        routes=routes2, proofs=proofs2,
+                        bindings=((SimpleNamespace(
+                            **{**vars(position),
+                               "trading_account_id": routes2.main.trading_account_id}
+                        ), plan),),
+                        observed_at=NOW + timedelta(seconds=5),
+                    )
+                    with self.assertRaisesRegex(
+                        ValueError, "RECOVERY_POSITION_OR_EXCHANGE_PROTECTION_DRIFT",
+                    ):
+                        _compare_recovery_snapshots(before=before, after=modified)
+
+        too_late = dict(after, observed_at=(
+            NOW + timedelta(seconds=181)
+        ).isoformat())
+        with self.assertRaisesRegex(ValueError, "RECOVERY_SNAPSHOTS_NOT_FRESH"):
+            _compare_recovery_snapshots(before=before, after=too_late)
+        forged = dict(after, runtime_behavior_verified=True)
+        with self.assertRaisesRegex(ValueError, "RECOVERY_SNAPSHOT_UNTRUSTED"):
+            _compare_recovery_snapshots(before=before, after=forged)
+        with self.assertRaisesRegex(ValueError, "RECOVERY_TIMESTAMP_INVALID"):
+            _compare_recovery_snapshots(
+                before=before, after=dict(after, observed_at="not-utc"),
+            )
+
+    def test_signed_flat_pre_post_rejects_swapped_account_and_orphan(self) -> None:
+        routes, proofs = fixture()
+        before = _recovery_snapshot(
+            routes=routes, proofs=proofs, bindings=(), observed_at=NOW,
+        )
+        later = copy.deepcopy(before)
+        later["observed_at"] = (NOW + timedelta(seconds=2)).isoformat()
+        self.assertTrue(_compare_recovery_snapshots(
+            before=before, after=later,
+        )["signed_protection_snapshot_unchanged"])
+        later["account_position_identity_and_protection_sha256"]["MAIN"] = (
+            "a" * 64
+        )
+        with self.assertRaisesRegex(
+            ValueError, "RECOVERY_POSITION_OR_EXCHANGE_PROTECTION_DRIFT",
+        ):
+            _compare_recovery_snapshots(before=before, after=later)
+        proofs[0].positions = (open_position(),)
+        with self.assertRaisesRegex(ValueError, "SIGNED_DB_POSITION_SET_MISMATCH"):
+            _recovery_snapshot(
+                routes=routes, proofs=proofs, bindings=(), observed_at=NOW,
             )
 
     @unittest.skipUnless(sys.platform == "linux", "requires Linux Unix pwd")

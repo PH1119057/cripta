@@ -10,6 +10,8 @@ rollback behavior, API/ABI compatibility, owner reconciliation or postcutover.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import sys
@@ -216,6 +218,136 @@ def _check_signed_exit_plan_recovery(
     }
 
 
+
+def _recovery_snapshot(
+    *, routes: object, proofs: object, bindings: object, observed_at: datetime,
+) -> dict[str, object]:
+    """Produce immutable read-only pre/post cutover comparison evidence.
+
+    This is NOT a deployment or rollback verifier.  The future privileged
+    owner must obtain both snapshots independently as credential-local real
+    Bybit GET/DB SELECT, then verify actual process/consumer E2E separately.
+    """
+    signed = _check_signed_exit_account_pair(
+        routes=routes, proofs=proofs, observed_at=observed_at,
+    )
+    lineage = _check_signed_exit_plan_recovery(
+        routes=routes, proofs=proofs, bindings=bindings,
+    )
+    if (
+        signed["account_position_counts"]
+        != lineage["account_position_counts"]
+    ):
+        _deny("RECOVERY_POSITION_COUNT_DRIFT")
+    assert isinstance(bindings, (list, tuple))
+    bound = {
+        (position.trading_account_id, position.symbol): (position, plan)
+        for position, plan in bindings
+    }
+    digest: dict[str, str] = {}
+    for kind, route, proof in (
+        ("MAIN", routes.main, proofs[0]), ("SUB", routes.sub, proofs[1]),
+    ):
+        identities: list[list[str]] = []
+        for row in sorted(proof.positions, key=lambda x: x["symbol"]):
+            position, plan = bound[(route.trading_account_id, row["symbol"])]
+            identities.append([
+                str(position.strategy_position_id),
+                str(position.exchange_position_key),
+                str(position.strategy_activation_id),
+                str(plan.exit_plan_fingerprint),
+                str(row["symbol"]),
+                str(row["side"]),
+                str(row["positionIdx"]),
+                str(_decimal(row["size"], allow_zero=False).normalize()),
+                str(_decimal(row["avgPrice"], allow_zero=False).normalize()),
+                str(_decimal(row["stopLoss"], allow_zero=False).normalize()),
+                str(_decimal(row["takeProfit"], allow_zero=False).normalize()),
+                str(_decimal(row["trailingStop"], allow_zero=True).normalize()),
+            ])
+        raw = json.dumps(
+            [kind, route.trading_account_id, route.registered_exchange_uid,
+             identities],
+            separators=(",", ":"), ensure_ascii=True,
+        ).encode("ascii")
+        digest[kind] = hashlib.sha256(raw).hexdigest()
+    return {
+        "state": "SIGNED_EXIT_POSITION_SNAPSHOT_READ_ONLY",
+        "observed_at": observed_at.astimezone(UTC).isoformat(),
+        "account_position_counts": signed["account_position_counts"],
+        "account_position_identity_and_protection_sha256": digest,
+        "immutable_exit_plan_lineage_checked": True,
+        "release_authorized": False,
+        "rollback_ready": False,
+        "runtime_behavior_verified": False,
+        "financial_mutation_authorized": False,
+    }
+
+
+def _compare_recovery_snapshots(
+    *, before: object, after: object,
+) -> dict[str, object]:
+    """Check exact signed/DB position preservation; never grant cutover.
+
+    Mark price and account telemetry are excluded because they legitimately
+    move.  Any position, quantity, TP, SL, trailing or ExitPlan drift blocks.
+    """
+    if not isinstance(before, Mapping) or not isinstance(after, Mapping):
+        _deny("RECOVERY_SNAPSHOT_MISSING")
+    times: list[datetime] = []
+    for snapshot in (before, after):
+        if (
+            snapshot.get("state") != "SIGNED_EXIT_POSITION_SNAPSHOT_READ_ONLY"
+            or snapshot.get("immutable_exit_plan_lineage_checked") is not True
+            or any(snapshot.get(flag) is not False for flag in (
+                "release_authorized", "rollback_ready",
+                "runtime_behavior_verified", "financial_mutation_authorized",
+            ))
+            or not isinstance(snapshot.get("account_position_counts"), dict)
+            or set(snapshot["account_position_counts"]) != {"MAIN", "SUB"}
+            or any(type(v) is not int or v < 0 or v > _MAX_ACCOUNT_POSITIONS
+                   for v in snapshot["account_position_counts"].values())
+            or not isinstance(
+                snapshot.get("account_position_identity_and_protection_sha256"),
+                dict,
+            )
+            or set(snapshot["account_position_identity_and_protection_sha256"])
+            != {"MAIN", "SUB"}
+            or any(
+                not isinstance(v, str)
+                or re.fullmatch("[0-9a-f]{64}", v) is None
+                for v in snapshot[
+                    "account_position_identity_and_protection_sha256"
+                ].values()
+            )
+        ):
+            _deny("RECOVERY_SNAPSHOT_UNTRUSTED")
+        try:
+            observed = datetime.fromisoformat(snapshot["observed_at"])
+        except (KeyError, TypeError, ValueError):
+            _deny("RECOVERY_TIMESTAMP_INVALID")
+        if observed.tzinfo is None or observed.utcoffset() is None:
+            _deny("RECOVERY_TIMESTAMP_INVALID")
+        times.append(observed.astimezone(UTC))
+    if not 0 <= (times[1] - times[0]).total_seconds() <= 180:
+        _deny("RECOVERY_SNAPSHOTS_NOT_FRESH")
+    for key in (
+        "account_position_counts",
+        "account_position_identity_and_protection_sha256",
+    ):
+        if before[key] != after[key]:
+            _deny("RECOVERY_POSITION_OR_EXCHANGE_PROTECTION_DRIFT")
+    return {
+        "state": "SIGNED_EXISTING_POSITION_AND_PROTECTION_PRESERVED_READ_ONLY",
+        "account_position_counts": after["account_position_counts"],
+        "signed_protection_snapshot_unchanged": True,
+        "release_authorized": False,
+        "rollback_ready": False,
+        "runtime_behavior_verified": False,
+        "financial_mutation_authorized": False,
+    }
+
+
 def collect_current_signed_exit_preflight_once() -> dict[str, object]:
     """No-argument credential-local GET/SELECT; no POST or trading action."""
     if sys.platform != "linux":
@@ -301,10 +433,16 @@ def collect_current_signed_exit_preflight_once() -> dict[str, object]:
                 )
                 for symbol in sorted(set().union(*ALLOWED_SYMBOLS.values())):
                     bindings.extend(provider(symbol))
-            lineage = _check_signed_exit_plan_recovery(
+            snapshot = _recovery_snapshot(
                 routes=routes, proofs=tuple(proofs), bindings=tuple(bindings),
+                observed_at=datetime.now(UTC),
             )
-            return {**signed, "position_exit_plan_alignment": lineage["state"]}
+            return {
+                **signed,
+                "position_exit_plan_alignment":
+                    "SIGNED_POSITION_EXIT_PLAN_DB_ALIGNMENT_PASS",
+                "existing_position_recovery_snapshot": snapshot,
+            }
     except Exception as exc:
         if isinstance(exc, ValueError) and str(exc).startswith(
             "EXIT_SIGNED_PREFLIGHT_"
