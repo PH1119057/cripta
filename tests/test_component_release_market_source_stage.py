@@ -33,7 +33,7 @@ def test_market_source_own_unit_pins_only_new_component_not_global_runtime() -> 
     assert "ReadWritePaths=/var/lib/cripta/native_public_trade_source" in result
     assert "User=cripta" in result
     assert "Group=cripta" in result
-    assert "NoNewPrivileges=yes" in result
+    assert "NoNewPrivileges=true" in result
     assert result.count("ExecStart=") == 1
     assert "stop cripta-" not in result and "start cripta-" not in result
 
@@ -57,6 +57,7 @@ def test_component_manifest_full_hash_covers_file_mode_bytes_and_symlink(
     (base / "src").mkdir()
     file = base / "src/native.py"
     file.write_text("print(42)\n", encoding="utf-8")
+    file.chmod(0o644)
     digest, count = source._walk_digest(base)
     assert count >= 4
     file.write_text("print(43)\n", encoding="utf-8")
