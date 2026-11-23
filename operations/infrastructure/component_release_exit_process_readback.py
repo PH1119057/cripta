@@ -22,7 +22,8 @@ _REQUIRED_SHOW = frozenset({
     "NeedDaemonReload", "WorkingDirectory",
 })
 _REQUIRED_ENV = frozenset({
-    "CRIPTA_RELEASE_COMMIT", "CRIPTA_RUNTIME_ROOT", "PYTHONPATH",
+    "CRIPTA_RELEASE_COMMIT", "CRIPTA_EXIT_COMPONENT_COMMIT",
+    "CRIPTA_RUNTIME_ROOT", "PYTHONPATH",
 })
 _LEGACY = "/srv/cripta/runtime/current"
 
@@ -99,6 +100,7 @@ def collect_exit_process_readback(
     *,
     systemd_show: str,
     expected_commit: str,
+    expected_source_commit: str,
     proc_parent: Path = Path("/proc"),
 ) -> dict[str, object]:
     """Validate consistent observation; never infer actual authorization.
@@ -111,6 +113,11 @@ def collect_exit_process_readback(
         expected_commit
     ):
         _deny("SOURCE_COMMIT_INVALID")
+    if (
+        not isinstance(expected_source_commit, str)
+        or not _SHA.fullmatch(expected_source_commit)
+    ):
+        _deny("SOURCE_COMPATIBILITY_COMMIT_INVALID")
     if not isinstance(proc_parent, Path) or not proc_parent.is_absolute():
         _deny("PROC_PARENT_UNTRUSTED")
     values = _show_fields(systemd_show)
@@ -164,7 +171,8 @@ def collect_exit_process_readback(
         or argv_script != release_root + "/" + _ENTRY
         or cwd != release_root
         or not _PYTHON.fullmatch(real_python)
-        or env["CRIPTA_RELEASE_COMMIT"] != expected_commit
+        or env["CRIPTA_RELEASE_COMMIT"] != expected_source_commit
+        or env["CRIPTA_EXIT_COMPONENT_COMMIT"] != expected_commit
         or env["CRIPTA_RUNTIME_ROOT"] != release_root
         or env["PYTHONPATH"] != release_root + "/src:"
         + release_root + "/operations/connectivity"
@@ -183,6 +191,7 @@ def collect_exit_process_readback(
         "process_kernel_interpreter": real_python,
         "process_pythonpath": env["PYTHONPATH"],
         "loaded_release_commit": env["CRIPTA_RELEASE_COMMIT"],
+        "loaded_exit_component_commit": env["CRIPTA_EXIT_COMPONENT_COMMIT"],
         "loaded_runtime_root": env["CRIPTA_RUNTIME_ROOT"],
         "caller_supplied_systemd_evidence": True,
         "actual_unit_attestation": False,
