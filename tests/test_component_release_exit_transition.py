@@ -286,6 +286,10 @@ class ExitTransactionTests(unittest.TestCase):
         _validate_flat_exit_status(
             status, observed_at=now, not_before=now - timedelta(seconds=5),
         )
+        with self.assertRaisesRegex(RuntimeError, "CLOCK_UNTRUSTED"):
+            _validate_flat_exit_status(
+                status, observed_at=None, not_before=None,
+            )
         for name, change in (
             ("stale", {"observed_at":
                        (now - timedelta(seconds=25)).isoformat()}),
