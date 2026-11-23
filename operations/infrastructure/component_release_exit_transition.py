@@ -160,6 +160,7 @@ def _recover_exact_old(
     old_unit: bytes,
     new_unit: bytes,
     previous_neighbors: object,
+    terminal_phase: str = "ROLLBACK_RECOVERED",
 ) -> bool:
     """One bounded rollback attempt; never retry a command with UNKNOWN result.
 
@@ -187,13 +188,14 @@ def _recover_exact_old(
     actuator.verify_old()
     actuator.verify_signed_and_recovery()
     actuator.neighbors_unchanged(previous_neighbors)
-    journal.record("ROLLBACK_RECOVERED")
+    journal.record(terminal_phase)
     return True
 
 
 def _run_exit_only_transition(
     actuator: object, journal: object, *,
     old_unit: bytes, new_unit: bytes,
+    exercise_old_rollback: bool = False,
 ) -> dict[str, object]:
     """Testable mechanical transaction; trusted LIVE caller NOT provided.
 
@@ -206,6 +208,7 @@ def _run_exit_only_transition(
 
     try:
         prior = actuator.before()
+        journal.record_baseline(prior)
         journal.record("PREPARED")
         journal.record("STOP_INTENT")
     except Exception:
@@ -230,6 +233,30 @@ def _run_exit_only_transition(
         actuator.verify_new()
         actuator.verify_signed_and_recovery()
         actuator.neighbors_unchanged(prior)
+        if exercise_old_rollback:
+            # Actual first canary: prove OLD can restart and recover after
+            # candidate has run. Never label staged rollback as tested.
+            journal.record("CANARY_OLD_PROOF_INTENT")
+            _recover_exact_old(
+                actuator, journal, observed="NEW_ACTIVE",
+                old_unit=old_unit, new_unit=new_unit,
+                previous_neighbors=prior,
+                terminal_phase="CANARY_OLD_RECOVERED",
+            )
+            # Return to NEW only after independent OLD runtime proof passed.
+            journal.record("CANARY_SECOND_NEW_INTENT")
+            actuator.stop()
+            actuator.prove_stopped()
+            journal.record("CANARY_SECOND_NEW_UNIT_WRITE_INTENT")
+            actuator.install_unit(old_unit, new_unit)
+            journal.record("CANARY_SECOND_NEW_RELOAD_INTENT")
+            actuator.reload()
+            journal.record("CANARY_SECOND_NEW_START_INTENT")
+            actuator.start()
+            journal.record("CANARY_SECOND_NEW_POSTCHECK_INTENT")
+            actuator.verify_new()
+            actuator.verify_signed_and_recovery()
+            actuator.neighbors_unchanged(prior)
         journal.record("ACCEPTANCE_PENDING")
         return _result("EXIT_TRANSITION_ACCEPTANCE_PENDING")
     except Exception as exc:
@@ -842,6 +869,33 @@ class _RootAppendFsyncJournal:
             os.fsync(parent_fd)
         finally:
             os.close(parent_fd)
+
+    def record_baseline(self, snapshot: object) -> None:
+        """Persist before the first stop; necessary to reconcile a crash."""
+        if (
+            not isinstance(snapshot, dict)
+            or set(snapshot) != {
+                "ENTRY", "MAIN_PRIVATE", "NATIVE", "SUB_PRIVATE"
+            }
+            or any(
+                not isinstance(v, tuple) or len(v) != 2
+                or any(type(n) is not int or n < 0 for n in v)
+                or v[0] == 0
+                for v in snapshot.values()
+            )
+        ):
+            _deny("ROLLBACK_NEIGHBOR_BASELINE_INVALID")
+        raw = (json.dumps({
+            "time": datetime.now(UTC).isoformat(),
+            "phase": "BASELINE", "unit": _EXIT_UNIT,
+            "neighbors": {k: list(v) for k, v in snapshot.items()},
+            "old_sha256":
+                "c4a21004e637df794670d7d096c6ffa443c23a881c662b65bebfc11459433248",
+            "new_sha256": _UNIT_SHA256,
+        }, separators=(",", ":"), sort_keys=True) + "\n").encode("ascii")
+        if os.write(self._fd, raw) != len(raw):
+            raise OSError("EXIT_JOURNAL_SHORT_WRITE")
+        os.fsync(self._fd)
 
     def record(self, phase: str) -> None:
         if not isinstance(phase, str) or not phase.isascii() or not phase.replace(
