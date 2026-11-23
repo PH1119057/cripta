@@ -43,6 +43,9 @@ class FakeJournal:
             raise OSError("journal write failed")
         self.events.append(phase)
 
+    def close(self) -> None:
+        self.events.append("CLOSED")
+
     def record_baseline(self, snapshot: object) -> None:
         if self.fail == "BASELINE":
             raise OSError("journal baseline failed")
@@ -137,6 +140,118 @@ class ExitTransactionTests(unittest.TestCase):
             self.assertIn(actual, a.calls)
         self.assertEqual(j.events[-1], "ACCEPTANCE_PENDING")
         self.assertNotIn("ROLLBACK_INTENT", j.events)
+
+    def test_public_noarg_first_flat_canary_physically_drills_rollback(self) -> None:
+        a, j = FakeExit(), FakeJournal()
+        with (
+            patch("component_release_exit_transition.sys.platform", "linux"),
+            patch("component_release_exit_transition.os.geteuid",
+                  return_value=0, create=True),
+            patch("component_release_exit_transition._check_sealed_controller_root"),
+            patch("component_release_exit_transition._JOURNAL_PARENT", ROOT),
+            patch("component_release_exit_transition._hold_shared_release_lock",
+                  return_value=nullcontext()),
+            patch("component_release_exit_transition._protected_real_admission",
+                  return_value=(OLD, NEW)),
+            patch("component_release_exit_transition._RootAppendFsyncJournal",
+                  return_value=j),
+            patch("component_release_exit_transition._HostExitUnitIO",
+                  return_value=a),
+        ):
+            result = exit_only_cutover_once()
+        self.assertEqual(result["state"], "EXIT_TRANSITION_ACCEPTANCE_PENDING")
+        self.assertEqual(a.current, "NEW_ACTIVE")
+        self.assertEqual(a.calls.count("START"), 3)
+        self.assertEqual(j.events[-2:], ["ACCEPTANCE_PENDING", "CLOSED"])
+        self.assertFalse(result["live_deployment_verified"])
+
+    def test_interrupted_new_active_reconciles_exact_old_not_forward_retry(self) -> None:
+        a = FakeExit()
+        a.current, a.unit = "NEW_ACTIVE", NEW
+        baseline = {
+            "phase": "BASELINE",
+            "neighbors": {
+                "ENTRY": [a.neighbor_pid, 0],
+                "MAIN_PRIVATE": [a.neighbor_pid, 0],
+                "NATIVE": [a.neighbor_pid, 0],
+                "SUB_PRIVATE": [a.neighbor_pid, 0],
+            },
+        }
+        history = SimpleNamespace(
+            existing_events=lambda: (
+                baseline,
+                {"phase": "STOP_INTENT"},
+                {"phase": "START_INTENT"},
+            ),
+            record=lambda phase: a.calls.append("LOG_" + phase),
+        )
+        with (
+            patch("component_release_exit_transition._load_exact_exit_units",
+                  return_value=(OLD, NEW)),
+            patch("component_release_exit_transition._HostExitUnitIO",
+                  return_value=a),
+            patch("component_release_exit_transition._collect_credential_local_exit_snapshot",
+                  return_value={
+                      "account_position_counts": {"MAIN": 0, "SUB": 0},
+                  }),
+        ):
+            result = transition._reconcile_interrupted_exit(history)
+        self.assertEqual(result["state"], "EXIT_INTERRUPTED_OLD_RECOVERED")
+        self.assertTrue(result["rollback_verified"])
+        self.assertEqual(a.unit, OLD)
+        self.assertEqual(a.current, "OLD_ACTIVE")
+        self.assertEqual(a.calls.count("START"), 1)
+        self.assertNotIn("VERIFY_NEW", a.calls)
+
+    def test_interrupted_unknown_stops_without_blind_retry(self) -> None:
+        a = FakeExit(unknown=True)
+        baseline = {
+            "phase": "BASELINE",
+            "neighbors": {k: [4136853, 0] for k in (
+                "ENTRY", "MAIN_PRIVATE", "NATIVE", "SUB_PRIVATE",
+            )},
+        }
+        history = SimpleNamespace(
+            existing_events=lambda: (baseline, {"phase": "STOP_INTENT"}),
+        )
+        with (
+            patch("component_release_exit_transition._load_exact_exit_units",
+                  return_value=(OLD, NEW)),
+            patch("component_release_exit_transition._HostExitUnitIO",
+                  return_value=a),
+        ):
+            result = transition._reconcile_interrupted_exit(history)
+        self.assertEqual(result["state"], "EXIT_INTERRUPTED_OUTCOME_UNKNOWN")
+        self.assertEqual(a.calls, ["RECONCILE"])
+
+    def test_existing_success_journal_never_issues_second_cutover(self) -> None:
+        a = FakeExit()
+        a.current, a.unit = "NEW_ACTIVE", NEW
+        history = SimpleNamespace(
+            existing_events=lambda: (
+                {
+                    "phase": "BASELINE",
+                    "neighbors": {k: [4136853, 0] for k in (
+                        "ENTRY", "MAIN_PRIVATE", "NATIVE", "SUB_PRIVATE",
+                    )},
+                },
+                {"phase": "STOP_INTENT"},
+                {"phase": "CANARY_OLD_RECOVERED"},
+                {"phase": "ACCEPTANCE_PENDING"},
+            ),
+        )
+        with (
+            patch("component_release_exit_transition._load_exact_exit_units",
+                  return_value=(OLD, NEW)),
+            patch("component_release_exit_transition._HostExitUnitIO",
+                  return_value=a),
+        ):
+            result = transition._reconcile_interrupted_exit(history)
+        self.assertEqual(
+            result["state"], "EXIT_PREVIOUS_CANDIDATE_ACCEPTANCE_PENDING",
+        )
+        self.assertEqual(a.calls, ["RECONCILE", "VERIFY_NEW", "NEIGHBORS"])
+        self.assertEqual(a.unit, NEW)
 
     def test_real_canary_exercises_old_restart_then_new_second_start(self) -> None:
         a, j = FakeExit(), FakeJournal()
