@@ -7,9 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-from operations.infrastructure import component_release_market_source_transition as rail
 from operations.infrastructure import component_release_market_source_stage as package
+from operations.infrastructure import component_release_market_source_transition as rail
 
 
 def test_source_old_epoch_must_be_durable_gap_with_ended_at(
@@ -23,7 +22,7 @@ def test_source_old_epoch_must_be_durable_gap_with_ended_at(
     rail._prove_old_source_gap(session)
     for state, ended in (("ACTIVE",None),("GAP",None),("STOPPED",None)):
         monkeypatch.setattr(
-            rail, "_command", lambda *_a, **_kw:
+            rail, "_command", lambda *_a, state=state, ended=ended, **_kw:
             json.dumps({"state":state,"ended_at":ended}),
         )
         with pytest.raises(RuntimeError, match="GAP_NOT_PROVEN"):
