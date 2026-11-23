@@ -109,9 +109,18 @@ class FakeExit:
     def verify_signed_and_recovery(self) -> None:
         self._hit("SIGNED_RECOVERY")
 
-    def neighbors_unchanged(self, snapshot: tuple[int, int]) -> None:
+    def neighbors_unchanged(self, snapshot: object) -> None:
         self._hit("NEIGHBORS")
-        if snapshot != (self.neighbor_pid, 0):
+        if isinstance(snapshot, dict):
+            if (
+                set(snapshot) != {
+                    "ENTRY", "MAIN_PRIVATE", "NATIVE", "SUB_PRIVATE"
+                }
+                or any(v != (self.neighbor_pid, 0)
+                       for v in snapshot.values())
+            ):
+                raise RuntimeError("neighbor changed")
+        elif snapshot != (self.neighbor_pid, 0):
             raise RuntimeError("neighbor changed")
 
     def reconcile(self) -> str:
