@@ -37,7 +37,7 @@ from component_release_exit_root_bootstrap import (
 )
 from component_release_exit_unit_spec import build_exit_unit_candidate
 
-_COMPONENT = "b451165846af286e2f31404d9cdb4eb5cf599031"
+_COMPONENT = "e5339f15cce5f24ab0dc7ee8fdfac3afec8c5869"
 _SOURCE = OLD_EXIT_COMMIT
 _ROOT = Path("/srv/cripta/components/exit/releases")
 _COMPONENT_ROOT = _ROOT / _COMPONENT
@@ -45,9 +45,9 @@ _BINDING_NAME = ".unit-binding-" + _COMPONENT
 _UNIT_FILE = "pinned_exit_corrected.service"
 _MARKER_FILE = "UNIT_BINDING_PREPARED.json"
 _EXIT_UNIT = Path("/etc/systemd/system/cripta-universal-exit-consumer.service")
-_ARCHIVE_SHA256 = "2193d32f24f0f2980a7678e844a93526cf5963f1c0bdaa36d4a74660c42b29d7"
-_PAYLOAD_SHA256 = "658b74091c757e3fccb717f6622824ea5280586bc16d75eeb435b9ca50b9ac1d"
-_UNIT_SHA256 = "d3da5b8614887471ba2b1681513b9d837dbc5ec2ce1dbe8676f561afb6a4c142"
+_ARCHIVE_SHA256 = "829d3309ad71e58d7968e8746e012503bdeba6cdc11674ca9df6278987109527"
+_PAYLOAD_SHA256 = "ed1f0fa1e8eb280cac6a9f29372f41bcf9f5cfaffcd9fecf6859b19e2ca9fea2"
+_UNIT_SHA256 = "47bbf471a33f7fcdfe86e36b104f573afce66173f16c8c0f6388cf3293a08b88"
 _LOCK_SHA256 = "eb9a7aea12c9be5836b32c2c18570adf395f0512d3c3f1bff10a1853d3ef6c15"
 
 

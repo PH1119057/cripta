@@ -45,10 +45,10 @@ from component_release_exit_root_bootstrap import (
 )
 from component_release_exit_unit_spec import build_exit_unit_candidate
 
-_COMMIT = "b451165846af286e2f31404d9cdb4eb5cf599031"
-_ARCHIVE_SHA256 = "2193d32f24f0f2980a7678e844a93526cf5963f1c0bdaa36d4a74660c42b29d7"
+_COMMIT = "e5339f15cce5f24ab0dc7ee8fdfac3afec8c5869"
+_ARCHIVE_SHA256 = "829d3309ad71e58d7968e8746e012503bdeba6cdc11674ca9df6278987109527"
 _LOCK_SHA256 = "eb9a7aea12c9be5836b32c2c18570adf395f0512d3c3f1bff10a1853d3ef6c15"
-_MANIFEST_SHA256 = "ed8d5a5c95d05583fc245122ebb786508a68deba8ae1550dffd86b4cd86636ea"
+_MANIFEST_SHA256 = "ac3d2766ad5d1500a91922ce52bdbc6e5840e4900b6d84e0507e5d4982bcc493"
 _ARCHIVE = Path(
     "/data/cripta/research/testenvs/component_release_849/"
     "p90_exit_bundle_" + _COMMIT + ".zip"
@@ -64,6 +64,9 @@ _SIBLINGS = (
     "operations/connectivity/p90_real_persistent_trail.py",
     "operations/connectivity/p90_r06_exit_owner.py",
     "operations/connectivity/p90l90_real_postfill_source_client.py",
+)
+_RUNTIME_ASSETS = (
+    "operations/monitoring/required_public_feeds.json",
 )
 _SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -89,7 +92,7 @@ def _valid_rel(value: object) -> bool:
         return False
     if any(p in ("", ".", "..") for p in value.split("/")):
         return False
-    return value.startswith("src/") or value in {_ENTRY, _LOCK, *_SIBLINGS}
+    return value.startswith("src/") or value in {_ENTRY, _LOCK, *_SIBLINGS, *_RUNTIME_ASSETS}
 
 
 def _verify_candidate_zip(
@@ -140,7 +143,7 @@ def _verify_candidate_zip(
             if (
                 not isinstance(hashes, dict)
                 or set(hashes) != set(names) - {"component_manifest.json"}
-                or not {_ENTRY, _LOCK, *_SIBLINGS} <= set(hashes)
+                or not {_ENTRY, _LOCK, *_SIBLINGS, *_RUNTIME_ASSETS} <= set(hashes)
                 or not any(n.startswith("src/") for n in hashes)
                 or any(not _SHA256.fullmatch(str(v)) for v in hashes.values())
             ):
@@ -209,7 +212,7 @@ def _tree_digest(root: Path, *, owner_uid: int, service_gid: int) -> str:
                 rel == _UNIT_NAME or rel == ".venv"
                 or rel.startswith(".venv/")
                 or any(item.startswith(rel + "/") for item in
-                       (_ENTRY, _LOCK, *_SIBLINGS, "src/bybit_workbench"))
+                       (_ENTRY, _LOCK, *_SIBLINGS, *_RUNTIME_ASSETS, "src/bybit_workbench"))
             ):
                 _deny("TREE_PATH_UNEXPECTED")
             z = f.lstat()
@@ -471,7 +474,7 @@ def prepare_exit_new_component_once() -> dict[str, object]:
             archive, expected_archive_sha256=_ARCHIVE_SHA256,
             expected_commit=_COMMIT, expected_lock_sha256=_LOCK_SHA256,
         )
-        if len(contents) != 437 or marker_sha256 != _MANIFEST_SHA256:
+        if len(contents) != 438 or marker_sha256 != _MANIFEST_SHA256:
             _deny("REVIEWED_BLOB_INVENTORY_CHANGED")
         unit_source = _read_fixed_input(
             _UNIT, uid=0, gid=0, mode=0o644, limit=16 * 1024,

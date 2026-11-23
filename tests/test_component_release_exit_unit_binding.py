@@ -1,6 +1,6 @@
 """#849 source-compatible Exit unit overlay: real filesystem negative gates.
 
-The already sealed b451 binary is immutable and must NOT be rewritten.
+The failed b451 binary remains immutable; this test pins a distinct replacement.
 All private filesystem tests are synthetic, not production release approval.
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ from component_release_exit_unit_spec import (  # noqa: E402
     build_exit_unit_candidate,
 )
 
-COMPONENT = "b451165846af286e2f31404d9cdb4eb5cf599031"
+COMPONENT = "e5339f15cce5f24ab0dc7ee8fdfac3afec8c5869"
 SOURCE = "8bd45e9874d6ce811d7261ee152fc2c43729e1b9"
 LOCK = "eb9a7aea12c9be5836b32c2c18570adf395f0512d3c3f1bff10a1853d3ef6c15"
 
@@ -96,7 +96,7 @@ class ExitUnitBindingTests(unittest.TestCase):
             "source_commit": COMPONENT,
             "state": "IMMUTABLE_EXIT_CANDIDATE_PREPARED",
             "payload_sha256":
-                "658b74091c757e3fccb717f6622824ea5280586bc16d75eeb435b9ca50b9ac1d",
+                "ed1f0fa1e8eb280cac6a9f29372f41bcf9f5cfaffcd9fecf6859b19e2ca9fea2",
             "new_component_loaded": False,
             "physical_file_hashes_verified": True,
             "rollback_ready": False,
