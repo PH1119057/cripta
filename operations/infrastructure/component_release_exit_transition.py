@@ -32,14 +32,14 @@ from component_release_exit_owner_preflight import (
 from component_release_exit_process_readback import (
     collect_exit_process_readback,
 )
-from component_release_exit_signed_preflight import (
-    _compare_recovery_snapshots,
-)
-from component_release_exit_unit_binding import _COMPONENT, _SOURCE
 from component_release_exit_root_bootstrap import (
     _EXIT_JOURNAL,
     inspect_exit_journal_root_once,
 )
+from component_release_exit_signed_preflight import (
+    _compare_recovery_snapshots,
+)
+from component_release_exit_unit_binding import _COMPONENT, _SOURCE
 
 _UNIT_PARENT = Path("/etc/systemd/system")
 _JOURNAL_PARENT = _EXIT_JOURNAL
