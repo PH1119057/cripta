@@ -280,6 +280,16 @@ class ExitTransactionTests(unittest.TestCase):
         )
         self.assertEqual(j.events[0], "BASELINE")
         self.assertEqual(j.events[-1], "ACCEPTANCE_PENDING")
+        for phase in (
+            "CANARY_SECOND_NEW_PROCESS_VERIFIED",
+            "CANARY_SECOND_NEW_SIGNED_RECOVERY_VERIFIED",
+            "CANARY_SECOND_NEW_NEIGHBORS_VERIFIED",
+        ):
+            self.assertIn(phase, j.events)
+        self.assertLess(
+            j.events.index("CANARY_SECOND_NEW_PROCESS_VERIFIED"),
+            j.events.index("CANARY_SECOND_NEW_SIGNED_RECOVERY_VERIFIED"),
+        )
         self.assertFalse(result["runtime_behavior_verified"])
         self.assertFalse(result["financial_mutation_authorized"])
 
@@ -300,6 +310,26 @@ class ExitTransactionTests(unittest.TestCase):
         self.assertTrue(result["rollback_verified"])
         self.assertEqual(a.current, "OLD_ACTIVE")
         self.assertEqual(a.unit, OLD)
+        self.assertEqual(j.events[-1], "ROLLBACK_RECOVERED")
+        self.assertNotIn("CANARY_SECOND_NEW_PROCESS_VERIFIED", j.events)
+
+    def test_second_new_signed_failure_records_process_pass_before_rollback(self) -> None:
+        a, j = FakeExit(), FakeJournal()
+        original = a.verify_signed_and_recovery
+        calls = [0]
+        def fail_second_signed() -> None:
+            calls[0] += 1
+            if calls[0] == 3:
+                raise RuntimeError("signed postcheck rejected")
+            original()
+        a.verify_signed_and_recovery = fail_second_signed
+        result = _run_exit_only_transition(
+            a, j, old_unit=OLD, new_unit=NEW, exercise_old_rollback=True,
+        )
+        self.assertEqual(result["state"], "EXIT_OLD_RECOVERED_AFTER_FAILURE")
+        self.assertTrue(result["rollback_verified"])
+        self.assertIn("CANARY_SECOND_NEW_PROCESS_VERIFIED", j.events)
+        self.assertNotIn("CANARY_SECOND_NEW_SIGNED_RECOVERY_VERIFIED", j.events)
         self.assertEqual(j.events[-1], "ROLLBACK_RECOVERED")
 
     def test_baseline_journal_failure_prevents_every_systemd_action(self) -> None:
