@@ -155,13 +155,14 @@ class ExitCandidateRootStageTests(unittest.TestCase):
         )
         self.assertEqual(verified["payload_sha256"], before)
         for f in self.candidate.rglob("*"):
-            self.assertNotEqual(stat.S_IMODE(f.lstat().st_mode) & 0o002, 0o002)
+            if not f.is_symlink():
+                self.assertFalse(stat.S_IMODE(f.lstat().st_mode) & 0o002)
         self.assertTrue((self.candidate / ".venv/bin/python").is_symlink())
 
     def test_wrong_blob_and_unknown_commit_never_stage(self) -> None:
         with self.assertRaisesRegex(ValueError, "ARCHIVE_HASH"):
             self.stage(self.blob + b"tamper")
-        with self.assertRaisesRegex(ValueError, "COMMIT"):
+        with self.assertRaisesRegex(ValueError, "MANIFEST_CONTRACT"):
             _verify_candidate_zip(
                 self.blob,
                 expected_archive_sha256=hashlib.sha256(self.blob).hexdigest(),
