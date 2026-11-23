@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 from component_release_exit_unit_binding import (  # noqa: E402
     _BINDING_NAME,
+    _check_prepared_component_readback,
     _UNIT_FILE,
     _UNIT_SHA256,
     _readback_binding_fixture,
@@ -84,6 +85,44 @@ class ExitUnitBindingTests(unittest.TestCase):
                       SOURCE.encode(), self.unit)
         self.assertIn(b"Environment=CRIPTA_EXIT_COMPONENT_COMMIT=" +
                       COMPONENT.encode(), self.unit)
+
+
+    def test_actual_prepared_candidate_readback_shape_passes(self) -> None:
+        # This is the exact shape returned by the real previously deployed
+        # _readback_prepared_candidate; it has new_component_loaded, not
+        # component_loaded. Prior root-owner raised KeyError before staging.
+        candidate = {
+            "component_id": "EXIT",
+            "source_commit": COMPONENT,
+            "state": "IMMUTABLE_EXIT_CANDIDATE_PREPARED",
+            "payload_sha256":
+                "658b74091c757e3fccb717f6622824ea5280586bc16d75eeb435b9ca50b9ac1d",
+            "new_component_loaded": False,
+            "physical_file_hashes_verified": True,
+            "rollback_ready": False,
+            "cutover_authorized": False,
+            "financial_mutation_authorized": False,
+        }
+        _check_prepared_component_readback(candidate)
+        for mutation in (
+            ("new_component_loaded", True),
+            ("new_component_loaded", None),
+            ("payload_sha256", "a" * 64),
+            ("physical_file_hashes_verified", False),
+            ("rollback_ready", True),
+            ("cutover_authorized", True),
+            ("financial_mutation_authorized", True),
+            ("source_commit", "f" * 40),
+            ("component_id", "ENTRY"),
+        ):
+            copy = dict(candidate)
+            copy[mutation[0]] = mutation[1]
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                _check_prepared_component_readback(copy)
+        missing = dict(candidate)
+        del missing["new_component_loaded"]
+        with self.assertRaises(ValueError):
+            _check_prepared_component_readback(missing)
 
     def test_existing_or_interrupted_binding_never_overwritten(self) -> None:
         self.stage()
