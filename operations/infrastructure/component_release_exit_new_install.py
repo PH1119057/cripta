@@ -31,6 +31,11 @@ from component_release_exit_legacy_prepare import (
 from component_release_exit_owner_preflight import (
     _ORIGINAL_UNIT_SHA256,
     _installed_unit_sha256,
+    _snapshot_units,
+    _sub_private_units,
+)
+from component_release_exit_rollback_attestation import (
+    attest_old_exit_candidate_on_host,
 )
 from component_release_exit_root_bootstrap import (
     _SHARED_LOCK,
@@ -42,6 +47,7 @@ from component_release_exit_unit_spec import build_exit_unit_candidate
 _COMMIT = "b451165846af286e2f31404d9cdb4eb5cf599031"
 _ARCHIVE_SHA256 = "2193d32f24f0f2980a7678e844a93526cf5963f1c0bdaa36d4a74660c42b29d7"
 _LOCK_SHA256 = "eb9a7aea12c9be5836b32c2c18570adf395f0512d3c3f1bff10a1853d3ef6c15"
+_MANIFEST_SHA256 = "ed8d5a5c95d05583fc245122ebb786508a68deba8ae1550dffd86b4cd86636ea"
 _ARCHIVE = Path(
     "/data/cripta/research/testenvs/component_release_849/"
     "p90_exit_bundle_" + _COMMIT + ".zip"
@@ -443,6 +449,18 @@ def prepare_exit_new_component_once() -> dict[str, object]:
     with _hold_shared_release_lock(path=_SHARED_LOCK, uid=0, gid=0):
         if inspect_exit_root_tree()["state"] != "ROOT_TREE_PREPARED_METADATA_ONLY":
             _deny("ROOT_TREE_UNTRUSTED")
+        old = attest_old_exit_candidate_on_host()
+        if (
+            old.get("state") != "OLD_EXIT_RECOVERY_STAGED_READBACK_PASS"
+            or old.get("actual_host_attested") is not True
+            or old.get("rollback_ready") is not False
+            or old.get("install_authorized") is not False
+        ):
+            _deny("OLD_PROTECTED_CANDIDATE_NOT_READBACK_PROVEN")
+        subs = _sub_private_units()
+        before_units = _snapshot_units(subs)
+        if before_units != _snapshot_units(subs):
+            _deny("LIVE_UNIT_BASELINE_NOT_STABLE")
         if _installed_unit_sha256() != _ORIGINAL_UNIT_SHA256:
             _deny("INSTALLED_LEGACY_UNIT_CHANGED")
         archive = _read_fixed_input(
@@ -452,7 +470,7 @@ def prepare_exit_new_component_once() -> dict[str, object]:
             archive, expected_archive_sha256=_ARCHIVE_SHA256,
             expected_commit=_COMMIT, expected_lock_sha256=_LOCK_SHA256,
         )
-        if len(contents) != 437:
+        if len(contents) != 437 or marker_sha256 != _MANIFEST_SHA256:
             _deny("REVIEWED_BLOB_INVENTORY_CHANGED")
         unit_source = _read_fixed_input(
             _UNIT, uid=0, gid=0, mode=0o644, limit=16 * 1024,
@@ -484,9 +502,16 @@ def prepare_exit_new_component_once() -> dict[str, object]:
             unit_bytes=proposal["unit_text"].encode("utf-8"),
             owner_uid=0, service_gid=group,
         )
+        # An unrelated runtime drift is never labeled stage acceptance.
+        if before_units != _snapshot_units(subs):
+            _deny("LIVE_NEIGHBOR_CHANGED_DURING_NEW_STAGE")
+        if _installed_unit_sha256() != _ORIGINAL_UNIT_SHA256:
+            _deny("ORIGINAL_EXIT_UNIT_CHANGED_DURING_NEW_STAGE")
         # A real on-host protected stage is NOT a live release approval.
         return {**result, "root_actor_verified": True,
-                "shared_release_lock_checked": True}
+                "shared_release_lock_checked": True,
+                "neighbor_pid_restart_snapshot_stable": True,
+                "old_rollback_artifact_readback": "PASS_STAGED_ONLY"}
 
 
 if __name__ == "__main__":
