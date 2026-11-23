@@ -16,9 +16,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -99,8 +101,8 @@ _EXPECTED_MODULES = frozenset({
     "component_release_exit_unit_binding.py",
     "component_release_exit_unit_spec.py",
 })
-_SHA40 = re.compile(r"[0-9a-f]{40}\\Z")
-_SHA256 = re.compile(r"[0-9a-f]{64}\\Z")
+_SHA40 = re.compile(r"[0-9a-f]{40}\Z")
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _FLAT_GATE_PROGRAM = (
     "import psycopg; "
     "c=psycopg.connect('dbname=cripta user=cripta "
