@@ -5,7 +5,6 @@ import hashlib
 from pathlib import Path
 
 import pytest
-
 from operations.infrastructure import component_release_market_source_stage as source
 
 
