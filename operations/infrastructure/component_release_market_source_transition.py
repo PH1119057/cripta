@@ -39,7 +39,7 @@ _NEIGHBORS = (
     "cripta-universal-exit-consumer.service",
     "cripta-private-runtime.service",
 )
-_SOURCE_PROBE = r"""
+_SOURCE_PROBE = r'''
 import json
 from datetime import UTC,datetime,timedelta
 import psycopg
@@ -77,7 +77,7 @@ with psycopg.connect(
        "arms":arms[0] if arms else None,
        "account_arms":account_arms[0] if account_arms else None,
     },sort_keys=True))
-"""
+'''
 _SIGNED_PROBE = (
     "import json; "
     "from component_release_exit_transition import "
