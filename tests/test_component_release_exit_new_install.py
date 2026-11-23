@@ -39,7 +39,7 @@ def _bundle() -> bytes:
     files = {
         "src/bybit_workbench/__init__.py": b"# test\n",
         ENTRY: b"print('test only')\n",
-        ASSET: b"asset\\n",
+        ASSET: b"asset\n",
         LOCK: b"psycopg==3.1.17 --hash=sha256:" + b"a" * 64 + b"\n",
         **{x: b"# isolated test\n" for x in SIBLINGS},
     }
