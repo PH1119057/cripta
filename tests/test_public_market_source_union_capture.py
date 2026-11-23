@@ -796,3 +796,101 @@ def test_r11_original_capture_cannot_claim_continuity_without_spot(
             Mock(), p90_symbols=P90, union=union,
             producer_release_commit="e" * 40, publish_seconds=True,
         )
+
+
+@pytest.mark.parametrize(("fault", "recover"), [
+    (queue.Full(), True),
+    (websocket.WebSocketConnectionClosedException("source disconnect"), True),
+    (ValueError("bad provider frame"), False),
+])
+def test_required_linear_epoch_gap_reconnect_is_typed_for_existing_owner(
+    monkeypatch: pytest.MonkeyPatch, fault: Exception, recover: bool,
+) -> None:
+    """The actual union owner must write GAP before outer native retry.
+
+    There is no second writer, invented provider cursor, DB connection,
+    real socket, Entry/Exit or financial action in this fixture.
+    """
+    union = parse_explicit_source_manifest(
+        _p90_minimal_manifest(), native_symbols=P90,
+    )
+    monkeypatch.setattr(
+        source, "_closed_repair_windows",
+        lambda _union, *, native_symbols: (),
+    )
+    monkeypatch.setattr(
+        source, "r11_optional_original_frames_enabled", lambda: False,
+    )
+    previous: list[str] = []
+    states: list[str] = []
+
+    class FailedSocket:
+        def recv(self) -> str:
+            raise fault
+
+        def send(self, _raw: str) -> None:
+            raise AssertionError("no outbound producer action in this fixture")
+
+        def close(self) -> None:
+            previous.append("SOCKET_CLOSED")
+
+    monkeypatch.setattr(
+        source, "_connect_subscribe",
+        lambda *, product, union: (FailedSocket(), []),
+    )
+    monkeypatch.setattr(native, "uuid4", lambda: SimpleNamespace(hex="a" * 32))
+    monkeypatch.setattr(native, "_new_r09_postfill_mirror", lambda _symbols: None)
+    monkeypatch.setattr(native, "_session_start",
+                        lambda _db, session: previous.append("START:" + session))
+    monkeypatch.setattr(native, "_session_gap",
+                        lambda _db, session, reason: previous.append("GAP:" + reason))
+    monkeypatch.setattr(native, "_status",
+                        lambda state, **_kw: states.append(state))
+    monkeypatch.setattr(
+        source, "persist_public_source_quality_events",
+        lambda _db, **_kw: 0,
+    )
+    if recover:
+        with pytest.raises(
+            native.NativeSourceInputUnverified,
+            match="NATIVE_SOURCE_REQUIRED_LINEAR_RECONNECT_AFTER_GAP",
+        ):
+            source.run_source_union(
+                Mock(), p90_symbols=P90, union=union,
+                producer_release_commit="a" * 40, publish_seconds=False,
+            )
+    else:
+        with pytest.raises(
+            PublicSourceSecondUnavailable,
+            match="PUBLIC_FEED_TRANSPORT_FAILED:"
+                  "PUBLIC_LINEAR_TRANSPORT_FATAL_VALUEERROR",
+        ):
+            source.run_source_union(
+                Mock(), p90_symbols=P90, union=union,
+                producer_release_commit="a" * 40, publish_seconds=False,
+            )
+    assert previous.count("GAP:PublicSourceSecondUnavailable") == 1
+    assert previous[0] == "START:" + "a" * 32
+    assert previous[-1] == "SOCKET_CLOSED"
+    assert states[-1] == "RECONNECTING"
+
+
+def test_required_linear_reconnect_never_whitelists_unknown_or_mixed_errors() -> None:
+    from operations.monitoring.public_market_source_union_capture import (
+        _recoverable_required_linear_transport_gap,
+    )
+    known = (
+        "PUBLIC_FEED_TRANSPORT_FAILED:PUBLIC_LINEAR_TRANSPORT_FATAL_FULL"
+    )
+    assert _recoverable_required_linear_transport_gap(
+        PublicSourceSecondUnavailable(known)
+    )
+    for bad in (
+        "PUBLIC_FEED_TRANSPORT_FAILED:PUBLIC_LINEAR_TRANSPORT_FATAL_VALUEERROR",
+        known + ",PUBLIC_LINEAR_TRANSPORT_FATAL_OSERROR",
+        "PUBLIC_FEED_TRANSPORT_FAILED:PUBLIC_LINEAR_TRANSPORT_FATAL_TYPEERROR",
+        "PUBLIC_FEED_EPOCH_INVALID",
+    ):
+        assert not _recoverable_required_linear_transport_gap(
+            PublicSourceSecondUnavailable(bad)
+        )
