@@ -447,6 +447,7 @@ def audit_bybit_archived_gap_price_witness(
         ) from None
     _need(found_anchors == set(anchors), "GAP_NATIVE_ANCHOR_MISSING")
     _need(count > 0 and low is not None and high is not None, "GAP_NOT_OBSERVED")
+    assert low is not None and high is not None  # narrow after fail-closed gate
     return BybitGapArchivePriceWitness(
         symbol=symbol,
         old_source_session_id=old_source_session_id,
