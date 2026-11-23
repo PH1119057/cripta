@@ -56,7 +56,7 @@ from component_release_exit_unit_spec import build_exit_unit_candidate
 
 _UNIT_PARENT = Path("/etc/systemd/system")
 _JOURNAL_PARENT = _EXIT_JOURNAL
-_JOURNAL_NAME = "exit-only-e5339f15cce5f24ab0dc7ee8fdfac3afec8c5869.jsonl"
+_JOURNAL_NAME = "exit-only-e5339f15cce5f24ab0dc7ee8fdfac3afec8c5869-v3.jsonl"
 _MAX_UNIT_BYTES = 16 * 1024
 _SYSTEMCTL = "/usr/bin/systemctl"
 _SYSTEMD_FIELDS = (
@@ -87,7 +87,7 @@ _SIGNED_GET_PROGRAM = (
     "sort_keys=True))"
 )
 
-_CONTROLLER_ROOT = _ROOT / ".owner-controller-849-v2"
+_CONTROLLER_ROOT = _ROOT / ".owner-controller-849-v3"
 _CONTROLLER_MANIFEST = "SOURCE_MANIFEST.json"
 _EXPECTED_MODULES = frozenset({
     "component_release_exit_transition.py",
@@ -259,8 +259,11 @@ def _run_exit_only_transition(
             actuator.start()
             journal.record("CANARY_SECOND_NEW_POSTCHECK_INTENT")
             actuator.verify_new()
+            journal.record("CANARY_SECOND_NEW_PROCESS_VERIFIED")
             actuator.verify_signed_and_recovery()
+            journal.record("CANARY_SECOND_NEW_SIGNED_RECOVERY_VERIFIED")
             actuator.neighbors_unchanged(prior)
+            journal.record("CANARY_SECOND_NEW_NEIGHBORS_VERIFIED")
         journal.record("ACCEPTANCE_PENDING")
         return _result("EXIT_TRANSITION_ACCEPTANCE_PENDING")
     except Exception as exc:
