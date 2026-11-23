@@ -42,6 +42,11 @@ class FakeJournal:
             raise OSError("journal write failed")
         self.events.append(phase)
 
+    def record_baseline(self, snapshot: object) -> None:
+        if self.fail == "BASELINE":
+            raise OSError("journal baseline failed")
+        self.events.append("BASELINE")
+
 
 class FakeExit:
     """Explicitly distinguish known systemd state from unknown timeout."""
@@ -131,6 +136,55 @@ class ExitTransactionTests(unittest.TestCase):
             self.assertIn(actual, a.calls)
         self.assertEqual(j.events[-1], "ACCEPTANCE_PENDING")
         self.assertNotIn("ROLLBACK_INTENT", j.events)
+
+    def test_real_canary_exercises_old_restart_then_new_second_start(self) -> None:
+        a, j = FakeExit(), FakeJournal()
+        result = _run_exit_only_transition(
+            a, j, old_unit=OLD, new_unit=NEW, exercise_old_rollback=True,
+        )
+        self.assertEqual(result["state"], "EXIT_TRANSITION_ACCEPTANCE_PENDING")
+        self.assertEqual(a.current, "NEW_ACTIVE")
+        self.assertEqual(a.unit, NEW)
+        self.assertEqual(a.calls.count("STOP"), 3)
+        self.assertEqual(a.calls.count("START"), 3)
+        self.assertEqual(a.calls.count("UNIT_WRITE"), 3)
+        self.assertEqual(a.calls.count("SIGNED_RECOVERY"), 3)
+        self.assertLess(
+            j.events.index("CANARY_OLD_RECOVERED"),
+            j.events.index("CANARY_SECOND_NEW_INTENT"),
+        )
+        self.assertEqual(j.events[0], "BASELINE")
+        self.assertEqual(j.events[-1], "ACCEPTANCE_PENDING")
+        self.assertFalse(result["runtime_behavior_verified"])
+        self.assertFalse(result["financial_mutation_authorized"])
+
+    def test_real_canary_second_new_failure_rolls_back_old(self) -> None:
+        a, j = FakeExit(), FakeJournal()
+        original = a.verify_new
+        attempts = [0]
+        def fail_second_candidate() -> None:
+            attempts[0] += 1
+            if attempts[0] == 2:
+                raise RuntimeError("candidate second start fails")
+            original()
+        a.verify_new = fail_second_candidate
+        result = _run_exit_only_transition(
+            a, j, old_unit=OLD, new_unit=NEW, exercise_old_rollback=True,
+        )
+        self.assertEqual(result["state"], "EXIT_OLD_RECOVERED_AFTER_FAILURE")
+        self.assertTrue(result["rollback_verified"])
+        self.assertEqual(a.current, "OLD_ACTIVE")
+        self.assertEqual(a.unit, OLD)
+        self.assertEqual(j.events[-1], "ROLLBACK_RECOVERED")
+
+    def test_baseline_journal_failure_prevents_every_systemd_action(self) -> None:
+        a, j = FakeExit(), FakeJournal(fail="BASELINE")
+        result = _run_exit_only_transition(
+            a, j, old_unit=OLD, new_unit=NEW, exercise_old_rollback=True,
+        )
+        self.assertEqual(result["state"], "EXIT_PRESTOP_BLOCKED")
+        self.assertEqual(a.calls, ["BEFORE"])
+        self.assertNotIn("STOP_INTENT", j.events)
 
     def test_faults_after_stop_recover_known_old_without_other_units(self) -> None:
         for failure in (
