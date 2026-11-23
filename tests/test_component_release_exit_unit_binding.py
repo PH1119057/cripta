@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 from component_release_exit_unit_binding import (  # noqa: E402
     _BINDING_NAME,
-    _check_prepared_component_readback,
     _UNIT_FILE,
     _UNIT_SHA256,
+    _check_prepared_component_readback,
     _readback_binding_fixture,
     _stage_binding_fixture,
     prepare_exit_source_compatible_unit_once,
