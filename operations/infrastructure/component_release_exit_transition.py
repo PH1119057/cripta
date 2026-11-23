@@ -34,12 +34,23 @@ from component_release_exit_process_readback import (
 )
 from component_release_exit_root_bootstrap import (
     _EXIT_JOURNAL,
+    _SHARED_LOCK,
+    _hold_shared_release_lock,
     inspect_exit_journal_root_once,
+    inspect_exit_root_tree,
 )
 from component_release_exit_signed_preflight import (
     _compare_recovery_snapshots,
 )
-from component_release_exit_unit_binding import _COMPONENT, _SOURCE
+from component_release_exit_unit_binding import (
+    _ARCHIVE_SHA256, _BINDING_NAME, _COMPONENT, _COMPONENT_ROOT,
+    _LOCK_SHA256, _ROOT, _SOURCE, _UNIT_SHA256, _readback_binding_fixture,
+)
+from component_release_exit_new_install import _readback_prepared_candidate
+from component_release_exit_rollback_attestation import (
+    attest_old_exit_candidate_on_host,
+)
+from component_release_exit_unit_spec import build_exit_unit_candidate
 
 _UNIT_PARENT = Path("/etc/systemd/system")
 _JOURNAL_PARENT = _EXIT_JOURNAL
@@ -73,6 +84,40 @@ _SIGNED_GET_PROGRAM = (
     "print(json.dumps(collect_current_signed_exit_preflight_once(), "
     "sort_keys=True))"
 )
+
+_CONTROLLER_ROOT = _ROOT / ".owner-controller-849"
+_CONTROLLER_MANIFEST = "SOURCE_MANIFEST.json"
+_EXPECTED_MODULES = frozenset({
+    "component_release_exit_transition.py",
+    "component_release_exit_owner_preflight.py",
+    "component_release_exit_legacy_prepare.py",
+    "component_release_exit_new_install.py",
+    "component_release_exit_rollback_attestation.py",
+    "component_release_exit_root_bootstrap.py",
+    "component_release_exit_signed_preflight.py",
+    "component_release_exit_process_readback.py",
+    "component_release_exit_unit_binding.py",
+    "component_release_exit_unit_spec.py",
+})
+_SHA40 = re.compile(r"[0-9a-f]{40}\\Z")
+_SHA256 = re.compile(r"[0-9a-f]{64}\\Z")
+_FLAT_GATE_PROGRAM = (
+    "import psycopg; "
+    "c=psycopg.connect('dbname=cripta user=cripta "
+    "host=/var/run/postgresql connect_timeout=5'); "
+    "c.execute('SET TRANSACTION READ ONLY'); "
+    "a=c.execute(\"SELECT COUNT(*) FROM control.execution_gates "
+    "WHERE mode='mainnet' AND enabled=0\").fetchone()[0]; "
+    "b=c.execute(\"SELECT COUNT(*) FROM control.live_arm_sessions "
+    "WHERE state<>'CLOSED'\").fetchone()[0]; "
+    "d=c.execute(\"SELECT COUNT(*) FROM control.account_live_arm_sessions "
+    "WHERE state<>'DISARMED'\").fetchone()[0]; "
+    "e=c.execute(\"SELECT COUNT(*) FROM strategy_entry.execution_permissions "
+    "WHERE enabled\").fetchone()[0]; "
+    "print('FLAT_ENTRY_INHIBITED' if a==1 and b==d==e==0 else 'BLOCKED')"
+)
+_FLAT_GATE_TIMEOUT = 16
+_MAX_JOURNAL_BYTES = 64 * 1024
 
 
 def _deny(code: str) -> None:
@@ -353,6 +398,156 @@ def _validate_flat_exit_status(
             raise RuntimeError("EXIT_HEARTBEAT_NOT_FROM_RESTARTED_CONSUMER")
 
 
+def _check_flat_new_entry_inhibited() -> None:
+    """Credential-local PG READ ONLY fresh gate, no financial write rights."""
+    if sys.platform != "linux" or os.geteuid() != 0:
+        _deny("ROOT_LINUX_REQUIRED")
+    try:
+        outcome = subprocess.run(
+            [
+                "/usr/sbin/runuser", "-u", "cripta", "--",
+                "/srv/cripta/runtime/current/.venv/bin/python", "-B", "-c",
+                _FLAT_GATE_PROGRAM,
+            ],
+            env=_SIGNED_SOURCE_ENV,
+            cwd="/srv/cripta/source_checkout",
+            check=False, capture_output=True, text=True,
+            timeout=_FLAT_GATE_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError("EXIT_NEW_ENTRY_INHIBITION_UNKNOWN") from exc
+    if (
+        outcome.returncode != 0 or outcome.stderr
+        or outcome.stdout.strip() != "FLAT_ENTRY_INHIBITED"
+    ):
+        raise RuntimeError("EXIT_NEW_ENTRY_INHIBITION_NOT_PROVEN")
+
+
+def _check_sealed_controller_root() -> None:
+    """Reject all source_checkout/root PYTHONPATH entrypoint impersonation."""
+    if sys.platform != "linux" or os.geteuid() != 0:
+        _deny("ROOT_LINUX_REQUIRED")
+    import grp
+
+    directory = _CONTROLLER_ROOT
+    if Path(__file__).parent != directory or directory.is_symlink():
+        _deny("ROOT_CONTROLLER_NOT_SEALED")
+    info = directory.lstat()
+    if (
+        not stat.S_ISDIR(info.st_mode) or info.st_uid != 0
+        or info.st_gid != grp.getgrnam("cripta").gr_gid
+        or stat.S_IMODE(info.st_mode) != 0o750
+    ):
+        _deny("ROOT_CONTROLLER_METADATA_UNTRUSTED")
+    found = set(item.name for item in directory.iterdir())
+    if found != _EXPECTED_MODULES | {_CONTROLLER_MANIFEST}:
+        _deny("ROOT_CONTROLLER_FILE_SET_CHANGED")
+    manifest_path = directory / _CONTROLLER_MANIFEST
+    marker_info = manifest_path.lstat()
+    if (
+        not stat.S_ISREG(marker_info.st_mode)
+        or marker_info.st_uid != 0 or marker_info.st_gid != 0
+        or stat.S_IMODE(marker_info.st_mode) != 0o600
+        or marker_info.st_nlink != 1 or marker_info.st_size > 4096
+    ):
+        _deny("ROOT_CONTROLLER_MANIFEST_UNTRUSTED")
+    try:
+        record = json.loads(manifest_path.read_text("ascii"))
+    except (OSError, ValueError) as exc:
+        raise ValueError("EXIT_TRANSITION_ROOT_CONTROLLER_MANIFEST_INVALID") from exc
+    if (
+        not isinstance(record, dict)
+        or set(record) != {"schema", "source_commit", "files",
+                           "component", "authorized_scope"}
+        or record["schema"] != "EXIT_ONLY_ROOT_OWNER_V1"
+        or not isinstance(record["source_commit"], str)
+        or _SHA40.fullmatch(record["source_commit"]) is None
+        or record["component"] != "EXIT"
+        or record["authorized_scope"] != "UNIT_CUTOVER_NO_ARM_NO_DB_WRITES"
+        or not isinstance(record["files"], dict)
+        or set(record["files"]) != _EXPECTED_MODULES
+    ):
+        _deny("ROOT_CONTROLLER_SOURCE_MANIFEST_DRIFT")
+    for name in sorted(_EXPECTED_MODULES):
+        file = directory / name
+        file_info = file.lstat()
+        if (
+            not stat.S_ISREG(file_info.st_mode)
+            or file_info.st_uid != 0 or file_info.st_gid != 0
+            or stat.S_IMODE(file_info.st_mode) != 0o640
+            or file_info.st_nlink != 1 or file_info.st_size > 64 * 1024
+            or not isinstance(record["files"][name], str)
+            or _SHA256.fullmatch(record["files"][name]) is None
+            or hashlib.sha256(file.read_bytes()).hexdigest()
+            != record["files"][name]
+        ):
+            _deny("ROOT_CONTROLLER_SOURCE_BYTES_DRIFT")
+
+
+def _load_exact_exit_units() -> tuple[bytes, bytes]:
+    """Read immutable OLD and NEW artifacts; never select user-supplied paths."""
+    import grp
+
+    if inspect_exit_root_tree().get("state") != "ROOT_TREE_PREPARED_METADATA_ONLY":
+        _deny("PROTECTED_EXIT_ROOT_UNTRUSTED")
+    if (
+        inspect_exit_journal_root_once().get("state")
+        != "PROTECTED_EXIT_JOURNAL_ROOT_READY_READ_ONLY"
+    ):
+        _deny("PROTECTED_EXIT_JOURNAL_UNTRUSTED")
+    old = attest_old_exit_candidate_on_host()
+    if (
+        old.get("state") != "OLD_EXIT_RECOVERY_STAGED_READBACK_PASS"
+        or old.get("actual_host_attested") is not True
+        or old.get("rollback_ready") is not False
+    ):
+        _deny("EXACT_OLD_ROLLBACK_ARTIFACT_DRIFT")
+    new = _readback_prepared_candidate(
+        candidate_root=_COMPONENT_ROOT,
+        owner_uid=0,
+        service_gid=grp.getgrnam("cripta").gr_gid,
+        expected_commit=_COMPONENT,
+        expected_archive_sha256=_ARCHIVE_SHA256,
+    )
+    if (
+        new.get("state") != "IMMUTABLE_EXIT_CANDIDATE_PREPARED"
+        or new.get("physical_file_hashes_verified") is not True
+        or new.get("cutover_authorized") is not False
+        or new.get("new_component_loaded") is not False
+    ):
+        _deny("EXACT_NEW_COMPONENT_DRIFT")
+    from component_release_exit_legacy_prepare import _INPUT
+
+    old_bytes = (_INPUT / "legacy_unit.service").read_bytes()
+    if _digest(old_bytes) != (
+        "c4a21004e637df794670d7d096c6ffa443c23a881c662b65bebfc11459433248"
+    ):
+        _deny("EXACT_OLD_UNIT_BYTES_DRIFT")
+    new_bytes = build_exit_unit_candidate(
+        source_unit=old_bytes.decode("utf-8"),
+        component_commit=_COMPONENT,
+        component_lock_sha256=_LOCK_SHA256,
+        source_compatibility_commit=_SOURCE,
+    )["unit_text"].encode("utf-8")
+    if _digest(new_bytes) != _UNIT_SHA256:
+        _deny("EXACT_NEW_UNIT_BYTES_DRIFT")
+    binding = _readback_binding_fixture(
+        parent=_ROOT, owner_uid=0,
+        service_gid=grp.getgrnam("cripta").gr_gid,
+        binding_name=_BINDING_NAME, expected_unit=new_bytes,
+    )
+    if (
+        binding.get("state") != "PROTECTED_EXIT_UNIT_BINDING_PREPARED_ONLY"
+        or binding.get("file_digest_readback") is not True
+    ):
+        _deny("PROTECTED_NEW_UNIT_BINDING_DRIFT")
+    marker = Path("/var/lib/cripta/release/INSTALLED_COMMIT")
+    if marker.is_symlink() or marker.read_text("ascii").strip() != _SOURCE:
+        _deny("LEGACY_MAIN_RELEASE_CHANGED")
+    return old_bytes, new_bytes
+
+
+
 class _HostExitUnitIO:
     """OS implementation with exactly one hardcoded, protected Exit unit.
 
@@ -446,6 +641,7 @@ class _HostExitUnitIO:
             # Specific first FLAT canary: an OPEN position requires a
             # separate actual restart/recovery proof, not blanket disarm.
             raise RuntimeError("EXIT_OPEN_POSITION_E2E_CANARY_NOT_WIRED")
+        _check_flat_new_entry_inhibited()
         _validate_flat_exit_status(
             _read_protected_exit_status(),
             observed_at=datetime.now(UTC), not_before=None,
@@ -566,11 +762,20 @@ class _HostExitUnitIO:
             or proof.get("release_authorized") is not False
         ):
             raise RuntimeError("EXIT_SIGNED_PROTECTION_NOT_PRESERVED")
-        _validate_flat_exit_status(
-            _read_protected_exit_status(),
-            observed_at=datetime.now(UTC),
-            not_before=self._restart_started_at,
-        )
+        _check_flat_new_entry_inhibited()
+        deadline = time.monotonic() + 22
+        while True:
+            try:
+                _validate_flat_exit_status(
+                    _read_protected_exit_status(),
+                    observed_at=datetime.now(UTC),
+                    not_before=self._restart_started_at,
+                )
+                break
+            except RuntimeError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.5)
         # This method does not itself authorize a cutover or a LIVE ARM.
 
     def neighbors_unchanged(self, snapshot: object) -> None:
@@ -656,17 +861,69 @@ class _RootAppendFsyncJournal:
         os.close(self._fd)
 
 
-def _protected_real_admission() -> None:
-    """No LIVE grant without all independent source+Exchange+rollback gates."""
-    # The complete verified, no-argument admission collector is not installed.
-    # Deliberately do not activate a financial Exit from a Draft PR.
-    _deny("RELEASE_NOT_MERGED_OR_PROTECTION_NOT_VERIFIED")
+def _protected_real_admission() -> tuple[bytes, bytes]:
+    """Root-controller sealed + protected OLD/NEW + fresh FLAT safety.
+
+    This is a narrow first FLAT canary gate, NOT an OPEN-position block on
+    independent release in general. OPEN requires separately tested owner.
+    """
+    _check_sealed_controller_root()
+    old_unit, new_unit = _load_exact_exit_units()
+    if not _unit_material_ok(old_unit, new_unit):
+        _deny("OLD_AND_NEW_UNIT_NOT_DISTINCT")
+    actual = _HostExitUnitIO(old_unit=old_unit, new_unit=new_unit)
+    if actual._unit_bytes() != old_unit:
+        _deny("LEGACY_EXIT_NOT_ACTIVE")
+    before = actual._show()
+    if (
+        before["ActiveState"] != "active"
+        or before["SubState"] != "running"
+        or not before["MainPID"].isdigit()
+        or int(before["MainPID"]) <= 0
+    ):
+        _deny("LEGACY_EXIT_NOT_RUNNING")
+    _check_flat_new_entry_inhibited()
+    signed = _collect_credential_local_exit_snapshot()
+    if signed.get("account_position_counts") != {"MAIN": 0, "SUB": 0}:
+        _deny("EXISTING_POSITION_REQUIRES_OPEN_OWNER_E2E")
+    _validate_flat_exit_status(
+        _read_protected_exit_status(),
+        observed_at=datetime.now(UTC), not_before=None,
+    )
+    return old_unit, new_unit
 
 
 def exit_only_cutover_once() -> dict[str, object]:
-    """Fixed NO-ARGUMENT public entrypoint. NEVER permit synthetic evidence."""
-    if sys.platform != "linux":
+    """Root-only fixed ONE-SHOT scoped cutover, lock before any filesystem IO."""
+    if sys.platform != "linux" or os.geteuid() != 0:
         _deny("ROOT_LINUX_REQUIRED")
-    _protected_real_admission()
-    # No host actuator is constructed while admission is incomplete.
-    _deny("GATED_ROOT_OWNER_NOT_INSTALLED")
+    _check_sealed_controller_root()
+    with _hold_shared_release_lock(path=_SHARED_LOCK, uid=0, gid=0):
+        old_unit, new_unit = _protected_real_admission()
+        journal = _RootAppendFsyncJournal()
+        try:
+            adapter = _HostExitUnitIO(old_unit=old_unit, new_unit=new_unit)
+            return _run_exit_only_transition(
+                adapter, journal, old_unit=old_unit, new_unit=new_unit,
+                exercise_old_rollback=True,
+            )
+        finally:
+            journal.close()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 1 or Path(sys.argv[0]) != (
+        _CONTROLLER_ROOT / "component_release_exit_transition.py"
+    ):
+        raise SystemExit("EXIT_ROOT_OWNER_NO_ARGUMENTS_REQUIRED")
+    try:
+        outcome = exit_only_cutover_once()
+        print(json.dumps(outcome, sort_keys=True))
+        if outcome["state"] not in (
+            "EXIT_TRANSITION_ACCEPTANCE_PENDING",
+            "EXIT_OLD_RECOVERED_AFTER_FAILURE",
+        ):
+            raise SystemExit(1)
+    except (OSError, ValueError, RuntimeError):
+        print("EXIT_ROOT_OWNER_BLOCKED_OR_OUTCOME_UNKNOWN")
+        raise SystemExit(1) from None
