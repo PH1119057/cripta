@@ -59,6 +59,7 @@ def _cutover_fixture(
     monkeypatch.setattr(rail.os, "geteuid",lambda:0)
     monkeypatch.setattr(rail.grp,"getgrnam",lambda _n:SimpleNamespace(gr_gid=100))
     monkeypatch.setattr(rail,"_expected_dir",lambda *_a,**_k:None)
+    monkeypatch.setattr(rail,"verify_sealed_market_source_controller",lambda:None)
     monkeypatch.setattr(rail,"_source_exact",lambda:b"exact")
     monkeypatch.setattr(rail,"inspect_prepared_market_source",lambda:{})
     monkeypatch.setattr(rail,"_old_unit",lambda:old)
