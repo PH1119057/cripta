@@ -27,6 +27,7 @@ from component_release_market_source_stage import (
     LEGACY_SHA, OLD_UNIT_SHA, SOURCE_SHA, _OWNER, _ROOT, _UNIT_PATH,
     _digest, _deny, _expected_dir, _old_unit, _source_exact,
     inspect_prepared_market_source, pinned_market_source_unit,
+    verify_sealed_market_source_controller,
 )
 
 _CONTROLLER = _OWNER / ".owner-controller-865"
@@ -339,6 +340,7 @@ def cutover_market_source_once() -> dict[str,object]:
     """Single authentic root cutover, no args, no trading or other unit writes."""
     if os.geteuid()!=0 or sys.platform!="linux":
         _deny("ROOT_LINUX_REQUIRED")
+    verify_sealed_market_source_controller()
     gid=grp.getgrnam("cripta").gr_gid
     _expected_dir(_OWNER,uid=0,gid=gid,mode=0o750)
     _expected_dir(_OWNER/"journal",uid=0,gid=gid,mode=0o750)
