@@ -207,6 +207,8 @@ def check_exit_identity_snapshot(
         "ARTIFACT_LOCK_INVALID",
     )
 
+    source_compat = proposed_unit.get("source_compatibility_commit")
+    _require(_sha(source_compat), "SOURCE_COMPATIBILITY_IDENTITY_INVALID")
     _require(
         proposed_unit.get("component_id") == "EXIT"
         and proposed_unit.get("unit_instance") == _EXIT_UNIT
@@ -229,7 +231,8 @@ def check_exit_identity_snapshot(
     lines = unit_text.splitlines()
     pinned = (
         "WorkingDirectory=" + root,
-        "Environment=CRIPTA_RELEASE_COMMIT=" + sha,
+        "Environment=CRIPTA_RELEASE_COMMIT=" + str(source_compat),
+        "Environment=CRIPTA_EXIT_COMPONENT_COMMIT=" + sha,
         "Environment=CRIPTA_RUNTIME_ROOT=" + root,
         "Environment=PYTHONPATH=" + root + "/src:" + root
         + "/operations/connectivity",
@@ -281,7 +284,8 @@ def check_exit_identity_snapshot(
         and observed.get("process_working_directory") == root
         and observed.get("process_pythonpath") == root + "/src:" + root
         + "/operations/connectivity"
-        and observed.get("loaded_release_commit") == sha
+        and observed.get("loaded_release_commit") == source_compat
+        and observed.get("loaded_exit_component_commit") == sha
         and observed.get("loaded_runtime_root") == root
         and observed.get("observed_executable_under_installed_root") is True,
         "PROCESS_RELEASE_NOT_PINNED",
@@ -303,6 +307,7 @@ def check_exit_identity_snapshot(
         "state": "OFFLINE_METADATA_CONSISTENCY_ONLY",
         "component_id": "EXIT",
         "component_commit": sha,
+        "source_compatibility_commit": source_compat,
         "installed_component_marker_consistent": True,
         "loaded_component_identity_consistent": True,
         "untouched_neighbor_snapshot_consistent": True,

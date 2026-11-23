@@ -22,6 +22,7 @@ from component_release_exit_unit_spec import build_exit_unit_candidate  # noqa: 
 
 SHA = "a" * 40
 PREVIOUS = "b" * 40
+SOURCE_COMPAT_COMMIT = "8bd45e9874d6ce811d7261ee152fc2c43729e1b9"
 LOCK_SHA = "c" * 64
 CONTENT_SHA = "d" * 64
 ROOT_PATH = "/srv/cripta/components/exit/releases/" + SHA
@@ -51,6 +52,7 @@ def coherent() -> tuple[dict[str, object], dict[str, object], dict[str, object]]
         ).read_text(encoding="utf-8"),
         component_commit=SHA,
         component_lock_sha256=LOCK_SHA,
+        source_compatibility_commit=SOURCE_COMPAT_COMMIT,
     )
     observed: dict[str, object] = {
         "installed_root": ROOT_PATH,
@@ -69,7 +71,8 @@ def coherent() -> tuple[dict[str, object], dict[str, object], dict[str, object]]
         "process_entrypoint": ROOT_PATH + "/" + ENTRY_SCRIPT,
         "process_working_directory": ROOT_PATH,
         "process_pythonpath": ROOT_PATH + "/src:" + ROOT_PATH + "/operations/connectivity",
-        "loaded_release_commit": SHA,
+        "loaded_release_commit": SOURCE_COMPAT_COMMIT,
+        "loaded_exit_component_commit": SHA,
         "loaded_runtime_root": ROOT_PATH,
         "observed_executable_under_installed_root": True,
         "rollback_commit": PREVIOUS,
@@ -97,6 +100,8 @@ class ExitIdentityContractTests(unittest.TestCase):
         self.assertEqual(result["state"], "OFFLINE_METADATA_CONSISTENCY_ONLY")
         self.assertEqual(result["component_id"], "EXIT")
         self.assertEqual(result["component_commit"], SHA)
+        self.assertEqual(result["source_compatibility_commit"],
+                         SOURCE_COMPAT_COMMIT)
         self.assertFalse(result["install_authorized"])
         self.assertFalse(result["runtime_behavior_verified"])
         self.assertFalse(result["live_financial_gate_verified"])
@@ -158,6 +163,7 @@ class ExitIdentityContractTests(unittest.TestCase):
             ("process_working_directory", "/srv/cripta/runtime/current"),
             ("process_pythonpath", "/srv/cripta/runtime/current/src"),
             ("loaded_runtime_root", "/srv/cripta/runtime/current"),
+            ("loaded_exit_component_commit", PREVIOUS),
             ("observed_executable_under_installed_root", False),
         ):
             artifact, unit, observed = coherent()
@@ -199,7 +205,8 @@ class ExitIdentityContractTests(unittest.TestCase):
     def test_missing_required_observation_denied(self) -> None:
         _, unit, _ = coherent()
         for key in ("pid", "installed_marker", "installed_file_sha256",
-                    "loaded_release_commit", "rollback_commit", "neighbor_before"):
+                    "loaded_release_commit", "loaded_exit_component_commit",
+                    "rollback_commit", "neighbor_before"):
             artifact, unit, observed = coherent()
             del observed[key]
             with self.subTest(key=key), self.assertRaises(ValueError):

@@ -118,6 +118,7 @@ _REQUIRED_SOURCE_LINES = (
 
 def build_exit_unit_candidate(
     *, source_unit: str, component_commit: str, component_lock_sha256: str,
+    source_compatibility_commit: str,
 ) -> dict[str, object]:
     """Return a deterministic, unsigned PREVIEW; never touch systemd or disk."""
     if not isinstance(component_commit, str) or not _SHA40.fullmatch(
@@ -128,6 +129,11 @@ def build_exit_unit_candidate(
         component_lock_sha256
     ):
         raise ValueError("EXIT_COMPONENT_LOCK_DIGEST_INVALID")
+    if (
+        not isinstance(source_compatibility_commit, str)
+        or not _SHA40.fullmatch(source_compatibility_commit)
+    ):
+        raise ValueError("EXIT_SOURCE_COMPATIBILITY_COMMIT_INVALID")
     if not isinstance(source_unit, str) or hashlib.sha256(
         source_unit.encode("utf-8")
     ).hexdigest() != _REVIEWED_LEGACY_UNIT_SHA256:
@@ -140,7 +146,11 @@ def build_exit_unit_candidate(
     root = _COMPONENT_PARENT + "/" + component_commit
     replacement = {
         _OLD_ENV: (
-            "Environment=CRIPTA_RELEASE_COMMIT=" + component_commit
+            # P90 source epoch is governed by the previously registered
+            # runtime consumer identity, NOT by the new Exit binary SHA.
+            # Independent process identity is separately protected below.
+            "Environment=CRIPTA_RELEASE_COMMIT=" + source_compatibility_commit
+            + "\nEnvironment=CRIPTA_EXIT_COMPONENT_COMMIT=" + component_commit
             + "\nEnvironment=CRIPTA_RUNTIME_ROOT=" + root
         ),
         _OLD_WORKDIR: "WorkingDirectory=" + root,
@@ -160,6 +170,7 @@ def build_exit_unit_candidate(
         "component_id": "EXIT",
         "unit_instance": _UNIT,
         "source_commit": component_commit,
+        "source_compatibility_commit": source_compatibility_commit,
         "component_release_root": root,
         "component_lock_sha256": component_lock_sha256,
         "unit_text": prepared,
@@ -168,6 +179,7 @@ def build_exit_unit_candidate(
         "install_authorized": False,
         "unit_installed": False,
         "compatibility_attested": False,
+        "source_compatibility_registered": False,
         "external_environment_attested": False,
         "runtime_identity_attested": False,
         "rollback_attested": False,
