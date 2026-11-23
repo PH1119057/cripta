@@ -241,7 +241,7 @@ class ExitTransactionTests(unittest.TestCase):
         )
         with (
             patch("component_release_exit_transition.sys.platform", "linux"),
-            patch("component_release_exit_transition.os.geteuid", return_value=0),
+            patch("component_release_exit_transition.os.geteuid", return_value=0, create=True),
             patch("component_release_exit_transition.subprocess.run",
                   return_value=reader) as run,
         ):
@@ -260,7 +260,7 @@ class ExitTransactionTests(unittest.TestCase):
         reader.returncode = 1
         with (
             patch("component_release_exit_transition.sys.platform", "linux"),
-            patch("component_release_exit_transition.os.geteuid", return_value=0),
+            patch("component_release_exit_transition.os.geteuid", return_value=0, create=True),
             patch("component_release_exit_transition.subprocess.run",
                   return_value=reader),
             self.assertRaisesRegex(RuntimeError, "SIGNED_READ_BLOCKED"),
@@ -268,7 +268,7 @@ class ExitTransactionTests(unittest.TestCase):
             _collect_credential_local_exit_snapshot()
         with (
             patch("component_release_exit_transition.sys.platform", "linux"),
-            patch("component_release_exit_transition.os.geteuid", return_value=1000),
+            patch("component_release_exit_transition.os.geteuid", return_value=1000, create=True),
             self.assertRaisesRegex(ValueError, "ROOT_LINUX_REQUIRED"),
         ):
             _collect_credential_local_exit_snapshot()
