@@ -844,7 +844,7 @@ class _RootAppendFsyncJournal:
     Requires a *preexisting* root:root0700 state directory and O_EXCL
     creation. No auto mkdir, path repair, reuse, truncation or log rotation.
     """
-    def __init__(self) -> None:
+    def __init__(self, *, resume: bool = False) -> None:
         if sys.platform != "linux" or os.geteuid() != 0:
             _deny("ROOT_LINUX_REQUIRED")
         if (
@@ -860,15 +860,64 @@ class _RootAppendFsyncJournal:
         ):
             _deny("JOURNAL_PARENT_NOT_PROTECTED")
         self.path = _JOURNAL_PARENT / _JOURNAL_NAME
-        self._fd = os.open(
-            self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL
-            | getattr(os, "O_NOFOLLOW", 0), 0o600,
-        )
-        parent_fd = os.open(_JOURNAL_PARENT, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(parent_fd)
-        finally:
-            os.close(parent_fd)
+        flags = os.O_RDWR | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
+        if not resume:
+            flags |= os.O_CREAT | os.O_EXCL
+        self._fd = os.open(self.path, flags, 0o600)
+        info = os.fstat(self._fd)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != 0 or info.st_gid != 0
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or info.st_nlink != 1
+            or info.st_size > _MAX_JOURNAL_BYTES
+        ):
+            os.close(self._fd)
+            _deny("JOURNAL_FILE_METADATA_DRIFT")
+        if not resume:
+            parent_fd = os.open(_JOURNAL_PARENT, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(parent_fd)
+            finally:
+                os.close(parent_fd)
+
+    def existing_events(self) -> tuple[dict[str, object], ...]:
+        """Bounded strict reconciliation of one already existing journal."""
+        os.lseek(self._fd, 0, os.SEEK_SET)
+        raw = os.read(self._fd, _MAX_JOURNAL_BYTES + 1)
+        if len(raw) > _MAX_JOURNAL_BYTES or raw and not raw.endswith(b"\\n"):
+            _deny("JOURNAL_TRUNCATED_OR_OVERSIZE")
+        events: list[dict[str, object]] = []
+        for row in raw.splitlines():
+            try:
+                item = json.loads(row)
+            except (ValueError, UnicodeError) as exc:
+                raise ValueError("EXIT_TRANSITION_JOURNAL_JSON_UNTRUSTED") from exc
+            if (
+                not isinstance(item, dict)
+                or item.get("unit") != _EXIT_UNIT
+                or not isinstance(item.get("time"), str)
+                or not isinstance(item.get("phase"), str)
+                or not item["phase"].isascii()
+                or not item["phase"].replace("_", "").isupper()
+            ):
+                _deny("JOURNAL_ROW_UNTRUSTED")
+            if item["phase"] == "BASELINE":
+                if events or set(item) != {
+                    "phase", "time", "unit", "neighbors",
+                    "old_sha256", "new_sha256",
+                }:
+                    _deny("JOURNAL_BASELINE_NOT_FIRST")
+                if (
+                    item.get("old_sha256") !=
+                    "c4a21004e637df794670d7d096c6ffa443c23a881c662b65bebfc11459433248"
+                    or item.get("new_sha256") != _UNIT_SHA256
+                ):
+                    _deny("JOURNAL_UNIT_DIGEST_DRIFT")
+            elif set(item) != {"phase", "time", "unit"}:
+                _deny("JOURNAL_EVENT_EXTRA_FIELDS")
+            events.append(item)
+        return tuple(events)
 
     def record_baseline(self, snapshot: object) -> None:
         """Persist before the first stop; necessary to reconcile a crash."""
@@ -915,6 +964,72 @@ class _RootAppendFsyncJournal:
         os.close(self._fd)
 
 
+def _reconcile_interrupted_exit(journal: _RootAppendFsyncJournal) -> dict[str, object]:
+    """On restart, reconcile physical state before *any* repeated mutation."""
+    events = journal.existing_events()
+    if not events:
+        return _result("EXIT_EMPTY_JOURNAL_NO_OS_ACTION")
+    baseline = events[0]
+    if baseline.get("phase") != "BASELINE":
+        _deny("JOURNAL_ORIGINAL_BASELINE_ABSENT")
+    raw = baseline.get("neighbors")
+    if (
+        not isinstance(raw, dict)
+        or set(raw) != {"ENTRY", "MAIN_PRIVATE", "NATIVE", "SUB_PRIVATE"}
+        or any(
+            not isinstance(v, list) or len(v) != 2
+            or any(type(n) is not int or n < 0 for n in v)
+            or v[0] <= 0
+            for v in raw.values()
+        )
+    ):
+        _deny("JOURNAL_NEIGHBOR_BASELINE_UNTRUSTED")
+    prior = {name: tuple(pair) for name, pair in raw.items()}
+    phases = [item["phase"] for item in events]
+    if phases.count("BASELINE") != 1:
+        _deny("JOURNAL_BASELINE_DUPLICATED")
+    old, new = _load_exact_exit_units()
+    adapter = _HostExitUnitIO(old_unit=old, new_unit=new)
+    observed = adapter.reconcile()
+    if observed not in _STATES:
+        return _result("EXIT_INTERRUPTED_OUTCOME_UNKNOWN")
+    if phases[-1] == "ROLLBACK_RECOVERED":
+        if observed != "OLD_ACTIVE":
+            return _result("EXIT_COMPLETED_ROLLBACK_PHYSICAL_DRIFT")
+        adapter.verify_old()
+        adapter.neighbors_unchanged(prior)
+        return _result("EXIT_PREVIOUSLY_RECOVERED_OLD", rollback_verified=True)
+    if phases[-1] == "ACCEPTANCE_PENDING":
+        if observed != "NEW_ACTIVE" or "CANARY_OLD_RECOVERED" not in phases:
+            return _result("EXIT_ACCEPTANCE_PHYSICAL_DRIFT")
+        adapter.verify_new()
+        adapter.neighbors_unchanged(prior)
+        return _result("EXIT_PREVIOUS_CANDIDATE_ACCEPTANCE_PENDING",
+                       rollback_verified=True)
+    if "STOP_INTENT" not in phases:
+        if observed != "OLD_ACTIVE":
+            return _result("EXIT_PRESTOP_JOURNAL_PHYSICAL_DRIFT")
+        return _result("EXIT_JOURNALED_PRESTOP_NO_OS_ACTION")
+    # A process crash after any stop-intent is uncertain even when the
+    # physical unit still appears old. Never reattempt the forward cutover.
+    # Require fresh independent credential-local signed protection before
+    # restoring the known OLD deployment, including any new OPEN position.
+    baseline_signed = _collect_credential_local_exit_snapshot()
+    if baseline_signed.get("account_position_counts") != {"MAIN": 0, "SUB": 0}:
+        return _result("EXIT_INTERRUPTED_OPEN_POSITION_REQUIRES_RECOVERY")
+    adapter._pre_signed_snapshot = baseline_signed
+    adapter._restart_started_at = datetime.now(UTC) - timedelta(seconds=15)
+    try:
+        adapter.neighbors_unchanged(prior)
+        _recover_exact_old(
+            adapter, journal, observed=observed,
+            old_unit=old, new_unit=new, previous_neighbors=prior,
+        )
+    except Exception:
+        return _result("EXIT_INTERRUPTED_ROLLBACK_NOT_VERIFIED")
+    return _result("EXIT_INTERRUPTED_OLD_RECOVERED", rollback_verified=True)
+
+
 def _protected_real_admission() -> tuple[bytes, bytes]:
     """Root-controller sealed + protected OLD/NEW + fresh FLAT safety.
 
@@ -953,6 +1068,12 @@ def exit_only_cutover_once() -> dict[str, object]:
         _deny("ROOT_LINUX_REQUIRED")
     _check_sealed_controller_root()
     with _hold_shared_release_lock(path=_SHARED_LOCK, uid=0, gid=0):
+        if (_JOURNAL_PARENT / _JOURNAL_NAME).exists():
+            journal = _RootAppendFsyncJournal(resume=True)
+            try:
+                return _reconcile_interrupted_exit(journal)
+            finally:
+                journal.close()
         old_unit, new_unit = _protected_real_admission()
         journal = _RootAppendFsyncJournal()
         try:
