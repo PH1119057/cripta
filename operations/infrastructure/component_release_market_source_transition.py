@@ -19,6 +19,10 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+# The owned root controller and the read-only signed Exit helper are sealed
+# against unexpected file-set changes; imports must not create __pycache__.
+sys.dont_write_bytecode = True
+
 from component_release_market_source_stage import (
     LEGACY_SHA, OLD_UNIT_SHA, SOURCE_SHA, _OWNER, _ROOT, _UNIT_PATH,
     _digest, _deny, _expected_dir, _old_unit, _source_exact,
