@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import json
 import unittest
+from contextlib import ExitStack
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -482,6 +483,97 @@ class CausalSimulatedTests(unittest.TestCase):
                         **kwargs,
                     ),
                 )
+
+        self._check_delayed_private_get_requires_fresh_original_quote_before_decision()
+
+    def _check_delayed_private_get_requires_fresh_original_quote_before_decision(self):
+        """Regression-first: a signed GET may outlive the earlier 2s R10 pin.
+
+        No DB/Bybit/credential access here. A distinct, monotonically newer
+        original quote exists after the delayed synthetic private proof. Old
+        owner code fails with CURRENT_PROOF_STALE before the Exit Engine.
+        """
+        from types import SimpleNamespace
+
+        from operations.connectivity import p90_real_persistent_trail as owner
+
+        position, plan, private, quote, at = _case()
+        checked_at = at + timedelta(seconds=3)
+        received_at = checked_at + timedelta(milliseconds=100)
+        late_private = replace(private, observed_at=checked_at)
+        refreshed = replace(
+            quote,
+            publication_id=quote.publication_id + 1,
+            as_of_second=checked_at,
+            field_times=(checked_at, checked_at, checked_at),
+        )
+
+        class FixedDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return received_at
+
+        database = MagicMock()
+        database.execute.return_value.fetchall.return_value = [("test-epoch",)]
+        connection = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = database
+        connection.execute.return_value.fetchone.return_value = {
+            "initial_protection_evidence": {
+                "trailing_recovery_policy": P90_TRAIL_RECOVERY_POLICY,
+            },
+        }
+        route = SimpleNamespace(
+            strategy_id=position.strategy_id,
+            trading_account_id=position.trading_account_id,
+            strategy_execution_binding_id=position.strategy_execution_binding_id,
+            activation_id=position.strategy_activation_id,
+            account_connector_id=private.connector_id,
+            registered_exchange_uid=private.signed_provider_uid,
+        )
+        routes = SimpleNamespace(
+            main=route,
+            sub=route,
+            account_by_strategy={position.strategy_id: position.trading_account_id},
+        )
+        client = MagicMock()
+        client.for_restart_recovery.return_value = late_private
+        quote_reader = MagicMock(side_effect=[
+            (quote, quote.source_session_id),
+            (refreshed, refreshed.source_session_id),
+        ])
+        substitutions = {
+            "datetime": FixedDatetime,
+            "_candidate": MagicMock(return_value={
+                "position_id": position.strategy_position_id,
+                "trading_account_id": position.trading_account_id,
+                "symbol": position.symbol,
+            }),
+            "lock_p90_exit_account": MagicMock(),
+            "load_exit_binding": MagicMock(return_value=(position, plan)),
+            "load_active_strategy_bundles": MagicMock(return_value=[
+                SimpleNamespace(card=SimpleNamespace(
+                    strategy_version=position.strategy_version,
+                )),
+            ]),
+            "read_p90_real_account_routes": MagicMock(return_value=routes),
+            "inspect_real_source_identity": MagicMock(return_value=SimpleNamespace(
+                approved_producers=(quote.producer_release_commit,),
+            )),
+            "p90_real_exit_no_pending": MagicMock(return_value=True),
+            "_source_quote": quote_reader,
+            "P90PrivateProofClient": MagicMock(return_value=client),
+            "PostgresExitShadowStore": MagicMock(),
+            "P90RealExitExecutionPort": MagicMock(),
+        }
+        with ExitStack() as stack:
+            for name, value in substitutions.items():
+                stack.enter_context(patch.object(owner, name, value))
+            result = owner.run_p90_persistent_trail_once(
+                connection, MagicMock(), loaded_commit="b" * 40,
+            )
+        self.assertEqual(result, "P90_TRAIL_RECOVERY_REQUEST_PUBLISHED")
+        self.assertEqual(client.for_restart_recovery.call_count, 1)
+        self.assertEqual(quote_reader.call_count, 2)
 
     def test_firstfill_failure_recovery_request_is_not_false_ready(self):
         from operations.connectivity import universal_exit_consumer as consumer
