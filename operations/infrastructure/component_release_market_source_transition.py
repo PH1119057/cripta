@@ -78,17 +78,6 @@ with psycopg.connect(
        "account_arms":account_arms[0] if account_arms else None,
     },sort_keys=True))
 '''
-_SIGNED_PROBE = (
-    "import json; "
-    "from component_release_exit_transition import "
-    "_collect_credential_local_exit_snapshot; "
-    "from component_release_exit_signed_preflight import "
-    "_compare_recovery_snapshots; "
-    "snapshot=_collect_credential_local_exit_snapshot(); "
-    "print(json.dumps(snapshot,sort_keys=True,default=str))"
-)
-
-
 def _command(*args: str, timeout: int = 30) -> str:
     result = subprocess.run(
         args, capture_output=True, text=True, timeout=timeout,
@@ -148,18 +137,22 @@ def _prove_old_source_gap(session: str) -> None:
 
 
 def _signed_snapshot() -> dict[str, object]:
-    argv = [
-        "/usr/sbin/runuser", "-u", "cripta", "--", "/usr/bin/env",
-        "PYTHONDONTWRITEBYTECODE=1",
-        "PYTHONPATH=" + str(_SIGNED_OWNER) + ":"
-                      + str(_OLD_CODE / "src") + ":" + str(_OLD_CODE / "operations/connectivity"),
-        str(_OLD_CODE / ".venv/bin/python"), "-B", "-c", _SIGNED_PROBE,
-    ]
-    result = json.loads(_command(*argv, timeout=35))
+    # The attested Exit root controller is intentionally NOT readable by the
+    # unprivileged cripta actor. Its own signed GET helper delegates private
+    # read-only work to cripta and returns a sanitized in-memory snapshot.
+    sys.path.insert(0,str(_SIGNED_OWNER))
+    try:
+        from component_release_exit_transition import (
+            _check_sealed_controller_root,
+            _collect_credential_local_exit_snapshot,
+        )
+        _check_sealed_controller_root()
+        result = _collect_credential_local_exit_snapshot()
+    finally:
+        sys.path.pop(0)
     if not isinstance(result,dict):
         _deny("SIGNED_PRIVATE_SNAPSHOT_UNVERIFIED")
     return result
-
 
 def _verify_signed_equal(before: dict[str,object], after: dict[str,object]) -> None:
     # Use the already-reviewed Exit owner comparison, not a new fake parity.
