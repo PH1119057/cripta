@@ -9,8 +9,8 @@ import json
 import sys
 import unittest
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
