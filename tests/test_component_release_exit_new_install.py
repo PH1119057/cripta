@@ -15,13 +15,13 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "operations/infrastructure"))
+from component_release_exit_legacy_prepare import _fingerprint_venv  # noqa: E402
 from component_release_exit_new_install import (  # noqa: E402
     _readback_prepared_candidate,
     _stage_prepared_candidate,
     _verify_candidate_zip,
     prepare_exit_new_component_once,
 )
-from component_release_exit_legacy_prepare import _fingerprint_venv  # noqa: E402
 
 COMMIT = "a" * 40
 ENTRY = "operations/connectivity/universal_exit_consumer.py"
