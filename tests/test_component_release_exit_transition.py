@@ -265,6 +265,7 @@ class ExitTransactionTests(unittest.TestCase):
             patch("component_release_exit_transition.os.geteuid",
                   return_value=0, create=True),
             patch("component_release_exit_transition._check_sealed_controller_root"),
+            patch("component_release_exit_transition._JOURNAL_PARENT", ROOT),
             patch("component_release_exit_transition._hold_shared_release_lock",
                   return_value=nullcontext()),
             patch("component_release_exit_transition._protected_real_admission",
