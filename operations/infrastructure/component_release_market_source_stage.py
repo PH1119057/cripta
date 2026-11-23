@@ -96,8 +96,33 @@ def _source_exact() -> bytes:
          "GIT_OPTIONAL_LOCKS=0", "/usr/bin/git", "-C", str(_SOURCE),
          "rev-parse", "HEAD"], capture_output=True, text=True, timeout=8,
     )
-    if check.returncode or check.stdout.strip() != SOURCE_SHA:
-        _deny("SOURCE_MAIN_SHA_DRIFT")
+    if (check.returncode or _SHA40.fullmatch(check.stdout.strip()) is None):
+        _deny("SOURCE_MAIN_SHA_INVALID")
+    # A reviewed staging-tool PR is necessarily merged AFTER the executable
+    # component commit. Keep code provenance pinned to SOURCE_SHA but accept
+    # only a descendant HEAD whose live MarketSource/ABI inputs are identical.
+    head = check.stdout.strip()
+    ancestor = subprocess.run(
+        ["/usr/sbin/runuser", "-u", "cripta", "--", "/usr/bin/env",
+         "GIT_OPTIONAL_LOCKS=0", "/usr/bin/git", "-C", str(_SOURCE),
+         "merge-base", "--is-ancestor", SOURCE_SHA, head],
+        capture_output=True, timeout=8,
+    )
+    if ancestor.returncode:
+        _deny("SOURCE_COMMIT_NOT_ANCESTOR")
+    unchanged = subprocess.run(
+        ["/usr/sbin/runuser", "-u", "cripta", "--", "/usr/bin/env",
+         "GIT_OPTIONAL_LOCKS=0", "/usr/bin/git", "-C", str(_SOURCE),
+         "diff", "--name-only", SOURCE_SHA, head, "--",
+         _ADAPTER,
+         "operations/monitoring/native_public_trade_source.py",
+         "src/bybit_workbench/market_data/native_public_trade_journal.py",
+         "src/bybit_workbench/market_identity.py",
+         "operations/systemd/cripta-native-public-trade-source.service"],
+        capture_output=True, timeout=10,
+    )
+    if unchanged.returncode or unchanged.stdout.strip():
+        _deny("SOURCE_EXECUTABLE_TREE_CHANGED_AFTER_PIN")
     dirty = subprocess.run(
         ["/usr/sbin/runuser", "-u", "cripta", "--", "/usr/bin/env",
          "GIT_OPTIONAL_LOCKS=0", "/usr/bin/git", "-C", str(_SOURCE),
