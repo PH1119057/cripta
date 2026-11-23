@@ -17,6 +17,7 @@ from component_release_exit_unit_spec import (  # noqa: E402
 SOURCE_UNIT = ROOT / "operations/systemd/cripta-universal-exit-consumer.service"
 SOURCE_COMMIT = "69c64c0dae722d9e655f7cb4ce103ba434e20054"
 LOCK_SHA = "a" * 64
+SOURCE_COMPAT_COMMIT = "8bd45e9874d6ce811d7261ee152fc2c43729e1b9"
 
 
 class ExitPinnedUnitContractTests(unittest.TestCase):
@@ -28,6 +29,7 @@ class ExitPinnedUnitContractTests(unittest.TestCase):
             source_unit=self.template(),
             component_commit=SOURCE_COMMIT,
             component_lock_sha256=LOCK_SHA,
+            source_compatibility_commit=SOURCE_COMPAT_COMMIT,
         )
 
     def test_exit_unit_has_only_component_pinned_executable_identity(self) -> None:
@@ -50,7 +52,10 @@ class ExitPinnedUnitContractTests(unittest.TestCase):
             "Environment=PYTHONPATH=" + root + "/src:"
             + root + "/operations/connectivity", unit,
         )
-        self.assertIn("Environment=CRIPTA_RELEASE_COMMIT=" + SOURCE_COMMIT, unit)
+        self.assertIn("Environment=CRIPTA_RELEASE_COMMIT=" + SOURCE_COMPAT_COMMIT, unit)
+        self.assertIn("Environment=CRIPTA_EXIT_COMPONENT_COMMIT=" + SOURCE_COMMIT, unit)
+        self.assertEqual(candidate["source_compatibility_commit"], SOURCE_COMPAT_COMMIT)
+        self.assertNotIn("Environment=CRIPTA_RELEASE_COMMIT=" + SOURCE_COMMIT, unit)
         self.assertIn("Environment=CRIPTA_RUNTIME_ROOT=" + root, unit)
         self.assertNotIn("/srv/cripta/runtime/current", unit)
         self.assertNotIn("EnvironmentFile=-/etc/cripta/release.env", unit)
@@ -106,6 +111,7 @@ class ExitPinnedUnitContractTests(unittest.TestCase):
                     source_unit=changed,
                     component_commit=SOURCE_COMMIT,
                     component_lock_sha256=LOCK_SHA,
+                    source_compatibility_commit=SOURCE_COMPAT_COMMIT,
                 )
 
     def test_unknown_sha_or_hash_never_prepares_a_unit(self) -> None:
@@ -120,8 +126,36 @@ class ExitPinnedUnitContractTests(unittest.TestCase):
                     source_unit=self.template(),
                     component_commit=sha,
                     component_lock_sha256=digest,
+                    source_compatibility_commit=SOURCE_COMPAT_COMMIT,
                 )
 
+
+
+    def test_unregistered_or_malformed_source_compatibility_identity_denied(
+        self,
+    ) -> None:
+        for source in ("", "g" * 40, "../config", "b" * 39):
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                build_exit_unit_candidate(
+                    source_unit=self.template(),
+                    component_commit=SOURCE_COMMIT,
+                    component_lock_sha256=LOCK_SHA,
+                    source_compatibility_commit=source,
+                )
+
+    def test_source_compatibility_identity_not_inferred_from_new_component(
+        self,
+    ) -> None:
+        # This test reproduces the production defect: new component SHA is
+        # not registered for the P90 source epoch, whereas the legacy
+        # streaming-consumer release SHA is approved.
+        result = self.candidate()
+        self.assertNotEqual(result["source_commit"],
+                            result["source_compatibility_commit"])
+        self.assertIn("Environment=CRIPTA_RELEASE_COMMIT=" +
+                      SOURCE_COMPAT_COMMIT, result["unit_text"])
+        self.assertIn("Environment=CRIPTA_EXIT_COMPONENT_COMMIT=" +
+                      SOURCE_COMMIT, result["unit_text"])
 
     def test_root_parent_is_not_controlled_by_runtime_actor(self) -> None:
         # Synthetic metadata only; passing is NOT host ownership proof.
