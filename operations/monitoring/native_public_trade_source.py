@@ -33,6 +33,9 @@ from bybit_workbench.market_data.native_public_trade_journal import (
 from bybit_workbench.market_data.market_source_public_candles import (
     decode_confirmed_bybit_klines,
 )
+from bybit_workbench.market_data.public_source_second_store import (
+    PublicSourceSecondUnavailable,
+)
 from bybit_workbench.market_data.market_publication import (
     publish_market_source_second,
 )
@@ -70,6 +73,39 @@ _ALLOWED_SYMBOLS = frozenset(
     if part.strip()
 )
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+_RECOVERABLE_LINEAR_TRANSPORT_FAULTS = frozenset({
+    "FULL",
+    "WEBSOCKETCONNECTIONCLOSEDEXCEPTION",
+    "PUBLIC_FEED_STREAM_CLOSED",
+    "PUBLIC_FEED_TRANSPORT_HEARTBEAT_LOST",
+    "CONNECTIONRESETERROR",
+    "BROKENPIPEERROR",
+    "TIMEOUTERROR",
+    "OSERROR",
+})
+_REQUIRED_LINEAR_FAILURE = (
+    "PUBLIC_FEED_TRANSPORT_FAILED:PUBLIC_LINEAR_TRANSPORT_FATAL_"
+)
+
+
+def _recoverable_required_linear_transport(
+    exc: PublicSourceSecondUnavailable,
+) -> bool:
+    """Only a durable-GAP union transport exit can retry under ONE PG owner.
+
+    The union's exception boundary marks the old native source session GAP
+    before raising. It never reuses its previous frame/seq/exec ID cursor.
+    Scope/decoder/DB/candle/ABI errors remain terminal, never a reconnect.
+    """
+    code = str(exc)
+    return (
+        type(exc) is PublicSourceSecondUnavailable
+        and code.startswith(_REQUIRED_LINEAR_FAILURE)
+        and code[len(_REQUIRED_LINEAR_FAILURE):]
+        in _RECOVERABLE_LINEAR_TRANSPORT_FAULTS
+    )
+
+
 _SYMBOL = re.compile(r"^[A-Z0-9]{2,32}$")
 # Both optional paths are INERT in the existing installed source and default
 # OFF in any future release. Enabling either is a separate, proven source
@@ -775,6 +811,16 @@ def main() -> int:
                         closed_only=capture_closed,
                         should_stop=lambda: stopping,
                     )
+            except PublicSourceSecondUnavailable as exc:
+                if union is None or not _recoverable_required_linear_transport(exc):
+                    _status("BLOCKED", reason="PRODUCER_DATABASE_OR_SOURCE_INVALID")
+                    raise
+                # run_source_union() has already fsynced the old session GAP,
+                # ended its threads and closed the old WS. The existing
+                # advisory lock/DB connection survives this narrow retry.
+                if stopping:
+                    break
+                time.sleep(2.0)
             except (websocket.WebSocketException, OSError, TimeoutError,
                     NativeSourceInputUnverified):
                 if stopping:
