@@ -117,26 +117,33 @@ def _read_cr_session() -> dict[str, object]:
     return result
 
 
+_GAP_PROBE = """
+import json,sys,psycopg
+with psycopg.connect(
+    "dbname=cripta user=cripta host=/var/run/postgresql connect_timeout=5 "
+    "options='-c default_transaction_read_only=on'",
+) as c:
+    row=c.execute(
+        "SELECT state,ended_at FROM analytics.native_public_trade_source_sessions "
+        "WHERE source_session_id=%s",(sys.argv[1],),
+    ).fetchone()
+    print(json.dumps({
+        "state":row[0] if row else None,
+        "ended_at":row[1].isoformat() if row and row[1] else None,
+    }))
+"""
+
+
 def _prove_old_source_gap(session: str) -> None:
     if re.fullmatch(r"[a-f0-9]{32}",session) is None:
         _deny("OLD_EPOCH_IDENTITY_INVALID")
-    code = (
-        "import psycopg; "
-        "with psycopg.connect("
-        "'dbname=cripta user=cripta host=/var/run/postgresql "
-        "connect_timeout=5 options=-c\\\\ default_transaction_read_only=on'"
-        ") as c: "
-        " print(c.execute("
-        "'SELECT state,ended_at FROM analytics.native_public_trade_source_sessions "
-        "WHERE source_session_id=%s',(" + repr(session) + ",)).fetchone())"
-    )
-    # Use the same role-bound PostgreSQL SELECT actor as the running recorder.
-    argv = [
-        "/usr/sbin/runuser", "-u", "cripta", "--",
-        str(_OLD_CODE / ".venv/bin/python"), "-B", "-c", code,
-    ]
-    actual = _command(*argv, timeout=18)
-    if not actual.startswith("('GAP', datetime.datetime("):
+    result=json.loads(_command(
+        "/usr/sbin/runuser", "-u", "cripta", "--", "/usr/bin/env",
+        "PYTHONDONTWRITEBYTECODE=1",
+        str(_OLD_CODE / ".venv/bin/python"), "-B",
+        "-c", _GAP_PROBE, session, timeout=20,
+    ))
+    if result != {"state":"GAP","ended_at":result.get("ended_at")} or not isinstance(result.get("ended_at"),str):
         _deny("OLD_SOURCE_SESSION_GAP_NOT_PROVEN")
 
 
