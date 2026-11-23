@@ -301,6 +301,8 @@ class BybitGapArchivePriceWitness:
     """Price evidence across a missing source interval; NEVER WS continuity."""
 
     symbol: str
+    old_source_session_id: str
+    new_source_session_id: str
     archive_day: date
     gap_start_ms: int
     gap_end_ms: int
@@ -327,6 +329,8 @@ def audit_bybit_archived_gap_price_witness(
     gap_start: datetime,
     gap_end: datetime,
     checked_at: datetime,
+    old_source_session_id: str,
+    new_source_session_id: str,
     old_native_anchor: tuple[str, NativePriceFields],
     new_native_anchor: tuple[str, NativePriceFields],
     expected_archive_sha256: str,
@@ -344,6 +348,14 @@ def audit_bybit_archived_gap_price_witness(
         and isinstance(archive_day, date)
         and not isinstance(archive_day, datetime),
         "GAP_SCOPE_INVALID",
+    )
+    _need(
+        isinstance(old_source_session_id, str)
+        and _SESSION.fullmatch(old_source_session_id) is not None
+        and isinstance(new_source_session_id, str)
+        and _SESSION.fullmatch(new_source_session_id) is not None
+        and old_source_session_id != new_source_session_id,
+        "GAP_SESSIONS_NOT_DISTINCT",
     )
     start, end, now = (_millis(x) for x in (gap_start, gap_end, checked_at))
     day_start = _millis(datetime.combine(archive_day, time.min, tzinfo=UTC))
@@ -437,6 +449,8 @@ def audit_bybit_archived_gap_price_witness(
     _need(count > 0 and low is not None and high is not None, "GAP_NOT_OBSERVED")
     return BybitGapArchivePriceWitness(
         symbol=symbol,
+        old_source_session_id=old_source_session_id,
+        new_source_session_id=new_source_session_id,
         archive_day=archive_day,
         gap_start_ms=start,
         gap_end_ms=end,
