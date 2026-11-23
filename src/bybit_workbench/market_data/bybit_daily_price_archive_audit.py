@@ -294,3 +294,157 @@ def audit_bybit_daily_price_archive(
         exit_ready=False,
         reason="INDEPENDENT_OFFICIAL_ARCHIVE_ISSUER_AND_COVERAGE_ATTESTATION_MISSING",
     )
+
+
+@dataclass(frozen=True, slots=True)
+class BybitGapArchivePriceWitness:
+    """Price evidence across a missing source interval; NEVER WS continuity."""
+
+    symbol: str
+    archive_day: date
+    gap_start_ms: int
+    gap_end_ms: int
+    compressed_sha256: str
+    daily_trade_count: int
+    gap_trade_count: int
+    gap_low: Decimal
+    gap_high: Decimal
+    old_native_anchor_matched: bool
+    new_native_anchor_matched: bool
+    archive_issuer_verified: bool = False
+    native_sequence_continuity_verified: bool = False
+    producer_source_session_reconstructed: bool = False
+    exit_ready: bool = False
+    financial_mutation_authorized: bool = False
+    status: str = "HISTORICAL_GAP_PRICE_WITNESS_ONLY"
+
+
+def audit_bybit_archived_gap_price_witness(
+    archive_path: Path,
+    *,
+    symbol: str,
+    archive_day: date,
+    gap_start: datetime,
+    gap_end: datetime,
+    checked_at: datetime,
+    old_native_anchor: tuple[str, NativePriceFields],
+    new_native_anchor: tuple[str, NativePriceFields],
+    expected_archive_sha256: str,
+    max_archive_rows: int,
+) -> BybitGapArchivePriceWitness:
+    """Bounded full-day gzip CRC audit of a *disjoint* historical source gap.
+
+    Anchor values must come independently from immutable original sessions;
+    the caller must verify their provenance and the official archive issuer.
+    No original WS seq exists in the CSV. This read-only function does NOT
+    bridge sessions, modify MFE or allow any Exit/Entry/trading decision.
+    """
+    _need(
+        isinstance(symbol, str) and _SYMBOL.fullmatch(symbol) is not None
+        and isinstance(archive_day, date)
+        and not isinstance(archive_day, datetime),
+        "GAP_SCOPE_INVALID",
+    )
+    start, end, now = (_millis(x) for x in (gap_start, gap_end, checked_at))
+    day_start = _millis(datetime.combine(archive_day, time.min, tzinfo=UTC))
+    day_end = _millis(
+        datetime.combine(archive_day, time.min, tzinfo=UTC)
+        + timedelta(days=1)
+    )
+    _need(
+        day_start <= start < end < day_end <= now
+        and 1 <= max_archive_rows <= _MAX_ARCHIVE_ROWS,
+        "GAP_TIME_OR_BUDGET_INVALID",
+    )
+    _need(
+        isinstance(expected_archive_sha256, str)
+        and re.fullmatch(r"[0-9a-f]{64}", expected_archive_sha256) is not None,
+        "GAP_ARCHIVE_DIGEST_REQUIRED",
+    )
+    anchors: dict[str, NativePriceFields] = {}
+    for value in (old_native_anchor, new_native_anchor):
+        _need(
+            isinstance(value, tuple) and len(value) == 2
+            and isinstance(value[0], str) and bool(value[0])
+            and isinstance(value[1], tuple) and len(value[1]) == 4
+            and type(value[1][0]) is int and day_start <= value[1][0] < day_end
+            and isinstance(value[1][1], Decimal)
+            and isinstance(value[1][2], Decimal)
+            and value[1][1].is_finite() and value[1][1] > 0
+            and value[1][2].is_finite() and value[1][2] > 0
+            and value[1][3] in ("Buy", "Sell"),
+            "GAP_ORIGINAL_ANCHOR_INVALID",
+        )
+        anchors[value[0]] = value[1]
+    _need(
+        len(anchors) == 2
+        and old_native_anchor[1][0] == start
+        and new_native_anchor[1][0] == end,
+        "GAP_ANCHOR_BOUNDARY_MISMATCH",
+    )
+    _need(
+        isinstance(archive_path, Path) and archive_path.is_file()
+        and archive_path.name == f"{symbol}{archive_day.isoformat()}.csv.gz"
+        and 0 < archive_path.stat().st_size <= _MAX_ARCHIVE_BYTES,
+        "GAP_ARCHIVE_FILE_INVALID",
+    )
+    digest = hashlib.sha256()
+    with archive_path.open("rb") as f:
+        for part in iter(lambda: f.read(1_048_576), b""):
+            digest.update(part)
+    _need(digest.hexdigest() == expected_archive_sha256, "GAP_ARCHIVE_HASH_DRIFT")
+
+    seen_ids: set[str] = set()
+    found_anchors: set[str] = set()
+    previous_ms: int | None = None
+    total = 0
+    count = 0
+    low: Decimal | None = None
+    high: Decimal | None = None
+    try:
+        with gzip.open(archive_path, "rt", encoding="utf-8", newline="") as source:
+            reader = csv.DictReader(source)
+            _need(
+                reader.fieldnames is not None
+                and _REQUIRED_FIELDS.issubset(reader.fieldnames)
+                and len(reader.fieldnames) == len(set(reader.fieldnames)),
+                "GAP_ARCHIVE_HEADER_INVALID",
+            )
+            for raw in reader:
+                total += 1
+                _need(total <= max_archive_rows, "GAP_ROW_LIMIT")
+                ms, ident, price, qty, side = _row(raw, symbol=symbol)
+                _need(day_start <= ms < day_end, "GAP_WRONG_UTC_DAY")
+                _need(previous_ms is None or ms >= previous_ms, "GAP_TIME_ORDER")
+                _need(ident not in seen_ids, "GAP_DUPLICATE_TRADE_ID")
+                previous_ms = ms
+                seen_ids.add(ident)
+                if ident in anchors:
+                    _need(
+                        anchors[ident] == (ms, price, qty, side),
+                        "GAP_NATIVE_ANCHOR_DRIFT",
+                    )
+                    found_anchors.add(ident)
+                if start < ms < end:
+                    count += 1
+                    low = price if low is None else min(low, price)
+                    high = price if high is None else max(high, price)
+    except (OSError, EOFError, UnicodeError, csv.Error, zlib.error):
+        raise BybitDailyPriceArchiveUnverified(
+            "BYBIT_DAILY_PRICE_ARCHIVE_GAP_GZIP_INCOMPLETE"
+        ) from None
+    _need(found_anchors == set(anchors), "GAP_NATIVE_ANCHOR_MISSING")
+    _need(count > 0 and low is not None and high is not None, "GAP_NOT_OBSERVED")
+    return BybitGapArchivePriceWitness(
+        symbol=symbol,
+        archive_day=archive_day,
+        gap_start_ms=start,
+        gap_end_ms=end,
+        compressed_sha256=digest.hexdigest(),
+        daily_trade_count=total,
+        gap_trade_count=count,
+        gap_low=low,
+        gap_high=high,
+        old_native_anchor_matched=True,
+        new_native_anchor_matched=True,
+    )
