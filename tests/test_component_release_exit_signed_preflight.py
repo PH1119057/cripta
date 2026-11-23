@@ -6,10 +6,10 @@ Synthetic proofs NEVER grant release or financial authorization.
 from __future__ import annotations
 
 import copy
-from decimal import Decimal
 import sys
 import unittest
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
