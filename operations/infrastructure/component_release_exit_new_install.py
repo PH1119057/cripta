@@ -22,6 +22,7 @@ import zipfile
 from pathlib import Path
 
 from component_release_exit_legacy_prepare import (
+    OLD_EXIT_COMMIT,
     _ISOLATED_VENV_FINGERPRINT,
     _PYTHON_LINKS,
     _VENV,
@@ -481,6 +482,7 @@ def prepare_exit_new_component_once() -> dict[str, object]:
             source_unit=unit_source.decode("utf-8"),
             component_commit=_COMMIT,
             component_lock_sha256=_LOCK_SHA256,
+            source_compatibility_commit=OLD_EXIT_COMMIT,
         )
         if (
             proposal.get("status") != "STAGED_ONLY_NOT_DEPLOYABLE"
