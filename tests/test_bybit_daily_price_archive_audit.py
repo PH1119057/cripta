@@ -12,8 +12,8 @@ import pytest
 
 from bybit_workbench.market_data.bybit_daily_price_archive_audit import (
     BybitDailyPriceArchiveUnverified,
-    audit_bybit_daily_price_archive,
     audit_bybit_archived_gap_price_witness,
+    audit_bybit_daily_price_archive,
 )
 
 DAY = date(2026, 11, 8)
