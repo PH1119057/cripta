@@ -113,6 +113,40 @@ def _linear_transport_failure_reason(exc: Exception) -> str:
     return ("PUBLIC_LINEAR_TRANSPORT_FATAL_" + suffix)[:127]
 
 
+
+_RECOVERABLE_REQUIRED_LINEAR_CODES = frozenset({
+    "FULL",
+    "WEBSOCKETCONNECTIONCLOSEDEXCEPTION",
+    "PUBLIC_FEED_STREAM_CLOSED",
+    "PUBLIC_FEED_TRANSPORT_HEARTBEAT_LOST",
+    "CONNECTIONRESETERROR",
+    "BROKENPIPEERROR",
+    "TIMEOUTERROR",
+    "OSERROR",
+})
+_REQUIRED_LINEAR_FAILED = (
+    "PUBLIC_FEED_TRANSPORT_FAILED:PUBLIC_LINEAR_TRANSPORT_FATAL_"
+)
+
+
+def _recoverable_required_linear_transport_gap(exc: Exception) -> bool:
+    """Only a durable native session GAP from an exact transient transport.
+
+    The one-writer native main loop already retries NativeSourceInputUnverified
+    after 2 seconds. This adapter must not extend that retry permission to
+    malformed provider data, PostgreSQL, unknown/mixed errors or failed GAP
+    persistence. A new successful subscription gets a NEW source_session_id.
+    """
+    code = str(exc)
+    return (
+        type(exc) is PublicSourceSecondUnavailable
+        and code.startswith(_REQUIRED_LINEAR_FAILED)
+        and code[len(_REQUIRED_LINEAR_FAILED):]
+        in _RECOVERABLE_REQUIRED_LINEAR_CODES
+    )
+
+
+
 def _enqueue_source_frame(
     required_pipe: queue.Queue[_SourceFrame],
     optional_pipe: queue.Queue[_SourceFrame],
@@ -1568,6 +1602,14 @@ def run_source_union(
         native._status(
             "RECONNECTING", session=session, reason=type(exc).__name__,
         )
+        if _recoverable_required_linear_transport_gap(exc):
+            # The GAP is committed before this typed handoff. The single
+            # native main() advisory-lock owner already retries this exact
+            # exception class without changing producer ABI, trading/arm,
+            # provider seq, original refs or source-session identity.
+            raise native.NativeSourceInputUnverified(
+                "NATIVE_SOURCE_REQUIRED_LINEAR_RECONNECT_AFTER_GAP"
+            ) from exc
         raise
     finally:
         done.set()
