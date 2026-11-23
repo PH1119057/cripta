@@ -5,8 +5,11 @@ host adapter. No actual systemd calls or production file writes are made.
 """
 from __future__ import annotations
 
+import json
 import sys
 import unittest
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,7 +19,10 @@ sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 from component_release_exit_transition import (  # noqa: E402
     _EXIT_UNIT,
     _HostExitUnitIO,
+    _SOURCE,
+    _collect_credential_local_exit_snapshot,
     _run_exit_only_transition,
+    _validate_flat_exit_status,
     exit_only_cutover_once,
 )
 
@@ -215,6 +221,139 @@ class ExitTransactionTests(unittest.TestCase):
         ):
             exit_only_cutover_once()
         adapter.assert_not_called()
+
+    def test_real_signed_child_transport_has_no_shell_and_denies_untrusted(self) -> None:
+        program_state = {
+            "state": "SIGNED_MAIN_SUB_GET_CONSISTENCY_PASS",
+            "position_exit_plan_alignment":
+                "SIGNED_POSITION_EXIT_PLAN_DB_ALIGNMENT_PASS",
+            "release_authorized": False,
+            "financial_mutation_authorized": False,
+            "runtime_behavior_verified": False,
+            "existing_position_recovery_snapshot": {
+                "state": "SIGNED_EXIT_POSITION_SNAPSHOT_READ_ONLY",
+            },
+        }
+        reader = SimpleNamespace(
+            returncode=0, stderr="", stdout=json.dumps(program_state),
+        )
+        with (
+            patch("component_release_exit_transition.sys.platform", "linux"),
+            patch("component_release_exit_transition.os.geteuid", return_value=0),
+            patch("component_release_exit_transition.subprocess.run",
+                  return_value=reader) as run,
+        ):
+            report = _collect_credential_local_exit_snapshot()
+        self.assertEqual(
+            report["state"], "SIGNED_EXIT_POSITION_SNAPSHOT_READ_ONLY",
+        )
+        args, kwargs = run.call_args
+        self.assertEqual(args[0][:5], [
+            "/usr/sbin/runuser", "-u", "cripta", "--",
+            "/srv/cripta/runtime/current/.venv/bin/python",
+        ])
+        self.assertFalse(kwargs.get("shell", False))
+        self.assertEqual(kwargs["cwd"], "/srv/cripta/source_checkout")
+        self.assertNotIn("sudo", args[0])
+        reader.returncode = 1
+        with (
+            patch("component_release_exit_transition.sys.platform", "linux"),
+            patch("component_release_exit_transition.os.geteuid", return_value=0),
+            patch("component_release_exit_transition.subprocess.run",
+                  return_value=reader),
+            self.assertRaisesRegex(RuntimeError, "SIGNED_READ_BLOCKED"),
+        ):
+            _collect_credential_local_exit_snapshot()
+        with (
+            patch("component_release_exit_transition.sys.platform", "linux"),
+            patch("component_release_exit_transition.os.geteuid", return_value=1000),
+            self.assertRaisesRegex(ValueError, "ROOT_LINUX_REQUIRED"),
+        ):
+            _collect_credential_local_exit_snapshot()
+
+    def test_flat_consumer_heartbeat_requires_new_start_and_safe_source(self) -> None:
+        now = datetime(2026, 11, 23, 14, 0, 10, tzinfo=UTC)
+        status = {
+            "service": "p90_r06_exit_owner",
+            "state": "P90_R06_EXIT_OWNER_READY_FLAT",
+            "result": "P90_R06_EXIT_OWNER_READY_FLAT",
+            "release_commit": _SOURCE,
+            "p90_r06_exit_owner": "ENABLED",
+            "generic_consumer": "DISABLED",
+            "observed_at": (now - timedelta(seconds=2)).isoformat(),
+            "error": None,
+        }
+        _validate_flat_exit_status(
+            status, observed_at=now, not_before=now - timedelta(seconds=5),
+        )
+        for name, change in (
+            ("stale", {"observed_at":
+                       (now - timedelta(seconds=25)).isoformat()}),
+            ("old-process", {"observed_at":
+                             (now - timedelta(seconds=4)).isoformat()}),
+            ("bad-commit", {"release_commit": "f" * 40}),
+            ("false-ready", {"state": "P90_R06_EXIT_OWNER_RUNNING"}),
+            ("error", {"error": "P90_R06_EXIT_SOURCE_DRIFT"}),
+            ("legacy-enable", {"generic_consumer": "ENABLED"}),
+        ):
+            with self.subTest(name=name), self.assertRaises(RuntimeError):
+                _validate_flat_exit_status(
+                    {**status, **change},
+                    observed_at=now, not_before=now - timedelta(seconds=3),
+                )
+
+    def test_host_post_restart_requires_same_signed_main_sub_and_new_ready(self) -> None:
+        now = datetime.now(UTC)
+        before = {
+            "state": "SIGNED_EXIT_POSITION_SNAPSHOT_READ_ONLY",
+            "observed_at": (now - timedelta(seconds=4)).isoformat(),
+            "account_position_counts": {"MAIN": 0, "SUB": 0},
+            "account_position_identity_and_protection_sha256": {
+                "MAIN": "a" * 64, "SUB": "b" * 64,
+            },
+            "immutable_exit_plan_lineage_checked": True,
+            "release_authorized": False, "rollback_ready": False,
+            "runtime_behavior_verified": False,
+            "financial_mutation_authorized": False,
+        }
+        after = dict(
+            before, observed_at=(now - timedelta(seconds=1)).isoformat(),
+        )
+        status = {
+            "service": "p90_r06_exit_owner",
+            "state": "P90_R06_EXIT_OWNER_READY_FLAT",
+            "result": "P90_R06_EXIT_OWNER_READY_FLAT",
+            "release_commit": _SOURCE,
+            "p90_r06_exit_owner": "ENABLED",
+            "generic_consumer": "DISABLED",
+            "observed_at": now.isoformat(),
+            "error": None,
+        }
+        adapter = object.__new__(_HostExitUnitIO)
+        adapter._pre_signed_snapshot = before
+        adapter._restart_started_at = now - timedelta(seconds=3)
+        with (
+            patch("component_release_exit_transition._collect_credential_local_exit_snapshot",
+                  return_value=after),
+            patch("component_release_exit_transition._read_protected_exit_status",
+                  return_value=status),
+        ):
+            adapter.verify_signed_and_recovery()
+        drift = dict(
+            after,
+            account_position_identity_and_protection_sha256={
+                "MAIN": "c" * 64, "SUB": "b" * 64,
+            },
+        )
+        with (
+            patch("component_release_exit_transition._collect_credential_local_exit_snapshot",
+                  return_value=drift),
+            self.assertRaisesRegex(ValueError, "PROTECTION_DRIFT"),
+        ):
+            adapter.verify_signed_and_recovery()
+        adapter._pre_signed_snapshot = None
+        with self.assertRaisesRegex(RuntimeError, "BASELINE_MISSING"):
+            adapter.verify_signed_and_recovery()
 
     def test_host_io_only_exact_exit_unit_is_written_or_restarted(self) -> None:
         import inspect
