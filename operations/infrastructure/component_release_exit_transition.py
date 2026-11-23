@@ -29,9 +29,13 @@ from component_release_exit_owner_preflight import (
     _snapshot_units,
     _sub_private_units,
 )
+from component_release_exit_root_bootstrap import (
+    _EXIT_JOURNAL,
+    inspect_exit_journal_root_once,
+)
 
 _UNIT_PARENT = Path("/etc/systemd/system")
-_JOURNAL_PARENT = Path("/var/lib/cripta/release/exit_transactions")
+_JOURNAL_PARENT = _EXIT_JOURNAL
 _JOURNAL_NAME = "exit-only-current.jsonl"
 _MAX_UNIT_BYTES = 16 * 1024
 _SYSTEMCTL = "/usr/bin/systemctl"
@@ -396,6 +400,11 @@ class _RootAppendFsyncJournal:
     def __init__(self) -> None:
         if sys.platform != "linux" or os.geteuid() != 0:
             _deny("ROOT_LINUX_REQUIRED")
+        if (
+            inspect_exit_journal_root_once().get("state")
+            != "PROTECTED_EXIT_JOURNAL_ROOT_READY_READ_ONLY"
+        ):
+            _deny("JOURNAL_ROOT_UNTRUSTED_ANCESTRY")
         stat_dir = _JOURNAL_PARENT.lstat()
         if (
             not stat.S_ISDIR(stat_dir.st_mode)
