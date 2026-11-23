@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -261,6 +262,11 @@ class ExitTransactionTests(unittest.TestCase):
         self.assertEqual(exit_only_cutover_once.__code__.co_argcount, 0)
         with (
             patch("component_release_exit_transition.sys.platform", "linux"),
+            patch("component_release_exit_transition.os.geteuid",
+                  return_value=0, create=True),
+            patch("component_release_exit_transition._check_sealed_controller_root"),
+            patch("component_release_exit_transition._hold_shared_release_lock",
+                  return_value=nullcontext()),
             patch("component_release_exit_transition._protected_real_admission",
                   side_effect=ValueError("EXIT_TRANSITION_RELEASE_NOT_MERGED")),
             patch("component_release_exit_transition._HostExitUnitIO") as adapter,
@@ -397,6 +403,7 @@ class ExitTransactionTests(unittest.TestCase):
                   return_value=after),
             patch("component_release_exit_transition._read_protected_exit_status",
                   return_value=status),
+            patch("component_release_exit_transition._check_flat_new_entry_inhibited"),
         ):
             adapter.verify_signed_and_recovery()
         drift = dict(
@@ -408,6 +415,7 @@ class ExitTransactionTests(unittest.TestCase):
         with (
             patch("component_release_exit_transition._collect_credential_local_exit_snapshot",
                   return_value=drift),
+            patch("component_release_exit_transition._check_flat_new_entry_inhibited"),
             self.assertRaisesRegex(ValueError, "PROTECTION_DRIFT"),
         ):
             adapter.verify_signed_and_recovery()
