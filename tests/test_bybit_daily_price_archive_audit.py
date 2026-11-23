@@ -233,6 +233,8 @@ def _gap_audit(path, **changes):
         "gap_start": START - timedelta(seconds=1),
         "gap_end": START + timedelta(seconds=4),
         "checked_at": CHECKED,
+        "old_source_session_id": "a" * 32,
+        "new_source_session_id": "b" * 32,
         "old_native_anchor": ("before", old),
         "new_native_anchor": ("after", new),
         "expected_archive_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -249,6 +251,8 @@ def test_disjoint_historical_archive_price_witness_never_grants_exit(tmp_path):
     assert witness.gap_low == Decimal("0.1710")
     assert witness.gap_high == Decimal("0.1730")
     assert witness.old_native_anchor_matched
+    assert witness.old_source_session_id == "a" * 32
+    assert witness.new_source_session_id == "b" * 32
     assert witness.new_native_anchor_matched
     assert witness.status == "HISTORICAL_GAP_PRICE_WITNESS_ONLY"
     assert not witness.archive_issuer_verified
@@ -313,6 +317,8 @@ def test_disjoint_gap_price_witness_fails_closed(tmp_path, fault):
     {"gap_end": START - timedelta(seconds=2)},
     {"symbol": "BTCUSDT"},
     {"expected_archive_sha256": "NOT_A_SHA"},
+    {"old_source_session_id": "bad-session"},
+    {"new_source_session_id": "a" * 32},
 ])
 def test_disjoint_gap_scope_rejects_nonfinal_untrusted_input(tmp_path, changes):
     path = _write(tmp_path)
