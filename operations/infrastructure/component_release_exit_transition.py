@@ -19,7 +19,7 @@ import os
 import stat
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from component_release_exit_owner_preflight import (
@@ -29,6 +29,13 @@ from component_release_exit_owner_preflight import (
     _snapshot_units,
     _sub_private_units,
 )
+from component_release_exit_process_readback import (
+    collect_exit_process_readback,
+)
+from component_release_exit_signed_preflight import (
+    _compare_recovery_snapshots,
+)
+from component_release_exit_unit_binding import _COMPONENT, _SOURCE
 from component_release_exit_root_bootstrap import (
     _EXIT_JOURNAL,
     inspect_exit_journal_root_once,
@@ -47,6 +54,25 @@ _STATES = frozenset({
     "OLD_ACTIVE", "OLD_STOPPED", "NEW_ACTIVE", "NEW_STOPPED",
 })
 _ACTION_TIMEOUT = 30
+
+_EXIT_STATUS = Path("/var/lib/cripta-p90-r06-exit/status.json")
+_SIGNED_READER_TIMEOUT = 35
+_SIGNED_SOURCE_ENV = {
+    "PATH": "/usr/bin:/bin",
+    "LANG": "C.UTF-8",
+    "PYTHONPATH": (
+        "/srv/cripta/source_checkout/src:"
+        "/srv/cripta/source_checkout/operations/infrastructure:"
+        "/srv/cripta/source_checkout/operations/connectivity"
+    ),
+}
+_SIGNED_GET_PROGRAM = (
+    "import json; "
+    "from component_release_exit_signed_preflight "
+    "import collect_current_signed_exit_preflight_once; "
+    "print(json.dumps(collect_current_signed_exit_preflight_once(), "
+    "sort_keys=True))"
+)
 
 
 def _deny(code: str) -> None:
@@ -184,6 +210,147 @@ def _run_exit_only_transition(
         return _result("EXIT_OLD_RECOVERED_AFTER_FAILURE", rollback_verified=True)
 
 
+
+def _collect_credential_local_exit_snapshot() -> dict[str, object]:
+    """Exactly one cripta-UID signed GET + PostgreSQL READ ONLY, no shell.
+
+    No credentials are shared with the root release owner. Output is a
+    short-lived *untrusted* snapshot until independently cross-checked.
+    """
+    if sys.platform != "linux" or os.geteuid() != 0:
+        _deny("ROOT_LINUX_REQUIRED")
+    try:
+        result = subprocess.run(
+            [
+                "/usr/sbin/runuser", "-u", "cripta", "--",
+                "/srv/cripta/runtime/current/.venv/bin/python", "-B",
+                "-c", _SIGNED_GET_PROGRAM,
+            ],
+            env=_SIGNED_SOURCE_ENV,
+            cwd="/srv/cripta/source_checkout",
+            check=False, capture_output=True, text=True,
+            timeout=_SIGNED_READER_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError("EXIT_SIGNED_READ_OUTCOME_UNKNOWN") from exc
+    if (
+        result.returncode != 0 or result.stderr
+        or not 0 < len(result.stdout) <= 16 * 1024
+    ):
+        raise RuntimeError("EXIT_CREDENTIAL_LOCAL_SIGNED_READ_BLOCKED")
+    try:
+        output = json.loads(result.stdout)
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError("EXIT_SIGNED_READ_JSON_UNTRUSTED") from exc
+    if (
+        not isinstance(output, dict)
+        or output.get("state") != "SIGNED_MAIN_SUB_GET_CONSISTENCY_PASS"
+        or output.get("position_exit_plan_alignment")
+        != "SIGNED_POSITION_EXIT_PLAN_DB_ALIGNMENT_PASS"
+        or output.get("release_authorized") is not False
+        or output.get("financial_mutation_authorized") is not False
+        or output.get("runtime_behavior_verified") is not False
+        or not isinstance(output.get("existing_position_recovery_snapshot"), dict)
+    ):
+        raise RuntimeError("EXIT_SIGNED_READ_PROVENANCE_UNVERIFIED")
+    return output["existing_position_recovery_snapshot"]
+
+
+def _read_protected_exit_status() -> dict[str, object]:
+    """Read only the one existing cripta-owned status file with no symlinks."""
+    if sys.platform != "linux" or os.geteuid() != 0:
+        _deny("ROOT_LINUX_REQUIRED")
+    import grp
+    import pwd
+
+    cripta_uid = pwd.getpwnam("cripta").pw_uid
+    cripta_gid = grp.getgrnam("cripta").gr_gid
+    parent = _EXIT_STATUS.parent
+    info = parent.lstat()
+    if (
+        parent.is_symlink()
+        or not stat.S_ISDIR(info.st_mode)
+        or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode))
+        != (cripta_uid, cripta_gid, 0o750)
+    ):
+        raise RuntimeError("EXIT_STATUS_PARENT_UNTRUSTED")
+    fd = os.open(
+        _EXIT_STATUS,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        file_info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(file_info.st_mode)
+            or file_info.st_nlink != 1
+            or (file_info.st_uid, file_info.st_gid,
+                stat.S_IMODE(file_info.st_mode))
+            != (cripta_uid, cripta_gid, 0o644)
+            or not 0 < file_info.st_size <= 4096
+        ):
+            raise RuntimeError("EXIT_STATUS_FILE_UNTRUSTED")
+        with os.fdopen(os.dup(fd), "rb") as stream:
+            raw = stream.read(4097)
+        if len(raw) != file_info.st_size:
+            raise RuntimeError("EXIT_STATUS_CHANGED_DURING_READ")
+    finally:
+        os.close(fd)
+    try:
+        payload = json.loads(raw)
+    except (UnicodeError, ValueError) as exc:
+        raise RuntimeError("EXIT_STATUS_JSON_INVALID") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("EXIT_STATUS_JSON_INVALID")
+    return payload
+
+
+def _validate_flat_exit_status(
+    status: object, *, observed_at: datetime,
+    not_before: datetime | None,
+) -> None:
+    """A fresh READY_FLAT heartbeat; never used as open-position E2E proof."""
+    if not isinstance(status, dict):
+        raise RuntimeError("EXIT_STATUS_UNTRUSTED")
+    required = {
+        "service", "state", "result", "release_commit",
+        "p90_r06_exit_owner", "generic_consumer", "observed_at", "error",
+    }
+    if not required.issubset(status) or not set(status).issubset(
+        required | {"recovery_result"}
+    ):
+        raise RuntimeError("EXIT_STATUS_SHAPE_UNTRUSTED")
+    if any((
+        status.get("service") != "p90_r06_exit_owner",
+        status.get("state") != "P90_R06_EXIT_OWNER_READY_FLAT",
+        status.get("result") != "P90_R06_EXIT_OWNER_READY_FLAT",
+        status.get("release_commit") != _SOURCE,
+        status.get("p90_r06_exit_owner") != "ENABLED",
+        status.get("generic_consumer") != "DISABLED",
+        status.get("error") is not None,
+        not isinstance(observed_at, datetime),
+        observed_at.tzinfo is None,
+        observed_at.utcoffset() is None,
+    )):
+        raise RuntimeError("EXIT_RUNTIME_READY_FLAT_NOT_PROVEN")
+    try:
+        heartbeat = datetime.fromisoformat(status["observed_at"])
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("EXIT_HEARTBEAT_TIMESTAMP_UNTRUSTED") from exc
+    if heartbeat.tzinfo is None or heartbeat.utcoffset() is None:
+        raise RuntimeError("EXIT_HEARTBEAT_TIMESTAMP_UNTRUSTED")
+    delta = (observed_at.astimezone(UTC) - heartbeat.astimezone(UTC)).total_seconds()
+    if not 0 <= delta <= 20:
+        raise RuntimeError("EXIT_HEARTBEAT_STALE_OR_FUTURE")
+    if not_before is not None:
+        if (
+            not isinstance(not_before, datetime)
+            or not_before.tzinfo is None
+            or not_before.utcoffset() is None
+            or heartbeat.astimezone(UTC) < not_before.astimezone(UTC)
+        ):
+            raise RuntimeError("EXIT_HEARTBEAT_NOT_FROM_RESTARTED_CONSUMER")
+
+
 class _HostExitUnitIO:
     """OS implementation with exactly one hardcoded, protected Exit unit.
 
@@ -200,6 +367,8 @@ class _HostExitUnitIO:
         self._old = old_unit
         self._new = new_unit
         self._sub_units = _sub_private_units()
+        self._pre_signed_snapshot: dict[str, object] | None = None
+        self._restart_started_at: datetime | None = None
 
     def _cmd(self, *args: str) -> str:
         try:
@@ -270,6 +439,16 @@ class _HostExitUnitIO:
         after = _snapshot_units(self._sub_units)
         if before != after:
             raise RuntimeError("EXIT_NEIGHBOR_BASELINE_MOVED")
+        signed = _collect_credential_local_exit_snapshot()
+        if signed.get("account_position_counts") != {"MAIN": 0, "SUB": 0}:
+            # Specific first FLAT canary: an OPEN position requires a
+            # separate actual restart/recovery proof, not blanket disarm.
+            raise RuntimeError("EXIT_OPEN_POSITION_E2E_CANARY_NOT_WIRED")
+        _validate_flat_exit_status(
+            _read_protected_exit_status(),
+            observed_at=datetime.now(UTC), not_before=None,
+        )
+        self._pre_signed_snapshot = signed
         return {k: v for k, v in before.items() if k != "EXIT"}
 
     def stop(self) -> None:
@@ -331,6 +510,7 @@ class _HostExitUnitIO:
         self._cmd("daemon-reload")
 
     def start(self) -> None:
+        self._restart_started_at = datetime.now(UTC)
         self._cmd("start", _EXIT_UNIT)
 
     def verify_new(self) -> None:
@@ -342,6 +522,20 @@ class _HostExitUnitIO:
             or int(s["MainPID"] or 0) <= 0
         ):
             raise RuntimeError("EXIT_NEW_UNIT_NOT_RUNNING")
+        fields = (
+            "Id", "ActiveState", "SubState", "MainPID",
+            "NRestarts", "NeedDaemonReload", "WorkingDirectory",
+        )
+        actual = collect_exit_process_readback(
+            systemd_show=self._cmd(
+                "show", _EXIT_UNIT, "--no-pager",
+                *("--property=" + key for key in fields),
+            ),
+            expected_commit=_COMPONENT,
+            expected_source_commit=_SOURCE,
+        )
+        if actual.get("state") != "READ_ONLY_PROCESS_CONSISTENCY_ONLY":
+            raise RuntimeError("EXIT_NEW_LOADED_PROCESS_NOT_PINNED")
 
     def verify_old(self) -> None:
         s = self._show()
@@ -354,9 +548,28 @@ class _HostExitUnitIO:
             raise RuntimeError("EXIT_OLD_UNIT_NOT_RUNNING")
 
     def verify_signed_and_recovery(self) -> None:
-        # No new service acceptance without independent current credential-
-        # local signed MAIN/SUB, position recovery and the ExitPlan owner.
-        raise RuntimeError("EXIT_CURRENT_POSITION_E2E_PROOF_NOT_WIRED")
+        # The first protected canary only accepts actual disarmed FLAT.
+        # OPEN requires a separately proven continuous Exit E2E contract.
+        if self._pre_signed_snapshot is None or self._restart_started_at is None:
+            raise RuntimeError("EXIT_PRECUTOVER_SIGNED_BASELINE_MISSING")
+        current = _collect_credential_local_exit_snapshot()
+        proof = _compare_recovery_snapshots(
+            before=self._pre_signed_snapshot, after=current,
+        )
+        if (
+            proof.get("state")
+            != "SIGNED_EXISTING_POSITION_AND_PROTECTION_PRESERVED_READ_ONLY"
+            or proof.get("account_position_counts") != {"MAIN": 0, "SUB": 0}
+            or proof.get("signed_protection_snapshot_unchanged") is not True
+            or proof.get("release_authorized") is not False
+        ):
+            raise RuntimeError("EXIT_SIGNED_PROTECTION_NOT_PRESERVED")
+        _validate_flat_exit_status(
+            _read_protected_exit_status(),
+            observed_at=datetime.now(UTC),
+            not_before=self._restart_started_at,
+        )
+        # This method does not itself authorize a cutover or a LIVE ARM.
 
     def neighbors_unchanged(self, snapshot: object) -> None:
         after = {
