@@ -16,7 +16,10 @@ from component_release_exit_root_bootstrap import (  # noqa: E402
     _journal_stage_under_parent_fd,
     bootstrap_exit_journal_root_once,
 )
-from component_release_exit_transition import _JOURNAL_PARENT  # noqa: E402
+from component_release_exit_transition import (  # noqa: E402
+    _JOURNAL_PARENT,
+    _RootAppendFsyncJournal,
+)
 
 
 @unittest.skipUnless(os.name == "posix", "requires Unix metadata")
@@ -91,14 +94,18 @@ class ExitJournalProtectedPathTests(unittest.TestCase):
             stat.S_IMODE((self.parent / "journal").stat().st_mode), 0o750,
         )
 
-    def test_no_auto_create_missing_parent(self) -> None:
-        os.close(self.fd)
-        self._cleaned_fd = True
-        # Work only with the private fixture, never production /srv.
-        missing = self.root / "missing"
-        with self.assertRaises(OSError):
-            os.open(missing, os.O_RDONLY | os.O_DIRECTORY)
-        self.fd = os.open(self.parent, os.O_RDONLY | os.O_DIRECTORY)
+    def test_root_journal_writer_rejects_untrusted_parent_before_os_open(self) -> None:
+        with (
+            patch("component_release_exit_transition.sys.platform", "linux"),
+            patch("component_release_exit_transition.os.geteuid",
+                  return_value=0),
+            patch("component_release_exit_transition.inspect_exit_journal_root_once",
+                  return_value={"state": "EXIT_JOURNAL_ROOT_MISSING"}),
+            patch("component_release_exit_transition.os.open") as opener,
+            self.assertRaisesRegex(ValueError, "JOURNAL_ROOT_UNTRUSTED_ANCESTRY"),
+        ):
+            _RootAppendFsyncJournal()
+        opener.assert_not_called()
 
     def test_production_root_bootstrap_accepts_no_arguments(self) -> None:
         self.assertEqual(bootstrap_exit_journal_root_once.__code__.co_argcount, 0)
