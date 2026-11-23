@@ -180,10 +180,12 @@ def _recover_exact_old(
     if observed in ("NEW_STOPPED",):
         journal.record("ROLLBACK_UNIT_WRITE_INTENT")
         actuator.install_unit(new_unit, old_unit)
-        journal.record("ROLLBACK_RELOAD_INTENT")
-        actuator.reload()
         observed = "OLD_STOPPED"
     if observed == "OLD_STOPPED":
+        # A crash after unit rename but before daemon-reload may leave
+        # OLD unit bytes with NEW ExecStart cached in systemd.
+        journal.record("ROLLBACK_RELOAD_INTENT")
+        actuator.reload()
         journal.record("ROLLBACK_START_INTENT")
         actuator.start()
     journal.record("ROLLBACK_VERIFY_INTENT")
@@ -887,7 +889,7 @@ class _RootAppendFsyncJournal:
         """Bounded strict reconciliation of one already existing journal."""
         os.lseek(self._fd, 0, os.SEEK_SET)
         raw = os.read(self._fd, _MAX_JOURNAL_BYTES + 1)
-        if len(raw) > _MAX_JOURNAL_BYTES or raw and not raw.endswith(b"\\n"):
+        if len(raw) > _MAX_JOURNAL_BYTES or raw and not raw.endswith(b"\n"):
             _deny("JOURNAL_TRUNCATED_OR_OVERSIZE")
         events: list[dict[str, object]] = []
         for row in raw.splitlines():
