@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import gzip
+import hashlib
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 
 from bybit_workbench.market_data.bybit_daily_price_archive_audit import (
     BybitDailyPriceArchiveUnverified,
+    audit_bybit_archived_gap_price_witness,
     audit_bybit_daily_price_archive,
 )
 
@@ -218,3 +220,107 @@ def test_false_positive_provider_label_never_grants_verified_price_mfe(tmp_path)
     assert result.official_archive_url.startswith("https://public.bybit.com/")
     assert result.price_history_verified is False
     assert result.exit_ready is False
+
+
+def _gap_audit(path, **changes):
+    old = (int((START - timedelta(seconds=1)).timestamp() * 1000),
+           Decimal("0.1742"), Decimal("1"), "Buy")
+    new = (int((START + timedelta(seconds=4)).timestamp() * 1000),
+           Decimal("0.1750"), Decimal("1"), "Buy")
+    params = {
+        "symbol": SYMBOL,
+        "archive_day": DAY,
+        "gap_start": START - timedelta(seconds=1),
+        "gap_end": START + timedelta(seconds=4),
+        "checked_at": CHECKED,
+        "old_source_session_id": "a" * 32,
+        "new_source_session_id": "b" * 32,
+        "old_native_anchor": ("before", old),
+        "new_native_anchor": ("after", new),
+        "expected_archive_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "max_archive_rows": 20,
+    }
+    params.update(changes)
+    return audit_bybit_archived_gap_price_witness(path, **params)
+
+
+def test_disjoint_historical_archive_price_witness_never_grants_exit(tmp_path):
+    witness = _gap_audit(_write(tmp_path))
+    assert witness.gap_trade_count == 2
+    assert witness.daily_trade_count == 4
+    assert witness.gap_low == Decimal("0.1710")
+    assert witness.gap_high == Decimal("0.1730")
+    assert witness.old_native_anchor_matched
+    assert witness.old_source_session_id == "a" * 32
+    assert witness.new_source_session_id == "b" * 32
+    assert witness.new_native_anchor_matched
+    assert witness.status == "HISTORICAL_GAP_PRICE_WITNESS_ONLY"
+    assert not witness.archive_issuer_verified
+    assert not witness.native_sequence_continuity_verified
+    assert not witness.producer_source_session_reconstructed
+    assert not witness.exit_ready
+    assert not witness.financial_mutation_authorized
+    assert not hasattr(witness, "source_sequence")
+    assert not hasattr(witness, "trailing_request")
+
+
+@pytest.mark.parametrize("fault", [
+    "wrong-sha", "missing-old", "missing-new", "price-drift",
+    "qty-drift", "side-drift", "timestamp-drift", "duplicate-id",
+    "reordered", "truncated", "foreign-symbol", "no-gap-trades",
+    "wrong-day", "max-rows", "invalid-actor-anchor",
+])
+def test_disjoint_gap_price_witness_fails_closed(tmp_path, fault):
+    rows = _rows()
+    changes = {}
+    if fault == "missing-old":
+        rows.pop(0)
+    elif fault == "missing-new":
+        rows.pop(-1)
+    elif fault == "price-drift":
+        rows[0]["price"] = "0.1999"
+    elif fault == "qty-drift":
+        rows[3]["size"] = "2"
+    elif fault == "side-drift":
+        rows[0]["side"] = "Sell"
+    elif fault == "timestamp-drift":
+        rows[0]["timestamp"] = str(
+            Decimal(rows[0]["timestamp"]) + Decimal("0.002")
+        )
+    elif fault == "duplicate-id":
+        rows[2]["trdMatchID"] = "first"
+    elif fault == "reordered":
+        rows[1], rows[2] = rows[2], rows[1]
+    elif fault == "foreign-symbol":
+        rows[1]["symbol"] = "BTCUSDT"
+    elif fault == "no-gap-trades":
+        rows = [rows[0], rows[-1]]
+    elif fault == "wrong-day":
+        rows[1]["timestamp"] = "1794182400"
+    elif fault == "max-rows":
+        changes["max_archive_rows"] = 3
+    elif fault == "invalid-actor-anchor":
+        changes["old_native_anchor"] = ("before", (0, Decimal("0.1742"),
+                                                Decimal("1"), "Buy"))
+    path = _write(tmp_path, rows=rows, truncate=fault == "truncated")
+    if fault == "wrong-sha":
+        changes["expected_archive_sha256"] = "0" * 64
+    with pytest.raises(BybitDailyPriceArchiveUnverified):
+        _gap_audit(path, **changes)
+
+
+@pytest.mark.parametrize("changes", [
+    {"checked_at": datetime(2026, 11, 8, 23, tzinfo=UTC)},
+    {"gap_start": START.replace(tzinfo=None)},
+    {"gap_end": START.replace(tzinfo=None)},
+    {"gap_start": START + timedelta(seconds=4)},
+    {"gap_end": START - timedelta(seconds=2)},
+    {"symbol": "BTCUSDT"},
+    {"expected_archive_sha256": "NOT_A_SHA"},
+    {"old_source_session_id": "bad-session"},
+    {"new_source_session_id": "a" * 32},
+])
+def test_disjoint_gap_scope_rejects_nonfinal_untrusted_input(tmp_path, changes):
+    path = _write(tmp_path)
+    with pytest.raises(BybitDailyPriceArchiveUnverified):
+        _gap_audit(path, **changes)
