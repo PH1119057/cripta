@@ -15,6 +15,7 @@ from __future__ import annotations
 import errno
 import os
 import stat
+import sys
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
@@ -330,4 +331,129 @@ def bootstrap_exit_root_once() -> dict[str, object]:
         return _bootstrap_from_fd(
             anchor, anchor_uid=0, anchor_gid=0,
             components_uid=0, components_gid=_service_group_gid(),
+        )
+
+
+# #849: journal must NOT be beneath /var/lib/cripta, whose ancestor is
+# mutable by the unprivileged cripta runtime actor. The exact safe path is
+# below the existing root-owned /srv/cripta/components/exit tree.
+_EXIT_JOURNAL = Path("/srv/cripta/components/exit/journal")
+
+
+def _journal_inspect_under_parent_fd(
+    exit_fd: int, *, parent_uid: int, parent_gid: int,
+    journal_uid: int, journal_gid: int, dev: int,
+) -> dict[str, object]:
+    """Private fd-based fixture/readback: never follows a caller symlink."""
+    _check_dir(
+        exit_fd, uid=parent_uid, gid=parent_gid,
+        mode=_EXPECTED_CHILD_MODE, dev=dev,
+    )
+    journal = _child_fd(exit_fd, "journal")
+    if journal is None:
+        state = "EXIT_JOURNAL_ROOT_MISSING"
+    else:
+        try:
+            _check_dir(
+                journal, uid=journal_uid, gid=journal_gid,
+                mode=0o700, dev=dev,
+            )
+        finally:
+            os.close(journal)
+        state = "PROTECTED_EXIT_JOURNAL_ROOT_READY_READ_ONLY"
+    return {
+        "state": state,
+        "journal_path": str(_EXIT_JOURNAL),
+        "service_restart_authorized": False,
+        "trading_mutation_authorized": False,
+        "transaction_committed": False,
+    }
+
+
+def _journal_stage_under_parent_fd(
+    exit_fd: int, *, parent_uid: int, parent_gid: int,
+    journal_uid: int, journal_gid: int, dev: int,
+) -> dict[str, object]:
+    """Private fixture writer, production reached ONLY by fixed no-arg root."""
+    prior = _journal_inspect_under_parent_fd(
+        exit_fd, parent_uid=parent_uid, parent_gid=parent_gid,
+        journal_uid=journal_uid, journal_gid=journal_gid, dev=dev,
+    )
+    if prior["state"] == "PROTECTED_EXIT_JOURNAL_ROOT_READY_READ_ONLY":
+        return {**prior, "state": "EXIT_JOURNAL_ROOT_ALREADY_PREPARED_METADATA_ONLY"}
+    try:
+        os.mkdir("journal", mode=0o700, dir_fd=exit_fd)
+        fd = os.open("journal", _FLAGS, dir_fd=exit_fd)
+        try:
+            os.fchown(fd, journal_uid, journal_gid)
+            os.fchmod(fd, 0o700)
+            _check_dir(
+                fd, uid=journal_uid, gid=journal_gid, mode=0o700, dev=dev,
+            )
+            os.fsync(fd)
+            os.fsync(exit_fd)
+        finally:
+            os.close(fd)
+    except OSError as exc:
+        # Never remove or rewrite a partial directory: reconcile first.
+        raise ValueError("EXIT_JOURNAL_BOOTSTRAP_OUTCOME_UNKNOWN") from exc
+    after = _journal_inspect_under_parent_fd(
+        exit_fd, parent_uid=parent_uid, parent_gid=parent_gid,
+        journal_uid=journal_uid, journal_gid=journal_gid, dev=dev,
+    )
+    if after["state"] != "PROTECTED_EXIT_JOURNAL_ROOT_READY_READ_ONLY":
+        _deny("JOURNAL_BOOTSTRAP_POSTCHECK")
+    return {**after, "state": "EXIT_JOURNAL_ROOT_PREPARED_METADATA_ONLY"}
+
+
+def _journal_protected_exit_fd(opened: ExitStack) -> tuple[int, int, int]:
+    """Resolve every ancestor from /, root-owned, no links/ACL/mount drift."""
+    anchor = _production_anchor_fd(opened)
+    device = os.fstat(anchor).st_dev
+    group = _service_group_gid()
+    comp = _child_fd(anchor, "components")
+    if comp is None:
+        _deny("JOURNAL_COMPONENT_PARENT_MISSING")
+    opened.callback(os.close, comp)
+    _check_dir(
+        comp, uid=0, gid=group, mode=_EXPECTED_CHILD_MODE, dev=device,
+    )
+    exit_fd = _child_fd(comp, "exit")
+    if exit_fd is None:
+        _deny("JOURNAL_EXIT_PARENT_MISSING")
+    opened.callback(os.close, exit_fd)
+    _check_dir(
+        exit_fd, uid=0, gid=group, mode=_EXPECTED_CHILD_MODE, dev=device,
+    )
+    return exit_fd, group, device
+
+
+def inspect_exit_journal_root_once() -> dict[str, object]:
+    """Read-only actual trusted root-chain check; no files are created."""
+    if sys.platform != "linux":
+        _deny("JOURNAL_LINUX_ONLY")
+    if os.geteuid() != 0:
+        _deny("ROOT_REQUIRED")
+    with ExitStack() as opened:
+        exit_fd, group, device = _journal_protected_exit_fd(opened)
+        return _journal_inspect_under_parent_fd(
+            exit_fd, parent_uid=0, parent_gid=group,
+            journal_uid=0, journal_gid=0, dev=device,
+        )
+
+
+def bootstrap_exit_journal_root_once() -> dict[str, object]:
+    """Fixed root NO-ARGUMENT pre-stage. NO journaling/systemd/trading action."""
+    if sys.platform != "linux":
+        _deny("JOURNAL_LINUX_ONLY")
+    if os.geteuid() != 0:
+        _deny("ROOT_REQUIRED")
+    with (
+        _hold_shared_release_lock(path=_SHARED_LOCK, uid=0, gid=0),
+        ExitStack() as opened,
+    ):
+        exit_fd, group, device = _journal_protected_exit_fd(opened)
+        return _journal_stage_under_parent_fd(
+            exit_fd, parent_uid=0, parent_gid=group,
+            journal_uid=0, journal_gid=0, dev=device,
         )
