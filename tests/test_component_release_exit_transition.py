@@ -16,15 +16,17 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 
-from component_release_exit_transition import (  # noqa: E402
-    _collect_credential_local_exit_snapshot,
-    _EXIT_UNIT,
-    _HostExitUnitIO,
-    _run_exit_only_transition,
-    _SOURCE,
-    _validate_flat_exit_status,
-    exit_only_cutover_once,
+import component_release_exit_transition as transition  # noqa: E402
+
+_EXIT_UNIT = transition._EXIT_UNIT
+_HostExitUnitIO = transition._HostExitUnitIO
+_SOURCE = transition._SOURCE
+_collect_credential_local_exit_snapshot = (
+    transition._collect_credential_local_exit_snapshot
 )
+_run_exit_only_transition = transition._run_exit_only_transition
+_validate_flat_exit_status = transition._validate_flat_exit_status
+exit_only_cutover_once = transition.exit_only_cutover_once
 
 OLD = b"[Unit]\nDescription=old\n[Service]\nExecStart=/old\n"
 NEW = b"[Unit]\nDescription=new\n[Service]\nExecStart=/new\n"
