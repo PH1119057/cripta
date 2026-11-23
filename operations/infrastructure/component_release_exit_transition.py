@@ -56,7 +56,8 @@ from component_release_exit_unit_spec import build_exit_unit_candidate
 
 _UNIT_PARENT = Path("/etc/systemd/system")
 _JOURNAL_PARENT = _EXIT_JOURNAL
-_JOURNAL_NAME = "exit-only-current.jsonl"
+_JOURNAL_NAME = "exit-only-attempt-02.jsonl"
+_PREVIOUS_JOURNAL_NAME = "exit-only-current.jsonl"
 _MAX_UNIT_BYTES = 16 * 1024
 _SYSTEMCTL = "/usr/bin/systemctl"
 _SYSTEMD_FIELDS = (
@@ -87,7 +88,7 @@ _SIGNED_GET_PROGRAM = (
     "sort_keys=True))"
 )
 
-_CONTROLLER_ROOT = _ROOT / ".owner-controller-849"
+_CONTROLLER_ROOT = _ROOT / ".owner-controller-849-v2"
 _CONTROLLER_MANIFEST = "SOURCE_MANIFEST.json"
 _EXPECTED_MODULES = frozenset({
     "component_release_exit_transition.py",
@@ -220,6 +221,7 @@ def _run_exit_only_transition(
         return _result("EXIT_PRESTOP_BLOCKED")
 
     uncertain_audit = False
+    stage = "INITIAL_STOP"
     try:
         actuator.stop()
         journal.record("STOP_DONE")
@@ -234,12 +236,16 @@ def _run_exit_only_transition(
         actuator.start()
         journal.record("STARTED")
         journal.record("POSTCHECK_INTENT")
+        stage = "INITIAL_NEW_PROCESS"
         actuator.verify_new()
+        stage = "INITIAL_NEW_SIGNED_RECOVERY"
         actuator.verify_signed_and_recovery()
+        stage = "INITIAL_NEIGHBORS"
         actuator.neighbors_unchanged(prior)
         if exercise_old_rollback:
             # Actual first canary: prove OLD can restart and recover after
             # candidate has run. Never label staged rollback as tested.
+            stage = "PHYSICAL_OLD_RECOVERY_DRILL"
             journal.record("CANARY_OLD_PROOF_INTENT")
             _recover_exact_old(
                 actuator, journal, observed="NEW_ACTIVE",
@@ -248,6 +254,7 @@ def _run_exit_only_transition(
                 terminal_phase="CANARY_OLD_RECOVERED",
             )
             # Return to NEW only after independent OLD runtime proof passed.
+            stage = "SECOND_NEW_STOP"
             journal.record("CANARY_SECOND_NEW_INTENT")
             actuator.stop()
             actuator.prove_stopped()
@@ -258,15 +265,30 @@ def _run_exit_only_transition(
             journal.record("CANARY_SECOND_NEW_START_INTENT")
             actuator.start()
             journal.record("CANARY_SECOND_NEW_POSTCHECK_INTENT")
+            stage = "SECOND_NEW_PROCESS"
             actuator.verify_new()
+            stage = "SECOND_NEW_SIGNED_RECOVERY"
             actuator.verify_signed_and_recovery()
+            stage = "SECOND_NEW_NEIGHBORS"
             actuator.neighbors_unchanged(prior)
         journal.record("ACCEPTANCE_PENDING")
         return _result("EXIT_TRANSITION_ACCEPTANCE_PENDING")
     except Exception as exc:
-        # A journal write error after the first action removes the durable
-        # proof chain; even a successful physical restore is NOT VERIFIED.
+        # Record only a fixed stage and allowlisted stable error class/code.
+        # Never persist raw subprocess stderr, account IDs or credentials.
+        # Even a journal failure still attempts physical OLD reconciliation.
         uncertain_audit = isinstance(exc, OSError)
+        try:
+            journal.record("FAULT_STAGE_" + stage)
+            journal.record("FAULT_KIND_" + type(exc).__name__.upper())
+            safe = str(exc)
+            if (
+                len(safe) <= 110 and safe.startswith("EXIT_")
+                and re.fullmatch(r"EXIT_[A-Z0-9_]+", safe) is not None
+            ):
+                journal.record("FAULT_CODE_" + safe)
+        except (OSError, ValueError):
+            uncertain_audit = True
         try:
             observed = actuator.reconcile()
         except Exception:
@@ -1034,6 +1056,43 @@ def _reconcile_interrupted_exit(journal: _RootAppendFsyncJournal) -> dict[str, o
     return _result("EXIT_INTERRUPTED_OLD_RECOVERED", rollback_verified=True)
 
 
+def _verify_completed_previous_exit_trial() -> None:
+    """Bind second physical attempt to an actual previous OLD rollback."""
+    previous = _JOURNAL_PARENT / _PREVIOUS_JOURNAL_NAME
+    fd = os.open(
+        previous, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != 0 or info.st_gid != 0
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or info.st_nlink != 1
+            or not 0 < info.st_size <= _MAX_JOURNAL_BYTES
+        ):
+            _deny("PRIOR_JOURNAL_OWNER_OR_SIZE_UNTRUSTED")
+        raw = os.read(fd, _MAX_JOURNAL_BYTES + 1)
+        if len(raw) != info.st_size or not raw.endswith(b"\n"):
+            _deny("PRIOR_JOURNAL_TRUNCATED")
+    finally:
+        os.close(fd)
+    try:
+        phases = [
+            json.loads(line)["phase"] for line in raw.splitlines()
+        ]
+    except (KeyError, TypeError, ValueError, UnicodeError) as exc:
+        raise ValueError("EXIT_TRANSITION_PRIOR_JOURNAL_INVALID") from exc
+    if (
+        len(phases) < 4 or phases[0] != "BASELINE"
+        or "STOP_INTENT" not in phases
+        or "ROLLBACK_VERIFY_INTENT" not in phases
+        or phases[-1] != "ROLLBACK_RECOVERED"
+        or "ACCEPTANCE_PENDING" in phases
+    ):
+        _deny("PREVIOUS_PHYSICAL_OLD_ROLLBACK_NOT_PROVEN")
+
+
 def _protected_real_admission() -> tuple[bytes, bytes]:
     """Root-controller sealed + protected OLD/NEW + fresh FLAT safety.
 
@@ -1041,6 +1100,7 @@ def _protected_real_admission() -> tuple[bytes, bytes]:
     independent release in general. OPEN requires separately tested owner.
     """
     _check_sealed_controller_root()
+    _verify_completed_previous_exit_trial()
     old_unit, new_unit = _load_exact_exit_units()
     if not _unit_material_ok(old_unit, new_unit):
         _deny("OLD_AND_NEW_UNIT_NOT_DISTINCT")
