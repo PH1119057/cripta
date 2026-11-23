@@ -319,6 +319,11 @@ def _validate_flat_exit_status(
         required | {"recovery_result"}
     ):
         raise RuntimeError("EXIT_STATUS_SHAPE_UNTRUSTED")
+    if (
+        not isinstance(observed_at, datetime)
+        or observed_at.tzinfo is None or observed_at.utcoffset() is None
+    ):
+        raise RuntimeError("EXIT_HEARTBEAT_CLOCK_UNTRUSTED")
     if any((
         status.get("service") != "p90_r06_exit_owner",
         status.get("state") != "P90_R06_EXIT_OWNER_READY_FLAT",
@@ -327,9 +332,6 @@ def _validate_flat_exit_status(
         status.get("p90_r06_exit_owner") != "ENABLED",
         status.get("generic_consumer") != "DISABLED",
         status.get("error") is not None,
-        not isinstance(observed_at, datetime),
-        observed_at.tzinfo is None,
-        observed_at.utcoffset() is None,
     )):
         raise RuntimeError("EXIT_RUNTIME_READY_FLAT_NOT_PROVEN")
     try:
