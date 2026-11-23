@@ -9,6 +9,7 @@ import copy
 import sys
 import unittest
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -18,6 +19,7 @@ sys.path.insert(0, str(ROOT / "operations/infrastructure"))
 
 from component_release_exit_signed_preflight import (  # noqa: E402
     _check_signed_exit_account_pair,
+    _check_signed_exit_plan_recovery,
     collect_current_signed_exit_preflight_once,
 )
 
@@ -179,6 +181,69 @@ class SignedExitPreflightTests(unittest.TestCase):
         proofs[0].positions = ({"symbol": "LTCUSDT"},)
         with self.assertRaises(ValueError):
             self.run_check(routes, proofs)
+
+    def test_signed_main_open_position_requires_same_durable_exit_plan(self) -> None:
+        routes, proofs = fixture()
+        proofs[0].positions = (open_position(),)
+        position = SimpleNamespace(
+            trading_account_id=routes.main.trading_account_id,
+            symbol="LTCUSDT", identity_status="PROVEN",
+            position_idx=0, initial_protection_confirmed_at=NOW,
+            exit_plan_fingerprint="exit-fp", strategy_activation_id="activation",
+            direction=SimpleNamespace(value="LONG"), actual_qty=Decimal("1.1"),
+        )
+        plan = SimpleNamespace(
+            exit_plan_fingerprint="exit-fp", strategy_activation_id="activation",
+        )
+        result = _check_signed_exit_plan_recovery(
+            routes=routes, proofs=proofs, bindings=((position, plan),),
+        )
+        self.assertEqual(
+            result["state"], "SIGNED_POSITION_EXIT_PLAN_DB_ALIGNMENT_PASS",
+        )
+        self.assertEqual(result["account_position_counts"], {"MAIN": 1, "SUB": 0})
+        for flag in ("release_authorized", "financial_mutation_authorized",
+                     "rollback_ready", "runtime_behavior_verified"):
+            self.assertFalse(result[flag])
+
+        for name, update in (
+            ("no_binding", lambda p, q: ()),
+            ("wrong_account", lambda p, q: ((SimpleNamespace(
+                **{**vars(p), "trading_account_id": routes.sub.trading_account_id}
+            ), q),)),
+            ("wrong_qty", lambda p, q: ((SimpleNamespace(
+                **{**vars(p), "actual_qty": Decimal("1.2")}
+            ), q),)),
+            ("wrong_plan", lambda p, q: ((p, SimpleNamespace(
+                exit_plan_fingerprint="forged",
+                strategy_activation_id="activation",
+            )),)),
+            ("missing_protection", lambda p, q: ((SimpleNamespace(
+                **{**vars(p), "initial_protection_confirmed_at": None}
+            ), q),)),
+            ("not_proven", lambda p, q: ((SimpleNamespace(
+                **{**vars(p), "identity_status": "LEGACY_UNKNOWN"}
+            ), q),)),
+            ("wrong_direction", lambda p, q: ((SimpleNamespace(
+                **{**vars(p), "direction": SimpleNamespace(value="SHORT")}
+            ), q),)),
+        ):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                _check_signed_exit_plan_recovery(
+                    routes=routes, proofs=proofs, bindings=update(position, plan),
+                )
+
+    def test_signed_flat_account_rejects_orphan_db_and_signed_position(self) -> None:
+        routes, proofs = fixture()
+        empty = _check_signed_exit_plan_recovery(
+            routes=routes, proofs=proofs, bindings=(),
+        )
+        self.assertEqual(empty["account_position_counts"], {"MAIN": 0, "SUB": 0})
+        proofs[1].positions = (open_position(),)
+        with self.assertRaisesRegex(ValueError, "SIGNED_DB_POSITION_SET_MISMATCH"):
+            _check_signed_exit_plan_recovery(
+                routes=routes, proofs=proofs, bindings=(),
+            )
 
     @unittest.skipUnless(sys.platform == "linux", "requires Linux Unix pwd")
     def test_noarg_host_owner_rejects_non_cripta_actor(self) -> None:

@@ -136,6 +136,86 @@ def _check_signed_exit_account_pair(
     }
 
 
+
+def _check_signed_exit_plan_recovery(
+    *, routes: object, proofs: object, bindings: object,
+) -> dict[str, object]:
+    """Correlate signed Bybit positions with actual immutable DB Exit bindings.
+
+    A positive result is only a short-lived read-only consistency proof.
+    It never authorizes root cutover or a financial mutation.
+    """
+    if (
+        not hasattr(routes, "main") or not hasattr(routes, "sub")
+        or not isinstance(proofs, (tuple, list)) or len(proofs) != 2
+        or not isinstance(bindings, (tuple, list))
+    ):
+        _deny("POSITION_EXIT_BINDING_INPUT_INVALID")
+
+    accounts = (routes.main.trading_account_id, routes.sub.trading_account_id)
+    if accounts[0] == accounts[1]:
+        _deny("POSITION_EXIT_ACCOUNT_COLLISION")
+    indexed: dict[str, dict[str, object]] = {account: {} for account in accounts}
+    for binding in bindings:
+        if not isinstance(binding, (tuple, list)) or len(binding) != 2:
+            _deny("POSITION_EXIT_BINDING_INVALID")
+        position, plan = binding
+        account = getattr(position, "trading_account_id", None)
+        symbol = getattr(position, "symbol", None)
+        if (
+            account not in indexed
+            or not isinstance(symbol, str) or not symbol
+            or symbol in indexed[account]
+            or getattr(position, "identity_status", None) != "PROVEN"
+            or getattr(position, "position_idx", None) != 0
+            or getattr(position, "initial_protection_confirmed_at", None) is None
+            or not getattr(position, "exit_plan_fingerprint", None)
+            or getattr(plan, "exit_plan_fingerprint", None)
+            != position.exit_plan_fingerprint
+            or getattr(plan, "strategy_activation_id", None)
+            != position.strategy_activation_id
+        ):
+            _deny("POSITION_EXIT_BINDING_UNVERIFIED")
+        indexed[account][symbol] = position
+
+    counts: dict[str, int] = {}
+    for kind, account, proof in zip(("MAIN", "SUB"), accounts, proofs, strict=True):
+        signed = getattr(proof, "positions", None)
+        if not isinstance(signed, (tuple, list)):
+            _deny("POSITION_SIGNED_ROWS_UNVERIFIED")
+        signed_by_symbol = {
+            row.get("symbol"): row for row in signed
+            if isinstance(row, Mapping)
+        }
+        if (
+            len(signed_by_symbol) != len(signed)
+            or set(signed_by_symbol) != set(indexed[account])
+        ):
+            _deny("SIGNED_DB_POSITION_SET_MISMATCH")
+        for symbol, position in indexed[account].items():
+            row = signed_by_symbol[symbol]
+            direction = getattr(getattr(position, "direction", None), "value", None)
+            expected_side = {"LONG": "Buy", "SHORT": "Sell"}.get(direction)
+            if (
+                expected_side is None
+                or row.get("side") != expected_side
+                or str(row.get("positionIdx")) != "0"
+                or _decimal(row.get("size"), allow_zero=False)
+                != _decimal(getattr(position, "actual_qty", None), allow_zero=False)
+            ):
+                _deny("SIGNED_DB_POSITION_DETAILS_MISMATCH")
+        counts[kind] = len(indexed[account])
+    return {
+        "state": "SIGNED_POSITION_EXIT_PLAN_DB_ALIGNMENT_PASS",
+        "account_position_counts": counts,
+        "immutable_exit_plan_lineage_checked": True,
+        "release_authorized": False,
+        "rollback_ready": False,
+        "financial_mutation_authorized": False,
+        "runtime_behavior_verified": False,
+    }
+
+
 def collect_current_signed_exit_preflight_once() -> dict[str, object]:
     """No-argument credential-local GET/SELECT; no POST or trading action."""
     if sys.platform != "linux":
@@ -151,6 +231,7 @@ def collect_current_signed_exit_preflight_once() -> dict[str, object]:
         _deny("ACTOR_NOT_CRIPTA")
 
     import psycopg
+    from psycopg.rows import dict_row
 
     from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
         MAIN_ID,
@@ -165,6 +246,12 @@ def collect_current_signed_exit_preflight_once() -> dict[str, object]:
     )
     from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
         P90PrivateProofClient,
+    )
+    from bybit_workbench.universal_exit.p90l90_real_position_provider import (
+        P90RealPositionProvider,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+        ALLOWED_SYMBOLS,
     )
 
     try:
@@ -199,10 +286,25 @@ def collect_current_signed_exit_preflight_once() -> dict[str, object]:
                     timeout_seconds=8.0,
                 ).read_recovery_account()
                 proofs.append(proof)
-            return _check_signed_exit_account_pair(
+            signed = _check_signed_exit_account_pair(
                 routes=routes, proofs=tuple(proofs),
                 observed_at=datetime.now(UTC),
             )
+            # Read the actual position/ExitPlan lineage under the same
+            # READ ONLY transaction, after the signed GETs.  Never infer
+            # that positive Bybit SL/TP alone restores an Exit owner.
+            bindings: list[tuple[object, object]] = []
+            with connection.cursor(row_factory=dict_row) as position_db:
+                provider = P90RealPositionProvider(
+                    position_db,
+                    account_by_strategy=routes.account_by_strategy,
+                )
+                for symbol in sorted(set().union(*ALLOWED_SYMBOLS.values())):
+                    bindings.extend(provider(symbol))
+            lineage = _check_signed_exit_plan_recovery(
+                routes=routes, proofs=tuple(proofs), bindings=tuple(bindings),
+            )
+            return {**signed, "position_exit_plan_alignment": lineage["state"]}
     except Exception as exc:
         if isinstance(exc, ValueError) and str(exc).startswith(
             "EXIT_SIGNED_PREFLIGHT_"
