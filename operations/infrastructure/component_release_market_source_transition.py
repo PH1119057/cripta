@@ -9,7 +9,6 @@ from __future__ import annotations
 import contextlib
 import fcntl
 import grp
-import hashlib
 import json
 import os
 import re
@@ -56,7 +55,7 @@ with psycopg.connect(
                      AND state='ACTIVE'""").fetchall()
     if len(r)!=1:raise RuntimeError("MARKET_SOURCE_ACTIVE_EPOCH_UNVERIFIED")
     session,commit,state,opened,last=r[0]
-    symbols=c.execute("""SELECT external_symbol,last_accepted_at
+    symbols=c.execute("""SELECT external_symbol,accepted_at
         FROM analytics.native_public_trade_source_cursors
         WHERE source_session_id=%s
         ORDER BY external_symbol""",(session,)).fetchall()
@@ -116,6 +115,29 @@ def _read_cr_session() -> dict[str, object]:
         not isinstance(result.get("symbol_accepted"),dict)):
         _deny("PG_NATIVE_SESSION_IDENTITY_UNVERIFIED")
     return result
+
+
+def _prove_old_source_gap(session: str) -> None:
+    if re.fullmatch(r"[a-f0-9]{32}",session) is None:
+        _deny("OLD_EPOCH_IDENTITY_INVALID")
+    code = (
+        "import psycopg; "
+        "with psycopg.connect("
+        "'dbname=cripta user=cripta host=/var/run/postgresql "
+        "connect_timeout=5 options=-c\\\\ default_transaction_read_only=on'"
+        ") as c: "
+        " print(c.execute("
+        "'SELECT state,ended_at FROM analytics.native_public_trade_source_sessions "
+        "WHERE source_session_id=%s',(" + repr(session) + ",)).fetchone())"
+    )
+    # Use the same role-bound PostgreSQL SELECT actor as the running recorder.
+    argv = [
+        "/usr/sbin/runuser", "-u", "cripta", "--",
+        str(_OLD_CODE / ".venv/bin/python"), "-B", "-c", code,
+    ]
+    actual = _command(*argv, timeout=18)
+    if not actual.startswith("('GAP', datetime.datetime("):
+        _deny("OLD_SOURCE_SESSION_GAP_NOT_PROVEN")
 
 
 def _signed_snapshot() -> dict[str, object]:
@@ -237,7 +259,11 @@ def _status_current(expected_commit: str, *, previous_session: str,
         _deny("PROCESS_CWD_NOT_PINNED")
     data=(Path("/proc")/str(actual["pid"])/"cmdline").read_bytes().split(b"\x00")
     executable=(target/"operations/monitoring/native_public_trade_source.py")
-    if str(executable).encode() not in data:
+    loaded_source = (
+        Path(item.decode("utf-8")).resolve()
+        for item in data if item and item.endswith(b"/native_public_trade_source.py")
+    )
+    if not any(path == executable for path in loaded_source):
         _deny("PROCESS_EXECUTABLE_SOURCE_NOT_PINNED")
     return {"pid":actual["pid"],"session":status["session"]}
 
@@ -347,6 +373,7 @@ def cutover_market_source_once() -> dict[str,object]:
                 _deny("OLD_SOURCE_NOT_STOPPED")
             # Native source stop marks a real GAP. Never replace an ACTIVE
             # session's continuity with the future producer's cursor.
+            _prove_old_source_gap(str(source["session"]))
             _append_event("OLD_STOPPED_GAP")
             _unit_atomic_replace(new)
             installed=True
