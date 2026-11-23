@@ -26,6 +26,7 @@ from component_release_exit_new_install import (  # noqa: E402
 COMMIT = "a" * 40
 ENTRY = "operations/connectivity/universal_exit_consumer.py"
 LOCK = "operations/infrastructure/exit_component_requirements.lock"
+ASSET = "operations/monitoring/required_public_feeds.json"
 SIBLINGS = (
     "operations/connectivity/p90_real_independent_exit.py",
     "operations/connectivity/p90_real_persistent_trail.py",
@@ -38,6 +39,7 @@ def _bundle() -> bytes:
     files = {
         "src/bybit_workbench/__init__.py": b"# test\n",
         ENTRY: b"print('test only')\n",
+        ASSET: b"asset\\n",
         LOCK: b"psycopg==3.1.17 --hash=sha256:" + b"a" * 64 + b"\n",
         **{x: b"# isolated test\n" for x in SIBLINGS},
     }
@@ -158,6 +160,34 @@ class ExitCandidateRootStageTests(unittest.TestCase):
             if not f.is_symlink():
                 self.assertFalse(stat.S_IMODE(f.lstat().st_mode) & 0o002)
         self.assertTrue((self.candidate / ".venv/bin/python").is_symlink())
+
+    def test_required_non_python_exit_asset_is_staged_and_rejected_if_absent(self) -> None:
+        self.stage()
+        self.assertEqual((self.candidate / ASSET).read_bytes(), b"asset\n")
+        with zipfile.ZipFile(io.BytesIO(self.blob)) as z:
+            files = {
+                name: z.read(name) for name in z.namelist()
+                if name not in (ASSET, "component_manifest.json")
+            }
+            manifest = json.loads(z.read("component_manifest.json"))
+        manifest["blob_sha256"].pop(ASSET)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for name, payload in files.items():
+                info = zipfile.ZipInfo(name)
+                info.external_attr = 0o100644 << 16
+                z.writestr(info, payload)
+            info = zipfile.ZipInfo("component_manifest.json")
+            info.external_attr = 0o100644 << 16
+            z.writestr(info, json.dumps(manifest).encode())
+        tampered = buf.getvalue()
+        with self.assertRaisesRegex(ValueError, "MANIFEST_CLOSURE"):
+            _verify_candidate_zip(
+                tampered,
+                expected_archive_sha256=hashlib.sha256(tampered).hexdigest(),
+                expected_commit=COMMIT,
+                expected_lock_sha256=hashlib.sha256(files[LOCK]).hexdigest(),
+            )
 
     def test_wrong_blob_and_unknown_commit_never_stage(self) -> None:
         with self.assertRaisesRegex(ValueError, "ARCHIVE_HASH"):
