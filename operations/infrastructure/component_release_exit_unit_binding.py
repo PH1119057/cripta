@@ -97,6 +97,23 @@ def _check_regular(
         _deny("BOUND_FILE_DIGEST_INVALID")
 
 
+def _check_prepared_component_readback(candidate: object) -> None:
+    """Match the actual NEW stage readback, not an invented component key."""
+    if (
+        not isinstance(candidate, dict)
+        or candidate.get("state") != "IMMUTABLE_EXIT_CANDIDATE_PREPARED"
+        or candidate.get("component_id") != "EXIT"
+        or candidate.get("source_commit") != _COMPONENT
+        or candidate.get("payload_sha256") != _PAYLOAD_SHA256
+        or candidate.get("physical_file_hashes_verified") is not True
+        or candidate.get("new_component_loaded") is not False
+        or candidate.get("rollback_ready") is not False
+        or candidate.get("cutover_authorized") is not False
+        or candidate.get("financial_mutation_authorized") is not False
+    ):
+        _deny("NEW_COMPONENT_ROOT_NOT_ATTESTED")
+
+
 def _binding_record() -> dict[str, object]:
     return {
         "schema": "CRIPTA_EXIT_SOURCE_COMPATIBLE_UNIT_BINDING_V1",
@@ -232,12 +249,7 @@ def prepare_exit_source_compatible_unit_once() -> dict[str, object]:
             expected_commit=_COMPONENT,
             expected_archive_sha256=_ARCHIVE_SHA256,
         )
-        if (
-            new["payload_sha256"] != _PAYLOAD_SHA256
-            or new["state"] != "IMMUTABLE_EXIT_CANDIDATE_PREPARED"
-            or new["component_loaded"] is not False
-        ):
-            _deny("NEW_COMPONENT_ROOT_NOT_ATTESTED")
+        _check_prepared_component_readback(new)
         if _installed_unit_sha256() != _ORIGINAL_UNIT_SHA256:
             _deny("OLD_ACTIVE_UNIT_DRIFT")
         marker = Path("/var/lib/cripta/release/INSTALLED_COMMIT")
