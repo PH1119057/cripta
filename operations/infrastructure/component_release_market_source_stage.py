@@ -29,6 +29,12 @@ _ROOT = _OWNER / "releases" / SOURCE_SHA
 _UNIT_PATH = Path("/etc/systemd/system/cripta-native-public-trade-source.service")
 _ADAPTER = "operations/monitoring/public_market_source_union_capture.py"
 _MANIFEST = "COMPONENT_SOURCE_MANIFEST.json"
+_CONTROLLER_ROOT = _OWNER / ".owner-controller-865"
+_CONTROLLER_FILES = frozenset({
+    "component_release_market_source_stage.py",
+    "component_release_market_source_transition.py",
+})
+_CONTROLLER_MANIFEST = "SOURCE_MANIFEST.json"
 _OLD_MARKER = "INSTALLED_COMMIT"
 _SHA40 = re.compile(r"[a-f0-9]{40}\Z")
 
@@ -224,10 +230,42 @@ def inspect_prepared_market_source() -> dict[str, object]:
             "unit_sha256":meta["candidate_unit_sha256"],"cutover_authorized":False}
 
 
+def verify_sealed_market_source_controller() -> None:
+    """Controller imports must be from exact root-owned Git-authored bytes."""
+    import sys
+    sys.dont_write_bytecode = True
+    gid = grp.getgrnam("cripta").gr_gid
+    _expected_dir(_CONTROLLER_ROOT, uid=0, gid=gid, mode=0o550)
+    names = {p.name for p in _CONTROLLER_ROOT.iterdir()}
+    if names != _CONTROLLER_FILES | {_CONTROLLER_MANIFEST}:
+        _deny("ROOT_CONTROLLER_FILE_SET_DRIFT")
+    manifest_file = _CONTROLLER_ROOT / _CONTROLLER_MANIFEST
+    st = manifest_file.lstat()
+    if (not stat.S_ISREG(st.st_mode) or st.st_uid != 0
+            or st.st_gid != 0 or stat.S_IMODE(st.st_mode) != 0o400):
+        _deny("ROOT_CONTROLLER_MANIFEST_OWNER_DRIFT")
+    m = json.loads(manifest_file.read_text(encoding="utf-8"))
+    if (set(m) != {"schema", "source_commit", "files"}
+            or m["schema"] != "MARKET_SOURCE_ROOT_CONTROLLER_865_V1"
+            or m["source_commit"] != SOURCE_SHA
+            or not isinstance(m["files"],dict)
+            or set(m["files"]) != _CONTROLLER_FILES):
+        _deny("ROOT_CONTROLLER_MANIFEST_INVALID")
+    for name, expected in m["files"].items():
+        p = _CONTROLLER_ROOT / name
+        z = p.lstat()
+        if (not stat.S_ISREG(z.st_mode) or z.st_uid != 0
+                or z.st_gid != gid or stat.S_IMODE(z.st_mode) != 0o440
+                or not isinstance(expected,str) or len(expected) != 64
+                or _digest(p.read_bytes()) != expected):
+            _deny("ROOT_CONTROLLER_SOURCE_HASH_DRIFT")
+
+
 def stage_market_source_component_once() -> dict[str, object]:
     """Root-only, bounded staging; NO systemd, DB, Exchange or live service."""
     if os.geteuid() != 0:
         _deny("ROOT_REQUIRED")
+    verify_sealed_market_source_controller()
     gid = grp.getgrnam("cripta").gr_gid
     _expected_dir(Path("/srv/cripta"),uid=0,gid=0,mode=0o755)
     _expected_dir(Path("/srv/cripta/components"),uid=0,gid=gid,mode=0o750)
@@ -294,6 +332,9 @@ def stage_market_source_component_once() -> dict[str, object]:
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv)!=1:
-        raise SystemExit("MARKET_SOURCE_STAGER_NO_ARGUMENTS_ONLY")
+    sys.dont_write_bytecode = True
+    if (len(sys.argv)!=1 or Path(sys.argv[0]) != (
+        _CONTROLLER_ROOT / "component_release_market_source_stage.py"
+    )):
+        raise SystemExit("MARKET_SOURCE_STAGER_SEALED_NO_ARGUMENTS_ONLY")
     print(json.dumps(stage_market_source_component_once(),sort_keys=True))
