@@ -18,6 +18,7 @@ from component_release_exit_process_readback import (  # noqa: E402
 )
 
 SHA = "a" * 40
+SOURCE_COMPAT_COMMIT = "8bd45e9874d6ce811d7261ee152fc2c43729e1b9"
 ROOT_PATH = "/srv/cripta/components/exit/releases/" + SHA
 PID = 2468
 UNIT = "cripta-universal-exit-consumer.service"
@@ -50,7 +51,8 @@ class ExitProcessReadbackTests(unittest.TestCase):
             + ROOT_PATH + "/" + ENTRY + "\0"
         ).encode("utf-8"))
         environment = (
-            "CRIPTA_RELEASE_COMMIT=" + SHA + "\0"
+            "CRIPTA_RELEASE_COMMIT=" + SOURCE_COMPAT_COMMIT + "\0"
+            + "CRIPTA_EXIT_COMPONENT_COMMIT=" + SHA + "\0"
             + "CRIPTA_RUNTIME_ROOT=" + ROOT_PATH + "\0"
             + "PYTHONPATH=" + ROOT_PATH + "/src:"
             + ROOT_PATH + "/operations/connectivity\0"
@@ -72,6 +74,7 @@ class ExitProcessReadbackTests(unittest.TestCase):
         return collect_exit_process_readback(
             systemd_show=show() if systemd is None else systemd,
             expected_commit=SHA,
+            expected_source_commit=SOURCE_COMPAT_COMMIT,
             proc_parent=self.proc,
         )
 
@@ -80,7 +83,10 @@ class ExitProcessReadbackTests(unittest.TestCase):
         self.assertEqual(result["state"], "READ_ONLY_PROCESS_CONSISTENCY_ONLY")
         self.assertEqual(result["pid"], PID)
         self.assertEqual(result["pid_start_ticks"], 123456)
-        self.assertEqual(result["loaded_release_commit"], SHA)
+        self.assertEqual(result["loaded_release_commit"], SOURCE_COMPAT_COMMIT)
+        self.assertEqual(result["loaded_exit_component_commit"], SHA)
+        self.assertNotEqual(result["loaded_release_commit"],
+                            result["loaded_exit_component_commit"])
         self.assertEqual(result["loaded_runtime_root"], ROOT_PATH)
         self.assertEqual(result["process_unit"], UNIT)
         self.assertFalse(result["install_authorized"])
@@ -119,6 +125,10 @@ class ExitProcessReadbackTests(unittest.TestCase):
         for changed in (
             original.replace(SHA.encode(), ("b" * 40).encode()),
             original.replace(b"CRIPTA_RELEASE_COMMIT", b"OTHER_RELEASE_COMMIT"),
+            original.replace(b"CRIPTA_EXIT_COMPONENT_COMMIT",
+                             b"OTHER_EXIT_COMPONENT_COMMIT"),
+            original.replace(SOURCE_COMPAT_COMMIT.encode(),
+                             ("c" * 40).encode()),
             original.replace(
                 b"CRIPTA_RUNTIME_ROOT", b"NOT_CRIPTA_RUNTIME_ROOT",
             ),
@@ -159,10 +169,28 @@ class ExitProcessReadbackTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             collect_exit_process_readback(
                 systemd_show=show(), expected_commit="../x",
+                expected_source_commit=SOURCE_COMPAT_COMMIT,
                 proc_parent=self.proc,
             )
         with self.assertRaises(ValueError):
             self.read(show() + "MainPID=" + str(PID) + "\n")
+
+
+    def test_mismatched_source_identity_fails_even_with_correct_executable(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(ValueError, "SOURCE"):
+            collect_exit_process_readback(
+                systemd_show=show(), expected_commit=SHA,
+                expected_source_commit="g" * 40,
+                proc_parent=self.proc,
+            )
+        with self.assertRaises(ValueError):
+            collect_exit_process_readback(
+                systemd_show=show(), expected_commit=SHA,
+                expected_source_commit="b" * 40,
+                proc_parent=self.proc,
+            )
 
     def test_pid_does_not_disappear_or_change_on_readback(self) -> None:
         original = (self.process / "stat").read_text()
