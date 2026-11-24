@@ -3,11 +3,15 @@ from __future__ import annotations
 
 import importlib
 import json
+import sys
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+if sys.platform != "linux":
+    pytest.skip("root-owned systemd component release requires Linux", allow_module_level=True)
 
 package = importlib.import_module(
     "operations.infrastructure.component_release_market_source_stage"
