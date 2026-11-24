@@ -1,14 +1,20 @@
 """#865 independent producer release: pure causal simulated cutover/rollback."""
 from __future__ import annotations
 
+import importlib
 import json
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from operations.infrastructure import component_release_market_source_stage as package
-from operations.infrastructure import component_release_market_source_transition as rail
+
+package = importlib.import_module(
+    "operations.infrastructure.component_release_market_source_stage"
+)
+rail = importlib.import_module(
+    "operations.infrastructure.component_release_market_source_transition"
+)
 
 
 def test_source_old_epoch_must_be_durable_gap_with_ended_at(
@@ -139,7 +145,9 @@ def test_scoped_source_cutover_failure_triggers_old_rollback_gate(
     )
     monkeypatch.setattr(
         rail,"_unit_rollback_to_old",
-        lambda session,pid: invoked.append(f"{session}:{pid}") or True,
+        lambda previous_session,previous_pid: invoked.append(
+            f"{previous_session}:{previous_pid}"
+        ) or True,
     )
     with pytest.raises(RuntimeError,match="RELEASE_FAILED_OLD_SOURCE_RECOVERED"):
         rail.cutover_market_source_once()
