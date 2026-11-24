@@ -214,6 +214,8 @@ def inspect_prepared_market_source() -> dict[str, object]:
         or meta["union_sha256"] != NEW_ADAPTER_SHA
         or meta["old_unit_sha256"] != OLD_UNIT_SHA
         or meta["status"] != "STAGED_ONLY_NOT_ACTIVATED"
+        or (_ROOT / "INSTALLED_COMMIT").read_text(encoding="utf-8").strip()
+            != SOURCE_SHA
         or type(meta["content_entry_count"]) is not int
         or meta["content_entry_count"] < 100):
         _deny("CANDIDATE_MANIFEST_INVALID")
@@ -299,6 +301,12 @@ def stage_market_source_component_once() -> dict[str, object]:
         external.unlink()
         (scratch / _ADAPTER).write_bytes(updated)
         (scratch / "pinned-market-source.service").write_bytes(unit)
+        # The immutable candidate identity is required by the canonical
+        # append-only source compatibility attestor. Manifest status still
+        # says STAGED_ONLY_NOT_ACTIVATED: this is NOT loaded runtime evidence.
+        (scratch / "INSTALLED_COMMIT").write_text(
+            SOURCE_SHA+"\n", encoding="utf-8"
+        )
         _seal_tree(scratch,gid=gid)
         digest, count = _walk_digest(scratch)
         meta = {
