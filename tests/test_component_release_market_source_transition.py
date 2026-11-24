@@ -111,7 +111,10 @@ def _cutover_fixture(
             state["active"]="active"
             state["pid"]=200
             state["session"]="b"*32
-            state["source_commit"]=rail.SOURCE_SHA
+            state["source_commit"]=(
+                rail.SOURCE_SHA if unit.read_bytes()==b"new-unit"
+                else rail.LEGACY_SHA
+            )
         elif operation=="daemon-reload":
             assert len(args)==2
         else:
@@ -147,12 +150,23 @@ def test_scoped_source_cutover_failure_triggers_old_rollback_gate(
         rail,"_native_ready",
         lambda *_a,**_k: (_ for _ in ()).throw(RuntimeError("new not ready")),
     )
-    monkeypatch.setattr(
-        rail,"_unit_rollback_to_old",
-        lambda previous_session,previous_pid: invoked.append(
-            f"{previous_session}:{previous_pid}"
-        ) or True,
-    )
+    def approved_rollback(
+        previous_session: str, previous_pid: int, *,
+        expected_neighbors: dict[str, object],
+        expected_signed: dict[str, object],
+        expected_financial: dict[str, object],
+    ) -> bool:
+        assert expected_neighbors=={
+            "Entry":(101,0),"Exit":(102,0),"Private":(103,0)
+        }
+        assert expected_signed=={"proven":True}
+        assert expected_financial=={
+            "gate":False,"permissions":0,"arms":0,"account_arms":0
+        }
+        invoked.append(f"{previous_session}:{previous_pid}")
+        return True
+
+    monkeypatch.setattr(rail,"_unit_rollback_to_old",approved_rollback)
     with pytest.raises(RuntimeError,match="RELEASE_FAILED_OLD_SOURCE_RECOVERED"):
         rail.cutover_market_source_once()
     assert invoked==["a"*32+":100"]
@@ -168,3 +182,22 @@ def test_no_cutover_if_old_source_or_candidate_unknown(
     with pytest.raises(RuntimeError,match="OLD_SOURCE_UNIT_NOT_ACTIVE"):
         rail.cutover_market_source_once()
     assert "SYSTEMD:stop" not in calls
+
+
+def test_real_rollback_fails_closed_when_signed_protection_changes(
+    monkeypatch: pytest.MonkeyPatch,tmp_path: Path,
+) -> None:
+    state,calls=_cutover_fixture(monkeypatch,tmp_path)
+    monkeypatch.setattr(rail,"_signed_snapshot",lambda:{"proven":False})
+    success=rail._unit_rollback_to_old(
+        previous_session="a"*32,previous_pid=100,
+        expected_neighbors={"Entry":(101,0),"Exit":(102,0),"Private":(103,0)},
+        expected_signed={"proven":True},
+        expected_financial={
+            "gate":False,"permissions":0,"arms":0,"account_arms":0,
+        },
+    )
+    assert success is False
+    assert state["source_commit"]==rail.LEGACY_SHA
+    assert "JOURNAL:ROLLBACK_UNKNOWN" in calls
+    assert "JOURNAL:ROLLBACK_OLD_PROCESS_RECOVERED" not in calls
