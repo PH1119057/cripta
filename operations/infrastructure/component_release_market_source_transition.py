@@ -94,6 +94,104 @@ def _command(*args: str, timeout: int = 30) -> str:
     return result.stdout.strip()
 
 
+_SOURCE_COMPATIBILITY_PREPARATION = r'''
+"""Single-use exact P90 producer compatibility attestation; no trades."""
+import json
+from pathlib import Path
+import psycopg
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID,SUB_ID
+from bybit_workbench.universal_entry.p90l90_real_source_compatibility import (
+    P90RealSourceCompatibilityUnverified,
+    inspect_real_source_identity,
+    register_real_source_compatibility,
+)
+from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
+
+source_commit="c5d355b02d59aa068d7858bd0428ebd9788e7e19"
+root=Path("/srv/cripta/components/market_source/releases")/source_commit
+if root.resolve()!=root or not (root/"INSTALLED_COMMIT").is_file():
+    raise RuntimeError("P90_SOURCE_COMPATIBILITY_STAGED_ROOT_INVALID")
+if (root/"INSTALLED_COMMIT").read_text().strip()!=source_commit:
+    raise RuntimeError("P90_SOURCE_COMPATIBILITY_COMPONENT_IDENTITY_INVALID")
+with psycopg.connect(
+    "dbname=cripta user=cripta host=/var/run/postgresql connect_timeout=5",
+    options="-c statement_timeout=15000 -c lock_timeout=3000",
+) as conn:
+    with conn.transaction():
+        conn.execute(
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ WRITE"
+        )
+        epochs=conn.execute(
+            "SELECT epoch_id FROM strategy_entry.p90l90_real_source_epochs "
+            "WHERE status='ACTIVE' ORDER BY opened_at,epoch_id",
+        ).fetchall()
+        if len(epochs)!=1 or not isinstance(epochs[0][0],str):
+            raise RuntimeError("P90_SOURCE_COMPATIBILITY_ACTIVE_EPOCH_INVALID")
+        epoch=epochs[0][0]
+        bundles=tuple(
+            b for b in load_active_strategy_bundles(conn)
+            if b.card.strategy_id in (MAIN_ID,SUB_ID)
+        )
+        try:
+            identity=inspect_real_source_identity(
+                conn,epoch_id=epoch,loaded_commit=source_commit,bundles=bundles,
+            )
+        except P90RealSourceCompatibilityUnverified as exc:
+            if str(exc)!="P90_REAL_SOURCE_COMPATIBILITY_RELEASE_NOT_REGISTERED":
+                raise
+            gate=conn.execute(
+                "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+            ).fetchone()
+            if gate!=(0,):
+                raise RuntimeError("P90_SOURCE_COMPATIBILITY_FINANCIAL_GATE_NOT_OFF")
+            row=conn.execute(
+                "SELECT source_commit FROM strategy_entry.p90l90_real_source_epochs "
+                "WHERE epoch_id=%s",(epoch,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("P90_SOURCE_COMPATIBILITY_ORIGIN_MISSING")
+            old=Path("/srv/cripta/runtime/releases")/row[0]
+            if (old/"INSTALLED_COMMIT").is_file():
+                origin={"origin_root":old}
+            else:
+                origin={"origin_git_checkout":Path("/srv/cripta/source_checkout")}
+            register_real_source_compatibility(
+                conn,epoch_id=epoch,loaded_commit=source_commit,
+                bundles=bundles,current_root=root,**origin,
+            )
+            identity=inspect_real_source_identity(
+                conn,epoch_id=epoch,loaded_commit=source_commit,bundles=bundles,
+            )
+        if source_commit not in identity.approved_producers:
+            raise RuntimeError("P90_SOURCE_COMPATIBILITY_PRODUCER_UNAPPROVED")
+print(json.dumps({
+    "state":"P90_SOURCE_PRODUCER_COMPATIBILITY_VERIFIED",
+    "producer":source_commit,
+    "financial_arm_changed":False,
+    "exchange_requests":0,
+    "strategy_mutations":0,
+},sort_keys=True))
+'''
+
+
+def _register_scoped_source_compatibility() -> None:
+    """Existing canonical technical INSERT, from the exact service cripta role."""
+    argv = [
+        "/usr/sbin/runuser", "-u", "cripta", "--", "/usr/bin/env",
+        "PYTHONDONTWRITEBYTECODE=1",
+        "PYTHONPATH=" + str(_ROOT / "src") + ":" + str(_ROOT),
+        str(_ROOT / ".venv/bin/python"), "-B", "-c",
+        _SOURCE_COMPATIBILITY_PREPARATION,
+    ]
+    result=json.loads(_command(*argv,timeout=40))
+    if (result.get("state")!="P90_SOURCE_PRODUCER_COMPATIBILITY_VERIFIED"
+        or result.get("producer")!=SOURCE_SHA
+        or result.get("financial_arm_changed") is not False
+        or result.get("exchange_requests")!=0
+        or result.get("strategy_mutations")!=0):
+        _deny("SOURCE_PRODUCER_COMPATIBILITY_UNVERIFIED")
+
+
 def _read_cr_session() -> dict[str, object]:
     argv = [
         "/usr/sbin/runuser", "-u", "cripta", "--", "/usr/bin/env",
@@ -378,6 +476,11 @@ def cutover_market_source_once() -> dict[str,object]:
         signed=_signed_snapshot()
         before_financial={k:source.get(k) for k in
                           ("gate","permissions","arms","account_arms")}
+        # The new producer commit must be accepted by the existing Exit/R06
+        # source-identity contract BEFORE touching the old MarketSource unit.
+        # Canonical registration is append-only DB compatibility evidence,
+        # not an Entry/Exit order, financial ARM or checkpoint rewrite.
+        _register_scoped_source_compatibility()
         if not _ROLLBACK.exists():
             _write_file_exact(_ROLLBACK,old,0o440)
         elif _digest(_ROLLBACK.read_bytes())!=OLD_UNIT_SHA:
