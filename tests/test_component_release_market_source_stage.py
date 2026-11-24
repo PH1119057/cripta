@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 from pathlib import Path
 
 import pytest
-from operations.infrastructure import component_release_market_source_stage as source
+
+source = importlib.import_module(
+    "operations.infrastructure.component_release_market_source_stage"
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
