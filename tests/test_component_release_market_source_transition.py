@@ -71,6 +71,10 @@ def _cutover_fixture(
     monkeypatch.setattr(rail,"verify_sealed_market_source_controller",lambda:None)
     monkeypatch.setattr(rail,"_source_exact",lambda:b"exact")
     monkeypatch.setattr(rail,"inspect_prepared_market_source",lambda:{})
+    monkeypatch.setattr(
+        rail,"_register_scoped_source_compatibility",
+        lambda:calls.append("EXACT_CANONICAL_SOURCE_COMPATIBILITY_PASS"),
+    )
     monkeypatch.setattr(rail,"_old_unit",lambda:old)
     monkeypatch.setattr(rail,"pinned_market_source_unit",lambda *_a: b"new-unit")
     monkeypatch.setattr(rail,"_exclusive_root_lock",nullcontext)
@@ -201,3 +205,33 @@ def test_real_rollback_fails_closed_when_signed_protection_changes(
     assert state["source_commit"]==rail.LEGACY_SHA
     assert "JOURNAL:ROLLBACK_UNKNOWN" in calls
     assert "JOURNAL:ROLLBACK_OLD_PROCESS_RECOVERED" not in calls
+
+
+def test_source_compatibility_must_precede_any_old_writer_stop(
+    monkeypatch: pytest.MonkeyPatch,tmp_path: Path,
+) -> None:
+    _,calls=_cutover_fixture(monkeypatch,tmp_path)
+    monkeypatch.setattr(
+        rail,"_register_scoped_source_compatibility",
+        lambda: (_ for _ in ()).throw(
+            RuntimeError("P90_SOURCE_COMPATIBILITY_UNVERIFIED")
+        ),
+    )
+    with pytest.raises(RuntimeError,match="SOURCE_COMPATIBILITY_UNVERIFIED"):
+        rail.cutover_market_source_once()
+    assert not any(x.startswith("SYSTEMD:") for x in calls)
+    assert "JOURNAL:BASELINE" not in calls
+
+
+def test_compatibility_actor_is_exact_canonical_serializable_insert_only() -> None:
+    program=rail._SOURCE_COMPATIBILITY_PREPARATION
+    compile(program,"P90_SOURCE_COMPATIBILITY_PROGRAM","exec")
+    assert "register_real_source_compatibility(" in program
+    assert "inspect_real_source_identity(" in program
+    assert "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ WRITE" in program
+    assert "P90_REAL_SOURCE_COMPATIBILITY_RELEASE_NOT_REGISTERED" in program
+    assert "P90_SOURCE_COMPATIBILITY_FINANCIAL_GATE_NOT_OFF" in program
+    assert "PRODUCER_UNAPPROVED" in program
+    assert "mainnet" in program
+    assert "pybit" not in program
+    assert "systemctl" not in program
