@@ -313,7 +313,12 @@ def _exclusive_root_lock():
         os.close(fd)
 
 
-def _unit_rollback_to_old(previous_session: str, previous_pid: int) -> bool:
+def _unit_rollback_to_old(
+    previous_session: str, previous_pid: int, *,
+    expected_neighbors: dict[str,dict[str,object]],
+    expected_signed: dict[str,object],
+    expected_financial: dict[str,object],
+) -> bool:
     try:
         _append_event("ROLLBACK_REQUESTED")
         _command("/usr/bin/systemctl","stop",_UNIT,timeout=30)
@@ -328,8 +333,16 @@ def _unit_rollback_to_old(previous_session: str, previous_pid: int) -> bool:
                                before_pid=previous_pid)
         if _digest(_UNIT_PATH.read_bytes())!=OLD_UNIT_SHA:
             _deny("OLD_UNIT_NOT_RESTORED")
+        _verify_signed_equal(expected_signed, _signed_snapshot())
+        if _neighbors() != expected_neighbors:
+            _deny("ROLLBACK_NEIGHBOR_PROCESS_DRIFT")
+        after=_read_cr_session()
+        if {key:after.get(key) for key in expected_financial} != expected_financial:
+            _deny("ROLLBACK_FINANCIAL_STATE_DRIFT")
         _append_event("ROLLBACK_OLD_PROCESS_RECOVERED",
-                      current_pid=observed["pid"])
+                      current_pid=observed["pid"],
+                      signed_protection_preserved=True,
+                      neighbors_and_financial_state_preserved=True)
         return True
     except Exception:
         _append_event("ROLLBACK_UNKNOWN")
@@ -363,6 +376,8 @@ def cutover_market_source_once() -> dict[str,object]:
             _deny("OLD_SOURCE_COMMIT_DRIFT")
         before_neighbors=_neighbors()
         signed=_signed_snapshot()
+        before_financial={k:source.get(k) for k in
+                          ("gate","permissions","arms","account_arms")}
         if not _ROLLBACK.exists():
             _write_file_exact(_ROLLBACK,old,0o440)
         elif _digest(_ROLLBACK.read_bytes())!=OLD_UNIT_SHA:
@@ -417,6 +432,9 @@ def cutover_market_source_once() -> dict[str,object]:
             recovered=_unit_rollback_to_old(
                 previous_session=source["session"],
                 previous_pid=baseline["pid"],
+                expected_neighbors=before_neighbors,
+                expected_signed=signed,
+                expected_financial=before_financial,
             ) if installed or _systemd_state(_UNIT)["active"]!="active" else True
             if not recovered:
                 _deny("RELEASE_FAILED_ROLLBACK_UNKNOWN")
