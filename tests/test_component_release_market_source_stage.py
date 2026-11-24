@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import sys
 from pathlib import Path
 
 import pytest
+
+if sys.platform != "linux":
+    pytest.skip("root-owned systemd component release requires Linux", allow_module_level=True)
 
 source = importlib.import_module(
     "operations.infrastructure.component_release_market_source_stage"
